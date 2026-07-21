@@ -149,6 +149,7 @@ export default function PipelineVentasPage() {
   const [nuevoTitulo, setNuevoTitulo] = useState('');
   const [nuevoClienteId, setNuevoClienteId] = useState('');
   const [nuevaFechaLimite, setNuevaFechaLimite] = useState('');
+  const [isActividadesExpanded, setIsActividadesExpanded] = useState(false);
 
   const supabase = createClient();
 
@@ -378,17 +379,20 @@ export default function PipelineVentasPage() {
       tipo,
     };
 
-    const updatedChat = [...(targetOp.chat_interno || []), newMsg];
-
     if (selectedOp && selectedOp.id === opId) {
-      setSelectedOp({ ...selectedOp, chat_interno: updatedChat });
+      setSelectedOp((prev) => prev ? { ...prev, chat_interno: [...(prev.chat_interno || []), newMsg] } : prev);
     }
     setOportunidades((prev) =>
-      prev.map((o) => (o.id === opId ? { ...o, chat_interno: updatedChat } : o))
+      prev.map((o) => (o.id === opId ? { ...o, chat_interno: [...(o.chat_interno || []), newMsg] } : o))
     );
 
     if (isUUID(opId)) {
       try {
+        // Fetch current chat to avoid overwriting with stale state
+        const { data: currentOpData } = await supabase.from('oportunidades').select('chat_interno').eq('id', opId).single();
+        const currentChat = currentOpData?.chat_interno || [];
+        const finalChat = [...currentChat, newMsg];
+
         // 1. Save in actividades_op table in Supabase
         await supabase.from('actividades_op').insert([{
           oportunidad_id: opId,
@@ -401,7 +405,7 @@ export default function PipelineVentasPage() {
         // 2. Also keep chat_interno updated
         await supabase
           .from('oportunidades')
-          .update({ chat_interno: updatedChat })
+          .update({ chat_interno: finalChat })
           .eq('id', opId);
       } catch (err) {
         console.error('Error updating actividades_op in Supabase:', err);
@@ -472,7 +476,7 @@ export default function PipelineVentasPage() {
     );
 
     if (selectedOp && selectedOp.id === opId) {
-      setSelectedOp({ ...selectedOp, [field]: value });
+      setSelectedOp((prev) => prev ? { ...prev, [field]: value } : prev);
     }
 
     if (isUUID(opId)) {
@@ -1959,11 +1963,37 @@ export default function PipelineVentasPage() {
 
                 {/* Feed de Actividades & Comentarios con Scroll */}
                 <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 text-xs">
-                  {(selectedOp.chat_interno || []).length > 0 ? (
-                    selectedOp.chat_interno?.map((msg) => {
-                      const isUserComment =
-                        msg.tipo === 'comentario' ||
-                        (!msg.tipo && !msg.contenido?.startsWith('['));
+                  {(() => {
+                    const chatList = selectedOp.chat_interno || [];
+                    const hasMany = chatList.length > 5;
+                    const displayChat = (hasMany && !isActividadesExpanded) ? chatList.slice(-5) : chatList;
+
+                    if (chatList.length === 0) {
+                      return (
+                        <div className="text-center py-12 text-gray-500 italic text-[11px] space-y-2">
+                          <MessageSquare className="w-8 h-8 text-gray-600 mx-auto opacity-40" />
+                          <p>No hay actividades registradas.</p>
+                          <p className="text-[10px] text-gray-600">Escribe un comentario abajo usando @ para mencionar a un integrante.</p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <>
+                        {hasMany && (
+                          <div className="text-center pb-2">
+                            <button
+                              onClick={() => setIsActividadesExpanded(!isActividadesExpanded)}
+                              className="text-xs text-[#F7931F] hover:text-[#e08316] font-bold transition underline"
+                            >
+                              {isActividadesExpanded ? 'Ver menos actividades' : `Ver ${chatList.length - 5} actividades anteriores`}
+                            </button>
+                          </div>
+                        )}
+                        {displayChat.map((msg) => {
+                          const isUserComment =
+                            msg.tipo === 'comentario' ||
+                            (!msg.tipo && !msg.contenido?.startsWith('['));
 
                       if (isUserComment) {
                         return (
@@ -1996,15 +2026,11 @@ export default function PipelineVentasPage() {
                           <p className="text-amber-200/90 leading-normal text-[11px] font-medium">{msg.contenido}</p>
                         </div>
                       );
-                    })
-                  ) : (
-                    <div className="text-center py-12 text-gray-500 italic text-[11px] space-y-2">
-                      <MessageSquare className="w-8 h-8 text-gray-600 mx-auto opacity-40" />
-                      <p>No hay actividades registradas.</p>
-                      <p className="text-[10px] text-gray-600">Escribe un comentario abajo usando @ para mencionar a un integrante.</p>
-                    </div>
-                  )}
-                </div>
+                    })}
+                  </>
+                );
+              })()}
+            </div>
               </div>
 
               {/* Input de Comentarios en el Fondo del Panel Lateral */}
