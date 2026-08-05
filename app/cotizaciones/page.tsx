@@ -90,8 +90,25 @@ export default function CotizacionesPage() {
     }
 
     getCotizaciones();
+
+    const channel = supabase
+      .channel('realtime_cotizaciones')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'cotizaciones',
+        },
+        () => {
+          getCotizaciones();
+        }
+      )
+      .subscribe();
+
     return () => {
       ignore = true;
+      supabase.removeChannel(channel);
     };
   }, []);
 

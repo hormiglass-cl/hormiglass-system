@@ -44,6 +44,7 @@ const SYSTEM_FIELDS_CLIENTES: FieldDefinition[] = [
   { id: 'sys-cli-2', nombre: 'Razón Social Completa', campo_supabase: 'apellido_razon_social', entidad: 'clientes', tipo: 'texto', es_sistema: true, activo: true },
   { id: 'sys-cli-3', nombre: 'RUT Empresa / Persona', campo_supabase: 'rut', entidad: 'clientes', tipo: 'texto', es_sistema: true, activo: true },
   { id: 'sys-cli-4', nombre: 'Nicho de Mercado', campo_supabase: 'nicho', entidad: 'clientes', tipo: 'opciones', opciones: ['Constructora B2B', 'Inmobiliaria', 'Contratista General', 'Particular', 'Distribuidor'], es_sistema: true, activo: true },
+  { id: 'sys-cli-tipo-venta', nombre: 'Tipo de Venta Habitual', campo_supabase: 'tipo_venta', entidad: 'clientes', tipo: 'opciones', opciones: ['Instalación', 'Suministro', 'Reventa de Material'], es_sistema: true, activo: true },
   { id: 'sys-cli-5', nombre: 'Teléfono Principal', campo_supabase: 'telefono', entidad: 'clientes', tipo: 'texto', es_sistema: true, activo: true },
   { id: 'sys-cli-6', nombre: 'Correo Electrónico Primario', campo_supabase: 'correo', entidad: 'clientes', tipo: 'texto', es_sistema: true, activo: true },
   { id: 'sys-cli-7', nombre: 'Correos Secundarios (CC)', campo_supabase: 'correos_secundarios', entidad: 'clientes', tipo: 'opciones', es_sistema: true, activo: true },
@@ -56,13 +57,15 @@ const SYSTEM_FIELDS_OPORTUNIDADES: FieldDefinition[] = [
   { id: 'sys-op-2', nombre: 'Título del Proyecto', campo_supabase: 'titulo', entidad: 'oportunidades', tipo: 'texto', es_sistema: true, activo: true },
   { id: 'sys-op-3', nombre: 'Cliente Vinculado', campo_supabase: 'cliente_id', entidad: 'oportunidades', tipo: 'relacion', es_sistema: true, activo: true },
   { id: 'sys-op-4', nombre: 'Estado en Pipeline', campo_supabase: 'estado_pipeline', entidad: 'oportunidades', tipo: 'opciones', opciones: ['Nueva', 'Pago Validado', 'En Programación', 'Trabajo Entregado'], es_sistema: true, activo: true },
+  { id: 'sys-op-tipo-venta', nombre: 'Tipo de Venta', campo_supabase: 'tipo_venta', entidad: 'oportunidades', tipo: 'opciones', opciones: ['Instalación', 'Suministro', 'Reventa de Material'], es_sistema: true, activo: true },
+  { id: 'sys-op-prioridad', nombre: 'Prioridad de Oportunidad', campo_supabase: 'prioridad', entidad: 'oportunidades', tipo: 'opciones', opciones: ['Normal / Baja', 'Alta', 'Urgente'], es_sistema: true, activo: true },
+  { id: 'sys-op-visita-req', nombre: 'Requiere Visita a Terreno', campo_supabase: 'requiere_visita_terreno', entidad: 'oportunidades', tipo: 'opciones', opciones: ['Sí', 'No'], es_sistema: true, activo: true },
+  { id: 'sys-op-visita-tec', nombre: 'Técnico Asignado a Visita', campo_supabase: 'tecnico_visita', entidad: 'oportunidades', tipo: 'opciones', opciones: ['Felipe Valverde', 'Marcos Catalán', 'Edith Tapia'], es_sistema: true, activo: true },
   { id: 'sys-op-5', nombre: 'Fecha Inicio Trabajo', campo_supabase: 'fecha_inicio', entidad: 'oportunidades', tipo: 'fecha', es_sistema: true, activo: true },
   { id: 'sys-op-6', nombre: 'Fecha Límite Término', campo_supabase: 'fecha_limite', entidad: 'oportunidades', tipo: 'fecha', es_sistema: true, activo: true },
   { id: 'sys-op-7', nombre: 'Categorías de Productos', campo_supabase: 'productos', entidad: 'oportunidades', tipo: 'opciones', es_sistema: true, activo: true },
   { id: 'sys-op-8', nombre: 'Monto Abonado / Depositado', campo_supabase: 'monto_abonado', entidad: 'oportunidades', tipo: 'numero', es_sistema: true, activo: true },
   { id: 'sys-op-9', nombre: 'Comprobantes de Pago', campo_supabase: 'comprobantes_pago', entidad: 'oportunidades', tipo: 'archivo', es_sistema: true, activo: true },
-  { id: 'sys-op-10', nombre: 'Notas de Venta Adjuntas', campo_supabase: 'notas_venta', entidad: 'oportunidades', tipo: 'archivo', es_sistema: true, activo: true },
-  { id: 'sys-op-11', nombre: 'Órdenes de Compra Adjuntas', campo_supabase: 'ordenes_compra', entidad: 'oportunidades', tipo: 'archivo', es_sistema: true, activo: true },
 ];
 
 const SYSTEM_FIELDS_COTIZACIONES: FieldDefinition[] = [
@@ -71,7 +74,7 @@ const SYSTEM_FIELDS_COTIZACIONES: FieldDefinition[] = [
   { id: 'sys-cot-3', nombre: 'Cliente Vinculado', campo_supabase: 'cliente_id', entidad: 'cotizaciones', tipo: 'relacion', es_sistema: true, activo: true },
   { id: 'sys-cot-4', nombre: 'Oportunidad de Venta', campo_supabase: 'oportunidad_id', entidad: 'cotizaciones', tipo: 'relacion', es_sistema: true, activo: true },
   { id: 'sys-cot-5', nombre: 'Estado Comercial', campo_supabase: 'estado', entidad: 'cotizaciones', tipo: 'opciones', opciones: ['Borrador', 'Enviada', 'Aprobada', 'Declinada'], es_sistema: true, activo: true },
-  { id: 'sys-cot-[#6]', nombre: 'Monto Subtotal Neto', campo_supabase: 'subtotal', entidad: 'cotizaciones', tipo: 'numero', es_sistema: true, activo: true },
+  { id: 'sys-cot-6', nombre: 'Monto Subtotal Neto', campo_supabase: 'subtotal', entidad: 'cotizaciones', tipo: 'numero', es_sistema: true, activo: true },
   { id: 'sys-cot-7', nombre: 'Monto IVA (19%)', campo_supabase: 'monto_iva', entidad: 'cotizaciones', tipo: 'numero', es_sistema: true, activo: true },
   { id: 'sys-cot-8', nombre: 'Monto Total General', campo_supabase: 'monto_total', entidad: 'cotizaciones', tipo: 'numero', es_sistema: true, activo: true },
   { id: 'sys-cot-9', nombre: 'Plazo de Entrega AC', campo_supabase: 'plazo_entrega', entidad: 'cotizaciones', tipo: 'texto', es_sistema: true, activo: true },
@@ -133,7 +136,20 @@ export default function ConfiguracionPage() {
           await supabase.from('campos_personalizados').upsert(defaultSeed);
           setFields(defaultSeed);
         } else {
-          setFields(data as FieldDefinition[]);
+          // Check if any system fields from defaultSeed are missing in DB
+          const existingKeys = new Set(data.map((f: any) => `${f.entidad}_${f.campo_supabase}`));
+          const missingFields = defaultSeed.filter((sf) => !existingKeys.has(`${sf.entidad}_${sf.campo_supabase}`));
+
+          if (missingFields.length > 0) {
+            try {
+              await supabase.from('campos_personalizados').upsert(missingFields);
+            } catch (uErr) {
+              console.error('Error upserting missing system fields:', uErr);
+            }
+            setFields([...(data as FieldDefinition[]), ...missingFields]);
+          } else {
+            setFields(data as FieldDefinition[]);
+          }
         }
       } catch (err) {
         console.error('Error loading fields from Supabase:', err);
@@ -459,8 +475,8 @@ export default function ConfiguracionPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredFields.map((f) => (
-                    <tr key={f.id} className="hover:bg-orange-50/40 transition">
+                  filteredFields.map((f, idx) => (
+                    <tr key={`${f.entidad}-${f.campo_supabase}-${f.id || idx}`} className="hover:bg-orange-50/40 transition">
                       <td className="py-4 px-6 font-extrabold text-[#363636]">
                         {f.nombre}
                       </td>

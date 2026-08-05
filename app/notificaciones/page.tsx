@@ -41,8 +41,25 @@ export default function NotificacionesPage() {
     }
 
     loadNotificaciones();
+
+    const channel = supabase
+      .channel('realtime_notificaciones')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notificaciones',
+        },
+        () => {
+          loadNotificaciones();
+        }
+      )
+      .subscribe();
+
     return () => {
       ignore = true;
+      supabase.removeChannel(channel);
     };
   }, []);
 
@@ -286,7 +303,7 @@ export default function NotificacionesPage() {
                 />
               </th>
               <th className="py-3.5 px-4 w-32">Tipo</th>
-              <th className="py-3.5 px-4 w-44">Cliente</th>
+              <th className="py-3.5 px-4 w-48">Ubicación / Ficha Origen</th>
               <th className="py-3.5 px-4">Descripción o Detalle del Recordatorio</th>
               <th className="py-3.5 px-4 w-36 text-right">Fecha & Hora</th>
             </tr>
@@ -308,8 +325,25 @@ export default function NotificacionesPage() {
               filteredNotifications.map((n) => {
                 const isMention = n.tipo === 'mencion' || n.mensaje.includes('@');
                 const isReminder = n.mensaje.toUpperCase().includes('RECORDATORIO');
-                const clientMatch = n.mensaje.match(/RECORDATORIO \((.*?)\):/) || n.mensaje.match(/cliente ([\w\s]+)/i);
-                const clientName = clientMatch ? clientMatch[1] : 'Cliente Hormiglass';
+                
+                // Extract exact location / context where the mention or notification occurred
+                const opMatch = n.mensaje.match(/oportunidad ([A-Z0-9-]+)/i);
+                const recMatch = n.mensaje.match(/RECORDATORIO \((.*?)\):/);
+                const cliMatch = n.mensaje.match(/cliente ([\w\s]+)/i);
+
+                let ubicacionNombre = 'Sistema CRM';
+                if (opMatch) {
+                  ubicacionNombre = `Oportunidad ${opMatch[1]}`;
+                } else if (recMatch) {
+                  ubicacionNombre = `Ficha Cliente: ${recMatch[1]}`;
+                } else if (cliMatch) {
+                  ubicacionNombre = `Ficha Cliente: ${cliMatch[1]}`;
+                } else if (n.link_url?.includes('/ventas')) {
+                  ubicacionNombre = 'Pipeline de Ventas';
+                } else if (n.link_url?.includes('/clientes')) {
+                  ubicacionNombre = 'Módulo Clientes';
+                }
+
                 const isSelected = selectedIds.includes(n.id);
 
                 return (
@@ -357,9 +391,11 @@ export default function NotificacionesPage() {
                       </div>
                     </td>
 
-                    {/* Column 2: Cliente */}
-                    <td className="py-3.5 px-4 font-bold text-[#363636] cursor-pointer" onClick={() => handleMarkAsReadAndNavigate(n)}>
-                      {clientName}
+                    {/* Column 2: Ubicación / Ficha de Origen */}
+                    <td className="py-3.5 px-4 font-extrabold text-[#363636] cursor-pointer" onClick={() => handleMarkAsReadAndNavigate(n)}>
+                      <span className="bg-gray-100 px-2.5 py-1 rounded-lg border border-gray-200 inline-block text-xs">
+                        {ubicacionNombre}
+                      </span>
                     </td>
 
                     {/* Column 3: Descripción o Detalle del Recordatorio */}

@@ -28,6 +28,7 @@ export interface Cliente {
   rut: string;
   tipo_cliente?: TipoCliente;
   nicho?: string;
+  tipo_venta?: 'Instalación' | 'Suministro' | 'Reventa de Material' | string;
   telefono?: string;
   correo?: string;
   correos_secundarios?: string[];
@@ -95,7 +96,23 @@ export type ModalidadEntrega = 'retiro' | 'despacho' | 'instalacion';
 export type CondicionPago = 'total' | 'abono50' | 'oc' | 'especial';
 export type MedioPago = 'efectivo' | 'transferencia' | 'debito' | 'credito' | 'webpay' | 'cheque';
 export type TipoDocumento = 'boleta' | 'factura' | 'factura_anticipo' | 'nota_venta';
-export type EstadoPipeline = 'nueva' | 'pagada' | 'programada' | 'entregada';
+export type EstadoPipeline =
+  | 'nueva'
+  | 'pagada'
+  | 'entregada'
+  | 'prod_pendiente'
+  | 'prod_cola'
+  | 'prod_fabricacion'
+  | 'prod_listo_instalacion'
+  | 'prod_instalacion'
+  | 'prod_finalizado'
+  | 'rev_coordinacion'
+  | 'rev_stock'
+  | 'rev_listo_retiro'
+  | 'rev_listo_despacho'
+  | 'rev_entregado'
+  | 'rev_postventa'
+  | 'programada';
 export type PrioridadOportunidad = 'urgente' | 'alta' | 'normal';
 
 export const PRODUCTOS_HORMIGLASS = [
@@ -129,6 +146,29 @@ export interface ChatMensaje {
   tipo?: 'comentario' | 'actualizacion' | 'abono' | string;
 }
 
+export interface VisitaTerreno {
+  id: string;
+  oportunidad_id: string;
+  tecnico_visita: 'Felipe Valverde' | 'Marcos Catalán' | 'Edith Tapia' | string;
+  fecha_visita_terreno: string;
+  hora_visita_terreno?: string;
+  estado_visita?: 'programada' | 'realizada' | 'cancelada' | string;
+  observaciones_visita?: string;
+  created_at?: string;
+  oportunidad?: OportunidadVenta;
+}
+
+export interface Abono {
+  id: string;
+  oportunidad_id: string;
+  monto: number;
+  fecha_pago: string;
+  metodo_pago?: string;
+  comprobante_url?: string;
+  registrado_por?: string;
+  created_at?: string;
+}
+
 export interface OportunidadVenta {
   id: string;
   codigo: string;
@@ -139,13 +179,21 @@ export interface OportunidadVenta {
   fecha_limite?: string | null;
   asignado_a?: string | null;
   prioridad?: PrioridadOportunidad;
+  tipo_venta?: 'Instalación' | 'Suministro' | 'Reventa de Material' | string;
+  monto?: number;
+  requiere_visita_terreno?: boolean;
+  visitas_terreno?: VisitaTerreno[];
+  tecnico_visita?: 'Felipe Valverde' | 'Marcos Catalán' | 'Edith Tapia' | string;
+  fecha_visita_terreno?: string;
+  hora_visita_terreno?: string;
+  estado_visita?: 'programada' | 'realizada' | 'cancelada' | string;
+  observaciones_visita?: string;
   modalidad_entrega?: ModalidadEntrega;
   condicion_pago?: CondicionPago;
   productos?: string[];
   comprobantes_pago?: string[];
-  notas_venta?: string[];
-  ordenes_compra?: string[];
   monto_abonado?: number;
+  abonos?: Abono[];
   chat_mensajes?: ChatMensaje[];
   chat_interno?: ChatMensaje[];
   created_at?: string;
@@ -230,5 +278,50 @@ export interface Notificacion {
   leido: boolean;
   entidad_relacionada?: string;
   fecha: string;
+}
+
+export type EstadoPlanificacion =
+  | 'pendiente'
+  | 'cola_produccion'
+  | 'fabricacion'
+  | 'listo_instalacion'
+  | 'instalacion'
+  | 'finalizado';
+
+export interface ProyectoPlanificacion {
+  id: string;
+  oportunidad_id: string;
+  codigo: string;
+  titulo: string;
+  cliente_id: string;
+  cliente?: Cliente;
+  estado: EstadoPlanificacion;
+  fecha_estimada_instalacion?: string;
+  fecha_estimada_produccion?: string;
+  observaciones?: string;
+  created_at?: string;
+}
+
+export type EstadoReventa =
+  | 'coordinacion_proveedor'
+  | 'confirmacion_stock'
+  | 'listo_retiro'
+  | 'listo_despacho'
+  | 'entregado'
+  | 'postventa';
+
+export interface OrdenReventa {
+  id: string;
+  oportunidad_id: string;
+  codigo: string;
+  titulo: string;
+  cliente_id: string;
+  cliente?: Cliente;
+  proveedor_nombre?: string;
+  estado: EstadoReventa;
+  fecha_despacho?: string;
+  observaciones?: string;
+  notas_postventa?: string;
+  created_at?: string;
 }
 

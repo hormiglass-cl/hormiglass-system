@@ -87,6 +87,7 @@ export default function ClientesPage() {
   const [rutBody, setRutBody] = useState('');
   const [rutDv, setRutDv] = useState('');
   const [nichoSeleccionado, setNichoSeleccionado] = useState<string>(NICHOS_CLIENTE_DEFAULT[0]);
+  const [tipoVentaSeleccionado, setTipoVentaSeleccionado] = useState<string>('Instalación');
   const [nuevoNichoInput, setNuevoNichoInput] = useState('');
   const [showAddNichoInput, setShowAddNichoInput] = useState(false);
   const [telefono, setTelefono] = useState('');
@@ -147,8 +148,25 @@ export default function ClientesPage() {
     }
 
     getClientesData();
+
+    const channel = supabase
+      .channel('realtime_clientes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'clientes',
+        },
+        () => {
+          getClientesData();
+        }
+      )
+      .subscribe();
+
     return () => {
       ignore = true;
+      supabase.removeChannel(channel);
     };
   }, []);
 
@@ -360,6 +378,7 @@ export default function ClientesPage() {
       rut: formattedRut,
       tipo_cliente: tipoClienteCalculado,
       nicho: nichoSeleccionado,
+      tipo_venta: tipoVentaSeleccionado || 'Instalación',
       telefono: telefono || undefined,
       correo: correo || undefined,
       correos_secundarios: secArray.length > 0 ? secArray : undefined,

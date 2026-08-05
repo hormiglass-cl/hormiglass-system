@@ -223,8 +223,59 @@ export default function ClienteDetailPage() {
     }
 
     loadData();
+
+    // Supabase Realtime channel subscription for instant client card updates
+    const channel = supabase
+      .channel(`realtime_client_detail_${clienteId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notas_actividad',
+        },
+        () => {
+          loadData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'clientes',
+        },
+        () => {
+          loadData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'cotizaciones',
+        },
+        () => {
+          loadData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'oportunidades',
+        },
+        () => {
+          loadData();
+        }
+      )
+      .subscribe();
+
     return () => {
       ignore = true;
+      supabase.removeChannel(channel);
     };
   }, [clienteId]);
 
@@ -478,25 +529,48 @@ export default function ClienteDetailPage() {
 
         <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[10px] font-black uppercase text-[#F7931F]">Nicho de Mercado:</span>
-              <select
-                value={cliente.nicho || nichosOptions[0] || 'Constructora B2B'}
-                onChange={async (e) => {
-                  const newN = e.target.value;
-                  setCliente({ ...cliente, nicho: newN });
-                  try {
-                    await supabase.from('clientes').update({ nicho: newN }).eq('id', cliente.id);
-                  } catch (err) {
-                    console.error('Error updating nicho:', err);
-                  }
-                }}
-                className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full bg-orange-50 text-[#F7931F] border border-orange-200 focus:outline-none focus:ring-1 focus:ring-[#F7931F] cursor-pointer"
-              >
-                {nichosOptions.map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
+            <div className="flex flex-wrap items-center gap-3 mb-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-black uppercase text-[#F7931F]">Nicho de Mercado:</span>
+                <select
+                  value={cliente.nicho || nichosOptions[0] || 'Constructora B2B'}
+                  onChange={async (e) => {
+                    const newN = e.target.value;
+                    setCliente({ ...cliente, nicho: newN });
+                    try {
+                      await supabase.from('clientes').update({ nicho: newN }).eq('id', cliente.id);
+                    } catch (err) {
+                      console.error('Error updating nicho:', err);
+                    }
+                  }}
+                  className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full bg-orange-50 text-[#F7931F] border border-orange-200 focus:outline-none focus:ring-1 focus:ring-[#F7931F] cursor-pointer"
+                >
+                  {nichosOptions.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-black uppercase text-purple-700">Tipo Venta Habitual:</span>
+                <select
+                  value={cliente.tipo_venta || 'Instalación'}
+                  onChange={async (e) => {
+                    const newTipo = e.target.value;
+                    setCliente({ ...cliente, tipo_venta: newTipo });
+                    try {
+                      await supabase.from('clientes').update({ tipo_venta: newTipo }).eq('id', cliente.id);
+                    } catch (err) {
+                      console.error('Error updating tipo_venta:', err);
+                    }
+                  }}
+                  className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full bg-purple-50 text-purple-900 border border-purple-200 focus:outline-none focus:ring-1 focus:ring-purple-400 cursor-pointer"
+                >
+                  <option value="Instalación">Instalación</option>
+                  <option value="Suministro">Suministro</option>
+                  <option value="Reventa de Material">Reventa de Material</option>
+                </select>
+              </div>
             </div>
             <h1 className="text-2xl font-extrabold text-[#363636]">{cliente.nombre}</h1>
             <p className="text-xs text-gray-600 mt-1">
