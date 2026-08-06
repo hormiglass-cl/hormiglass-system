@@ -92,6 +92,7 @@ export default function PipelineVentasPage() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [stageMenuPos, setStageMenuPos] = useState<{ opId: string; top: number; left: number } | null>(null);
+  const [statusSearchQuery, setStatusSearchQuery] = useState('');
 
   // Deletion Modal State for Oportunidad
   const [opToDelete, setOpToDelete] = useState<OportunidadVenta | null>(null);
@@ -103,6 +104,13 @@ export default function PipelineVentasPage() {
     productos: false,
     finanzas: false,
     visita: false,
+    produccion: false,
+    reventa: false,
+  });
+
+  // Area Sections Collapsible State (Secciones 1, 2 y 3) (Todas contraídas por defecto al entrar)
+  const [areaExpanded, setAreaExpanded] = useState<{ comercial: boolean; produccion: boolean; reventa: boolean }>({
+    comercial: false,
     produccion: false,
     reventa: false,
   });
@@ -353,6 +361,11 @@ export default function PipelineVentasPage() {
       produccion: false,
       reventa: false,
     });
+    setAreaExpanded({
+      comercial: false,
+      produccion: false,
+      reventa: false,
+    });
     setSelectedOp(op);
     setEditTitleValue(op.titulo);
     loadLatestActivities(op.id);
@@ -516,6 +529,11 @@ export default function PipelineVentasPage() {
                 produccion: false,
                 reventa: false,
               });
+              setAreaExpanded({
+                comercial: false,
+                produccion: false,
+                reventa: false,
+              });
               setSelectedOp(found as OportunidadVenta);
               setEditTitleValue(found.titulo);
               loadLatestActivities(found.id);
@@ -549,7 +567,7 @@ export default function PipelineVentasPage() {
           schema: 'public',
           table: 'actividades_op',
         },
-        (payload) => {
+        (payload: any) => {
           const newAct = payload.new;
           if (!newAct) return;
 
@@ -584,7 +602,7 @@ export default function PipelineVentasPage() {
           schema: 'public',
           table: 'oportunidades',
         },
-        (payload) => {
+        (payload: any) => {
           if (payload.eventType === 'UPDATE' && payload.new) {
             const updatedOp = payload.new;
             setOportunidades((prevOps) =>
@@ -621,11 +639,33 @@ export default function PipelineVentasPage() {
       .on(
         'postgres_changes',
         {
+          event: '*',
+          schema: 'public',
+          table: 'clientes',
+        },
+        (payload: any) => {
+          if (payload.new) {
+            const updatedClient = payload.new as Cliente;
+            setClientes((prev) => {
+              const exists = prev.some((c) => c.id === updatedClient.id);
+              if (exists) {
+                return prev.map((c) => (c.id === updatedClient.id ? { ...c, ...updatedClient } : c));
+              }
+              return [updatedClient, ...prev];
+            });
+          } else {
+            fetchPipelineData();
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
           event: 'INSERT',
           schema: 'public',
           table: 'notificaciones',
         },
-        (payload) => {
+        (payload: any) => {
           const newNotif = payload.new;
           if (!newNotif) return;
 
@@ -670,7 +710,7 @@ export default function PipelineVentasPage() {
           .select('*')
           .eq('oportunidad_id', selectedOp.id)
           .order('created_at', { ascending: true })
-          .then(({ data, error }) => {
+          .then(({ data, error }: any) => {
             if (!ignore && !error && data && data.length > 0) {
               const actMsgs: ChatMensaje[] = data.map((d: any) => ({
                 id: d.id,
@@ -695,45 +735,45 @@ export default function PipelineVentasPage() {
       id: 'ventas',
       nombre: 'Sección 1: Área Comercial & Ventas',
       descripcion: 'Gestión de prospección, cotizaciones, validación de pago y cierre comercial.',
-      badge: '💼 Comercial',
+      badge: 'Comercial',
       badgeBg: 'bg-amber-100 border-amber-300',
       badgeText: 'text-amber-900',
       etapas: [
-        { id: 'nueva' as EstadoPipeline, label: '1. Nueva Oportunidad', color: 'border-amber-300 text-amber-900', bg: 'bg-amber-50' },
-        { id: 'pagada' as EstadoPipeline, label: '2. Pago Validado', color: 'border-blue-300 text-blue-900', bg: 'bg-blue-50' },
-        { id: 'entregada' as EstadoPipeline, label: '3. Venta Cerrada', color: 'border-emerald-300 text-emerald-900', bg: 'bg-emerald-50' },
+        { id: 'nueva' as EstadoPipeline, label: 'Nueva Oportunidad', color: 'border-amber-300 text-amber-900', bg: 'bg-amber-50' },
+        { id: 'pagada' as EstadoPipeline, label: 'Pago Validado', color: 'border-blue-300 text-blue-900', bg: 'bg-blue-50' },
+        { id: 'entregada' as EstadoPipeline, label: 'Venta Cerrada', color: 'border-emerald-300 text-emerald-900', bg: 'bg-emerald-50' },
       ],
     },
     {
       id: 'produccion',
       nombre: 'Sección 2: Área de Producción & Instalación',
       descripcion: 'Planificación de fabricación, control de planta y ejecución de instalaciones en terreno.',
-      badge: '🏭 Producción',
+      badge: 'Producción',
       badgeBg: 'bg-purple-100 border-purple-300',
       badgeText: 'text-purple-900',
       etapas: [
-        { id: 'prod_pendiente' as EstadoPipeline, label: '4. Pendiente Planificación', color: 'border-amber-300 text-amber-900', bg: 'bg-amber-50' },
-        { id: 'prod_cola' as EstadoPipeline, label: '5. En Cola de Fabricación', color: 'border-blue-300 text-blue-900', bg: 'bg-blue-50' },
-        { id: 'prod_fabricacion' as EstadoPipeline, label: '6. En Fabricación', color: 'border-purple-300 text-purple-900', bg: 'bg-purple-50' },
-        { id: 'prod_listo_instalacion' as EstadoPipeline, label: '7. Listo p/ Instalación', color: 'border-indigo-300 text-indigo-900', bg: 'bg-indigo-50' },
-        { id: 'prod_instalacion' as EstadoPipeline, label: '8. En Instalación', color: 'border-orange-300 text-orange-900', bg: 'bg-orange-50' },
-        { id: 'prod_finalizado' as EstadoPipeline, label: '9. Finalizado / Entregado', color: 'border-emerald-300 text-emerald-900', bg: 'bg-emerald-50' },
+        { id: 'prod_pendiente' as EstadoPipeline, label: 'Pendiente Planificación', color: 'border-amber-300 text-amber-900', bg: 'bg-amber-50' },
+        { id: 'prod_cola' as EstadoPipeline, label: 'En Cola de Fabricación', color: 'border-blue-300 text-blue-900', bg: 'bg-blue-50' },
+        { id: 'prod_fabricacion' as EstadoPipeline, label: 'En Fabricación', color: 'border-purple-300 text-purple-900', bg: 'bg-purple-50' },
+        { id: 'prod_listo_instalacion' as EstadoPipeline, label: 'Listo p/ Instalación', color: 'border-indigo-300 text-indigo-900', bg: 'bg-indigo-50' },
+        { id: 'prod_instalacion' as EstadoPipeline, label: 'En Instalación', color: 'border-orange-300 text-orange-900', bg: 'bg-orange-50' },
+        { id: 'prod_finalizado' as EstadoPipeline, label: 'Finalizado / Entregado', color: 'border-emerald-300 text-emerald-900', bg: 'bg-emerald-50' },
       ],
     },
     {
       id: 'reventa',
       nombre: 'Sección 3: Área de Reventa & Logística',
       descripcion: 'Coordinación con proveedores, confirmación de stock y despachos.',
-      badge: '🚚 Logística & Reventa',
+      badge: 'Reventa & Logística',
       badgeBg: 'bg-indigo-100 border-indigo-300',
       badgeText: 'text-indigo-900',
       etapas: [
-        { id: 'rev_coordinacion' as EstadoPipeline, label: '10. Coordinación Proveedor', color: 'border-blue-300 text-blue-900', bg: 'bg-blue-50' },
-        { id: 'rev_stock' as EstadoPipeline, label: '11. Confirmación Stock', color: 'border-indigo-300 text-indigo-900', bg: 'bg-indigo-50' },
-        { id: 'rev_listo_retiro' as EstadoPipeline, label: '12. Listo para Retiro', color: 'border-amber-300 text-amber-900', bg: 'bg-amber-50' },
-        { id: 'rev_listo_despacho' as EstadoPipeline, label: '13. Listo para Despacho', color: 'border-orange-300 text-orange-900', bg: 'bg-orange-50' },
-        { id: 'rev_entregado' as EstadoPipeline, label: '14. Entregado al Cliente', color: 'border-emerald-300 text-emerald-900', bg: 'bg-emerald-50' },
-        { id: 'rev_postventa' as EstadoPipeline, label: '15. Postventa & Seguimiento', color: 'border-purple-300 text-purple-900', bg: 'bg-purple-50' },
+        { id: 'rev_coordinacion' as EstadoPipeline, label: 'Coordinación Proveedor', color: 'border-blue-300 text-blue-900', bg: 'bg-blue-50' },
+        { id: 'rev_stock' as EstadoPipeline, label: 'Confirmación Stock', color: 'border-indigo-300 text-indigo-900', bg: 'bg-indigo-50' },
+        { id: 'rev_listo_retiro' as EstadoPipeline, label: 'Listo para Retiro', color: 'border-amber-300 text-amber-900', bg: 'bg-amber-50' },
+        { id: 'rev_listo_despacho' as EstadoPipeline, label: 'Listo para Despacho', color: 'border-orange-300 text-orange-900', bg: 'bg-orange-50' },
+        { id: 'rev_entregado' as EstadoPipeline, label: 'Entregado al Cliente', color: 'border-emerald-300 text-emerald-900', bg: 'bg-emerald-50' },
+        { id: 'rev_postventa' as EstadoPipeline, label: 'Postventa & Seguimiento', color: 'border-purple-300 text-purple-900', bg: 'bg-purple-50' },
       ],
     },
   ];
@@ -814,16 +854,132 @@ export default function PipelineVentasPage() {
     });
   };
 
-  // Helper for sorting table headers
+  // Column Widths para la Vista de Lista (Ajustable por arrastre)
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({
+    codigo: 110,
+    titulo: 280,
+    cliente: 220,
+    tipo_venta: 150,
+    prioridad: 130,
+    fecha_inicio: 130,
+    fecha_limite: 130,
+    monto: 140,
+  });
+
+  const resizingRef = React.useRef<{ colKey: string; startX: number; startWidth: number } | null>(null);
+
+  const handleMouseDownResize = (colKey: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    resizingRef.current = {
+      colKey,
+      startX: e.clientX,
+      startWidth: columnWidths[colKey] || 130,
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const deltaX = moveEvent.clientX - resizingRef.current.startX;
+      const newWidth = Math.max(70, resizingRef.current.startWidth + deltaX);
+      setColumnWidths((prev) => ({
+        ...prev,
+        [resizingRef.current!.colKey]: newWidth,
+      }));
+    };
+
+    const handleMouseUp = () => {
+      resizingRef.current = null;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Modal Split Ratio State (Porcentaje de ancho de la columna izquierda, por defecto 58%)
+  const [modalLeftColRatio, setModalLeftColRatio] = useState<number>(58);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedRatio = localStorage.getItem('hormiglass_modal_left_col_ratio');
+      if (savedRatio) {
+        const parsed = Number(savedRatio);
+        if (parsed >= 30 && parsed <= 80) {
+          setModalLeftColRatio(parsed);
+        }
+      }
+    }
+  }, []);
+
+  const modalResizingRef = React.useRef<{ startX: number; startRatio: number; containerWidth: number } | null>(null);
+  const modalContainerRef = React.useRef<HTMLDivElement | null>(null);
+
+  const handleMouseDownModalResizer = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!modalContainerRef.current) return;
+    const containerWidth = modalContainerRef.current.getBoundingClientRect().width;
+
+    modalResizingRef.current = {
+      startX: e.clientX,
+      startRatio: modalLeftColRatio,
+      containerWidth,
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!modalResizingRef.current) return;
+      const deltaX = moveEvent.clientX - modalResizingRef.current.startX;
+      const deltaRatio = (deltaX / modalResizingRef.current.containerWidth) * 100;
+      const newRatio = Math.min(80, Math.max(30, modalResizingRef.current.startRatio + deltaRatio));
+
+      setModalLeftColRatio(newRatio);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('hormiglass_modal_left_col_ratio', newRatio.toString());
+      }
+    };
+
+    const handleMouseUp = () => {
+      modalResizingRef.current = null;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Warning Modal para validación de Abono Mínimo (50% o 100%)
+  const [abonoWarningModal, setAbonoWarningModal] = useState<{
+    op: OportunidadVenta;
+    targetStage: EstadoPipeline;
+    montoTotal: number;
+    montoAbonado: number;
+    porcentajeActual?: number;
+  } | null>(null);
+
+  // Helper para obtener el color del círculo de estado según la etapa del pipeline
+  const getStageDotColor = (stage: EstadoPipeline) => {
+    if (stage === 'nueva') return 'bg-amber-500 border-amber-400 text-amber-500';
+    if (stage === 'pagada') return 'bg-blue-500 border-blue-400 text-blue-500';
+    if (stage === 'entregada') return 'bg-emerald-500 border-emerald-400 text-emerald-500';
+    if (stage.startsWith('prod_')) return 'bg-purple-500 border-purple-400 text-purple-500';
+    return 'bg-indigo-500 border-indigo-400 text-indigo-500';
+  };
+
+  // Helper for sorting and resizing table headers
   const renderSortHeader = (
     label: string,
     field: 'titulo' | 'cliente' | 'tipo_venta' | 'fecha_inicio' | 'fecha_limite' | 'monto' | 'prioridad',
-    align: 'left' | 'center' | 'right' = 'left',
-    widthClass?: string
+    colKey: string,
+    align: 'left' | 'center' | 'right' = 'left'
   ) => {
     const isActive = sortField === field;
+    const width = columnWidths[colKey] || 130;
+
     return (
       <th
+        style={{ width: `${width}px` }}
         onClick={() => {
           if (sortField === field) {
             setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
@@ -832,24 +988,32 @@ export default function PipelineVentasPage() {
             setSortDirection('asc');
           }
         }}
-        className={`py-2.5 px-3 cursor-pointer hover:text-[#F7931F] transition select-none text-${align} text-xs font-extrabold uppercase tracking-wider text-gray-500 ${widthClass || ''}`}
+        className={`py-2.5 px-3 cursor-pointer hover:text-[#F7931F] transition select-none text-${align} text-xs font-extrabold uppercase tracking-wider text-gray-500 relative group border-r border-gray-200/50`}
       >
         <div
           className={`flex items-center gap-1.5 ${
             align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start'
           }`}
         >
-          <span>{label}</span>
+          <span className="truncate">{label}</span>
           {isActive ? (
             sortDirection === 'asc' ? (
-              <ArrowUp className="w-3.5 h-3.5 text-[#F7931F]" />
+              <ArrowUp className="w-3.5 h-3.5 text-[#F7931F] shrink-0" />
             ) : (
-              <ArrowDown className="w-3.5 h-3.5 text-[#F7931F]" />
+              <ArrowDown className="w-3.5 h-3.5 text-[#F7931F] shrink-0" />
             )
           ) : (
-            <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-40 hover:opacity-100" />
+            <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-40 hover:opacity-100 shrink-0" />
           )}
         </div>
+
+        {/* Resizer Handle Bar */}
+        <div
+          onMouseDown={(e) => handleMouseDownResize(colKey, e)}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#F7931F] active:bg-[#F7931F] z-10 transition opacity-0 group-hover:opacity-100"
+          title="Arrastrar para cambiar ancho de columna"
+        />
       </th>
     );
   };
@@ -861,6 +1025,14 @@ export default function PipelineVentasPage() {
       return linkedQuotes.reduce((sum, c) => sum + (c.monto_total || 0), 0);
     }
     return 0;
+  };
+
+  // Helper para obtener el monto abonado de una oportunidad
+  const getOportunidadAbonadoValue = (op: OportunidadVenta): number => {
+    if (op.abonos && Array.isArray(op.abonos) && op.abonos.length > 0) {
+      return op.abonos.reduce((acc, a) => acc + (a.monto || 0), 0);
+    }
+    return op.monto_abonado || 0;
   };
 
   // Helper para obtener la cotización activa principal para una oportunidad
@@ -964,6 +1136,25 @@ export default function PipelineVentasPage() {
   const moveOportunidadToState = async (opId: string, targetState: EstadoPipeline) => {
     const targetOp = oportunidades.find((o) => o.id === opId);
     if (!targetOp || targetOp.estado_pipeline === targetState) return;
+
+    // Validar abono mínimo (50% o 100%) para pasar a Venta Cerrada o etapas de Producción / Reventa
+    const isRestrictedStage = targetState !== 'nueva' && targetState !== 'pagada';
+    if (isRestrictedStage) {
+      const montoTotal = getOportunidadTotalValue(targetOp);
+      const montoAbonado = getOportunidadAbonadoValue(targetOp);
+      const porcentajeAbonado = montoTotal > 0 ? (montoAbonado / montoTotal) * 100 : 100;
+
+      if (montoTotal > 0 && porcentajeAbonado < 50) {
+        setAbonoWarningModal({
+          op: targetOp,
+          targetStage: targetState,
+          montoTotal,
+          montoAbonado,
+          porcentajeActual: Math.round(porcentajeAbonado),
+        });
+        return; // Bloquear transición si el abono es inferior al 50%
+      }
+    }
 
     // Actualización optimista local
     setOportunidades((prev) =>
@@ -1515,9 +1706,19 @@ export default function PipelineVentasPage() {
                   const isCollapsed = !!collapsedSections[col.id];
                   const rawOps = oportunidades.filter((o) => o.estado_pipeline === col.id);
                   const colOps = sortOpportunities(rawOps);
+                  const isTargetColumn = dragOverColumn === col.id;
 
                   return (
-                    <div key={col.id} className="space-y-2 mb-4 transition">
+                    <div
+                      key={col.id}
+                      onDragOver={(e) => handleDragOver(e, col.id)}
+                      onDrop={(e) => handleDrop(e, col.id)}
+                      className={`space-y-2 mb-4 p-2 rounded-3xl transition-all duration-200 ${
+                        isTargetColumn
+                          ? 'bg-orange-100/60 border-2 border-[#F7931F] ring-2 ring-[#F7931F]/30 scale-[1.005]'
+                          : 'border border-transparent'
+                      }`}
+                    >
                       <div
                         onClick={() =>
                           setCollapsedSections((prev) => ({
@@ -1563,46 +1764,76 @@ export default function PipelineVentasPage() {
                             </div>
                           ) : (
                             <div className="overflow-x-auto bg-white rounded-2xl border border-gray-200/80 shadow-xs">
-                              <table className="w-full text-left text-xs min-w-[1050px] table-fixed border-collapse">
-                                <thead className="text-gray-500 uppercase text-xs font-extrabold border-b border-gray-200 bg-gray-50/50">
+                              <table className="w-full text-left text-xs min-w-[1000px] table-fixed border-collapse">
+                                <thead className="text-gray-500 uppercase text-xs font-extrabold border-b border-gray-200 bg-gray-50/60">
                                   <tr>
-                                    <th className="py-3 px-3 w-10 text-center align-middle"></th>
-                                    <th className="py-3 px-3 w-28 text-left text-xs font-extrabold uppercase tracking-wider align-middle">Código</th>
-                                    {renderSortHeader('Oportunidad / Nombre', 'titulo', 'left', 'w-72')}
-                                    {renderSortHeader('Cliente', 'cliente', 'left', 'w-56')}
-                                    {renderSortHeader('Tipo Venta', 'tipo_venta', 'left', 'w-36')}
-                                    {renderSortHeader('Prioridad', 'prioridad', 'left', 'w-28')}
-                                    {renderSortHeader('Fecha Inicio', 'fecha_inicio', 'left', 'w-32')}
-                                    {renderSortHeader('Fecha Límite', 'fecha_limite', 'left', 'w-32')}
-                                    {renderSortHeader('Monto Total', 'monto', 'right', 'w-32')}
-                                    <th className="py-3 px-3 w-16 text-center text-xs font-extrabold uppercase tracking-wider align-middle">Acción</th>
+                                    <th className="py-3 px-2 w-8 text-center align-middle"></th>
+                                    <th
+                                      style={{ width: `${columnWidths.codigo}px` }}
+                                      className="py-3 px-3 text-left text-xs font-extrabold uppercase tracking-wider align-middle relative group border-r border-gray-200/50"
+                                    >
+                                      <span>Código</span>
+                                      <div
+                                        onMouseDown={(e) => handleMouseDownResize('codigo', e)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#F7931F] active:bg-[#F7931F] z-10 transition opacity-0 group-hover:opacity-100"
+                                        title="Arrastrar para cambiar ancho de columna"
+                                      />
+                                    </th>
+                                    {renderSortHeader('Oportunidad / Nombre', 'titulo', 'titulo', 'left')}
+                                    {renderSortHeader('Cliente', 'cliente', 'cliente', 'left')}
+                                    {renderSortHeader('Tipo Venta', 'tipo_venta', 'tipo_venta', 'left')}
+                                    {renderSortHeader('Prioridad', 'prioridad', 'prioridad', 'left')}
+                                    {renderSortHeader('Fecha Inicio', 'fecha_inicio', 'fecha_inicio', 'left')}
+                                    {renderSortHeader('Fecha Límite', 'fecha_limite', 'fecha_limite', 'left')}
+                                    {renderSortHeader('Monto Total', 'monto', 'monto', 'right')}
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 font-semibold text-[#363636]">
                                   {colOps.map((op) => {
                                     const montoTotal = getOportunidadTotalValue(op);
+                                    const isBeingDragged = draggedOpId === op.id;
 
                                     return (
                                       <tr
                                         key={op.id}
-                                        className="hover:bg-orange-50/40 transition group cursor-pointer text-xs"
+                                        draggable={true}
+                                        onDragStart={(e) => handleDragStart(e, op.id)}
+                                        onDragEnd={handleDragEnd}
                                         onClick={() => handleOpenOportunidad(op)}
+                                        className={`hover:bg-orange-50/40 transition group cursor-grab active:cursor-grabbing text-xs ${
+                                          isBeingDragged ? 'opacity-40 bg-amber-50 border-dashed border-[#F7931F]' : ''
+                                        }`}
                                       >
-                                        <td className="py-3 px-3 w-10 text-center align-middle" onClick={(e) => e.stopPropagation()}>
-                                          <div className="flex items-center justify-center">
-                                            <div className="w-3 h-3 rounded-full border border-gray-400 bg-white group-hover:border-[#F7931F] mx-auto" />
+                                        <td className="py-3 px-2 w-10 text-center align-middle" onClick={(e) => e.stopPropagation()}>
+                                          <div className="flex items-center justify-center gap-1">
+                                            <GripVertical className="w-3.5 h-3.5 text-gray-400 opacity-50 group-hover:opacity-100 transition shrink-0 cursor-grab" />
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                setStageMenuPos({
+                                                  opId: op.id,
+                                                  top: rect.bottom + 4,
+                                                  left: rect.left,
+                                                });
+                                              }}
+                                              className={`w-3.5 h-3.5 rounded-full border shadow-2xs transition hover:scale-125 cursor-pointer ${getStageDotColor(op.estado_pipeline)}`}
+                                              title="Hacer clic para cambiar el estado del pipeline"
+                                            />
                                           </div>
                                         </td>
 
-                                        <td className="py-3 px-3 w-28 font-mono font-bold text-gray-600 text-xs align-middle">
+                                        <td style={{ width: `${columnWidths.codigo}px` }} className="py-3 px-3 font-mono font-bold text-gray-600 text-xs align-middle truncate">
                                           {op.codigo}
                                         </td>
 
-                                        <td className="py-3 px-3 w-72 font-bold text-[#363636] group-hover:text-[#F7931F] transition text-xs truncate align-middle" title={op.titulo}>
+                                        <td style={{ width: `${columnWidths.titulo}px` }} className="py-3 px-3 font-bold text-[#363636] group-hover:text-[#F7931F] transition text-xs truncate align-middle" title={op.titulo}>
                                           {op.titulo}
                                         </td>
 
-                                        <td className="py-3 px-3 w-56 text-xs align-middle" onClick={(e) => e.stopPropagation()}>
+                                        <td style={{ width: `${columnWidths.cliente}px` }} className="py-3 px-3 text-xs align-middle truncate" onClick={(e) => e.stopPropagation()}>
                                           <Link
                                             href={`/clientes/${op.cliente_id}`}
                                             className="font-bold text-[#F7931F] hover:underline flex items-center gap-1.5 truncate"
@@ -1613,7 +1844,7 @@ export default function PipelineVentasPage() {
                                           </Link>
                                         </td>
 
-                                        <td className="py-3 px-3 w-36 text-xs align-middle" onClick={(e) => e.stopPropagation()}>
+                                        <td style={{ width: `${columnWidths.tipo_venta}px` }} className="py-3 px-3 text-xs align-middle" onClick={(e) => e.stopPropagation()}>
                                           <select
                                             value={op.tipo_venta || 'Instalación'}
                                             onChange={async (e) => {
@@ -1629,7 +1860,7 @@ export default function PipelineVentasPage() {
                                           </select>
                                         </td>
 
-                                        <td className="py-3 px-3 w-28 text-xs align-middle" onClick={(e) => e.stopPropagation()}>
+                                        <td style={{ width: `${columnWidths.prioridad}px` }} className="py-3 px-3 text-xs align-middle" onClick={(e) => e.stopPropagation()}>
                                           <select
                                             value={op.prioridad || 'normal'}
                                             onChange={async (e) => {
@@ -1651,7 +1882,7 @@ export default function PipelineVentasPage() {
                                           </select>
                                         </td>
 
-                                        <td className="py-3 px-3 w-32 font-mono text-gray-600 text-xs align-middle" onClick={(e) => e.stopPropagation()}>
+                                        <td style={{ width: `${columnWidths.fecha_inicio}px` }} className="py-3 px-3 font-mono text-gray-600 text-xs align-middle" onClick={(e) => e.stopPropagation()}>
                                           <input
                                             type="date"
                                             value={op.fecha_inicio || ''}
@@ -1664,7 +1895,7 @@ export default function PipelineVentasPage() {
                                           />
                                         </td>
 
-                                        <td className="py-3 px-3 w-32 font-mono font-bold text-amber-800 text-xs align-middle" onClick={(e) => e.stopPropagation()}>
+                                        <td style={{ width: `${columnWidths.fecha_limite}px` }} className="py-3 px-3 font-mono font-bold text-amber-800 text-xs align-middle" onClick={(e) => e.stopPropagation()}>
                                           <input
                                             type="date"
                                             value={op.fecha_limite || ''}
@@ -1677,21 +1908,8 @@ export default function PipelineVentasPage() {
                                           />
                                         </td>
 
-                                        <td className="py-3 px-3 w-32 text-right font-bold text-[#363636] text-xs align-middle">
+                                        <td style={{ width: `${columnWidths.monto}px` }} className="py-3 px-3 text-right font-bold text-[#363636] text-xs align-middle">
                                           ${montoTotal.toLocaleString('es-CL')}
-                                        </td>
-
-                                        <td className="py-3 px-3 w-16 text-center align-middle" onClick={(e) => e.stopPropagation()}>
-                                          <div className="flex items-center justify-center">
-                                            <button
-                                              type="button"
-                                              onClick={() => setOpToDelete(op)}
-                                              className="p-1.5 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-xl transition border border-red-200"
-                                              title="Eliminar Oportunidad"
-                                            >
-                                              <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                          </div>
                                         </td>
                                       </tr>
                                     );
@@ -1719,10 +1937,15 @@ export default function PipelineVentasPage() {
             if (e.target === e.currentTarget) handleCloseOportunidad();
           }}
         >
-          <div className="bg-[#18181b] text-gray-100 border border-gray-800 rounded-3xl max-w-7xl w-full p-4 sm:p-6 shadow-2xl h-[95vh] overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-6">
-            
-            {/* Columna Izquierda (7/12 Cols): Breadcrumb + Título + Accordions */}
-            <div className="lg:col-span-7 flex flex-col h-full overflow-hidden pr-2 border-r border-gray-800/80">
+          <div
+            ref={modalContainerRef}
+            className="bg-[#18181b] text-gray-100 border border-gray-800 rounded-3xl max-w-[84vw] w-full p-4 sm:p-6 shadow-2xl h-[95vh] overflow-hidden flex flex-col lg:flex-row gap-0 relative"
+          >
+            {/* Columna Izquierda: Breadcrumb + Título + Accordions (Ancho Resizable) */}
+            <div
+              style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${modalLeftColRatio}%` : '100%' }}
+              className="flex flex-col h-full overflow-hidden pr-3 shrink-0"
+            >
               {/* Header Superior con Breadcrumb, Selector de Estado de Pipeline y Botón Eliminar Oportunidad */}
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 pb-3 text-sm shrink-0">
                 <div className="flex items-center gap-2.5 text-gray-300 font-medium">
@@ -1877,60 +2100,124 @@ export default function PipelineVentasPage() {
 
               {/* Listas Desplegables (Accordions) con Scroll Independiente */}
               <div className="flex-1 overflow-y-auto space-y-4 pr-2 text-sm">
+                {/* Banner Header: SECCIÓN 1: ÁREA COMERCIAL & VENTAS (Contraíble con Jerarquía) */}
+                <button
+                  type="button"
+                  onClick={() => setAreaExpanded((prev) => ({ ...prev, comercial: !prev.comercial }))}
+                  className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] border border-amber-500/40 rounded-2xl flex items-center justify-between font-black text-sm sm:text-base uppercase tracking-wide text-amber-400 transition shadow-md cursor-pointer group"
+                >
+                  <div className="flex items-center gap-3">
+                    <TrendingUp className="w-5 h-5 text-[#F7931F] group-hover:scale-110 transition-transform" />
+                    <span>Sección 1: Área Comercial & Ventas</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {areaExpanded.comercial ? (
+                      <ChevronUp className="w-5 h-5 text-amber-400" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-amber-400" />
+                    )}
+                  </div>
+                </button>
+
+                {areaExpanded.comercial && (
+                  <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-amber-500/40 space-y-3.5 my-2.5 animate-fadeIn relative">
+
                 {/* Accordion 1: Contacto del Cliente */}
                 <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
                   <button
                     onClick={() => setOpenSections({ ...openSections, contacto: !openSections.contacto })}
-                    className="w-full p-4 bg-[#27272a] hover:bg-[#323236] text-[#F7931F] font-extrabold text-sm uppercase tracking-wider flex items-center justify-between border-b border-gray-800 transition"
+                    className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] text-[#F7931F] font-extrabold text-xs uppercase tracking-wider flex items-center justify-between border-b border-gray-800 transition"
                   >
                     <span className="flex items-center gap-2.5">
-                      <User className="w-4 h-4" />
+                      <User className="w-4 h-4 text-[#F7931F]" />
                       <span>Contacto del Cliente</span>
                     </span>
-                    {openSections.contacto ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    <div className="flex items-center gap-2">
+                      {selectedOp.cliente_id && (
+                        <Link
+                          href={`/clientes/${selectedOp.cliente_id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-[10px] font-bold bg-[#F7931F]/20 hover:bg-[#F7931F] text-[#F7931F] hover:text-white px-2.5 py-1 rounded-xl transition normal-case"
+                        >
+                          Editar Ficha del Cliente
+                        </Link>
+                      )}
+                      {openSections.contacto ? <ChevronUp className="w-4 h-4 text-[#F7931F]" /> : <ChevronDown className="w-4 h-4 text-[#F7931F]" />}
+                    </div>
                   </button>
 
-                  {openSections.contacto && (
-                    <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4 text-gray-300 animate-fadeIn">
-                      <div>
-                        <span className="text-gray-400 font-semibold text-xs block mb-1">Razón Social / Nombre:</span>
-                        <strong className="text-white text-sm block font-bold">{selectedOp.cliente?.nombre || 'Hormiglass Cliente'}</strong>
-                      </div>
-                      <div>
-                        <span className="text-gray-400 font-semibold text-xs block mb-1">RUT Registrado:</span>
-                        <span className="font-mono text-amber-400 font-bold text-sm block">{selectedOp.cliente?.rut || 'Sin RUT'}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400 font-semibold text-xs block mb-1">Teléfono:</span>
-                        <span className="flex items-center gap-1.5 font-bold text-white text-sm">
-                          <Phone className="w-3.5 h-3.5 text-[#F7931F]" />
-                          {selectedOp.cliente?.telefono || 'No indicado'}
-                        </span>
-                      </div>
-                      <div className="md:col-span-3">
-                        <span className="text-gray-400 font-semibold text-xs block mb-1">Correos Electrónicos:</span>
-                        <div className="flex flex-wrap items-center gap-2 mt-1">
-                          <span className="bg-[#18181b] px-3 py-1.5 rounded-xl border border-gray-700 text-white font-mono text-xs flex items-center gap-1.5">
-                            <Mail className="w-3.5 h-3.5 text-[#F7931F]" />
-                            {selectedOp.cliente?.correo || 'Sin correo principal'}
+                  {openSections.contacto && (() => {
+                    const activeClient = clientes.find((c) => c.id === selectedOp.cliente_id) || selectedOp.cliente;
+
+                    return (
+                      <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4 text-gray-300 animate-fadeIn">
+                        <div>
+                          <span className="text-gray-400 font-semibold text-xs block mb-1">Razón Social / Nombre:</span>
+                          <strong className="text-white text-sm block font-bold">{activeClient?.nombre || 'Hormiglass Cliente'}</strong>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 font-semibold text-xs block mb-1">RUT Registrado:</span>
+                          <span className="font-mono text-amber-400 font-bold text-sm block">{activeClient?.rut || 'Sin RUT'}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 font-semibold text-xs block mb-1">Teléfono:</span>
+                          <span className="flex items-center gap-1.5 font-bold text-white text-sm">
+                            <Phone className="w-3.5 h-3.5 text-[#F7931F]" />
+                            {activeClient?.telefono || 'No indicado'}
                           </span>
                         </div>
+
+                        {/* Ubicación Desglosada: Dirección, Comuna, Región */}
+                        <div>
+                          <span className="text-gray-400 font-semibold text-xs block mb-1">Dirección de Despacho / Obra:</span>
+                          <span className="text-white text-xs font-bold block truncate" title={activeClient?.direccion || selectedOp.direccion || 'Sin dirección'}>
+                            {activeClient?.direccion || selectedOp.direccion || 'Sin dirección'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 font-semibold text-xs block mb-1">Comuna:</span>
+                          <span className="text-amber-400 text-xs font-bold block">
+                            {activeClient?.comuna || selectedOp.comuna || 'Sin comuna'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 font-semibold text-xs block mb-1">Región:</span>
+                          <span className="text-white text-xs font-medium block">
+                            {activeClient?.region || selectedOp.region || 'Región Metropolitana'}
+                          </span>
+                        </div>
+
+                        <div className="md:col-span-3">
+                          <span className="text-gray-400 font-semibold text-xs block mb-1">Correos Electrónicos:</span>
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            <span className="bg-[#18181b] px-3 py-1.5 rounded-xl border border-gray-700 text-white font-mono text-xs flex items-center gap-1.5">
+                              <Mail className="w-3.5 h-3.5 text-[#F7931F]" />
+                              {activeClient?.correo || 'Sin correo principal'}
+                            </span>
+                            {activeClient?.correos_secundarios?.map((sec, idx) => (
+                              <span key={idx} className="bg-[#18181b] px-3 py-1.5 rounded-xl border border-gray-700 text-gray-300 font-mono text-xs flex items-center gap-1.5">
+                                <Mail className="w-3.5 h-3.5 text-gray-400" />
+                                {sec}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
 
                 {/* Accordion 2: Cotizaciones de la Oportunidad */}
                 <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
                   <button
                     onClick={() => setOpenSections({ ...openSections, productos: !openSections.productos })}
-                    className="w-full p-4 bg-[#27272a] hover:bg-[#323236] text-[#F7931F] font-extrabold text-sm uppercase tracking-wider flex items-center justify-between border-b border-gray-800 transition"
+                    className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] text-[#F7931F] font-extrabold text-xs uppercase tracking-wider flex items-center justify-between border-b border-gray-800 transition"
                   >
                     <span className="flex items-center gap-2.5">
-                      <FileText className="w-4 h-4" />
+                      <FileText className="w-4 h-4 text-[#F7931F]" />
                       <span>Cotizaciones de la Oportunidad</span>
                     </span>
-                    {openSections.productos ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    {openSections.productos ? <ChevronUp className="w-4 h-4 text-[#F7931F]" /> : <ChevronDown className="w-4 h-4 text-[#F7931F]" />}
                   </button>
 
                   {openSections.productos && (
@@ -2240,13 +2527,13 @@ export default function PipelineVentasPage() {
                 <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
                   <button
                     onClick={() => setOpenSections({ ...openSections, finanzas: !openSections.finanzas })}
-                    className="w-full p-4 bg-[#27272a] hover:bg-[#323236] text-[#F7931F] font-extrabold text-sm uppercase tracking-wider flex items-center justify-between border-b border-gray-800 transition"
+                    className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] text-[#F7931F] font-extrabold text-xs uppercase tracking-wider flex items-center justify-between border-b border-gray-800 transition"
                   >
                     <span className="flex items-center gap-2.5">
-                      <DollarSign className="w-4 h-4" />
+                      <DollarSign className="w-4 h-4 text-[#F7931F]" />
                       <span>Finanzas & Comprobantes de Pago</span>
                     </span>
-                    {openSections.finanzas ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    {openSections.finanzas ? <ChevronUp className="w-4 h-4 text-[#F7931F]" /> : <ChevronDown className="w-4 h-4 text-[#F7931F]" />}
                   </button>
 
                   {openSections.finanzas && (
@@ -2319,8 +2606,13 @@ export default function PipelineVentasPage() {
                                       onChange={(e) => {
                                         const file = e.target.files?.[0];
                                         if (file) {
+                                          if (file.size > 10 * 1024 * 1024) {
+                                            setAbonoErrorMsg('El comprobante excede el tamaño máximo de 10 MB.');
+                                            return;
+                                          }
+                                          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
                                           setNuevoAbonoFile(file);
-                                          setNuevoAbonoFileName(file.name);
+                                          setNuevoAbonoFileName(safeName);
                                           setAbonoErrorMsg('');
                                         }
                                       }}
@@ -2610,13 +2902,13 @@ export default function PipelineVentasPage() {
                   )}
                 </div>
 
-                {/* Accordion 4: Visita a Terreno (De último, debajo de Finanzas, con el mismo formato que los demás acordeones) */}
+                {/* Accordion 4: Visita a Terreno */}
                 <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
-                  <div className="w-full p-4 bg-[#27272a] text-[#F7931F] font-extrabold text-sm uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
+                  <div className="w-full p-3.5 bg-[#27272a] text-[#F7931F] font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
                     <button
                       type="button"
                       onClick={() => setOpenSections({ ...openSections, visita: !openSections.visita })}
-                      className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-sm uppercase tracking-wider text-[#F7931F]"
+                      className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-xs uppercase tracking-wider text-[#F7931F]"
                     >
                       <Calendar className="w-4 h-4 text-[#F7931F]" />
                       <span>Visita a Terreno</span>
@@ -3045,9 +3337,37 @@ export default function PipelineVentasPage() {
                                     type="button"
                                     onClick={async () => {
                                       try {
-                                        await supabase.from('visitas_terreno').delete().eq('id', vis.id);
-                                        setOpVisitasList((prev) => prev.filter((v) => v.id !== vis.id));
-                                        await addOportunidadActividad(selectedOp.id, 'Una Visita a Terreno fue eliminada.');
+                                        const isLegacy = vis.id.startsWith('legacy-');
+                                        if (isUUID(vis.id) && !isLegacy) {
+                                          await supabase.from('visitas_terreno').delete().eq('id', vis.id);
+                                        }
+
+                                        const updatedList = opVisitasList.filter((v) => v.id !== vis.id);
+                                        setOpVisitasList(updatedList);
+
+                                        if (updatedList.length === 0 || isLegacy) {
+                                          if (isUUID(selectedOp.id)) {
+                                            await supabase.from('oportunidades').update({
+                                              fecha_visita_terreno: null,
+                                              hora_visita_terreno: null,
+                                              tecnico_visita: null,
+                                              estado_visita: null,
+                                              observaciones_visita: null,
+                                              requiere_visita_terreno: false,
+                                            }).eq('id', selectedOp.id);
+                                          }
+
+                                          setSelectedOp((prev) =>
+                                            prev ? { ...prev, requiere_visita_terreno: false, fecha_visita_terreno: undefined } : null
+                                          );
+                                          setOportunidades((prevOps) =>
+                                            prevOps.map((o) =>
+                                              o.id === selectedOp.id ? { ...o, requiere_visita_terreno: false, fecha_visita_terreno: undefined } : o
+                                            )
+                                          );
+                                        }
+
+                                        await addOportunidadActividad(selectedOp.id, 'Una Visita a Terreno fue eliminada del sistema.');
                                       } catch (err) {
                                         console.error('Error deleting visita:', err);
                                       }
@@ -3066,276 +3386,396 @@ export default function PipelineVentasPage() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
 
-                {/* Accordion 5: Datos de Producción & Fabricación */}
-                <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
-                  <div className="w-full p-4 bg-[#27272a] text-[#F7931F] font-extrabold text-sm uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
-                    <button
-                      type="button"
-                      onClick={() => setOpenSections({ ...openSections, produccion: !openSections.produccion })}
-                      className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-sm uppercase tracking-wider text-[#F7931F]"
-                    >
-                      <Factory className="w-4 h-4 text-[#F7931F]" />
-                      <span>Datos de Producción & Fabricación</span>
-                      {planificacionData && (
-                        <span className="text-xs bg-amber-500/20 text-amber-300 font-mono font-bold px-2 py-0.5 rounded-full border border-amber-500/30 capitalize">
-                          {planificacionData.estado || 'Activo'}
-                        </span>
+            {/* Banner & Acordeón de Sección 2: Área de Producción & Instalación (Contraíble con Jerarquía) */}
+                {(() => {
+                  const isProduccionUnlocked =
+                    selectedOp.estado_pipeline === 'entregada' ||
+                    selectedOp.estado_pipeline.startsWith('prod_') ||
+                    selectedOp.estado_pipeline.startsWith('rev_');
+
+                  if (!isProduccionUnlocked) {
+                    return (
+                      <div className="p-4 bg-[#222226] border border-gray-800 rounded-2xl space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-black text-sm sm:text-base uppercase tracking-wide text-purple-400 flex items-center gap-2.5">
+                            <Factory className="w-5 h-5" />
+                            <span>Sección 2: Área de Producción & Instalación</span>
+                          </span>
+                          <span className="text-[10px] font-bold bg-gray-800 text-gray-400 px-2.5 py-0.5 rounded-full border border-gray-700">
+                            Bloqueado
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400 leading-relaxed pl-7">
+                          Esta sección se mostrará automáticamente al ingresar al estado <strong>Venta Cerrada</strong> o a la sección de <strong>Producción</strong>.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      <button
+                        type="button"
+                        onClick={() => setAreaExpanded((prev) => ({ ...prev, produccion: !prev.produccion }))}
+                        className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] border border-purple-500/40 rounded-2xl flex items-center justify-between font-black text-sm sm:text-base uppercase tracking-wide text-purple-400 transition shadow-md cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Factory className="w-5 h-5 text-purple-400 group-hover:scale-110 transition-transform" />
+                          <span>Sección 2: Área de Producción & Instalación</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {areaExpanded.produccion ? (
+                            <ChevronUp className="w-5 h-5 text-purple-400" />
+                          ) : (
+                            <ChevronDown className="w-5 h-5 text-purple-400" />
+                          )}
+                        </div>
+                      </button>
+
+                      {areaExpanded.produccion && (
+                        <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-purple-500/40 space-y-3.5 my-2.5 animate-fadeIn relative">
+                          {/* Accordion 5: Datos de Producción & Fabricación */}
+                          <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
+                            <div className="w-full p-3.5 bg-[#27272a] text-[#F7931F] font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
+                              <button
+                                type="button"
+                                onClick={() => setOpenSections({ ...openSections, produccion: !openSections.produccion })}
+                                className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-xs uppercase tracking-wider text-[#F7931F]"
+                              >
+                                <Factory className="w-4 h-4 text-[#F7931F]" />
+                                <span>Datos de Producción & Fabricación</span>
+                                {planificacionData && (
+                                  <span className="text-xs bg-amber-500/20 text-amber-300 font-mono font-bold px-2 py-0.5 rounded-full border border-amber-500/30 capitalize">
+                                    {planificacionData.estado || 'Activo'}
+                                  </span>
+                                )}
+                                {openSections.produccion ? <ChevronUp className="w-4 h-4 text-[#F7931F]" /> : <ChevronDown className="w-4 h-4 text-[#F7931F]" />}
+                              </button>
+                            </div>
+
+                            {openSections.produccion && (
+                              <div className="p-4 space-y-4 text-xs text-gray-300 bg-[#1e1e22]">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="block font-bold text-gray-300 mb-1">Estado de Producción</label>
+                                    <select
+                                      value={planificacionData?.estado || 'pendiente'}
+                                      onChange={async (e) => {
+                                        const newEst = e.target.value;
+                                        setPlanificacionData((prev) => ({ ...prev, estado: newEst }));
+                                        if (isUUID(selectedOp.id)) {
+                                          await supabase.from('proyectos_planificacion').upsert([
+                                            {
+                                              oportunidad_id: selectedOp.id,
+                                              codigo: selectedOp.codigo,
+                                              titulo: selectedOp.titulo,
+                                              cliente_id: selectedOp.cliente_id,
+                                              estado: newEst,
+                                            },
+                                          ], { onConflict: 'oportunidad_id' });
+                                          await addOportunidadActividad(selectedOp.id, `Estado de Producción actualizado a "${newEst.toUpperCase()}"`);
+                                        }
+                                      }}
+                                      className="w-full bg-[#18181b] border border-gray-700 text-amber-400 font-bold rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
+                                    >
+                                      <option value="pendiente">Pendiente Planificación</option>
+                                      <option value="cola_produccion">En Cola de Fabricación</option>
+                                      <option value="fabricacion">En Fabricación</option>
+                                      <option value="listo_instalacion">Listo p/ Instalación</option>
+                                      <option value="instalacion">En Instalación</option>
+                                      <option value="finalizado">Finalizado / Entregado</option>
+                                    </select>
+                                  </div>
+
+                                  <div>
+                                    <label className="block font-bold text-gray-300 mb-1">Estimación Fabricación</label>
+                                    <input
+                                      type="date"
+                                      value={planificacionData?.fecha_estimada_produccion || ''}
+                                      onChange={async (e) => {
+                                        const val = e.target.value;
+                                        setPlanificacionData((prev) => ({ ...prev, fecha_estimada_produccion: val }));
+                                        if (isUUID(selectedOp.id)) {
+                                          await supabase.from('proyectos_planificacion').upsert([
+                                            {
+                                              oportunidad_id: selectedOp.id,
+                                              codigo: selectedOp.codigo,
+                                              titulo: selectedOp.titulo,
+                                              cliente_id: selectedOp.cliente_id,
+                                              fecha_estimada_produccion: val,
+                                            },
+                                          ], { onConflict: 'oportunidad_id' });
+                                        }
+                                      }}
+                                      className="w-full bg-[#18181b] border border-gray-700 text-white font-mono rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="block font-bold text-gray-300 mb-1">Estimación Instalación</label>
+                                    <input
+                                      type="date"
+                                      value={planificacionData?.fecha_estimada_instalacion || ''}
+                                      onChange={async (e) => {
+                                        const val = e.target.value;
+                                        setPlanificacionData((prev) => ({ ...prev, fecha_estimada_instalacion: val }));
+                                        if (isUUID(selectedOp.id)) {
+                                          await supabase.from('proyectos_planificacion').upsert([
+                                            {
+                                              oportunidad_id: selectedOp.id,
+                                              codigo: selectedOp.codigo,
+                                              titulo: selectedOp.titulo,
+                                              cliente_id: selectedOp.cliente_id,
+                                              fecha_estimada_instalacion: val,
+                                            },
+                                          ], { onConflict: 'oportunidad_id' });
+                                        }
+                                      }}
+                                      className="w-full bg-[#18181b] border border-gray-700 text-white font-mono rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label className="block font-bold text-gray-300 mb-1">Observaciones Técnicas / Planta</label>
+                                  <textarea
+                                    rows={2}
+                                    placeholder="Instrucciones específicas de corte, templado, armado o logística de instalación..."
+                                    value={planificacionData?.observaciones || ''}
+                                    onChange={async (e) => {
+                                      const val = e.target.value;
+                                      setPlanificacionData((prev) => ({ ...prev, observaciones: val }));
+                                      if (isUUID(selectedOp.id)) {
+                                        await supabase.from('proyectos_planificacion').upsert([
+                                          {
+                                            oportunidad_id: selectedOp.id,
+                                            codigo: selectedOp.codigo,
+                                            titulo: selectedOp.titulo,
+                                            cliente_id: selectedOp.cliente_id,
+                                            observaciones: val,
+                                          },
+                                        ], { onConflict: 'oportunidad_id' });
+                                      }
+                                    }}
+                                    className="w-full bg-[#18181b] border border-gray-700 text-white rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#F7931F]"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       )}
-                      {openSections.produccion ? <ChevronUp className="w-4 h-4 text-[#F7931F]" /> : <ChevronDown className="w-4 h-4 text-[#F7931F]" />}
-                    </button>
-                  </div>
-
-                  {openSections.produccion && (
-                    <div className="p-4 space-y-4 text-xs text-gray-300 bg-[#1e1e22]">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block font-bold text-gray-300 mb-1">Estado de Producción</label>
-                          <select
-                            value={planificacionData?.estado || 'pendiente'}
-                            onChange={async (e) => {
-                              const newEst = e.target.value;
-                              setPlanificacionData((prev) => ({ ...prev, estado: newEst }));
-                              if (isUUID(selectedOp.id)) {
-                                await supabase.from('proyectos_planificacion').upsert([
-                                  {
-                                    oportunidad_id: selectedOp.id,
-                                    codigo: selectedOp.codigo,
-                                    titulo: selectedOp.titulo,
-                                    cliente_id: selectedOp.cliente_id,
-                                    estado: newEst,
-                                  },
-                                ], { onConflict: 'oportunidad_id' });
-                                await addOportunidadActividad(selectedOp.id, `Estado de Producción actualizado a "${newEst.toUpperCase()}"`);
-                              }
-                            }}
-                            className="w-full bg-[#18181b] border border-gray-700 text-amber-400 font-bold rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
-                          >
-                            <option value="pendiente">1. Pendiente Planificación</option>
-                            <option value="cola_produccion">2. En Cola de Fabricación</option>
-                            <option value="fabricacion">3. En Fabricación</option>
-                            <option value="listo_instalacion">4. Listo p/ Instalación</option>
-                            <option value="instalacion">5. En Instalación</option>
-                            <option value="finalizado">6. Finalizado / Entregado</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block font-bold text-gray-300 mb-1">Estimación Fabricación</label>
-                          <input
-                            type="date"
-                            value={planificacionData?.fecha_estimada_produccion || ''}
-                            onChange={async (e) => {
-                              const val = e.target.value;
-                              setPlanificacionData((prev) => ({ ...prev, fecha_estimada_produccion: val }));
-                              if (isUUID(selectedOp.id)) {
-                                await supabase.from('proyectos_planificacion').upsert([
-                                  {
-                                    oportunidad_id: selectedOp.id,
-                                    codigo: selectedOp.codigo,
-                                    titulo: selectedOp.titulo,
-                                    cliente_id: selectedOp.cliente_id,
-                                    fecha_estimada_produccion: val,
-                                  },
-                                ], { onConflict: 'oportunidad_id' });
-                              }
-                            }}
-                            className="w-full bg-[#18181b] border border-gray-700 text-white font-mono rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block font-bold text-gray-300 mb-1">Estimación Instalación</label>
-                          <input
-                            type="date"
-                            value={planificacionData?.fecha_estimada_instalacion || ''}
-                            onChange={async (e) => {
-                              const val = e.target.value;
-                              setPlanificacionData((prev) => ({ ...prev, fecha_estimada_instalacion: val }));
-                              if (isUUID(selectedOp.id)) {
-                                await supabase.from('proyectos_planificacion').upsert([
-                                  {
-                                    oportunidad_id: selectedOp.id,
-                                    codigo: selectedOp.codigo,
-                                    titulo: selectedOp.titulo,
-                                    cliente_id: selectedOp.cliente_id,
-                                    fecha_estimada_instalacion: val,
-                                  },
-                                ], { onConflict: 'oportunidad_id' });
-                              }
-                            }}
-                            className="w-full bg-[#18181b] border border-gray-700 text-white font-mono rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block font-bold text-gray-300 mb-1">Observaciones Técnicas / Planta</label>
-                        <textarea
-                          rows={2}
-                          placeholder="Instrucciones específicas de corte, templado, armado o logística de instalación..."
-                          value={planificacionData?.observaciones || ''}
-                          onChange={async (e) => {
-                            const val = e.target.value;
-                            setPlanificacionData((prev) => ({ ...prev, observaciones: val }));
-                            if (isUUID(selectedOp.id)) {
-                              await supabase.from('proyectos_planificacion').upsert([
-                                {
-                                  oportunidad_id: selectedOp.id,
-                                  codigo: selectedOp.codigo,
-                                  titulo: selectedOp.titulo,
-                                  cliente_id: selectedOp.cliente_id,
-                                  observaciones: val,
-                                },
-                              ], { onConflict: 'oportunidad_id' });
-                            }
-                          }}
-                          className="w-full bg-[#18181b] border border-gray-700 text-white rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#F7931F]"
-                        />
-                      </div>
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
 
-                {/* Accordion 6: Datos de Logística & Reventa */}
-                <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
-                  <div className="w-full p-4 bg-[#27272a] text-[#F7931F] font-extrabold text-sm uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
-                    <button
-                      type="button"
-                      onClick={() => setOpenSections({ ...openSections, reventa: !openSections.reventa })}
-                      className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-sm uppercase tracking-wider text-[#F7931F]"
-                    >
-                      <Truck className="w-4 h-4 text-[#F7931F]" />
-                      <span>Datos de Logística & Reventa</span>
-                      {reventaData && (
-                        <span className="text-xs bg-indigo-500/20 text-indigo-300 font-mono font-bold px-2 py-0.5 rounded-full border border-indigo-500/30 capitalize">
-                          {reventaData.estado || 'Activo'}
-                        </span>
+                {/* Banner & Acordeón de Sección 3: Área de Reventa & Logística (Contraíble con Jerarquía) */}
+                {(() => {
+                  const isReventaUnlocked =
+                    selectedOp.estado_pipeline.startsWith('rev_') ||
+                    selectedOp.tipo_venta === 'Reventa de Material' ||
+                    selectedOp.tipo_venta === 'Suministro';
+
+                  if (!isReventaUnlocked) {
+                    return (
+                      <div className="p-4 bg-[#222226] border border-gray-800 rounded-2xl space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-black text-sm sm:text-base uppercase tracking-wide text-indigo-400 flex items-center gap-2.5">
+                            <Truck className="w-5 h-5" />
+                            <span>Sección 3: Área de Reventa & Logística</span>
+                          </span>
+                          <span className="text-[10px] font-bold bg-gray-800 text-gray-400 px-2.5 py-0.5 rounded-full border border-gray-700">
+                            Bloqueado
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400 leading-relaxed pl-7">
+                          Esta sección se mostrará automáticamente al seleccionar el tipo <strong>Reventa de Material / Suministro</strong> o avanzar a la sección de <strong>Reventa & Logística</strong>.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      <button
+                        type="button"
+                        onClick={() => setAreaExpanded((prev) => ({ ...prev, reventa: !prev.reventa }))}
+                        className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] border border-indigo-500/40 rounded-2xl flex items-center justify-between font-black text-sm sm:text-base uppercase tracking-wide text-indigo-400 transition shadow-md cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Truck className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
+                          <span>Sección 3: Área de Reventa & Logística</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {areaExpanded.reventa ? (
+                            <ChevronUp className="w-5 h-5 text-indigo-400" />
+                          ) : (
+                            <ChevronDown className="w-5 h-5 text-indigo-400" />
+                          )}
+                        </div>
+                      </button>
+
+                      {areaExpanded.reventa && (
+                        <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-indigo-500/40 space-y-3.5 my-2.5 animate-fadeIn relative">
+                          {/* Accordion 6: Datos de Logística & Reventa */}
+                          <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
+                            <div className="w-full p-3.5 bg-[#27272a] text-[#F7931F] font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
+                              <button
+                                type="button"
+                                onClick={() => setOpenSections({ ...openSections, reventa: !openSections.reventa })}
+                                className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-xs uppercase tracking-wider text-[#F7931F]"
+                              >
+                                <Truck className="w-4 h-4 text-[#F7931F]" />
+                                <span>Datos de Logística & Reventa</span>
+                                {reventaData && (
+                                  <span className="text-xs bg-indigo-500/20 text-indigo-300 font-mono font-bold px-2 py-0.5 rounded-full border border-indigo-500/30 capitalize">
+                                    {reventaData.estado || 'Activo'}
+                                  </span>
+                                )}
+                                {openSections.reventa ? <ChevronUp className="w-4 h-4 text-[#F7931F]" /> : <ChevronDown className="w-4 h-4 text-[#F7931F]" />}
+                              </button>
+                            </div>
+
+                            {openSections.reventa && (
+                              <div className="p-4 space-y-4 text-xs text-gray-300 bg-[#1e1e22]">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="block font-bold text-gray-300 mb-1">Estado Logístico</label>
+                                    <select
+                                      value={reventaData?.estado || 'coordinacion_proveedor'}
+                                      onChange={async (e) => {
+                                        const newEst = e.target.value;
+                                        setReventaData((prev) => ({ ...prev, estado: newEst }));
+                                        if (isUUID(selectedOp.id)) {
+                                          await supabase.from('ordenes_reventa').upsert([
+                                            {
+                                              oportunidad_id: selectedOp.id,
+                                              codigo: selectedOp.codigo,
+                                              titulo: selectedOp.titulo,
+                                              cliente_id: selectedOp.cliente_id,
+                                              estado: newEst,
+                                            },
+                                          ], { onConflict: 'oportunidad_id' });
+                                          await addOportunidadActividad(selectedOp.id, `Estado Logístico de Reventa actualizado a "${newEst.toUpperCase()}"`);
+                                        }
+                                      }}
+                                      className="w-full bg-[#18181b] border border-gray-700 text-indigo-400 font-bold rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
+                                    >
+                                      <option value="coordinacion_proveedor">Coordinación Proveedor</option>
+                                      <option value="confirmacion_stock">Confirmación Stock</option>
+                                      <option value="listo_retiro">Listo para Retiro</option>
+                                      <option value="listo_despacho">Listo para Despacho</option>
+                                      <option value="entregado">Entregado al Cliente</option>
+                                      <option value="postventa">Postventa & Seguimiento</option>
+                                    </select>
+                                  </div>
+
+                                  <div>
+                                    <label className="block font-bold text-gray-300 mb-1">Proveedor Asignado</label>
+                                    <input
+                                      type="text"
+                                      placeholder="Nombre del proveedor o distribuidor..."
+                                      value={reventaData?.proveedor_nombre || ''}
+                                      onChange={async (e) => {
+                                        const val = e.target.value;
+                                        setReventaData((prev) => ({ ...prev, proveedor_nombre: val }));
+                                        if (isUUID(selectedOp.id)) {
+                                          await supabase.from('ordenes_reventa').upsert([
+                                            {
+                                              oportunidad_id: selectedOp.id,
+                                              codigo: selectedOp.codigo,
+                                              titulo: selectedOp.titulo,
+                                              cliente_id: selectedOp.cliente_id,
+                                              proveedor_nombre: val,
+                                            },
+                                          ], { onConflict: 'oportunidad_id' });
+                                        }
+                                      }}
+                                      className="w-full bg-[#18181b] border border-gray-700 text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="block font-bold text-gray-300 mb-1">Fecha Despacho</label>
+                                    <input
+                                      type="date"
+                                      value={reventaData?.fecha_despacho || ''}
+                                      onChange={async (e) => {
+                                        const val = e.target.value;
+                                        setReventaData((prev) => ({ ...prev, fecha_despacho: val }));
+                                        if (isUUID(selectedOp.id)) {
+                                          await supabase.from('ordenes_reventa').upsert([
+                                            {
+                                              oportunidad_id: selectedOp.id,
+                                              codigo: selectedOp.codigo,
+                                              titulo: selectedOp.titulo,
+                                              cliente_id: selectedOp.cliente_id,
+                                              fecha_despacho: val,
+                                            },
+                                          ], { onConflict: 'oportunidad_id' });
+                                        }
+                                      }}
+                                      className="w-full bg-[#18181b] border border-gray-700 text-white font-mono rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label className="block font-bold text-gray-300 mb-1">Notas de Postventa & Seguimiento</label>
+                                  <textarea
+                                    rows={2}
+                                    placeholder="Añadir observaciones de entrega, garantías o postventa..."
+                                    value={reventaData?.notas_postventa || ''}
+                                    onChange={async (e) => {
+                                      const val = e.target.value;
+                                      setReventaData((prev) => ({ ...prev, notas_postventa: val }));
+                                      if (isUUID(selectedOp.id)) {
+                                        await supabase.from('ordenes_reventa').upsert([
+                                          {
+                                            oportunidad_id: selectedOp.id,
+                                            codigo: selectedOp.codigo,
+                                            titulo: selectedOp.titulo,
+                                            cliente_id: selectedOp.cliente_id,
+                                            notas_postventa: val,
+                                          },
+                                        ], { onConflict: 'oportunidad_id' });
+                                      }
+                                    }}
+                                    className="w-full bg-[#18181b] border border-gray-700 text-white rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#F7931F]"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       )}
-                      {openSections.reventa ? <ChevronUp className="w-4 h-4 text-[#F7931F]" /> : <ChevronDown className="w-4 h-4 text-[#F7931F]" />}
-                    </button>
-                  </div>
-
-                  {openSections.reventa && (
-                    <div className="p-4 space-y-4 text-xs text-gray-300 bg-[#1e1e22]">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block font-bold text-gray-300 mb-1">Estado Logístico</label>
-                          <select
-                            value={reventaData?.estado || 'coordinacion_proveedor'}
-                            onChange={async (e) => {
-                              const newEst = e.target.value;
-                              setReventaData((prev) => ({ ...prev, estado: newEst }));
-                              if (isUUID(selectedOp.id)) {
-                                await supabase.from('ordenes_reventa').upsert([
-                                  {
-                                    oportunidad_id: selectedOp.id,
-                                    codigo: selectedOp.codigo,
-                                    titulo: selectedOp.titulo,
-                                    cliente_id: selectedOp.cliente_id,
-                                    estado: newEst,
-                                  },
-                                ], { onConflict: 'oportunidad_id' });
-                                await addOportunidadActividad(selectedOp.id, `Estado Logístico de Reventa actualizado a "${newEst.toUpperCase()}"`);
-                              }
-                            }}
-                            className="w-full bg-[#18181b] border border-gray-700 text-indigo-400 font-bold rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
-                          >
-                            <option value="coordinacion_proveedor">1. Coordinación Proveedor</option>
-                            <option value="confirmacion_stock">2. Confirmación Stock</option>
-                            <option value="listo_retiro">3. Listo para Retiro</option>
-                            <option value="listo_despacho">4. Listo para Despacho</option>
-                            <option value="entregado">5. Entregado al Cliente</option>
-                            <option value="postventa">6. Postventa & Seguimiento</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block font-bold text-gray-300 mb-1">Proveedor Asignado</label>
-                          <input
-                            type="text"
-                            placeholder="Nombre del proveedor o distribuidor..."
-                            value={reventaData?.proveedor_nombre || ''}
-                            onChange={async (e) => {
-                              const val = e.target.value;
-                              setReventaData((prev) => ({ ...prev, proveedor_nombre: val }));
-                              if (isUUID(selectedOp.id)) {
-                                await supabase.from('ordenes_reventa').upsert([
-                                  {
-                                    oportunidad_id: selectedOp.id,
-                                    codigo: selectedOp.codigo,
-                                    titulo: selectedOp.titulo,
-                                    cliente_id: selectedOp.cliente_id,
-                                    proveedor_nombre: val,
-                                  },
-                                ], { onConflict: 'oportunidad_id' });
-                              }
-                            }}
-                            className="w-full bg-[#18181b] border border-gray-700 text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block font-bold text-gray-300 mb-1">Fecha Despacho</label>
-                          <input
-                            type="date"
-                            value={reventaData?.fecha_despacho || ''}
-                            onChange={async (e) => {
-                              const val = e.target.value;
-                              setReventaData((prev) => ({ ...prev, fecha_despacho: val }));
-                              if (isUUID(selectedOp.id)) {
-                                await supabase.from('ordenes_reventa').upsert([
-                                  {
-                                    oportunidad_id: selectedOp.id,
-                                    codigo: selectedOp.codigo,
-                                    titulo: selectedOp.titulo,
-                                    cliente_id: selectedOp.cliente_id,
-                                    fecha_despacho: val,
-                                  },
-                                ], { onConflict: 'oportunidad_id' });
-                              }
-                            }}
-                            className="w-full bg-[#18181b] border border-gray-700 text-white font-mono rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block font-bold text-gray-300 mb-1">Notas de Postventa & Seguimiento</label>
-                        <textarea
-                          rows={2}
-                          placeholder="Añadir observaciones de entrega, garantías o postventa..."
-                          value={reventaData?.notas_postventa || ''}
-                          onChange={async (e) => {
-                            const val = e.target.value;
-                            setReventaData((prev) => ({ ...prev, notas_postventa: val }));
-                            if (isUUID(selectedOp.id)) {
-                              await supabase.from('ordenes_reventa').upsert([
-                                {
-                                  oportunidad_id: selectedOp.id,
-                                  codigo: selectedOp.codigo,
-                                  titulo: selectedOp.titulo,
-                                  cliente_id: selectedOp.cliente_id,
-                                  notas_postventa: val,
-                                },
-                              ], { onConflict: 'oportunidad_id' });
-                            }
-                          }}
-                          className="w-full bg-[#18181b] border border-gray-700 text-white rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#F7931F]"
-                        />
-                      </div>
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
               </div>
             </div>
 
-            {/* Columna Derecha (5/12 Cols): Feed de Actividades Estilo ClickUp Completo */}
-            <div className="lg:col-span-5 bg-[#222226] rounded-2xl border border-gray-800 p-4 sm:p-5 flex flex-col justify-between h-full overflow-hidden shadow-xl">
+            {/* Separador Vertical Resizable (Barra para arrastrar y cambiar ancho) */}
+            <div
+              onMouseDown={handleMouseDownModalResizer}
+              className="hidden lg:flex w-4 hover:w-4 bg-transparent hover:bg-amber-500/20 active:bg-amber-500/30 cursor-col-resize select-none items-center justify-center group z-20 relative mx-1 transition-all rounded-full shrink-0"
+              title="Arrastrar para ajustar el ancho entre Información y Actividad (Tu configuración se guardará automáticamente)"
+            >
+              <div className="w-1.5 h-14 rounded-full bg-gray-700 group-hover:bg-[#F7931F] group-active:bg-[#F7931F] transition-colors shadow-sm" />
+            </div>
+
+            {/* Columna Derecha: Feed de Actividades (Ancho Resizable) */}
+            <div
+              style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${100 - modalLeftColRatio}%` : '100%' }}
+              className="flex-1 bg-[#222226] rounded-2xl border border-gray-800 p-4 sm:p-5 flex flex-col justify-between h-full overflow-hidden shadow-xl shrink-0"
+            >
               <div className="space-y-3.5 flex-1 flex flex-col overflow-hidden">
                 {/* Header de Actividad con Título e Íconos ClickUp */}
                 <div className="flex items-center justify-between border-b border-gray-800 pb-3">
@@ -3927,64 +4367,181 @@ export default function PipelineVentasPage() {
         </div>
       )}
 
-      {/* Floating Status Popover Overlay (Estilo ClickUp fuera de la tabla sin recortes ni scroll) */}
+      {/* Modal de Advertencia por Abono Mínimo Requerido (50% o 100%) */}
+      {abonoWarningModal && (
+        <div
+          className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn"
+          onClick={() => setAbonoWarningModal(null)}
+        >
+          <div
+            className="bg-white text-[#363636] border border-gray-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 border-b border-gray-100 pb-3">
+              <div className="p-2.5 bg-amber-100 text-amber-800 rounded-2xl shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-[#363636]">Requisito de Abono Mínimo (50%)</h3>
+                <p className="text-xs text-gray-500 font-medium">No se puede mover la oportunidad de estado</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <p className="text-gray-700 font-medium leading-relaxed">
+                Para cambiar la oportunidad <strong className="font-mono text-[#F7931F]">{abonoWarningModal.op.codigo}</strong> al estado de Venta Cerrada o Producción, se requiere registrar un abono equivalente a al menos el <strong className="text-amber-800 font-bold">50% o 100%</strong> del monto total.
+              </p>
+
+              <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200 space-y-2 font-mono text-xs">
+                <div className="flex justify-between text-gray-600">
+                  <span>Monto Total Venta:</span>
+                  <span className="font-bold text-[#363636]">${abonoWarningModal.montoTotal.toLocaleString('es-CL')}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Abonado actualmente:</span>
+                  <span className="font-bold text-amber-700">${abonoWarningModal.montoAbonado.toLocaleString('es-CL')} ({abonoWarningModal.porcentajeActual}%)</span>
+                </div>
+                <div className="flex justify-between text-[#F7931F] font-black border-t border-gray-200 pt-2 text-xs">
+                  <span>Requerido mínimo (50%):</span>
+                  <span>${Math.round(abonoWarningModal.montoTotal * 0.5).toLocaleString('es-CL')}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setAbonoWarningModal(null)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+              >
+                Entendido
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetOp = abonoWarningModal.op;
+                  setAbonoWarningModal(null);
+                  handleOpenOportunidad(targetOp);
+                  setOpenSections({
+                    contacto: false,
+                    productos: false,
+                    finanzas: true,
+                    visita: false,
+                    produccion: false,
+                    reventa: false,
+                  });
+                }}
+                className="px-4 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold rounded-xl transition shadow-sm flex items-center gap-1.5"
+              >
+                <DollarSign className="w-4 h-4" />
+                <span>Registrar Abono Ahora</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Status Popover Overlay (Estilo ClickUp de la Imagen) */}
       {stageMenuPos && (
         <div
           className="fixed inset-0 z-[100]"
-          onClick={() => setStageMenuPos(null)}
+          onClick={() => {
+            setStageMenuPos(null);
+            setStatusSearchQuery('');
+          }}
         >
           <div
             style={{
-              top: `${Math.min(stageMenuPos.top, typeof window !== 'undefined' ? window.innerHeight - 300 : stageMenuPos.top)}px`,
-              left: `${Math.min(stageMenuPos.left, typeof window !== 'undefined' ? window.innerWidth - 260 : stageMenuPos.left)}px`,
+              top: `${Math.min(stageMenuPos.top, typeof window !== 'undefined' ? window.innerHeight - 420 : stageMenuPos.top)}px`,
+              left: `${Math.min(stageMenuPos.left, typeof window !== 'undefined' ? window.innerWidth - 290 : stageMenuPos.left)}px`,
             }}
-            className="fixed z-[101] bg-[#1c1c1f] text-gray-100 border border-gray-800 rounded-2xl shadow-2xl p-2.5 min-w-[240px] space-y-2 animate-fadeIn"
+            className="fixed z-[101] bg-[#1c1c1f] text-gray-100 border border-gray-800 rounded-2xl shadow-2xl p-3 min-w-[280px] space-y-3 animate-fadeIn"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-gray-800 pb-2 px-1">
-              <span className="text-[11px] font-black uppercase text-gray-300 tracking-wider">Estado del Pipeline</span>
-              <button
-                onClick={() => setStageMenuPos(null)}
-                className="text-gray-500 hover:text-gray-300 p-0.5 rounded-lg transition"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+            {/* Header del Popover con Buscador ClickUp */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between border-b border-gray-800 pb-2 px-1">
+                <span className="text-[11px] font-black uppercase text-gray-300 tracking-wider">Estado del Pipeline</span>
+                <button
+                  onClick={() => {
+                    setStageMenuPos(null);
+                    setStatusSearchQuery('');
+                  }}
+                  className="text-gray-500 hover:text-gray-300 p-0.5 rounded-lg transition"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Buscador de estados Buscar... */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={statusSearchQuery}
+                  onChange={(e) => setStatusSearchQuery(e.target.value)}
+                  className="w-full bg-[#27272a] text-gray-200 border border-gray-700 focus:border-[#F7931F] text-xs rounded-xl pl-8 pr-3 py-1.5 focus:outline-none transition placeholder-gray-500 font-medium"
+                  autoFocus
+                />
+              </div>
             </div>
 
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
-              {SECCIONES_PIPELINE.map((sec) => (
-                <div key={sec.id} className="space-y-1">
-                  <span className="text-[10px] font-black uppercase text-amber-400 tracking-wider px-2 py-1 block bg-black/40 rounded-lg">
-                    {sec.nombre}
-                  </span>
-                  {sec.etapas.map((st) => {
-                    const targetOp = oportunidades.find((o) => o.id === stageMenuPos.opId);
-                    const isCurrent = targetOp?.estado_pipeline === st.id;
-                    return (
-                      <button
-                        key={st.id}
-                        type="button"
-                        onClick={async () => {
-                          const opId = stageMenuPos.opId;
-                          setStageMenuPos(null);
-                          await moveOportunidadToState(opId, st.id as EstadoPipeline);
-                        }}
-                        className={`w-full text-left px-3 py-1.5 text-xs font-bold rounded-xl transition flex items-center justify-between ${
-                          isCurrent
-                            ? 'bg-[#27272a] text-[#F7931F] border border-[#F7931F]/40 shadow-sm'
-                            : 'hover:bg-white/5 text-gray-200'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <div className="w-2.5 h-2.5 rounded-full bg-[#F7931F] border border-orange-300" />
-                          <span className="text-[11px] font-bold">{st.label}</span>
-                        </div>
-                        {isCurrent && <Check className="w-4 h-4 text-[#F7931F]" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
+            {/* Listado Agrupado de Estados con Filtro */}
+            <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1 scrollbar-thin">
+              {SECCIONES_PIPELINE.map((sec) => {
+                const filteredEtapas = sec.etapas.filter((st) =>
+                  st.label.toLowerCase().includes(statusSearchQuery.toLowerCase())
+                );
+                if (filteredEtapas.length === 0) return null;
+
+                return (
+                  <div key={sec.id} className="space-y-1">
+                    <span className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider px-2 py-0.5 block">
+                      {sec.nombre}
+                    </span>
+                    {filteredEtapas.map((st) => {
+                      const targetOp = oportunidades.find((o) => o.id === stageMenuPos.opId);
+                      const isCurrent = targetOp?.estado_pipeline === st.id;
+                      return (
+                        <button
+                          key={st.id}
+                          type="button"
+                          onClick={async () => {
+                            const opId = stageMenuPos.opId;
+                            setStageMenuPos(null);
+                            setStatusSearchQuery('');
+                            await moveOportunidadToState(opId, st.id as EstadoPipeline);
+                          }}
+                          className={`w-full text-left px-3 py-2 text-xs font-bold rounded-xl transition flex items-center justify-between group ${
+                            isCurrent
+                              ? 'bg-[#27272a] text-[#F7931F] border border-[#F7931F]/40 shadow-sm'
+                              : 'hover:bg-white/5 text-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className={`w-3 h-3 rounded-full border border-current shadow-2xs ${
+                                st.id === 'nueva'
+                                  ? 'bg-amber-500 border-amber-400'
+                                  : st.id === 'pagada'
+                                  ? 'bg-blue-500 border-blue-400'
+                                  : st.id === 'entregada'
+                                  ? 'bg-emerald-500 border-emerald-400'
+                                  : st.id.startsWith('prod_')
+                                  ? 'bg-purple-500 border-purple-400'
+                                  : 'bg-indigo-500 border-indigo-400'
+                              }`}
+                            />
+                            <span className="text-[11px] font-extrabold uppercase tracking-wider">{st.label}</span>
+                          </div>
+                          {isCurrent && <Check className="w-4 h-4 text-[#F7931F]" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

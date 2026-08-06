@@ -13,9 +13,10 @@ export function Navbar() {
 
   if (pathname === '/login') return null;
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     router.replace('/login');
+    router.refresh();
   };
 
   const getRoleLabel = (role?: string) => {

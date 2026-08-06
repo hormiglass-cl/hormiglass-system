@@ -72,8 +72,16 @@ export default function ProveedoresPage() {
     }
 
     loadData();
+
+    const channel = supabase
+      .channel('proveedores_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'proveedores' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos_proveedor' }, () => loadData())
+      .subscribe();
+
     return () => {
       ignore = true;
+      supabase.removeChannel(channel);
     };
   }, []);
 

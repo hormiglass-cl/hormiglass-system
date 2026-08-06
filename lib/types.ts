@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'ventas' | 'finanzas' | 'administracion' | 'programacion';
+export type UserRole = 'admin' | 'user';
 
 export interface Usuario {
   id: string;
@@ -34,6 +34,7 @@ export interface Cliente {
   correos_secundarios?: string[];
   direccion?: string;
   comuna?: string;
+  region?: string;
   asignado_a?: string;
   created_by?: string;
   created_at?: string;
@@ -180,7 +181,15 @@ export interface OportunidadVenta {
   asignado_a?: string | null;
   prioridad?: PrioridadOportunidad;
   tipo_venta?: 'Instalación' | 'Suministro' | 'Reventa de Material' | string;
+  comuna?: string;
+  region?: string;
+  direccion?: string;
+  /** @deprecated No existe como columna en public.oportunidades — usar monto_estimado. */
   monto?: number;
+  monto_estimado?: number;
+  probabilidad?: number;
+  notas_venta?: unknown[];
+  ordenes_compra?: unknown[];
   requiere_visita_terreno?: boolean;
   visitas_terreno?: VisitaTerreno[];
   tecnico_visita?: 'Felipe Valverde' | 'Marcos Catalán' | 'Edith Tapia' | string;
@@ -193,10 +202,12 @@ export interface OportunidadVenta {
   productos?: string[];
   comprobantes_pago?: string[];
   monto_abonado?: number;
+  /** @deprecated No existe tabla `abonos` en Supabase — el embed .select('*, abonos(*)') no resuelve nada. Usar comprobantes_pago (ver Fase 4 del plan de seguridad). */
   abonos?: Abono[];
   chat_mensajes?: ChatMensaje[];
   chat_interno?: ChatMensaje[];
   created_at?: string;
+  updated_at?: string;
   cliente?: Cliente;
   usuario_asignado?: Usuario;
   cotizaciones?: Cotizacion[];

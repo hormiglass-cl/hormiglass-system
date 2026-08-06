@@ -13,9 +13,11 @@ import {
   Calendar,
   Building,
 } from 'lucide-react';
+import { useAuth } from '../../lib/context/AuthContext';
 import { Pagination } from '../../components/Pagination';
 
 export default function CajaPage() {
+  const { currentUser } = useAuth();
   const supabase = createClient();
   const [movimientos, setMovimientos] = useState<MovimientoCaja[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,8 +55,15 @@ export default function CajaPage() {
       }
     }
     loadMovimientos();
+
+    const channel = supabase
+      .channel('caja_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'caja_movimientos' }, () => loadMovimientos())
+      .subscribe();
+
     return () => {
       ignore = true;
+      supabase.removeChannel(channel);
     };
   }, []);
 
@@ -77,7 +86,7 @@ export default function CajaPage() {
       monto: Number(monto),
       categoria,
       descripcion: descripcion || categoria,
-      usuario_id: null,
+      usuario_id: currentUser?.id || null,
       fecha: new Date().toISOString(),
     };
 

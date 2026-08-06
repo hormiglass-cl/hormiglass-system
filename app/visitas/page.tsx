@@ -21,7 +21,11 @@ import {
   ExternalLink,
   Filter,
   Search,
+  Trash2,
 } from 'lucide-react';
+
+const isUUID = (str: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
 
 const TECNICOS = ['Felipe Valverde', 'Marcos Catalán', 'Edith Tapia'] as const;
 
@@ -512,19 +516,57 @@ export default function VisitasTerrenoPage() {
               </div>
             </div>
 
-            <div className="pt-3 flex items-center justify-between border-t border-gray-200">
-              <Link
-                href={`/ventas?oportunidad=${selectedVisitaOp.cotizacion_actual_id || selectedVisitaOp.id}`}
-                className="px-4 py-2 bg-orange-50 hover:bg-orange-100 text-[#F7931F] border border-orange-200 rounded-xl font-extrabold text-xs flex items-center gap-1.5 transition"
-              >
-                <span>Abrir Oportunidad en Pipeline</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </Link>
+            <div className="pt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-200">
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/ventas?oportunidad=${selectedVisitaOp.cotizacion_actual_id || selectedVisitaOp.id}`}
+                  className="px-3.5 py-2 bg-orange-50 hover:bg-orange-100 text-[#F7931F] border border-orange-200 rounded-xl font-extrabold text-xs flex items-center gap-1.5 transition"
+                >
+                  <span>Abrir en Pipeline</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!selectedVisitaOp) return;
+                    try {
+                      const visId = selectedVisitaOp.id;
+                      const parentOpId = selectedVisitaOp.cotizacion_actual_id || selectedVisitaOp.id;
+
+                      if (isUUID(visId)) {
+                        await supabase.from('visitas_terreno').delete().eq('id', visId);
+                      }
+
+                      if (isUUID(parentOpId)) {
+                        await supabase.from('oportunidades').update({
+                          fecha_visita_terreno: null,
+                          hora_visita_terreno: null,
+                          tecnico_visita: null,
+                          estado_visita: null,
+                          observaciones_visita: null,
+                          requiere_visita_terreno: false,
+                        }).eq('id', parentOpId);
+                      }
+
+                      setOportunidades((prev) => prev.filter((o) => o.id !== visId && o.id !== parentOpId));
+                      setSelectedVisitaOp(null);
+                    } catch (err) {
+                      console.error('Error deleting visita from calendar:', err);
+                    }
+                  }}
+                  className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl font-extrabold text-xs flex items-center gap-1.5 transition"
+                  title="Eliminar esta visita a terreno del sistema"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Eliminar Visita</span>
+                </button>
+              </div>
 
               <button
                 type="button"
                 onClick={() => setSelectedVisitaOp(null)}
-                className="px-5 py-2 bg-[#363636] hover:bg-black text-white rounded-xl font-bold text-xs transition"
+                className="px-4 py-2 bg-[#363636] hover:bg-black text-white rounded-xl font-bold text-xs transition"
               >
                 Cerrar
               </button>

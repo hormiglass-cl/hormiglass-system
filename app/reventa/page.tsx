@@ -88,7 +88,7 @@ export default function ReventaPage() {
       ]);
 
       const revMap = new Map<string, any>();
-      (revRes.data || []).forEach((r) => {
+      (revRes.data || []).forEach((r: any) => {
         if (r.oportunidad_id) revMap.set(r.oportunidad_id, r);
       });
 
@@ -218,7 +218,7 @@ export default function ReventaPage() {
 
       if (data) {
         setOpActivities(
-          data.map((a) => ({
+          data.map((a: any) => ({
             id: a.id,
             usuario_id: a.usuario_id || 'sistema',
             usuario_nombre: a.usuario_nombre || 'Sistema',

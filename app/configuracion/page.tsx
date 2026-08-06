@@ -82,7 +82,7 @@ const SYSTEM_FIELDS_COTIZACIONES: FieldDefinition[] = [
 ];
 
 export default function ConfiguracionPage() {
-  const { currentUser, usersList, addUser, updateUserRole, deleteUser } = useAuth();
+  const { currentUser, usersList, addUser, updateUserRole, updateUser, deleteUser } = useAuth();
   const supabase = createClient();
 
   // Top Section Mode (Campos vs Usuarios)
@@ -103,13 +103,22 @@ export default function ConfiguracionPage() {
   const [tipo, setTipo] = useState<'texto' | 'numero' | 'fecha' | 'opciones' | 'archivo' | 'relacion'>('texto');
   const [opcionesInput, setOpcionesInput] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [userErrorMsg, setUserErrorMsg] = useState('');
 
   // User Management State
   const [showUserModal, setShowUserModal] = useState(false);
   const [userNombre, setUserNombre] = useState('');
   const [userEmail, setUserEmail] = useState('');
-  const [userRol, setUserRol] = useState<UserRole>('ventas');
+  const [userRol, setUserRol] = useState<UserRole>('user');
   const [userToDelete, setUserToDelete] = useState<Usuario | null>(null);
+
+  // Edit User State
+  const [editingUser, setEditingUser] = useState<Usuario | null>(null);
+  const [editUserNombre, setEditUserNombre] = useState('');
+  const [editUserRol, setEditUserRol] = useState<UserRole>('user');
+  const [editUserActivo, setEditUserActivo] = useState(true);
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
+
   const [userCurrentPage, setUserCurrentPage] = useState(1);
   const [userItemsPerPage, setUserItemsPerPage] = useState(10);
 
@@ -306,28 +315,70 @@ export default function ConfiguracionPage() {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userNombre || !userEmail) return;
+    setUserErrorMsg('');
 
-    await addUser({
-      nombre: userNombre,
-      email: userEmail,
-      rol: userRol,
-      activo: true,
-    });
+    try {
+      await addUser({
+        nombre: userNombre,
+        email: userEmail,
+        rol: userRol,
+        activo: true,
+      });
+      setSuccessMsg(`Usuario ${userEmail} registrado exitosamente en Supabase. Falta invitarlo desde Supabase Auth para que pueda iniciar sesión.`);
+      setUserNombre('');
+      setUserEmail('');
+      setUserRol('user');
+      setShowUserModal(false);
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (err) {
+      setUserErrorMsg(err instanceof Error ? err.message : 'No se pudo registrar el usuario.');
+    }
+  };
 
-    setSuccessMsg(`Usuario ${userEmail} registrado exitosamente en Supabase.`);
-    setUserNombre('');
-    setUserEmail('');
-    setUserRol('ventas');
-    setShowUserModal(false);
-    setTimeout(() => setSuccessMsg(''), 4000);
+  const handleOpenEditUser = (usr: Usuario) => {
+    setEditingUser(usr);
+    setEditUserNombre(usr.nombre);
+    setEditUserRol(usr.rol);
+    setEditUserActivo(usr.activo);
+    setShowEditUserModal(true);
+  };
+
+  const handleSaveEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    setUserErrorMsg('');
+
+    try {
+      await updateUser(editingUser.id, {
+        nombre: editUserNombre.trim(),
+        rol: editUserRol,
+        activo: editUserActivo,
+      });
+      setSuccessMsg(`Usuario ${editUserNombre} actualizado correctamente en Supabase.`);
+      setShowEditUserModal(false);
+      setEditingUser(null);
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (err) {
+      setUserErrorMsg(err instanceof Error ? err.message : 'No se pudo actualizar el usuario.');
+    }
   };
 
   const handleConfirmDeleteUser = async () => {
     if (!userToDelete) return;
-    await deleteUser(userToDelete.id);
-    setSuccessMsg(`Usuario ${userToDelete.nombre} (${userToDelete.email}) eliminado permanentemente de Supabase.`);
-    setUserToDelete(null);
-    setTimeout(() => setSuccessMsg(''), 4000);
+    if (currentUser && userToDelete.id === currentUser.id) {
+      setUserErrorMsg('No puedes eliminar tu propia cuenta mientras mantengas la sesión activa.');
+      return;
+    }
+    setUserErrorMsg('');
+
+    try {
+      await deleteUser(userToDelete.id);
+      setSuccessMsg(`Usuario ${userToDelete.nombre} (${userToDelete.email}) eliminado permanentemente de Supabase.`);
+      setUserToDelete(null);
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (err) {
+      setUserErrorMsg(err instanceof Error ? err.message : 'No se pudo eliminar el usuario.');
+    }
   };
 
   const filteredFields = fields.filter((f) => f.entidad === activeEntityTab);
@@ -382,6 +433,12 @@ export default function ConfiguracionPage() {
         <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 p-4 rounded-xl text-xs flex items-center gap-2 font-bold animate-fadeIn">
           <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           <span>{successMsg}</span>
+        </div>
+      )}
+
+      {userErrorMsg && (
+        <div className="bg-red-50 border border-red-300 text-red-800 p-4 rounded-xl text-xs flex items-center gap-2 font-bold animate-fadeIn">
+          <span>{userErrorMsg}</span>
         </div>
       )}
 
@@ -541,26 +598,29 @@ export default function ConfiguracionPage() {
       {mainTab === 'usuarios' && (
         <div className="space-y-6 animate-fadeIn">
           {/* Matriz Informativa de Roles */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
-            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm">
-              <span className="font-extrabold text-red-600 block mb-1">ADMIN</span>
-              <p className="text-gray-600 text-[11px]">Acceso total a todos los módulos y configuración del sistema.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex items-start gap-3">
+              <div className="w-8 h-8 rounded-xl bg-red-100 text-red-700 flex items-center justify-center font-black shrink-0">
+                A
+              </div>
+              <div>
+                <span className="font-extrabold text-red-700 block text-xs mb-0.5">ADMIN (Acceso Total)</span>
+                <p className="text-gray-600 text-[11px] leading-relaxed">
+                  Acceso completo a la plataforma, configuración del sistema, gestión de usuarios, clientes, cotizaciones, pipeline y tesorería.
+                </p>
+              </div>
             </div>
-            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm">
-              <span className="font-extrabold text-blue-600 block mb-1">VENTAS</span>
-              <p className="text-gray-600 text-[11px]">Directorio de clientes, creación de cotizaciones e ingreso a pipeline.</p>
-            </div>
-            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm">
-              <span className="font-extrabold text-emerald-600 block mb-1">FINANZAS</span>
-              <p className="text-gray-600 text-[11px]">Validación de pagos, facturación, movimientos de caja y OC proveedores.</p>
-            </div>
-            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm">
-              <span className="font-extrabold text-purple-600 block mb-1">ADMINISTRACIÓN</span>
-              <p className="text-gray-600 text-[11px]">Control previo, registro de comisiones y pólizas de garantía.</p>
-            </div>
-            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm">
-              <span className="font-extrabold text-amber-600 block mb-1">PROGRAMACIÓN</span>
-              <p className="text-gray-600 text-[11px]">Agenda de despachos, orden de fabricación e instalaciones.</p>
+
+            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex items-start gap-3">
+              <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black shrink-0">
+                U
+              </div>
+              <div>
+                <span className="font-extrabold text-blue-700 block text-xs mb-0.5">USER (Acceso Parcial / Operativo)</span>
+                <p className="text-gray-600 text-[11px] leading-relaxed">
+                  Acceso operativo a clientes, cotizaciones, pipeline de ventas, proveedores y movimientos de caja. Sin acceso a configuración del sistema.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -599,10 +659,7 @@ export default function ConfiguracionPage() {
                           className="bg-white text-[#363636] font-bold text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#F7931F] cursor-pointer"
                         >
                           <option value="admin">Admin (Acceso Total)</option>
-                          <option value="ventas">Ventas (Comercial)</option>
-                          <option value="finanzas">Finanzas (Facturación & Caja)</option>
-                          <option value="administracion">Administración (Control & Pólizas)</option>
-                          <option value="programacion">Programación (Agenda & Logística)</option>
+                          <option value="user">User (Acceso Parcial)</option>
                         </select>
                       </td>
                       <td className="p-3.5">
@@ -618,6 +675,14 @@ export default function ConfiguracionPage() {
                       </td>
                       <td className="p-3.5 text-center">
                         <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => handleOpenEditUser(usr)}
+                            className="p-1.5 bg-orange-50 hover:bg-[#F7931F] text-[#F7931F] hover:text-white rounded-lg transition border border-orange-200"
+                            title="Editar Nombre y Rol de Usuario"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+
                           <button
                             onClick={() => updateUserRole(usr.id, usr.rol, !usr.activo)}
                             className={`text-xs px-3 py-1.5 rounded-lg font-bold transition ${
@@ -802,10 +867,7 @@ export default function ConfiguracionPage() {
                   onChange={(e) => setUserRol(e.target.value as UserRole)}
                   className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-semibold focus:outline-none focus:border-[#F7931F]"
                 >
-                  <option value="ventas">Ventas (Comercial)</option>
-                  <option value="finanzas">Finanzas (Facturación & Caja)</option>
-                  <option value="administracion">Administración (Control)</option>
-                  <option value="programacion">Programación (Agenda & Logística)</option>
+                  <option value="user">User (Acceso Parcial / Operativo)</option>
                   <option value="admin">Admin (Acceso Total)</option>
                 </select>
               </div>
@@ -867,6 +929,95 @@ export default function ConfiguracionPage() {
                 <span>Confirmar Eliminación</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Usuario */}
+      {showEditUserModal && editingUser && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn text-[#363636]">
+          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+              <h3 className="text-base font-extrabold text-[#363636] flex items-center gap-2">
+                <Edit className="w-5 h-5 text-[#F7931F]" />
+                <span>Editar Usuario</span>
+              </h3>
+              <button
+                onClick={() => {
+                  setShowEditUserModal(false);
+                  setEditingUser(null);
+                }}
+                className="text-gray-400 hover:text-[#363636] font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditUser} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Nombre Completo</label>
+                <input
+                  type="text"
+                  required
+                  value={editUserNombre}
+                  onChange={(e) => setEditUserNombre(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2.5 font-medium text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Correo Electrónico (Solo Lectura)</label>
+                <input
+                  type="email"
+                  disabled
+                  value={editingUser.email}
+                  className="w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2.5 font-mono text-gray-500 cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Rol de Acceso / Permisos</label>
+                <select
+                  value={editUserRol}
+                  onChange={(e) => setEditUserRol(e.target.value as UserRole)}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2.5 font-bold text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                >
+                  <option value="admin">Admin (Acceso Total)</option>
+                  <option value="user">User (Acceso Parcial / Operativo)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Estado de la Cuenta</label>
+                <select
+                  value={editUserActivo ? 'true' : 'false'}
+                  onChange={(e) => setEditUserActivo(e.target.value === 'true')}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2.5 font-bold text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                >
+                  <option value="true">Activo (Acceso Permitido)</option>
+                  <option value="false">Inactivo / Baneado (Acceso Bloqueado)</option>
+                </select>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditUserModal(false);
+                    setEditingUser(null);
+                  }}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold rounded-xl transition shadow-md"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

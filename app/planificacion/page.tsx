@@ -90,7 +90,7 @@ export default function PlanificacionPage() {
       ]);
 
       const planMap = new Map<string, any>();
-      (planRes.data || []).forEach((p) => {
+      (planRes.data || []).forEach((p: any) => {
         if (p.oportunidad_id) planMap.set(p.oportunidad_id, p);
       });
 
@@ -219,7 +219,7 @@ export default function PlanificacionPage() {
 
       if (data) {
         setOpActivities(
-          data.map((a) => ({
+          data.map((a: any) => ({
             id: a.id,
             usuario_id: a.usuario_id || 'sistema',
             usuario_nombre: a.usuario_nombre || 'Sistema',

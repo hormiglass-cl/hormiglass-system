@@ -8,6 +8,8 @@ import { useAuth } from '../../../lib/context/AuthContext';
 import { Cliente, NotaActividad, Cotizacion, TipoNotaActividad, OportunidadVenta, PRODUCTOS_HORMIGLASS } from '../../../lib/types';
 import { PdfPreviewModal } from '../../../components/PdfPreviewModal';
 import { CotizacionModal } from '../../../components/CotizacionModal';
+import { SearchableSelect } from '../../../components/SearchableSelect';
+import { REGIONES_CHILE, TODAS_COMUNAS_CHILE } from '../../../lib/chile-data';
 import { logSistema } from '../../../lib/logger';
 
 const NICHOS_CLIENTE_DEFAULT = [
@@ -40,6 +42,31 @@ import {
   DollarSign,
   Package,
 } from 'lucide-react';
+
+const STAGE_CONFIG: Record<string, { label: string; bg: string; text: string; border: string }> = {
+  nueva: { label: 'Nueva Oportunidad', bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-300' },
+  pagada: { label: 'Pago Validado', bg: 'bg-blue-50', text: 'text-blue-800', border: 'border-blue-300' },
+  venta_cerrada: { label: 'Venta Cerrada', bg: 'bg-emerald-50', text: 'text-emerald-800', border: 'border-emerald-300' },
+  programada: { label: 'Pendiente Planificación', bg: 'bg-purple-50', text: 'text-purple-800', border: 'border-purple-300' },
+  en_fabricacion: { label: 'En Cola de Fabricación', bg: 'bg-indigo-50', text: 'text-indigo-800', border: 'border-indigo-300' },
+  lista_despacho: { label: 'Listo para Despacho', bg: 'bg-cyan-50', text: 'text-cyan-800', border: 'border-cyan-300' },
+  instalacion: { label: 'Instalación / Terreno', bg: 'bg-teal-50', text: 'text-teal-800', border: 'border-teal-300' },
+  entregada: { label: 'Entregada & Cierre', bg: 'bg-green-50', text: 'text-green-800', border: 'border-green-300' },
+};
+
+const renderStageBadge = (stage: string) => {
+  const conf = STAGE_CONFIG[stage] || {
+    label: stage.replace(/_/g, ' ').toUpperCase(),
+    bg: 'bg-orange-50',
+    text: 'text-[#F7931F]',
+    border: 'border-orange-200',
+  };
+  return (
+    <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border shadow-2xs ${conf.bg} ${conf.text} ${conf.border}`}>
+      {conf.label}
+    </span>
+  );
+};
 
 export default function ClienteDetailPage() {
   const params = useParams();
@@ -94,6 +121,7 @@ export default function ClienteDetailPage() {
   const [editCorreo, setEditCorreo] = useState('');
   const [editDireccion, setEditDireccion] = useState('');
   const [editComuna, setEditComuna] = useState('');
+  const [editRegion, setEditRegion] = useState('');
   const [editRutError, setEditRutError] = useState('');
 
   // Activity Notes, Quotes & Opportunities
@@ -173,6 +201,7 @@ export default function ClienteDetailPage() {
         setEditCorreo(currentCli.correo || '');
         setEditDireccion(currentCli.direccion || '');
         setEditComuna(currentCli.comuna || '');
+        setEditRegion(currentCli.region || '');
 
         // 1. Fetch Notes strictly from Supabase
         const { data: notesData } = await supabase
@@ -292,25 +321,42 @@ export default function ClienteDetailPage() {
     }
 
     const formattedRut = `${editRutBody.replace(/[^0-9]/g, '')}-${editRutDv.trim().toUpperCase()}`;
+    const rutNum = parseInt(editRutBody.replace(/[^0-9]/g, ''), 10);
+    const tipoClienteCalculado: 'natural' | 'juridica' = rutNum >= 50000000 ? 'juridica' : 'natural';
 
     const updatedData = {
       nombre: editNombre,
       apellido_razon_social: editRazon,
       rut: formattedRut,
+      tipo_cliente: tipoClienteCalculado,
       nicho: editNicho,
       telefono: editTelefono,
       correo: editCorreo,
       direccion: editDireccion,
       comuna: editComuna,
+      region: editRegion,
     };
 
     try {
-      await supabase
+      const { data, error } = await supabase
         .from('clientes')
         .update(updatedData)
-        .eq('id', cliente.id);
+        .eq('id', cliente.id)
+        .select()
+        .single();
 
-      setCliente({ ...cliente, ...updatedData });
+      if (error) {
+        console.error('Error actualizando cliente en Supabase:', error);
+        setEditRutError(`Error al actualizar en Supabase: ${error.message}`);
+        return;
+      }
+
+      if (data) {
+        setCliente(data as Cliente);
+      } else {
+        setCliente({ ...cliente, ...updatedData });
+      }
+
       setIsEditing(false);
       setSaveSuccess(true);
 
@@ -318,15 +364,16 @@ export default function ClienteDetailPage() {
         tipo_accion: 'actualizacion',
         entidad: 'clientes',
         entidad_id: cliente.id,
-        descripcion: `Información del cliente ${editNombre} (${formattedRut}) actualizada`,
+        descripcion: `Información del cliente ${editNombre} (${formattedRut}) actualizada en Supabase`,
         usuario_id: currentUser?.id,
         datos_anteriores: cliente,
         datos_nuevos: updatedData,
       });
 
       setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving client updates:', err);
+      setEditRutError(`Error al guardar en Supabase: ${err.message || 'Error de conexión'}`);
     }
   };
 
@@ -715,7 +762,7 @@ export default function ClienteDetailPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div>
                 <label className="block font-bold text-gray-700 mb-1">Dirección de Despacho / Obra</label>
                 <input
@@ -727,12 +774,34 @@ export default function ClienteDetailPage() {
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Comuna</label>
-                <input
-                  type="text"
+                <SearchableSelect
+                  label="Región"
+                  value={editRegion}
+                  onChange={(val) => setEditRegion(val)}
+                  options={REGIONES_CHILE.map((r) => r.region)}
+                  placeholder="Seleccionar o buscar región..."
+                />
+              </div>
+
+              <div>
+                <SearchableSelect
+                  label="Comuna"
                   value={editComuna}
-                  onChange={(e) => setEditComuna(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  onChange={(val) => {
+                    setEditComuna(val);
+                    if (!editRegion && val) {
+                      const foundReg = REGIONES_CHILE.find((r) => r.comunas.includes(val));
+                      if (foundReg) {
+                        setEditRegion(foundReg.region);
+                      }
+                    }
+                  }}
+                  options={
+                    editRegion
+                      ? (REGIONES_CHILE.find((r) => r.region === editRegion)?.comunas || TODAS_COMUNAS_CHILE)
+                      : TODAS_COMUNAS_CHILE
+                  }
+                  placeholder="Seleccionar o buscar comuna..."
                 />
               </div>
             </div>
@@ -792,8 +861,12 @@ export default function ClienteDetailPage() {
               )}
               <div>
                 <span className="text-gray-500 text-[11px] block font-semibold">Dirección de Despacho / Obra</span>
-                <span className="font-bold text-[#363636]">
-                  {cliente.direccion ? `${cliente.direccion}, ${cliente.comuna || ''}` : 'No registrada'}
+                <span className="font-bold text-[#363636] block">{cliente.direccion || 'No registrada'}</span>
+              </div>
+              <div>
+                <span className="text-gray-500 text-[11px] block font-semibold">Comuna / Región</span>
+                <span className="font-bold text-[#363636] block">
+                  {[cliente.comuna, cliente.region].filter(Boolean).join(', ') || 'No registrada'}
                 </span>
               </div>
             </div>
@@ -819,11 +892,9 @@ export default function ClienteDetailPage() {
                     href={`/ventas?oportunidad=${op.id}`}
                     className="p-3 bg-orange-50/60 hover:bg-orange-100/80 rounded-xl border border-orange-200 text-xs space-y-1.5 cursor-pointer transition group block"
                   >
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="font-bold font-mono text-[#363636]">{op.codigo}</span>
-                      <span className="text-[10px] font-black uppercase bg-[#F7931F] text-white px-2.5 py-0.5 rounded-full">
-                        {op.estado_pipeline}
-                      </span>
+                      {renderStageBadge(op.estado_pipeline)}
                     </div>
                     <p className="font-extrabold text-[#363636] group-hover:text-[#F7931F] transition">{op.titulo}</p>
                     <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1 border-t border-orange-200/60">

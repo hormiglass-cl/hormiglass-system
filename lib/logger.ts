@@ -26,12 +26,21 @@ export async function logSistema({
     const isValidUuid = (id?: string | null) =>
       id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
+    let finalUserId = isValidUuid(usuario_id) ? usuario_id : null;
+    if (!finalUserId) {
+      const { data: authUser } = await supabase.auth.getUser();
+      if (authUser?.user) {
+        const { data: usr } = await supabase.from('usuarios').select('id').eq('auth_id', authUser.user.id).maybeSingle();
+        if (usr?.id) finalUserId = usr.id;
+      }
+    }
+
     await supabase.from('logs_sistema').insert([{
       tipo_accion,
       entidad,
       entidad_id: entidad_id || null,
       descripcion,
-      usuario_id: isValidUuid(usuario_id) ? usuario_id : null,
+      usuario_id: finalUserId,
       datos_anteriores: datos_anteriores ? JSON.parse(JSON.stringify(datos_anteriores)) : null,
       datos_nuevos: datos_nuevos ? JSON.parse(JSON.stringify(datos_nuevos)) : null,
     }]);

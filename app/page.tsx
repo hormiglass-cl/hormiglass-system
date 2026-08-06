@@ -17,6 +17,12 @@ import {
   BarChart3,
   TrendingUp,
   Filter,
+  Wrench,
+  Truck,
+  Factory,
+  MapPin,
+  Building2,
+  Award,
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -35,7 +41,7 @@ export default function Dashboard() {
       try {
         const [cotRes, opRes, cliRes] = await Promise.all([
           supabase.from('cotizaciones').select('*'),
-          supabase.from('oportunidades').select('*'),
+          supabase.from('oportunidades').select('*, cliente:clientes(*)'),
           supabase.from('clientes').select('*'),
         ]);
 
@@ -60,8 +66,29 @@ export default function Dashboard() {
     }
 
     loadDashboardData();
+
+    const channel = supabase
+      .channel('dashboard_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'cotizaciones' },
+        () => loadDashboardData()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'oportunidades' },
+        () => loadDashboardData()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'clientes' },
+        () => loadDashboardData()
+      )
+      .subscribe();
+
     return () => {
       ignore = true;
+      supabase.removeChannel(channel);
     };
   }, []);
 
@@ -70,7 +97,8 @@ export default function Dashboard() {
     const linkedQuotes = cotizaciones.filter(
       (c) => c.oportunidad_id === op.id && (c.estado === 'enviada' || c.estado === 'aprobada')
     );
-    return linkedQuotes.reduce((sum, c) => sum + (c.monto_total || 0), 0);
+    const sumQuotes = linkedQuotes.reduce((sum, c) => sum + (c.monto_total || 0), 0);
+    return sumQuotes > 0 ? sumQuotes : op.monto || 0;
   };
 
   // Filter opportunities by date range picker
@@ -113,6 +141,65 @@ export default function Dashboard() {
     const abonado = op.monto_abonado || 0;
     return acc + Math.max(0, trueVal - abonado);
   }, 0);
+
+  // Métrica 1: Desglose de Ventas por Tipo de Venta (Instalación, Suministro, Reventa)
+  const statsTipoVenta = React.useMemo(() => {
+    const tipos = [
+      { id: 'Instalación', label: 'Instalación', icon: Wrench, color: 'text-[#F7931F]', bg: 'bg-amber-50', border: 'border-amber-200' },
+      { id: 'Suministro', label: 'Suministro', icon: Factory, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' },
+      { id: 'Reventa de Material', label: 'Reventa Material', icon: Truck, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200' },
+    ];
+
+    return tipos.map((item) => {
+      const ops = oportunidadesFiltradas.filter(
+        (o) => (o.tipo_venta || 'Instalación') === item.id
+      );
+      const totalMonto = ops.reduce((acc, o) => acc + getOportunidadTrueValue(o), 0);
+      const totalAbonado = ops.reduce((acc, o) => acc + (o.monto_abonado || 0), 0);
+      const porcentaje = totalFacturadoPipeline > 0 ? Math.round((totalMonto / totalFacturadoPipeline) * 100) : 0;
+
+      return {
+        ...item,
+        count: ops.length,
+        totalMonto,
+        totalAbonado,
+        porcentaje,
+      };
+    });
+  }, [oportunidadesFiltradas, cotizaciones, totalFacturadoPipeline]);
+
+  // Métrica 2: Ranking Geográfico de Comunas Más Vendidas
+  const rankingComunas = React.useMemo(() => {
+    const comunaMap: Record<string, { count: number; totalMonto: number }> = {};
+
+    oportunidadesFiltradas.forEach((op) => {
+      let rawComuna = op.comuna || op.cliente?.comuna;
+      if (!rawComuna && op.cliente_id) {
+        const foundCli = clientes.find((c) => c.id === op.cliente_id);
+        if (foundCli?.comuna) rawComuna = foundCli.comuna;
+      }
+
+      const cleanComuna = rawComuna ? rawComuna.trim() : 'Sin Comuna Asignada';
+
+      if (!comunaMap[cleanComuna]) {
+        comunaMap[cleanComuna] = { count: 0, totalMonto: 0 };
+      }
+
+      comunaMap[cleanComuna].count += 1;
+      comunaMap[cleanComuna].totalMonto += getOportunidadTrueValue(op);
+    });
+
+    const sorted = Object.entries(comunaMap)
+      .map(([comuna, data]) => ({
+        comuna,
+        count: data.count,
+        totalMonto: data.totalMonto,
+        porcentaje: totalFacturadoPipeline > 0 ? Math.round((data.totalMonto / totalFacturadoPipeline) * 100) : 0,
+      }))
+      .sort((a, b) => b.totalMonto - a.totalMonto);
+
+    return sorted.slice(0, 6);
+  }, [oportunidadesFiltradas, cotizaciones, totalFacturadoPipeline]);
 
   return (
     <div className="space-y-8 text-[#363636]">
@@ -304,6 +391,63 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+
+          {/* NUEVA SECCIÓN: Ventas por Tipo de Venta (Instalación, Suministro, Reventa) */}
+          <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-[#363636] flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-[#F7931F]" />
+                  <span>Ventas por Tipo de Servicio</span>
+                </h3>
+                <p className="text-xs text-gray-500 font-medium">
+                  Distribución de ingresos según modalidad de Instalación, Suministro o Reventa
+                </p>
+              </div>
+              <div className="w-8 h-8 bg-orange-50 text-[#F7931F] rounded-2xl flex items-center justify-center font-bold">
+                <PieChart className="w-4 h-4" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {statsTipoVenta.map((st) => {
+                const IconComponent = st.icon;
+                return (
+                  <div
+                    key={st.id}
+                    className={`p-4 rounded-2xl border ${st.border} ${st.bg} space-y-3 flex flex-col justify-between shadow-2xs`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-black uppercase text-gray-700 tracking-wider">
+                        {st.label}
+                      </span>
+                      <div className={`p-1.5 rounded-xl bg-white shadow-xs ${st.color}`}>
+                        <IconComponent className="w-4 h-4" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-lg font-black text-[#363636]">
+                        ${st.totalMonto.toLocaleString('es-CL')}
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-gray-500 font-bold mt-1">
+                        <span>{st.count} ops</span>
+                        <span className="font-mono">{st.porcentaje}% del total</span>
+                      </div>
+                    </div>
+
+                    {/* Barra de progreso porcentaje */}
+                    <div className="w-full bg-gray-200/80 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-[#F7931F] h-full rounded-full transition-all duration-500"
+                        style={{ width: `${st.porcentaje}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* Columna Derecha (5 cols): Resumen de Clientes, Cotizaciones y Accesos Rápido */}
@@ -388,6 +532,56 @@ export default function Dashboard() {
               <span>Ir al Pipeline de Ventas</span>
               <ChevronRight className="w-4 h-4 text-[#F7931F]" />
             </Link>
+          </div>
+
+          {/* NUEVA SECCIÓN: Ranking Geográfico de Comunas Más Vendidas */}
+          <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-[#363636] flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-red-500" />
+                  <span>Comunas Más Vendidas</span>
+                </h3>
+                <p className="text-xs text-gray-500 font-medium">
+                  Ubicación geográfica con mayor volumen de facturación y proyectos
+                </p>
+              </div>
+              <div className="w-8 h-8 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center font-bold">
+                <Award className="w-4 h-4" />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {rankingComunas.length === 0 ? (
+                <div className="text-xs text-gray-400 italic py-2">
+                  No hay datos suficientes de comuna en el período.
+                </div>
+              ) : (
+                rankingComunas.map((item, idx) => (
+                  <div key={item.comuna} className="space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between font-bold">
+                      <div className="flex items-center gap-2 text-[#363636]">
+                        <span className="w-5 h-5 rounded-full bg-gray-100 border border-gray-300 font-mono text-[10px] flex items-center justify-center text-gray-600 font-black">
+                          #{idx + 1}
+                        </span>
+                        <span>{item.comuna}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-gray-400 font-medium">({item.count} ops)</span>
+                        <span className="font-extrabold text-[#F7931F]">${item.totalMonto.toLocaleString('es-CL')}</span>
+                      </div>
+                    </div>
+
+                    <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden flex items-center">
+                      <div
+                        className="bg-gradient-to-r from-amber-500 to-[#F7931F] h-full rounded-full transition-all duration-500"
+                        style={{ width: `${Math.max(5, item.porcentaje)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>

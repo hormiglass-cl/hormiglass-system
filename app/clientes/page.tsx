@@ -22,6 +22,8 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import { Pagination } from '../../components/Pagination';
+import { SearchableSelect } from '../../components/SearchableSelect';
+import { REGIONES_CHILE, TODAS_COMUNAS_CHILE } from '../../lib/chile-data';
 
 interface ColumnState {
   rut: boolean;
@@ -95,6 +97,7 @@ export default function ClientesPage() {
   const [correosSecundariosInput, setCorreosSecundariosInput] = useState('');
   const [direccion, setDireccion] = useState('');
   const [comuna, setComuna] = useState('');
+  const [region, setRegion] = useState('');
 
   const supabase = createClient();
 
@@ -384,6 +387,7 @@ export default function ClientesPage() {
       correos_secundarios: secArray.length > 0 ? secArray : undefined,
       direccion: direccion || undefined,
       comuna: comuna || undefined,
+      region: region || undefined,
     };
 
     try {
@@ -603,7 +607,7 @@ export default function ClientesPage() {
                 {columns.nicho && <th className="py-4 px-6 min-w-[160px]">Nicho de Mercado</th>}
                 {columns.cant_oportunidades && <th className="py-4 px-6 min-w-[180px]">Oportunidades de Venta</th>}
                 {columns.contacto && <th className="py-4 px-6 min-w-[200px]">Contacto</th>}
-                {columns.ubicacion && <th className="py-4 px-6 min-w-[130px]">Ubicación</th>}
+                {columns.ubicacion && <th className="py-4 px-6 min-w-[220px]">Dirección & Ubicación</th>}
                 <th className="py-4 px-6 text-right min-w-[120px]">Acciones</th>
               </tr>
             </thead>
@@ -736,12 +740,15 @@ export default function ClientesPage() {
                         </td>
                       )}
 
-                      {/* Ubicación */}
+                      {/* Dirección & Ubicación */}
                       {columns.ubicacion && (
-                        <td className="py-4 px-6 font-medium text-gray-700">
-                          <p className="flex items-center gap-1.5">
-                            <MapPin className="w-3 h-3 text-gray-400 shrink-0" />
-                            <span>{cli.comuna || 'Sin Comuna'}</span>
+                        <td className="py-4 px-6 space-y-1">
+                          <p className="font-bold text-[#363636] text-xs flex items-center gap-1.5" title={cli.direccion || 'Sin dirección'}>
+                            <MapPin className="w-3.5 h-3.5 text-[#F7931F] shrink-0" />
+                            <span className="truncate max-w-[220px]">{cli.direccion || 'Sin dirección'}</span>
+                          </p>
+                          <p className="text-[11px] text-gray-500 font-medium pl-5">
+                            {[cli.comuna, cli.region].filter(Boolean).join(', ') || 'Sin comuna / región'}
                           </p>
                         </td>
                       )}
@@ -994,26 +1001,47 @@ export default function ClientesPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Dirección de Despacho</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-gray-700 mb-1">Dirección (Calle y Número)</label>
                   <input
                     type="text"
                     placeholder="Av. Los Pajaritos 1230"
                     value={direccion}
                     onChange={(e) => setDireccion(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] text-xs focus:outline-none focus:border-[#F7931F]"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">Comuna</label>
-                  <input
-                    type="text"
-                    placeholder="San Bernardo / Maipú"
+                  <SearchableSelect
+                    label="Región"
+                    value={region}
+                    onChange={(val) => setRegion(val)}
+                    options={REGIONES_CHILE.map((r) => r.region)}
+                    placeholder="Seleccionar o buscar región..."
+                  />
+                </div>
+
+                <div>
+                  <SearchableSelect
+                    label="Comuna"
                     value={comuna}
-                    onChange={(e) => setComuna(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                    onChange={(val) => {
+                      setComuna(val);
+                      if (!region && val) {
+                        const foundReg = REGIONES_CHILE.find((r) => r.comunas.includes(val));
+                        if (foundReg) {
+                          setRegion(foundReg.region);
+                        }
+                      }
+                    }}
+                    options={
+                      region
+                        ? (REGIONES_CHILE.find((r) => r.region === region)?.comunas || TODAS_COMUNAS_CHILE)
+                        : TODAS_COMUNAS_CHILE
+                    }
+                    placeholder="Seleccionar o buscar comuna..."
                   />
                 </div>
               </div>
