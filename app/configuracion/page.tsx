@@ -109,6 +109,7 @@ export default function ConfiguracionPage() {
   const [showUserModal, setShowUserModal] = useState(false);
   const [userNombre, setUserNombre] = useState('');
   const [userEmail, setUserEmail] = useState('');
+  const [userPassword, setUserPassword] = useState('');
   const [userRol, setUserRol] = useState<UserRole>('user');
   const [userToDelete, setUserToDelete] = useState<Usuario | null>(null);
 
@@ -311,22 +312,26 @@ export default function ConfiguracionPage() {
     setTimeout(() => setSuccessMsg(''), 4000);
   };
 
-  // Handle User Creation & Deletion
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userNombre || !userEmail) return;
+    if (!userNombre || !userEmail || !userPassword) {
+      setUserErrorMsg('Por favor completa todos los campos requeridos, incluyendo la contraseña.');
+      return;
+    }
     setUserErrorMsg('');
 
     try {
       await addUser({
         nombre: userNombre,
         email: userEmail,
+        password: userPassword,
         rol: userRol,
         activo: true,
       });
-      setSuccessMsg(`Usuario ${userEmail} registrado exitosamente en Supabase. Falta invitarlo desde Supabase Auth para que pueda iniciar sesión.`);
+      setSuccessMsg(`Usuario ${userEmail} creado exitosamente en el sistema con su contraseña.`);
       setUserNombre('');
       setUserEmail('');
+      setUserPassword('');
       setUserRol('user');
       setShowUserModal(false);
       setTimeout(() => setSuccessMsg(''), 4000);
@@ -856,6 +861,19 @@ export default function ConfiguracionPage() {
                   value={userEmail}
                   onChange={(e) => setUserEmail(e.target.value)}
                   placeholder="usuario@hormiglass.cl"
+                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Contraseña Inicial *</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={userPassword}
+                  onChange={(e) => setUserPassword(e.target.value)}
+                  placeholder="••••••••"
                   className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
                 />
               </div>

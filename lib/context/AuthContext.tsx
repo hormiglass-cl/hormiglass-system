@@ -8,7 +8,7 @@ import { createClient } from '../supabase/client';
 interface AuthContextType {
   currentUser: Usuario | null;
   usersList: Usuario[];
-  addUser: (user: Omit<Usuario, 'id' | 'created_at'>) => Promise<void>;
+  addUser: (user: { nombre: string; email: string; password?: string; rol: UserRole; activo?: boolean }) => Promise<void>;
   updateUserRole: (id: string, newRole: UserRole, active: boolean) => Promise<void>;
   updateUser: (id: string, updates: { nombre?: string; rol?: UserRole; activo?: boolean }) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
@@ -95,23 +95,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [supabase, loadProfileForSession, fetchUsers]);
 
-  const addUser = async (userData: Omit<Usuario, 'id' | 'created_at'>) => {
-    const { data, error } = await supabase
-      .from('usuarios')
-      .insert([{
-        nombre: userData.nombre,
-        email: userData.email,
-        rol: userData.rol,
-        activo: userData.activo ?? true,
-      }])
-      .select()
-      .single();
-
-    if (error) {
-      // No hay fallback local: si Supabase no lo guardó, no existe.
-      throw new Error(`No se pudo crear el usuario: ${error.message}`);
+  const addUser = async (userData: { nombre: string; email: string; password?: string; rol: UserRole; activo?: boolean }) => {
+    if (!userData.password) {
+      throw new Error('Por favor ingresa una contraseña para el nuevo usuario.');
     }
-    setUsersList((prev) => [...prev, data as Usuario]);
+
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      email: userData.email.trim(),
+      password: userData.password,
+      options: {
+        emailRedirectTo: 'https://hormiglass-system.vercel.app/',
+        data: {
+          nombre: userData.nombre.trim(),
+        },
+      },
+    });
+
+    if (signUpError) {
+      throw new Error(`No se pudo crear el usuario en Supabase Auth: ${signUpError.message}`);
+    }
+
+    if (signUpData.user && userData.rol && userData.rol !== 'user') {
+      await supabase
+        .from('usuarios')
+        .update({ rol: userData.rol })
+        .eq('auth_id', signUpData.user.id);
+    }
+
+    await fetchUsers();
   };
 
   const updateUserRole = async (id: string, newRole: UserRole, active: boolean) => {
