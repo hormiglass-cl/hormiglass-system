@@ -10,10 +10,8 @@ function isPublicPath(pathname: string): boolean {
 }
 
 /**
- * Protección de rutas a nivel de servidor. Antes de esto, la única "guardia"
- * era components/AuthGuard.tsx (client-side, useEffect) que solo redirige el
- * navegador después de hidratar — no impedía que la página, su JS y sus
- * queries a Supabase se sirvieran igual. Esto es lo que realmente lo impide.
+ * Protección de rutas a nivel de servidor (Next.js Proxy/Middleware).
+ * Verifica la validez del token JWT y el estado activo del usuario.
  */
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -40,8 +38,6 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  // IMPORTANTE: getUser() revalida el JWT contra el servidor de Auth.
-  // getSession() solo lee la cookie sin verificarla — no sirve como gate.
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -78,9 +74,6 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // Debe devolverse esta response (con las cookies refrescadas por setAll),
-  // no una NextResponse nueva — de lo contrario se pierde la sesión refrescada
-  // y el usuario queda deslogueado al azar.
   return supabaseResponse;
 }
 

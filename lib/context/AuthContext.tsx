@@ -71,40 +71,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
-    (async () => {
-      setLoading(true);
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!isMounted) return;
-
-      await loadProfileForSession(session);
-      if (session?.user) {
-        await fetchUsers();
-      } else {
-        setUsersList([]);
-      }
-      if (!isMounted) return;
-      setLoading(false);
-    })();
-
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event: string, session: Session | null) => {
-      await loadProfileForSession(session);
-      if (session?.user) {
-        await fetchUsers();
-      } else {
-        setUsersList([]);
-      }
+    } = supabase.auth.onAuthStateChange((_event: string, session: Session | null) => {
+      setTimeout(async () => {
+        if (!isMounted) return;
+        if (session?.user) {
+          await loadProfileForSession(session);
+          await fetchUsers();
+        } else {
+          setCurrentUser(null);
+          setUsersList([]);
+        }
+        if (isMounted) {
+          setLoading(false);
+        }
+      }, 0);
     });
 
     return () => {
       isMounted = false;
       subscription.unsubscribe();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [supabase, loadProfileForSession, fetchUsers]);
 
   const addUser = async (userData: Omit<Usuario, 'id' | 'created_at'>) => {
     const { data, error } = await supabase

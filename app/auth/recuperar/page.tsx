@@ -18,8 +18,9 @@ export default function RecuperarPasswordPage() {
     setError('');
     setLoading(true);
 
+    const redirectUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://hormiglass-system.vercel.app';
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth/callback?next=/auth/actualizar-password`,
+      redirectTo: `${redirectUrl}/auth/callback?next=/auth/actualizar-password`,
     });
 
     setLoading(false);

@@ -79,7 +79,6 @@ export default function LoginPage() {
       }
 
       router.replace('/');
-      router.refresh();
     } else {
       // REGISTRO DE NUEVO USUARIO
       if (!nombre.trim()) {
@@ -92,6 +91,7 @@ export default function LoginPage() {
         email: email.trim(),
         password,
         options: {
+          emailRedirectTo: 'https://hormiglass-system.vercel.app/',
           data: {
             nombre: nombre.trim(),
           },
@@ -121,7 +121,6 @@ export default function LoginPage() {
         if (!autoLoginError && signInData.user) {
           setTimeout(() => {
             router.replace('/');
-            router.refresh();
           }, 1500);
         } else {
           setLoading(false);
