@@ -100,26 +100,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error('Por favor ingresa una contraseña para el nuevo usuario.');
     }
 
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: userData.email.trim(),
-      password: userData.password,
-      options: {
-        emailRedirectTo: 'https://hormiglass-system.vercel.app/',
-        data: {
-          nombre: userData.nombre.trim(),
-        },
-      },
+    // Intentar creación administrativa directa por RPC para evitar límite de envío de correos
+    const { error: rpcError } = await supabase.rpc('create_user_admin', {
+      p_email: userData.email.trim(),
+      p_password: userData.password,
+      p_nombre: userData.nombre.trim(),
+      p_rol: userData.rol || 'user',
     });
 
-    if (signUpError) {
-      throw new Error(`No se pudo crear el usuario en Supabase Auth: ${signUpError.message}`);
-    }
+    if (rpcError) {
+      if (rpcError.message.includes('ya se encuentra registrado')) {
+        throw new Error(`El correo ${userData.email} ya se encuentra registrado.`);
+      }
 
-    if (signUpData.user && userData.rol && userData.rol !== 'user') {
-      await supabase
-        .from('usuarios')
-        .update({ rol: userData.rol })
-        .eq('auth_id', signUpData.user.id);
+      // Fallback a signUp tradicional
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: userData.email.trim(),
+        password: userData.password,
+        options: {
+          emailRedirectTo: 'https://hormiglass-system.vercel.app/',
+          data: {
+            nombre: userData.nombre.trim(),
+          },
+        },
+      });
+
+      if (signUpError) {
+        throw new Error(`No se pudo crear el usuario: ${signUpError.message}`);
+      }
+
+      if (signUpData.user && userData.rol && userData.rol !== 'user') {
+        await supabase
+          .from('usuarios')
+          .update({ rol: userData.rol })
+          .eq('auth_id', signUpData.user.id);
+      }
     }
 
     await fetchUsers();
