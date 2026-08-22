@@ -19,6 +19,9 @@ import {
   ChevronUp,
   Settings,
   CalendarDays,
+  ShoppingCart,
+  Truck,
+  UserCheck,
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -29,7 +32,7 @@ export function Sidebar() {
 
   // Mantenemos desplegable para Calendarios solamente
   const [openCalendars, setOpenCalendars] = useState(
-    ['/visitas', '/planificacion/calendario'].some((path) => pathname.startsWith(path))
+    ['/visitas', '/planificacion/calendario', '/reventa/calendario'].some((path) => pathname.startsWith(path))
   );
 
   const supabase = createClient();
@@ -38,7 +41,9 @@ export function Sidebar() {
     let ignore = false;
 
     if (!currentUser?.id) {
-      setUnreadCount(0);
+      setTimeout(() => {
+        if (!ignore) setUnreadCount(0);
+      }, 0);
       return;
     }
 
@@ -95,9 +100,15 @@ export function Sidebar() {
       roles: ['admin', 'ventas', 'finanzas', 'administracion', 'programacion'],
     },
     {
-      label: 'Planificación y Entregas',
+      label: 'Producción y Logística',
       href: '/planificacion/calendario',
       icon: CalendarDays,
+      roles: ['admin', 'ventas', 'finanzas', 'administracion', 'programacion'],
+    },
+    {
+      label: 'Reventa y Logística',
+      href: '/reventa/calendario',
+      icon: Truck,
       roles: ['admin', 'ventas', 'finanzas', 'administracion', 'programacion'],
     },
   ];
@@ -150,52 +161,80 @@ export function Sidebar() {
           )}
 
           <nav className="mt-2 space-y-1.5">
-            {/* Dashboard */}
-            <Link
-              href="/"
-              title={collapsed ? 'Dashboard' : undefined}
-              className={`flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition ${
-                pathname === '/' ? 'bg-[#F7931F] text-white shadow-sm' : 'text-[#363636] hover:bg-orange-50 hover:text-[#F7931F]'
-              } ${collapsed ? 'justify-center px-0' : ''}`}
-            >
-              <LayoutDashboard className="w-5 h-5 shrink-0" />
-              {!collapsed && <span>Dashboard</span>}
-            </Link>
+            {/* Si es mano_obra, solo ve RRHH, Calendarios y Notificaciones */}
+            {currentUser?.rol !== 'mano_obra' && (
+              <>
+                {/* Dashboard */}
+                <Link
+                  href="/"
+                  title={collapsed ? 'Dashboard' : undefined}
+                  className={`flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition ${
+                    pathname === '/' ? 'bg-[#F7931F] text-white shadow-sm' : 'text-[#363636] hover:bg-orange-50 hover:text-[#F7931F]'
+                  } ${collapsed ? 'justify-center px-0' : ''}`}
+                >
+                  <LayoutDashboard className="w-5 h-5 shrink-0" />
+                  {!collapsed && <span>Dashboard</span>}
+                </Link>
 
-            {/* Clientes */}
-            <Link
-              href="/clientes"
-              title={collapsed ? 'Clientes' : undefined}
-              className={`flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition ${
-                pathname === '/clientes' ? 'bg-[#F7931F] text-white shadow-sm' : 'text-[#363636] hover:bg-orange-50 hover:text-[#F7931F]'
-              } ${collapsed ? 'justify-center px-0' : ''}`}
-            >
-              <Users className="w-5 h-5 shrink-0" />
-              {!collapsed && <span>Clientes</span>}
-            </Link>
+                {/* Clientes */}
+                <Link
+                  href="/clientes"
+                  title={collapsed ? 'Clientes' : undefined}
+                  className={`flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition ${
+                    pathname === '/clientes' ? 'bg-[#F7931F] text-white shadow-sm' : 'text-[#363636] hover:bg-orange-50 hover:text-[#F7931F]'
+                  } ${collapsed ? 'justify-center px-0' : ''}`}
+                >
+                  <Users className="w-5 h-5 shrink-0" />
+                  {!collapsed && <span>Clientes</span>}
+                </Link>
 
-            {/* Cotizaciones */}
-            <Link
-              href="/cotizaciones"
-              title={collapsed ? 'Cotizaciones' : undefined}
-              className={`flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition ${
-                pathname === '/cotizaciones' ? 'bg-[#F7931F] text-white shadow-sm' : 'text-[#363636] hover:bg-orange-50 hover:text-[#F7931F]'
-              } ${collapsed ? 'justify-center px-0' : ''}`}
-            >
-              <FileText className="w-5 h-5 shrink-0" />
-              {!collapsed && <span>Cotizaciones</span>}
-            </Link>
+                {/* Cotizaciones */}
+                <Link
+                  href="/cotizaciones"
+                  title={collapsed ? 'Cotizaciones' : undefined}
+                  className={`flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition ${
+                    pathname === '/cotizaciones' ? 'bg-[#F7931F] text-white shadow-sm' : 'text-[#363636] hover:bg-orange-50 hover:text-[#F7931F]'
+                  } ${collapsed ? 'justify-center px-0' : ''}`}
+                >
+                  <FileText className="w-5 h-5 shrink-0" />
+                  {!collapsed && <span>Cotizaciones</span>}
+                </Link>
 
-            {/* PIPELINE (Único Pipeline Unificado) */}
+                <Link
+                  href="/ordenes-compra"
+                  title={collapsed ? 'Ordenes de Compra' : undefined}
+                  className={`flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition ${
+                    pathname.startsWith('/ordenes-compra') ? 'bg-[#F7931F] text-white shadow-sm' : 'text-[#363636] hover:bg-orange-50 hover:text-[#F7931F]'
+                  } ${collapsed ? 'justify-center px-0' : ''}`}
+                >
+                  <ShoppingCart className="w-5 h-5 shrink-0" />
+                  {!collapsed && <span>Ordenes de Compra</span>}
+                </Link>
+
+                {/* PIPELINE (Único Pipeline Unificado) */}
+                <Link
+                  href="/ventas"
+                  title={collapsed ? 'Pipeline' : undefined}
+                  className={`flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition ${
+                    pathname === '/ventas' ? 'bg-[#F7931F] text-white shadow-sm' : 'text-[#363636] hover:bg-orange-50 hover:text-[#F7931F]'
+                  } ${collapsed ? 'justify-center px-0' : ''}`}
+                >
+                  <TrendingUp className="w-5 h-5 shrink-0" />
+                  {!collapsed && <span>Pipeline</span>}
+                </Link>
+              </>
+            )}
+
+            {/* RECURSOS HUMANOS (RR.HH.) */}
             <Link
-              href="/ventas"
-              title={collapsed ? 'Pipeline' : undefined}
+              href="/rrhh"
+              title={collapsed ? 'Recursos Humanos' : undefined}
               className={`flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition ${
-                pathname === '/ventas' ? 'bg-[#F7931F] text-white shadow-sm' : 'text-[#363636] hover:bg-orange-50 hover:text-[#F7931F]'
+                pathname.startsWith('/rrhh') ? 'bg-[#F7931F] text-white shadow-sm' : 'text-[#363636] hover:bg-orange-50 hover:text-[#F7931F]'
               } ${collapsed ? 'justify-center px-0' : ''}`}
             >
-              <TrendingUp className="w-5 h-5 shrink-0" />
-              {!collapsed && <span>Pipeline</span>}
+              <UserCheck className="w-5 h-5 shrink-0" />
+              {!collapsed && <span>Recursos Humanos</span>}
             </Link>
 
             {/* GRUPO: CALENDARIOS (Desplegable Mantenido) */}
@@ -263,15 +302,17 @@ export function Sidebar() {
             )}
           </Link>
 
-          <Link
-            href="/configuracion"
-            className={`flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition ${
-              pathname === '/configuracion' ? 'bg-[#F7931F] text-white shadow-sm' : 'text-[#363636] hover:bg-orange-50 hover:text-[#F7931F]'
-            } ${collapsed ? 'justify-center px-0' : ''}`}
-          >
-            <Settings className="w-5 h-5 shrink-0" />
-            {!collapsed && <span>Configuración</span>}
-          </Link>
+          {currentUser?.rol !== 'mano_obra' && (
+            <Link
+              href="/configuracion"
+              className={`flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition ${
+                pathname === '/configuracion' ? 'bg-[#F7931F] text-white shadow-sm' : 'text-[#363636] hover:bg-orange-50 hover:text-[#F7931F]'
+              } ${collapsed ? 'justify-center px-0' : ''}`}
+            >
+              <Settings className="w-5 h-5 shrink-0" />
+              {!collapsed && <span>Configuración</span>}
+            </Link>
+          )}
 
           {currentUser && !collapsed && (
             <div className="pt-2 flex items-center gap-3 px-2">

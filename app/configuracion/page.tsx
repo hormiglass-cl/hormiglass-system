@@ -17,14 +17,10 @@ import {
   AlertTriangle,
   FileText,
   Users,
-  TrendingUp,
   Database,
   ToggleLeft,
   ToggleRight,
-  ShieldCheck,
   UserPlus,
-  Mail,
-  User,
   Sliders,
 } from 'lucide-react';
 
@@ -60,7 +56,7 @@ const SYSTEM_FIELDS_OPORTUNIDADES: FieldDefinition[] = [
   { id: 'sys-op-tipo-venta', nombre: 'Tipo de Venta', campo_supabase: 'tipo_venta', entidad: 'oportunidades', tipo: 'opciones', opciones: ['Instalación', 'Suministro', 'Reventa de Material'], es_sistema: true, activo: true },
   { id: 'sys-op-prioridad', nombre: 'Prioridad de Oportunidad', campo_supabase: 'prioridad', entidad: 'oportunidades', tipo: 'opciones', opciones: ['Normal / Baja', 'Alta', 'Urgente'], es_sistema: true, activo: true },
   { id: 'sys-op-visita-req', nombre: 'Requiere Visita a Terreno', campo_supabase: 'requiere_visita_terreno', entidad: 'oportunidades', tipo: 'opciones', opciones: ['Sí', 'No'], es_sistema: true, activo: true },
-  { id: 'sys-op-visita-tec', nombre: 'Técnico Asignado a Visita', campo_supabase: 'tecnico_visita', entidad: 'oportunidades', tipo: 'opciones', opciones: ['Felipe Valverde', 'Marcos Catalán', 'Edith Tapia'], es_sistema: true, activo: true },
+  { id: 'sys-op-visita-tec', nombre: 'Técnico Asignado a Visita', campo_supabase: 'tecnico_id', entidad: 'oportunidades', tipo: 'relacion', es_sistema: true, activo: true },
   { id: 'sys-op-5', nombre: 'Fecha Inicio Trabajo', campo_supabase: 'fecha_inicio', entidad: 'oportunidades', tipo: 'fecha', es_sistema: true, activo: true },
   { id: 'sys-op-6', nombre: 'Fecha Límite Término', campo_supabase: 'fecha_limite', entidad: 'oportunidades', tipo: 'fecha', es_sistema: true, activo: true },
   { id: 'sys-op-7', nombre: 'Categorías de Productos', campo_supabase: 'productos', entidad: 'oportunidades', tipo: 'opciones', es_sistema: true, activo: true },
@@ -82,11 +78,11 @@ const SYSTEM_FIELDS_COTIZACIONES: FieldDefinition[] = [
 ];
 
 export default function ConfiguracionPage() {
-  const { currentUser, usersList, addUser, updateUserRole, updateUser, deleteUser } = useAuth();
+  const { currentUser, usersList, addUser, updateUserRole, updateUser, deleteUser, refreshUsers } = useAuth();
   const supabase = createClient();
 
-  // Top Section Mode (Campos vs Usuarios)
-  const [mainTab, setMainTab] = useState<'campos' | 'usuarios'>('campos');
+  // Modo de Pestaña Principal (Campos vs Usuarios y Accesos)
+  const [mainTab, setMainTab] = useState<'campos' | 'usuarios'>('usuarios');
 
   // Campos Custom State
   const [fields, setFields] = useState<FieldDefinition[]>([]);
@@ -110,7 +106,10 @@ export default function ConfiguracionPage() {
   const [userNombre, setUserNombre] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userPassword, setUserPassword] = useState('');
-  const [userRol, setUserRol] = useState<UserRole>('user');
+  const [userRol, setUserRol] = useState<UserRole>('mano_obra');
+  const [userCalVisitas, setUserCalVisitas] = useState(true);
+  const [userCalProduccion, setUserCalProduccion] = useState(true);
+  const [userCalReventa, setUserCalReventa] = useState(true);
   const [userToDelete, setUserToDelete] = useState<Usuario | null>(null);
 
   // Edit User State
@@ -118,6 +117,9 @@ export default function ConfiguracionPage() {
   const [editUserNombre, setEditUserNombre] = useState('');
   const [editUserRol, setEditUserRol] = useState<UserRole>('user');
   const [editUserActivo, setEditUserActivo] = useState(true);
+  const [editUserCalVisitas, setEditUserCalVisitas] = useState(true);
+  const [editUserCalProduccion, setEditUserCalProduccion] = useState(true);
+  const [editUserCalReventa, setEditUserCalReventa] = useState(true);
   const [showEditUserModal, setShowEditUserModal] = useState(false);
 
   const [userCurrentPage, setUserCurrentPage] = useState(1);
@@ -141,12 +143,7 @@ export default function ConfiguracionPage() {
           ...SYSTEM_FIELDS_COTIZACIONES,
         ];
 
-        if (error || !data || data.length === 0) {
-          // Seed defaults into Supabase
-          await supabase.from('campos_personalizados').upsert(defaultSeed);
-          setFields(defaultSeed);
-        } else {
-          // Check if any system fields from defaultSeed are missing in DB
+        if (data && data.length > 0) {
           const existingKeys = new Set(data.map((f: any) => `${f.entidad}_${f.campo_supabase}`));
           const missingFields = defaultSeed.filter((sf) => !existingKeys.has(`${sf.entidad}_${sf.campo_supabase}`));
 
@@ -160,6 +157,8 @@ export default function ConfiguracionPage() {
           } else {
             setFields(data as FieldDefinition[]);
           }
+        } else {
+          setFields(defaultSeed);
         }
       } catch (err) {
         console.error('Error loading fields from Supabase:', err);
@@ -174,119 +173,15 @@ export default function ConfiguracionPage() {
     };
   }, []);
 
-  // Protección: Solo Admin puede acceder
-  if (currentUser?.rol !== 'admin') {
-    return (
-      <div className="bg-red-50 border border-red-200 text-red-700 p-8 rounded-2xl text-center space-y-3 my-8 shadow-sm">
-        <AlertTriangle className="w-12 h-12 mx-auto text-red-500" />
-        <h2 className="text-xl font-extrabold text-red-900">Acceso Restringido</h2>
-        <p className="text-xs text-red-700">
-          Solo los usuarios con rol <strong>Administrador</strong> tienen permisos para acceder a la configuración del sistema.
-        </p>
-      </div>
-    );
-  }
-
-  // Handle Field Saving in Supabase
-  const handleSaveField = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nombre.trim()) return;
-
-    const opcArray = tipo === 'opciones' ? opcionesInput.split(',').map((s) => s.trim()).filter(Boolean) : undefined;
-    const keySupabase = campoSupabase.trim() || nombre.toLowerCase().replace(/\s+/g, '_');
-
-    if (editingField) {
-      const updatedField: FieldDefinition = {
-        ...editingField,
-        nombre: nombre.trim(),
-        campo_supabase: keySupabase,
-        entidad,
-        tipo,
-        opciones: opcArray,
-      };
-
-      setFields((prev) => prev.map((f) => (f.id === editingField.id ? updatedField : f)));
-      setSuccessMsg(`Campo "${nombre}" actualizado correctamente en Supabase.`);
-
-      try {
-        await supabase
-          .from('campos_personalizados')
-          .update({
-            nombre: updatedField.nombre,
-            campo_supabase: updatedField.campo_supabase,
-            entidad: updatedField.entidad,
-            tipo: updatedField.tipo,
-            opciones: updatedField.opciones,
-          })
-          .eq('id', editingField.id);
-
-        await logSistema({
-          tipo_accion: 'actualizacion',
-          entidad: 'sistema',
-          entidad_id: editingField.id,
-          descripcion: `Campo personalizado "${nombre}" actualizado`,
-          usuario_id: currentUser?.id,
-          datos_nuevos: updatedField,
-        });
-      } catch (err) {
-        console.error('Error updating field in Supabase:', err);
-      }
-    } else {
-      const newF: FieldDefinition = {
-        id: `cf-${Date.now()}`,
-        nombre: nombre.trim(),
-        campo_supabase: keySupabase,
-        entidad,
-        tipo,
-        opciones: opcArray,
-        es_sistema: false,
-        activo: true,
-      };
-
-      setFields((prev) => [...prev, newF]);
-      setSuccessMsg(`Campo "${nombre}" creado y guardado exitosamente en Supabase.`);
-
-      try {
-        await supabase.from('campos_personalizados').insert([newF]);
-
-        await logSistema({
-          tipo_accion: 'creacion',
-          entidad: 'sistema',
-          entidad_id: newF.id,
-          descripcion: `Nuevo campo personalizado "${nombre}" creado para ${entidad}`,
-          usuario_id: currentUser?.id,
-          datos_nuevos: newF,
-        });
-      } catch (err) {
-        console.error('Error inserting new field into Supabase:', err);
-      }
-    }
-
-    setShowFieldModal(false);
+  const handleOpenNewField = () => {
     setEditingField(null);
     setNombre('');
     setCampoSupabase('');
+    setEntidad(activeEntityTab);
+    setTipo('texto');
     setOpcionesInput('');
-    setTimeout(() => setSuccessMsg(''), 4000);
-  };
-
-  const handleToggleActive = async (id: string) => {
-    const target = fields.find((f) => f.id === id);
-    if (!target) return;
-    const newStatus = !target.activo;
-
-    setFields((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, activo: newStatus } : f))
-    );
-
-    try {
-      await supabase
-        .from('campos_personalizados')
-        .update({ activo: newStatus })
-        .eq('id', id);
-    } catch (err) {
-      console.error('Error toggling field status in Supabase:', err);
-    }
+    setUserErrorMsg('');
+    setShowFieldModal(true);
   };
 
   const handleEditField = (field: FieldDefinition) => {
@@ -296,47 +191,155 @@ export default function ConfiguracionPage() {
     setEntidad(field.entidad);
     setTipo(field.tipo);
     setOpcionesInput(field.opciones ? field.opciones.join(', ') : '');
+    setUserErrorMsg('');
     setShowFieldModal(true);
   };
 
-  const handleDeleteField = async (id: string) => {
-    setFields((prev) => prev.filter((f) => f.id !== id));
-    setSuccessMsg('Campo eliminado permanentemente de Supabase.');
-
-    try {
-      await supabase.from('campos_personalizados').delete().eq('id', id);
-    } catch (err) {
-      console.error('Error deleting field from Supabase:', err);
-    }
-
-    setTimeout(() => setSuccessMsg(''), 4000);
-  };
-
-  const handleCreateUser = async (e: React.FormEvent) => {
+  const handleSaveField = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userNombre || !userEmail || !userPassword) {
-      setUserErrorMsg('Por favor completa todos los campos requeridos, incluyendo la contraseña.');
+    if (!nombre.trim() || !campoSupabase.trim()) {
+      setUserErrorMsg('El nombre y el identificador en Supabase son obligatorios.');
       return;
     }
+
+    const fieldData: FieldDefinition = {
+      id: editingField ? editingField.id : `custom-${Date.now()}`,
+      nombre: nombre.trim(),
+      campo_supabase: campoSupabase.trim().toLowerCase().replace(/\s+/g, '_'),
+      entidad,
+      tipo,
+      opciones: tipo === 'opciones' ? opcionesInput.split(',').map((o) => o.trim()).filter(Boolean) : undefined,
+      es_sistema: editingField ? editingField.es_sistema : false,
+      activo: editingField ? editingField.activo : true,
+    };
+
+    try {
+      const { error } = await supabase.from('campos_personalizados').upsert([fieldData]);
+      if (error) throw error;
+
+      if (editingField) {
+        setFields(fields.map((f) => (f.id === editingField.id ? fieldData : f)));
+        setSuccessMsg(`Campo "${nombre}" actualizado correctamente en Supabase.`);
+      } else {
+        setFields([...fields, fieldData]);
+        setSuccessMsg(`Campo personalizado "${nombre}" creado exitosamente en Supabase.`);
+      }
+      setShowFieldModal(false);
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (err: any) {
+      setUserErrorMsg(err?.message || 'Error al persistir el campo.');
+    }
+  };
+
+  const handleToggleActive = async (id: string) => {
+    const field = fields.find((f) => f.id === id);
+    if (!field) return;
+    const newStatus = !field.activo;
+
+    try {
+      const { error } = await supabase
+        .from('campos_personalizados')
+        .update({ activo: newStatus })
+        .eq('id', id);
+      if (error) throw error;
+
+      setFields(fields.map((f) => (f.id === id ? { ...f, activo: newStatus } : f)));
+      setSuccessMsg(`El campo "${field.nombre}" ahora está ${newStatus ? 'Activo' : 'Oculto'}.`);
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (err: any) {
+      setUserErrorMsg(err?.message || 'Error al cambiar estado del campo.');
+    }
+  };
+
+  const handleDeleteField = async (id: string) => {
+    const field = fields.find((f) => f.id === id);
+    if (!field || field.es_sistema) return;
+
+    if (confirm(`¿Estás seguro de eliminar el campo "${field.nombre}"?`)) {
+      try {
+        const { error } = await supabase.from('campos_personalizados').delete().eq('id', id);
+        if (error) throw error;
+
+        setFields(fields.filter((f) => f.id !== id));
+        setSuccessMsg(`Campo "${field.nombre}" eliminado de Supabase.`);
+        setTimeout(() => setSuccessMsg(''), 3000);
+      } catch (err: any) {
+        setUserErrorMsg(err?.message || 'Error al eliminar el campo.');
+      }
+    }
+  };
+
+  // Toggle Calendario directo en la tabla de usuarios
+  const handleToggleUserCalendar = async (
+    userId: string,
+    field: 'calendario_visitas' | 'calendario_produccion' | 'calendario_reventa',
+    currentVal?: boolean
+  ) => {
+    const newVal = !(currentVal ?? true);
+    try {
+      const { error } = await supabase
+        .from('usuarios')
+        .update({ [field]: newVal, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+
+      if (error) throw error;
+      await refreshUsers();
+      setSuccessMsg(`Preferencia de calendario actualizada para el usuario.`);
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (err: any) {
+      setUserErrorMsg(err?.message || 'Error al actualizar calendario.');
+    }
+  };
+
+  // User Handlers
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
     setUserErrorMsg('');
+
+    if (!userNombre.trim() || !userEmail.trim() || !userPassword) {
+      setUserErrorMsg('Todos los campos son requeridos para crear el usuario.');
+      return;
+    }
 
     try {
       await addUser({
-        nombre: userNombre,
-        email: userEmail,
+        nombre: userNombre.trim(),
+        email: userEmail.trim(),
         password: userPassword,
         rol: userRol,
         activo: true,
       });
-      setSuccessMsg(`Usuario ${userEmail} creado exitosamente en el sistema con su contraseña.`);
+
+      // Actualizar flags de calendarios en el registro recién creado
+      await supabase
+        .from('usuarios')
+        .update({
+          calendario_visitas: userCalVisitas,
+          calendario_produccion: userCalProduccion,
+          calendario_reventa: userCalReventa,
+        })
+        .eq('email', userEmail.trim());
+
+      await logSistema({
+        tipo_accion: 'creacion',
+        entidad: 'usuarios',
+        descripcion: `Usuario ${userNombre.trim()} (${userEmail.trim()}) registrado con rol ${userRol}.`,
+        usuario_id: currentUser?.id,
+      });
+
+      setSuccessMsg(`Usuario ${userNombre} registrado exitosamente en Supabase.`);
+      setShowUserModal(false);
       setUserNombre('');
       setUserEmail('');
       setUserPassword('');
-      setUserRol('user');
-      setShowUserModal(false);
+      setUserRol('mano_obra');
+      setUserCalVisitas(true);
+      setUserCalProduccion(true);
+      setUserCalReventa(true);
+      await refreshUsers();
       setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (err) {
-      setUserErrorMsg(err instanceof Error ? err.message : 'No se pudo registrar el usuario.');
+    } catch (err: any) {
+      setUserErrorMsg(err?.message || 'Error al registrar usuario en Supabase.');
     }
   };
 
@@ -345,6 +348,9 @@ export default function ConfiguracionPage() {
     setEditUserNombre(usr.nombre);
     setEditUserRol(usr.rol);
     setEditUserActivo(usr.activo);
+    setEditUserCalVisitas(usr.calendario_visitas ?? true);
+    setEditUserCalProduccion(usr.calendario_produccion ?? true);
+    setEditUserCalReventa(usr.calendario_reventa ?? true);
     setShowEditUserModal(true);
   };
 
@@ -359,315 +365,317 @@ export default function ConfiguracionPage() {
         rol: editUserRol,
         activo: editUserActivo,
       });
-      setSuccessMsg(`Usuario ${editUserNombre} actualizado correctamente en Supabase.`);
+
+      await supabase
+        .from('usuarios')
+        .update({
+          calendario_visitas: editUserCalVisitas,
+          calendario_produccion: editUserCalProduccion,
+          calendario_reventa: editUserCalReventa,
+        })
+        .eq('id', editingUser.id);
+
+      await logSistema({
+        tipo_accion: 'actualizacion',
+        entidad: 'usuarios',
+        entidad_id: editingUser.id,
+        descripcion: `Usuario ${editUserNombre} actualizado (Rol: ${editUserRol}, Activo: ${editUserActivo}).`,
+        usuario_id: currentUser?.id,
+      });
+
+      setSuccessMsg(`Usuario ${editUserNombre} actualizado exitosamente.`);
       setShowEditUserModal(false);
       setEditingUser(null);
+      await refreshUsers();
       setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (err) {
-      setUserErrorMsg(err instanceof Error ? err.message : 'No se pudo actualizar el usuario.');
+    } catch (err: any) {
+      setUserErrorMsg(err?.message || 'Error al actualizar usuario.');
     }
   };
 
   const handleConfirmDeleteUser = async () => {
     if (!userToDelete) return;
-    if (currentUser && userToDelete.id === currentUser.id) {
-      setUserErrorMsg('No puedes eliminar tu propia cuenta mientras mantengas la sesión activa.');
-      return;
-    }
     setUserErrorMsg('');
 
     try {
       await deleteUser(userToDelete.id);
-      setSuccessMsg(`Usuario ${userToDelete.nombre} (${userToDelete.email}) eliminado permanentemente de Supabase.`);
+
+      await logSistema({
+        tipo_accion: 'eliminacion',
+        entidad: 'usuarios',
+        entidad_id: userToDelete.id,
+        descripcion: `Usuario ${userToDelete.nombre} (${userToDelete.email}) eliminado del sistema.`,
+        usuario_id: currentUser?.id,
+      });
+
+      setSuccessMsg(`Usuario ${userToDelete.nombre} eliminado exitosamente de Supabase.`);
       setUserToDelete(null);
+      await refreshUsers();
       setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (err) {
-      setUserErrorMsg(err instanceof Error ? err.message : 'No se pudo eliminar el usuario.');
+    } catch (err: any) {
+      setUserErrorMsg(err?.message || 'Error al eliminar usuario.');
     }
   };
 
   const filteredFields = fields.filter((f) => f.entidad === activeEntityTab);
+
+  // Pagination for Users
+  const totalUserPages = Math.ceil(usersList.length / userItemsPerPage) || 1;
   const paginatedUsers = usersList.slice(
     (userCurrentPage - 1) * userItemsPerPage,
     userCurrentPage * userItemsPerPage
   );
 
   return (
-    <div className="space-y-6 text-[#363636]">
-      {/* Header General de Configuración */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
-        <div>
-          <h1 className="text-2xl font-extrabold text-[#363636] flex items-center gap-2">
-            <Settings className="w-6 h-6 text-[#F7931F]" />
-            <span>Configuración General del Sistema</span>
-          </h1>
-          <p className="text-xs text-gray-600 mt-1">
-            Gestión centralizada de usuarios, accesos, roles y mapeo de campos de la base de datos de Supabase.
-          </p>
+    <div className="space-y-6 pb-12 text-[#363636] animate-fadeIn">
+      {/* Cabecera Principal */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-gray-200 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-orange-50 text-[#F7931F] rounded-2xl">
+            <Settings className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black text-[#363636] tracking-tight">
+              Configuración del Sistema
+            </h1>
+            <p className="text-xs text-gray-500 font-medium mt-0.5">
+              Gestión centralizada de usuarios, permisos, 3 calendarios y campos personalizados.
+            </p>
+          </div>
         </div>
 
-        {/* Botón según pestaña principal activa */}
-        {mainTab === 'campos' ? (
+        {/* Acciones Rápidas */}
+        {mainTab === 'usuarios' && (
           <button
             onClick={() => {
-              setEditingField(null);
-              setNombre('');
-              setCampoSupabase('');
-              setEntidad(activeEntityTab);
-              setTipo('texto');
-              setOpcionesInput('');
-              setShowFieldModal(true);
+              setUserErrorMsg('');
+              setShowUserModal(true);
             }}
-            className="bg-[#F7931F] hover:bg-[#e08316] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition flex items-center gap-2 self-start md:self-auto"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Agregar Nuevo Campo</span>
-          </button>
-        ) : (
-          <button
-            onClick={() => setShowUserModal(true)}
-            className="bg-[#F7931F] hover:bg-[#e08316] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition flex items-center gap-2 self-start md:self-auto"
+            className="bg-[#F7931F] hover:bg-[#e08316] text-white px-4 py-2.5 rounded-2xl font-black text-xs transition shadow-md flex items-center gap-2 self-start sm:self-auto cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
-            <span>Crear Nuevo Usuario</span>
+            <span>Registrar Usuario</span>
+          </button>
+        )}
+
+        {mainTab === 'campos' && (
+          <button
+            onClick={handleOpenNewField}
+            className="bg-[#F7931F] hover:bg-[#e08316] text-white px-4 py-2.5 rounded-2xl font-black text-xs transition shadow-md flex items-center gap-2 self-start sm:self-auto cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Nuevo Campo</span>
           </button>
         )}
       </div>
 
+      {/* Mensajes de Éxito / Error */}
       {successMsg && (
-        <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 p-4 rounded-xl text-xs flex items-center gap-2 font-bold animate-fadeIn">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-2.5 text-emerald-800 text-xs font-bold animate-fadeIn">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
 
       {userErrorMsg && (
-        <div className="bg-red-50 border border-red-300 text-red-800 p-4 rounded-xl text-xs flex items-center gap-2 font-bold animate-fadeIn">
+        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-2.5 text-red-800 text-xs font-bold animate-fadeIn">
+          <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
           <span>{userErrorMsg}</span>
         </div>
       )}
 
-      {/* Selector de Pestaña Principal (Campos vs Usuarios) */}
-      <div className="flex gap-2 bg-gray-100 p-1.5 rounded-2xl border border-gray-200 text-xs font-extrabold w-fit">
+      {/* Selector de Pestañas Superiores */}
+      <div className="bg-white p-2 rounded-3xl border border-gray-200 shadow-xs flex items-center gap-2">
+        <button
+          onClick={() => setMainTab('usuarios')}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-xs font-black transition cursor-pointer ${
+            mainTab === 'usuarios'
+              ? 'bg-[#F7931F] text-white shadow-sm'
+              : 'text-gray-600 hover:bg-orange-50 hover:text-[#F7931F]'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>Usuarios, Accesos & 3 Calendarios ({usersList.length})</span>
+        </button>
+
         <button
           onClick={() => setMainTab('campos')}
-          className={`px-5 py-2.5 rounded-xl transition flex items-center gap-2 ${
+          className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-xs font-black transition cursor-pointer ${
             mainTab === 'campos'
-              ? 'bg-[#F7931F] text-white shadow-xs'
-              : 'text-gray-600 hover:text-[#363636]'
+              ? 'bg-[#F7931F] text-white shadow-sm'
+              : 'text-gray-600 hover:bg-orange-50 hover:text-[#F7931F]'
           }`}
         >
           <Sliders className="w-4 h-4" />
-          <span>Configuración & Mapeo de Campos</span>
-        </button>
-
-        <button
-          onClick={() => setMainTab('usuarios')}
-          className={`px-5 py-2.5 rounded-xl transition flex items-center gap-2 ${
-            mainTab === 'usuarios'
-              ? 'bg-[#F7931F] text-white shadow-xs'
-              : 'text-gray-600 hover:text-[#363636]'
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4" />
-          <span>Usuarios y Accesos ({usersList.length})</span>
+          <span>Campos del Sistema & Módulos</span>
         </button>
       </div>
 
-      {/* CONTENIDO PESTAÑA 1: CAMPOS DE SUPABASE */}
-      {mainTab === 'campos' && (
-        <div className="space-y-6 animate-fadeIn">
-          {/* Tabs por Entidad */}
-          <div className="flex gap-2 border-b border-gray-200 text-xs font-bold">
-            <button
-              onClick={() => setActiveEntityTab('clientes')}
-              className={`pb-3 px-4 flex items-center gap-2 border-b-2 transition ${
-                activeEntityTab === 'clientes'
-                  ? 'border-[#F7931F] text-[#F7931F]'
-                  : 'border-transparent text-gray-500 hover:text-[#363636]'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>Campos de Clientes ({fields.filter((f) => f.entidad === 'clientes').length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveEntityTab('oportunidades')}
-              className={`pb-3 px-4 flex items-center gap-2 border-b-2 transition ${
-                activeEntityTab === 'oportunidades'
-                  ? 'border-[#F7931F] text-[#F7931F]'
-                  : 'border-transparent text-gray-500 hover:text-[#363636]'
-              }`}
-            >
-              <TrendingUp className="w-4 h-4" />
-              <span>Campos de Oportunidades ({fields.filter((f) => f.entidad === 'oportunidades').length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveEntityTab('cotizaciones')}
-              className={`pb-3 px-4 flex items-center gap-2 border-b-2 transition ${
-                activeEntityTab === 'cotizaciones'
-                  ? 'border-[#F7931F] text-[#F7931F]'
-                  : 'border-transparent text-gray-500 hover:text-[#363636]'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              <span>Campos de Cotizaciones ({fields.filter((f) => f.entidad === 'cotizaciones').length})</span>
-            </button>
-          </div>
-
-          {/* Tabla de Campos */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden text-xs">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-[#363636] text-white uppercase text-[10px] tracking-wider">
-                <tr>
-                  <th className="py-3.5 px-6">Etiqueta del Campo</th>
-                  <th className="py-3.5 px-6">Columna Supabase</th>
-                  <th className="py-3.5 px-6">Tipo</th>
-                  <th className="py-3.5 px-6">Opciones / Detalles</th>
-                  <th className="py-3.5 px-6 text-center">Estado</th>
-                  <th className="py-3.5 px-6 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 text-[#363636]">
-                {filteredFields.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-8 text-center text-gray-400 font-medium">
-                      No hay campos configurados para esta sección.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredFields.map((f, idx) => (
-                    <tr key={`${f.entidad}-${f.campo_supabase}-${f.id || idx}`} className="hover:bg-orange-50/40 transition">
-                      <td className="py-4 px-6 font-extrabold text-[#363636]">
-                        {f.nombre}
-                      </td>
-                      <td className="py-4 px-6 font-mono font-bold text-gray-600">
-                        <span className="bg-gray-100 text-gray-800 px-2 py-1 rounded border border-gray-200">
-                          {f.campo_supabase}
-                        </span>
-                      </td>
-                      <td className="py-4 px-6 font-semibold text-gray-700 capitalize flex items-center gap-1.5">
-                        <Database className="w-3.5 h-3.5 text-[#F7931F]" />
-                        <span>{f.tipo}</span>
-                      </td>
-                      <td className="py-4 px-6 text-gray-500 text-[11px]">
-                        {f.opciones && f.opciones.length > 0 ? f.opciones.join(', ') : '-'}
-                      </td>
-                      <td className="py-4 px-6 text-center">
-                        <button
-                          onClick={() => handleToggleActive(f.id)}
-                          className="text-xs font-bold focus:outline-none"
-                        >
-                          {f.activo ? (
-                            <span className="text-emerald-700 font-black flex items-center justify-center gap-1">
-                              <ToggleRight className="w-5 h-5 text-emerald-600" />
-                              <span>Activo</span>
-                            </span>
-                          ) : (
-                            <span className="text-gray-400 font-medium flex items-center justify-center gap-1">
-                              <ToggleLeft className="w-5 h-5 text-gray-400" />
-                              <span>Oculto</span>
-                            </span>
-                          )}
-                        </button>
-                      </td>
-                      <td className="py-4 px-6 text-right space-x-2">
-                        <button
-                          onClick={() => handleEditField(f)}
-                          className="p-1.5 bg-orange-50 hover:bg-[#F7931F] text-[#F7931F] hover:text-white rounded-lg transition border border-orange-200"
-                          title="Editar Campo"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        {!f.es_sistema && (
-                          <button
-                            onClick={() => handleDeleteField(f.id)}
-                            className="p-1.5 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-lg transition border border-red-200"
-                            title="Eliminar Campo"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* CONTENIDO PESTAÑA 2: USUARIOS Y ACCESOS */}
+      {/* ========================================================= */}
+      {/* PESTAÑA 1: USUARIOS, ACCESOS Y CALENDARIOS                */}
+      {/* ========================================================= */}
       {mainTab === 'usuarios' && (
         <div className="space-y-6 animate-fadeIn">
           {/* Matriz Informativa de Roles */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex items-start gap-3">
-              <div className="w-8 h-8 rounded-xl bg-red-100 text-red-700 flex items-center justify-center font-black shrink-0">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+            <div className="bg-white p-4 rounded-3xl border border-gray-200 shadow-sm flex items-start gap-3">
+              <div className="w-8 h-8 rounded-2xl bg-red-100 text-red-700 flex items-center justify-center font-black shrink-0">
                 A
               </div>
               <div>
                 <span className="font-extrabold text-red-700 block text-xs mb-0.5">ADMIN (Acceso Total)</span>
                 <p className="text-gray-600 text-[11px] leading-relaxed">
-                  Acceso completo a la plataforma, configuración del sistema, gestión de usuarios, clientes, cotizaciones, pipeline y tesorería.
+                  Control total: configuración, finanzas, ventas, compras y gestión de colaboradores.
                 </p>
               </div>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex items-start gap-3">
-              <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black shrink-0">
+            <div className="bg-white p-4 rounded-3xl border border-gray-200 shadow-sm flex items-start gap-3">
+              <div className="w-8 h-8 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center font-black shrink-0">
                 U
               </div>
               <div>
-                <span className="font-extrabold text-blue-700 block text-xs mb-0.5">USER (Acceso Parcial / Operativo)</span>
+                <span className="font-extrabold text-blue-700 block text-xs mb-0.5">USER (Ejecutivo Comercial)</span>
                 <p className="text-gray-600 text-[11px] leading-relaxed">
-                  Acceso operativo a clientes, cotizaciones, pipeline de ventas, proveedores y movimientos de caja. Sin acceso a configuración del sistema.
+                  Operación comercial: clientes, cotizaciones, pipeline de ventas y movimientos de caja.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-3xl border border-gray-200 shadow-sm flex items-start gap-3">
+              <div className="w-8 h-8 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-black shrink-0">
+                M
+              </div>
+              <div>
+                <span className="font-extrabold text-amber-800 block text-xs mb-0.5">MANO DE OBRA (Terreno / Planta)</span>
+                <p className="text-gray-600 text-[11px] leading-relaxed">
+                  Acceso exclusivo a Recursos Humanos (ficha personal, carpetas, permisos) y Calendarios de faenas.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Tabla de Usuarios */}
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-visible shadow-sm">
+          {/* Tabla Unificada de Usuarios y Calendarios */}
+          <div className="bg-white rounded-3xl border border-gray-200 overflow-hidden shadow-sm">
             <div className="p-4 border-b border-gray-200 font-extrabold text-sm text-[#363636] flex items-center justify-between">
-              <span>Usuarios Registrados en Supabase ({usersList.length})</span>
-              <span className="text-xs font-semibold text-gray-500">Edición en tiempo real</span>
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-[#F7931F]" />
+                <span>Usuarios Registrados en Supabase ({usersList.length})</span>
+              </div>
+              <span className="text-xs font-semibold text-gray-400">
+                Sincronización 1-a-1 con Recursos Humanos
+              </span>
             </div>
 
-            <div className="overflow-visible">
-              <table className="w-full text-left text-xs min-w-[750px]">
-                <thead className="bg-[#363636] text-white uppercase text-[10px] tracking-wider">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs min-w-[950px]">
+                <thead className="bg-gray-50/80 text-gray-500 font-bold border-b border-gray-200">
                   <tr>
-                    <th className="p-3.5">Usuario / Nombre</th>
-                    <th className="p-3.5">Correo Electrónico</th>
-                    <th className="p-3.5">Rol de Acceso / Permisos</th>
-                    <th className="p-3.5">Estado</th>
-                    <th className="p-3.5 text-center">Acciones</th>
+                    <th className="py-3.5 px-4">Usuario / Nombre</th>
+                    <th className="py-3.5 px-4">Correo Electrónico</th>
+                    <th className="py-3.5 px-4">Rol de Acceso</th>
+                    <th className="py-3.5 px-4 text-center">Cal. Visitas</th>
+                    <th className="py-3.5 px-4 text-center">Cal. Producción</th>
+                    <th className="py-3.5 px-4 text-center">Cal. Reventa</th>
+                    <th className="py-3.5 px-4 text-center">Estado</th>
+                    <th className="py-3.5 px-4 text-right">Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 text-[#363636]">
+                <tbody className="divide-y divide-gray-100 text-[#363636]">
                   {paginatedUsers.map((usr) => (
-                    <tr key={usr.id} className="hover:bg-orange-50/50 transition">
-                      <td className="p-3.5 font-bold text-[#363636] flex items-center gap-2">
-                        <div className="w-8 h-8 bg-[#363636] text-white rounded-lg flex items-center justify-center font-black text-xs">
-                          {usr.nombre.charAt(0)}
+                    <tr key={usr.id} className="hover:bg-orange-50/30 transition">
+                      {/* Usuario / Nombre */}
+                      <td className="py-3 px-4 font-bold text-[#363636] flex items-center gap-2.5">
+                        <div className="w-8 h-8 bg-[#363636] text-white rounded-xl flex items-center justify-center font-black text-xs">
+                          {usr.nombre.charAt(0).toUpperCase()}
                         </div>
                         <span>{usr.nombre}</span>
                       </td>
-                      <td className="p-3.5 text-gray-700 font-mono font-medium">{usr.email}</td>
-                      <td className="p-3.5">
+
+                      {/* Correo Electrónico */}
+                      <td className="py-3 px-4 text-gray-700 font-mono font-medium">{usr.email}</td>
+
+                      {/* Rol de Acceso */}
+                      <td className="py-3 px-4">
                         <select
                           value={usr.rol}
                           onChange={(e) => updateUserRole(usr.id, e.target.value as UserRole, usr.activo)}
-                          className="bg-white text-[#363636] font-bold text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#F7931F] cursor-pointer"
+                          className="bg-white text-[#363636] font-bold text-xs border border-gray-300 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#F7931F] cursor-pointer"
                         >
                           <option value="admin">Admin (Acceso Total)</option>
-                          <option value="user">User (Acceso Parcial)</option>
+                          <option value="user">User (Acceso Comercial)</option>
+                          <option value="mano_obra">Mano de Obra (Solo RR.HH. & Calendarios)</option>
                         </select>
                       </td>
-                      <td className="p-3.5">
+
+                      {/* Cal. Visitas Toggle (Naranja) */}
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleUserCalendar(usr.id, 'calendario_visitas', usr.calendario_visitas)}
+                          className="cursor-pointer"
+                          title="Activar/Desactivar presencia en Calendario de Visitas a Terreno"
+                        >
+                          {(usr.calendario_visitas ?? true) ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-[#F7931F] bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
+                              <ToggleRight className="w-4 h-4 text-[#F7931F]" />
+                              <span>Activo</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-full">
+                              <ToggleLeft className="w-4 h-4 text-gray-400" />
+                              <span>Oculto</span>
+                            </span>
+                          )}
+                        </button>
+                      </td>
+
+                      {/* Cal. Producción Toggle (Naranja) */}
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleUserCalendar(usr.id, 'calendario_produccion', usr.calendario_produccion)}
+                          className="cursor-pointer"
+                          title="Activar/Desactivar presencia en Calendario de Producción & Logística"
+                        >
+                          {(usr.calendario_produccion ?? true) ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-[#F7931F] bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
+                              <ToggleRight className="w-4 h-4 text-[#F7931F]" />
+                              <span>Activo</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-full">
+                              <ToggleLeft className="w-4 h-4 text-gray-400" />
+                              <span>Oculto</span>
+                            </span>
+                          )}
+                        </button>
+                      </td>
+
+                      {/* Cal. Reventa Toggle (Naranja) */}
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleUserCalendar(usr.id, 'calendario_reventa', usr.calendario_reventa)}
+                          className="cursor-pointer"
+                          title="Activar/Desactivar presencia en Calendario de Reventa & Logística"
+                        >
+                          {(usr.calendario_reventa ?? true) ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-[#F7931F] bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
+                              <ToggleRight className="w-4 h-4 text-[#F7931F]" />
+                              <span>Activo</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-full">
+                              <ToggleLeft className="w-4 h-4 text-gray-400" />
+                              <span>Oculto</span>
+                            </span>
+                          )}
+                        </button>
+                      </td>
+
+                      {/* Estado */}
+                      <td className="py-3 px-4 text-center">
                         {usr.activo ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 rounded-full">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Activo
@@ -678,19 +686,21 @@ export default function ConfiguracionPage() {
                           </span>
                         )}
                       </td>
-                      <td className="p-3.5 text-center">
-                        <div className="flex items-center justify-center gap-2">
+
+                      {/* Acciones */}
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => handleOpenEditUser(usr)}
-                            className="p-1.5 bg-orange-50 hover:bg-[#F7931F] text-[#F7931F] hover:text-white rounded-lg transition border border-orange-200"
-                            title="Editar Nombre y Rol de Usuario"
+                            className="p-1.5 bg-orange-50 hover:bg-[#F7931F] text-[#F7931F] hover:text-white rounded-xl transition border border-orange-200 cursor-pointer"
+                            title="Editar Usuario"
                           >
-                            <Edit className="w-4 h-4" />
+                            <Edit className="w-3.5 h-3.5" />
                           </button>
 
                           <button
                             onClick={() => updateUserRole(usr.id, usr.rol, !usr.activo)}
-                            className={`text-xs px-3 py-1.5 rounded-lg font-bold transition ${
+                            className={`text-xs px-2.5 py-1 rounded-xl font-bold transition cursor-pointer ${
                               usr.activo
                                 ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
                                 : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
@@ -701,10 +711,10 @@ export default function ConfiguracionPage() {
 
                           <button
                             onClick={() => setUserToDelete(usr)}
-                            className="p-1.5 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-lg transition border border-red-200"
-                            title="Eliminar usuario permanentemente de Supabase"
+                            className="p-1.5 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-xl transition border border-red-200 cursor-pointer"
+                            title="Eliminar usuario"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
@@ -713,6 +723,7 @@ export default function ConfiguracionPage() {
                 </tbody>
               </table>
             </div>
+
             <Pagination
               currentPage={userCurrentPage}
               totalItems={usersList.length}
@@ -724,123 +735,152 @@ export default function ConfiguracionPage() {
         </div>
       )}
 
-      {/* Modal Crear / Editar Campo */}
-      {showFieldModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl text-[#363636]">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h3 className="text-base font-extrabold text-[#363636] flex items-center gap-2">
-                <Settings className="w-5 h-5 text-[#F7931F]" />
-                <span>{editingField ? 'Editar Campo' : 'Crear & Cruzar Nuevo Campo'}</span>
-              </h3>
-              <button onClick={() => setShowFieldModal(false)} className="text-gray-400 hover:text-[#363636] font-bold">
-                ✕
-              </button>
+      {/* ========================================================= */}
+      {/* PESTAÑA 2: CAMPOS PERSONALIZADOS DEL SISTEMA              */}
+      {/* ========================================================= */}
+      {mainTab === 'campos' && (
+        <div className="space-y-4 animate-fadeIn">
+          {/* Sub-Pestañas de Entidades */}
+          <div className="flex items-center gap-2 border-b border-gray-200 pb-3">
+            <button
+              onClick={() => setActiveEntityTab('clientes')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition cursor-pointer ${
+                activeEntityTab === 'clientes'
+                  ? 'bg-orange-100 text-[#F7931F]'
+                  : 'bg-white text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>Clientes & Contactos</span>
+            </button>
+
+            <button
+              onClick={() => setActiveEntityTab('oportunidades')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition cursor-pointer ${
+                activeEntityTab === 'oportunidades'
+                  ? 'bg-orange-100 text-[#F7931F]'
+                  : 'bg-white text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>Oportunidades & Pipeline</span>
+            </button>
+
+            <button
+              onClick={() => setActiveEntityTab('cotizaciones')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition cursor-pointer ${
+                activeEntityTab === 'cotizaciones'
+                  ? 'bg-orange-100 text-[#F7931F]'
+                  : 'bg-white text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>Cotizaciones</span>
+            </button>
+          </div>
+
+          {/* Tabla de Campos */}
+          <div className="bg-white rounded-3xl border border-gray-200 overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs min-w-[700px]">
+                <thead className="bg-gray-50/80 text-gray-500 font-bold border-b border-gray-200">
+                  <tr>
+                    <th className="py-3.5 px-4">Etiqueta / Nombre Visible</th>
+                    <th className="py-3.5 px-4">Columna en Base de Datos</th>
+                    <th className="py-3.5 px-4">Tipo de Dato</th>
+                    <th className="py-3.5 px-4">Opciones</th>
+                    <th className="py-3.5 px-4 text-center">Estado</th>
+                    <th className="py-3.5 px-4 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-[#363636]">
+                  {filteredFields.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-gray-400 font-medium">
+                        No hay campos configurados para esta sección.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredFields.map((f, idx) => (
+                      <tr key={`${f.entidad}-${f.campo_supabase}-${f.id || idx}`} className="hover:bg-orange-50/30 transition">
+                        <td className="py-3.5 px-4 font-extrabold text-[#363636]">
+                          {f.nombre}
+                        </td>
+                        <td className="py-3.5 px-4 font-mono font-bold text-gray-600">
+                          <span className="bg-gray-100 text-gray-800 px-2 py-0.5 rounded border border-gray-200 text-[11px]">
+                            {f.campo_supabase}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 font-semibold text-gray-700 capitalize flex items-center gap-1.5">
+                          <Database className="w-3.5 h-3.5 text-[#F7931F]" />
+                          <span>{f.tipo}</span>
+                        </td>
+                        <td className="py-3.5 px-4 text-gray-500 text-[11px]">
+                          {f.opciones && f.opciones.length > 0 ? f.opciones.join(', ') : '-'}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <button
+                            onClick={() => handleToggleActive(f.id)}
+                            className="text-xs font-bold focus:outline-none cursor-pointer"
+                          >
+                            {f.activo ? (
+                              <span className="text-emerald-700 font-black flex items-center justify-center gap-1">
+                                <ToggleRight className="w-5 h-5 text-emerald-600" />
+                                <span>Activo</span>
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 font-medium flex items-center justify-center gap-1">
+                                <ToggleLeft className="w-5 h-5 text-gray-400" />
+                                <span>Oculto</span>
+                              </span>
+                            )}
+                          </button>
+                        </td>
+                        <td className="py-3.5 px-4 text-right space-x-2">
+                          <button
+                            onClick={() => handleEditField(f)}
+                            className="p-1.5 bg-orange-50 hover:bg-[#F7931F] text-[#F7931F] hover:text-white rounded-xl transition border border-orange-200 cursor-pointer"
+                            title="Editar Campo"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          {!f.es_sistema && (
+                            <button
+                              onClick={() => handleDeleteField(f.id)}
+                              className="p-1.5 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-xl transition border border-red-200 cursor-pointer"
+                              title="Eliminar Campo"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
-
-            <form onSubmit={handleSaveField} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Nombre / Etiqueta del Campo *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej. Giro Comercial, Orden de Compra Interna"
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Nombre Columna Supabase (Key DB)</label>
-                <input
-                  type="text"
-                  placeholder="ej. giro_comercial, orden_compra_cliente"
-                  value={campoSupabase}
-                  onChange={(e) => setCampoSupabase(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 font-mono text-[#363636] focus:outline-none focus:border-[#F7931F]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Sección / Módulo *</label>
-                <select
-                  value={entidad}
-                  onChange={(e) => setEntidad(e.target.value as any)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-semibold focus:outline-none focus:border-[#F7931F]"
-                >
-                  <option value="clientes">Clientes</option>
-                  <option value="oportunidades">Oportunidades de Venta</option>
-                  <option value="cotizaciones">Cotizaciones</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Tipo de Dato *</label>
-                <select
-                  value={tipo}
-                  onChange={(e) => setTipo(e.target.value as any)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-semibold focus:outline-none focus:border-[#F7931F]"
-                >
-                  <option value="texto">Texto Simple</option>
-                  <option value="numero">Número / Monto</option>
-                  <option value="fecha">Fecha</option>
-                  <option value="opciones">Lista Desplegable de Opciones</option>
-                  <option value="archivo">Archivo Adjunto / Documento</option>
-                  <option value="relacion">Relación / Clave Foránea</option>
-                </select>
-              </div>
-
-              {tipo === 'opciones' && (
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Opciones (Separadas por coma) *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Opción 1, Opción 2, Opción 3"
-                    value={opcionesInput}
-                    onChange={(e) => setOpcionesInput(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
-                  />
-                </div>
-              )}
-
-              <div className="pt-3 flex items-center justify-end gap-3 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => setShowFieldModal(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-extrabold transition shadow-md flex items-center gap-1.5"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>{editingField ? 'Guardar Cambios' : 'Crear Campo'}</span>
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
 
-      {/* Modal Crear Usuario */}
+      {/* ========================================================= */}
+      {/* MODAL: REGISTRAR NUEVO USUARIO                            */}
+      {/* ========================================================= */}
       {showUserModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white border border-gray-200 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl text-[#363636]">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl text-[#363636]">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="text-lg font-extrabold text-[#363636] flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-[#F7931F]" />
-                <span>Registrar Nuevo Usuario en Supabase</span>
+                <span>Registrar Nuevo Usuario</span>
               </h3>
-              <button onClick={() => setShowUserModal(false)} className="text-gray-400 hover:text-[#363636] text-lg font-bold">
+              <button onClick={() => setShowUserModal(false)} className="text-gray-400 hover:text-[#363636] text-lg font-bold cursor-pointer">
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleCreateUser} className="space-y-4 text-xs">
+            <form onSubmit={handleCreateUser} className="space-y-3.5 text-xs">
               <div>
                 <label className="block font-bold text-gray-700 mb-1">Nombre Completo *</label>
                 <input
@@ -848,8 +888,8 @@ export default function ConfiguracionPage() {
                   required
                   value={userNombre}
                   onChange={(e) => setUserNombre(e.target.value)}
-                  placeholder="Ej. Mariela Valverde"
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                  placeholder="Ej. Marco Antonio"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-semibold focus:outline-none focus:border-[#F7931F]"
                 />
               </div>
 
@@ -861,7 +901,7 @@ export default function ConfiguracionPage() {
                   value={userEmail}
                   onChange={(e) => setUserEmail(e.target.value)}
                   placeholder="usuario@hormiglass.cl"
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-semibold focus:outline-none focus:border-[#F7931F]"
                 />
               </div>
 
@@ -874,7 +914,7 @@ export default function ConfiguracionPage() {
                   value={userPassword}
                   onChange={(e) => setUserPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-semibold focus:outline-none focus:border-[#F7931F]"
                 />
               </div>
 
@@ -883,24 +923,59 @@ export default function ConfiguracionPage() {
                 <select
                   value={userRol}
                   onChange={(e) => setUserRol(e.target.value as UserRole)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-semibold focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F] cursor-pointer"
                 >
-                  <option value="user">User (Acceso Parcial / Operativo)</option>
+                  <option value="mano_obra">Mano de Obra (Solo RR.HH. & Calendarios)</option>
+                  <option value="user">User (Acceso Comercial)</option>
                   <option value="admin">Admin (Acceso Total)</option>
                 </select>
               </div>
 
-              <div className="pt-3 flex items-center justify-end gap-3 border-t border-gray-200">
+              {/* Toggles de los 3 Calendarios */}
+              <div className="pt-2 border-t border-gray-100 space-y-2">
+                <span className="text-[11px] font-bold text-gray-500 block uppercase tracking-wider">
+                  Asignación en los 3 Calendarios:
+                </span>
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#F7931F]">
+                  <input
+                    type="checkbox"
+                    checked={userCalVisitas}
+                    onChange={(e) => setUserCalVisitas(e.target.checked)}
+                    className="w-4 h-4 accent-[#F7931F] rounded"
+                  />
+                  <span>Disponible para Visitas a Terreno</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#F7931F]">
+                  <input
+                    type="checkbox"
+                    checked={userCalProduccion}
+                    onChange={(e) => setUserCalProduccion(e.target.checked)}
+                    className="w-4 h-4 accent-[#F7931F] rounded"
+                  />
+                  <span>Disponible para Producción, Obras & Fabricación</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#F7931F]">
+                  <input
+                    type="checkbox"
+                    checked={userCalReventa}
+                    onChange={(e) => setUserCalReventa(e.target.checked)}
+                    className="w-4 h-4 accent-[#F7931F] rounded"
+                  />
+                  <span>Disponible para Reventa & Logística</span>
+                </label>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-3 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setShowUserModal(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition"
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-extrabold transition shadow-md"
+                  className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-extrabold transition shadow-md cursor-pointer"
                 >
                   Crear Usuario
                 </button>
@@ -910,16 +985,144 @@ export default function ConfiguracionPage() {
         </div>
       )}
 
-      {/* Modal Confirmación Eliminación de Usuario */}
+      {/* ========================================================= */}
+      {/* MODAL: EDITAR USUARIO                                     */}
+      {/* ========================================================= */}
+      {showEditUserModal && editingUser && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn text-[#363636]">
+          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="text-base font-extrabold text-[#363636] flex items-center gap-2">
+                <Edit className="w-5 h-5 text-[#F7931F]" />
+                <span>Editar Usuario & Calendarios</span>
+              </h3>
+              <button
+                onClick={() => {
+                  setShowEditUserModal(false);
+                  setEditingUser(null);
+                }}
+                className="text-gray-400 hover:text-[#363636] font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditUser} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Nombre Completo</label>
+                <input
+                  type="text"
+                  required
+                  value={editUserNombre}
+                  onChange={(e) => setEditUserNombre(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-medium text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Correo Electrónico (Solo Lectura)</label>
+                <input
+                  type="email"
+                  disabled
+                  value={editingUser.email}
+                  className="w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 font-mono text-gray-500 cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Rol de Acceso / Permisos</label>
+                <select
+                  value={editUserRol}
+                  onChange={(e) => setEditUserRol(e.target.value as UserRole)}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold text-[#363636] focus:outline-none focus:border-[#F7931F] cursor-pointer"
+                >
+                  <option value="admin">Admin (Acceso Total)</option>
+                  <option value="user">User (Acceso Comercial)</option>
+                  <option value="mano_obra">Mano de Obra (Solo RR.HH. & Calendarios)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Estado de la Cuenta</label>
+                <select
+                  value={editUserActivo ? 'true' : 'false'}
+                  onChange={(e) => setEditUserActivo(e.target.value === 'true')}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold text-[#363636] focus:outline-none focus:border-[#F7931F] cursor-pointer"
+                >
+                  <option value="true">Activo (Acceso Permitido)</option>
+                  <option value="false">Inactivo / Bloqueado</option>
+                </select>
+              </div>
+
+              {/* Toggles de los 3 Calendarios */}
+              <div className="pt-2 border-t border-gray-100 space-y-2">
+                <span className="text-[11px] font-bold text-gray-500 block uppercase tracking-wider">
+                  Asignación en los 3 Calendarios:
+                </span>
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#F7931F]">
+                  <input
+                    type="checkbox"
+                    checked={editUserCalVisitas}
+                    onChange={(e) => setEditUserCalVisitas(e.target.checked)}
+                    className="w-4 h-4 accent-[#F7931F] rounded"
+                  />
+                  <span>Disponible para Visitas a Terreno</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#F7931F]">
+                  <input
+                    type="checkbox"
+                    checked={editUserCalProduccion}
+                    onChange={(e) => setEditUserCalProduccion(e.target.checked)}
+                    className="w-4 h-4 accent-[#F7931F] rounded"
+                  />
+                  <span>Disponible para Producción, Obras & Fabricación</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#F7931F]">
+                  <input
+                    type="checkbox"
+                    checked={editUserCalReventa}
+                    onChange={(e) => setEditUserCalReventa(e.target.checked)}
+                    className="w-4 h-4 accent-[#F7931F] rounded"
+                  />
+                  <span>Disponible para Reventa & Logística</span>
+                </label>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditUserModal(false);
+                    setEditingUser(null);
+                  }}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-extrabold transition shadow-md cursor-pointer"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: CONFIRMAR ELIMINACIÓN DE USUARIO                   */}
+      {/* ========================================================= */}
       {userToDelete && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl text-[#363636]">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="text-base font-extrabold text-red-700 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
                 <span>Eliminar Usuario de Supabase</span>
               </h3>
-              <button onClick={() => setUserToDelete(null)} className="text-gray-400 hover:text-[#363636] font-bold">
+              <button onClick={() => setUserToDelete(null)} className="text-gray-400 hover:text-[#363636] font-bold cursor-pointer">
                 ✕
               </button>
             </div>
@@ -934,14 +1137,14 @@ export default function ConfiguracionPage() {
               <button
                 type="button"
                 onClick={() => setUserToDelete(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDeleteUser}
-                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-xl transition shadow-md flex items-center gap-1.5"
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-xl transition shadow-md flex items-center gap-1.5 cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Confirmar Eliminación</span>
@@ -951,88 +1154,106 @@ export default function ConfiguracionPage() {
         </div>
       )}
 
-      {/* Modal Editar Usuario */}
-      {showEditUserModal && editingUser && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn text-[#363636]">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+      {/* ========================================================= */}
+      {/* MODAL: CREAR / EDITAR CAMPO PERSONALIZADO                 */}
+      {/* ========================================================= */}
+      {showFieldModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl text-[#363636]">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="text-base font-extrabold text-[#363636] flex items-center gap-2">
-                <Edit className="w-5 h-5 text-[#F7931F]" />
-                <span>Editar Usuario</span>
+                <Sliders className="w-5 h-5 text-[#F7931F]" />
+                <span>{editingField ? 'Editar Campo' : 'Nuevo Campo Personalizado'}</span>
               </h3>
-              <button
-                onClick={() => {
-                  setShowEditUserModal(false);
-                  setEditingUser(null);
-                }}
-                className="text-gray-400 hover:text-[#363636] font-bold"
-              >
+              <button onClick={() => setShowFieldModal(false)} className="text-gray-400 hover:text-[#363636] font-bold cursor-pointer">
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleSaveEditUser} className="space-y-4 text-xs">
+            <form onSubmit={handleSaveField} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Nombre Completo</label>
+                <label className="block font-bold text-gray-700 mb-1">Nombre / Etiqueta Visible *</label>
                 <input
                   type="text"
                   required
-                  value={editUserNombre}
-                  onChange={(e) => setEditUserNombre(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2.5 font-medium text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                  placeholder="Ej. Tipo de Vidrio Especial"
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Correo Electrónico (Solo Lectura)</label>
+                <label className="block font-bold text-gray-700 mb-1">Columna en Base de Datos *</label>
                 <input
-                  type="email"
-                  disabled
-                  value={editingUser.email}
-                  className="w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2.5 font-mono text-gray-500 cursor-not-allowed"
+                  type="text"
+                  required
+                  disabled={editingField?.es_sistema}
+                  placeholder="ej. tipo_vidrio_especial"
+                  value={campoSupabase}
+                  onChange={(e) => setCampoSupabase(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-mono text-gray-700 focus:outline-none focus:border-[#F7931F] disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Rol de Acceso / Permisos</label>
+                <label className="block font-bold text-gray-700 mb-1">Módulo / Sección *</label>
                 <select
-                  value={editUserRol}
-                  onChange={(e) => setEditUserRol(e.target.value as UserRole)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2.5 font-bold text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                  value={entidad}
+                  onChange={(e) => setEntidad(e.target.value as any)}
+                  disabled={!!editingField}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F] disabled:bg-gray-100 cursor-pointer"
                 >
-                  <option value="admin">Admin (Acceso Total)</option>
-                  <option value="user">User (Acceso Parcial / Operativo)</option>
+                  <option value="clientes">Clientes & Contactos</option>
+                  <option value="oportunidades">Oportunidades & Pipeline</option>
+                  <option value="cotizaciones">Cotizaciones</option>
                 </select>
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Estado de la Cuenta</label>
+                <label className="block font-bold text-gray-700 mb-1">Tipo de Campo *</label>
                 <select
-                  value={editUserActivo ? 'true' : 'false'}
-                  onChange={(e) => setEditUserActivo(e.target.value === 'true')}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2.5 font-bold text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                  value={tipo}
+                  onChange={(e) => setTipo(e.target.value as any)}
+                  disabled={editingField?.es_sistema}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F] disabled:bg-gray-100 cursor-pointer"
                 >
-                  <option value="true">Activo (Acceso Permitido)</option>
-                  <option value="false">Inactivo / Baneado (Acceso Bloqueado)</option>
+                  <option value="texto">Texto Simple</option>
+                  <option value="numero">Número</option>
+                  <option value="fecha">Fecha</option>
+                  <option value="opciones">Lista Desplegable (Opciones)</option>
+                  <option value="archivo">Archivo / Documento</option>
                 </select>
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-2">
+              {tipo === 'opciones' && (
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Opciones (Separadas por coma) *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Opción 1, Opción 2, Opción 3"
+                    value={opcionesInput}
+                    onChange={(e) => setOpcionesInput(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                  />
+                </div>
+              )}
+
+              <div className="pt-3 flex items-center justify-end gap-3 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowEditUserModal(false);
-                    setEditingUser(null);
-                  }}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+                  onClick={() => setShowFieldModal(false)}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold rounded-xl transition shadow-md"
+                  className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-extrabold transition shadow-md flex items-center gap-1.5 cursor-pointer"
                 >
-                  Guardar Cambios
+                  <Save className="w-4 h-4" />
+                  <span>{editingField ? 'Guardar Cambios' : 'Crear Campo'}</span>
                 </button>
               </div>
             </form>

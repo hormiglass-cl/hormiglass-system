@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { createClient } from '../../lib/supabase/client';
-import { MOCK_OPORTUNIDADES, MOCK_CLIENTES, MOCK_USUARIOS } from '../../lib/supabase/mock-data';
 import {
   Cliente,
   Cotizacion,
@@ -14,9 +13,20 @@ import {
   Usuario,
   ChatMensaje,
   VisitaTerreno,
+  EventoProduccionLogistica,
+  OrdenCompra,
+  ProduccionDiaria,
+  CotizacionItem,
+  AntecedenteDocumento,
+  TipoAntecedenteDocumento,
+  ContextoEventoProduccionLogistica,
+  EstadoEventoProduccionLogistica,
+  TipoEventoProduccionLogistica,
 } from '../../lib/types';
 import { useAuth } from '../../lib/context/AuthContext';
 import { PdfPreviewModal } from '../../components/PdfPreviewModal';
+import { OrdenCompraModal } from '../../components/OrdenCompraModal';
+import { OrdenCompraPdfPreviewModal } from '../../components/OrdenCompraPdfPreviewModal';
 import { logSistema } from '../../lib/logger';
 import { playNotificationSound } from '../../lib/audio';
 import {
@@ -52,7 +62,6 @@ import {
   X,
   Bell,
   ThumbsUp,
-  Smile,
   Reply,
   Mic,
   MoreHorizontal,
@@ -69,6 +78,9 @@ import {
   Truck,
   CheckCircle,
   Download,
+  HardHat,
+  ShoppingCart,
+  ShieldAlert,
 } from 'lucide-react';
 
 import { useSearchParams } from 'next/navigation';
@@ -84,8 +96,18 @@ export default function PipelineVentasPage() {
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
   const [allCotizaciones, setAllCotizaciones] = useState<Cotizacion[]>([]);
   const [usuariosApp, setUsuariosApp] = useState<Usuario[]>([]);
+  const [personalTerrenoList, setPersonalTerrenoList] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'lista' | 'tablero'>('lista');
+  const [activeBoardSection, setActiveBoardSection] = useState<string>('ventas');
+
+  // Advanced Filters for List & Board View
+  const [filterSearch, setFilterSearch] = useState('');
+  const [filterEstado, setFilterEstado] = useState<string>('todos');
+  const [filterTipoVenta, setFilterTipoVenta] = useState<string>('todos');
+  const [filterPrioridad, setFilterPrioridad] = useState<string>('todos');
+  const [filterAsignado, setFilterAsignado] = useState<string>('todos');
+  const [collapsedParentSections, setCollapsedParentSections] = useState<Record<string, boolean>>({});
 
   // Sorting & List View Section Collapsing State
   const [sortField, setSortField] = useState<'titulo' | 'cliente' | 'tipo_venta' | 'fecha_inicio' | 'fecha_limite' | 'monto' | 'prioridad'>('titulo');
@@ -94,19 +116,51 @@ export default function PipelineVentasPage() {
   const [stageMenuPos, setStageMenuPos] = useState<{ opId: string; top: number; left: number } | null>(null);
   const [statusSearchQuery, setStatusSearchQuery] = useState('');
 
+  // Bifurcation Modal State (Sección 1 -> Sección 2 vs 3)
+  const [ramaChoiceModal, setRamaChoiceModal] = useState<{
+    op: OportunidadVenta;
+    targetState: EstadoPipeline;
+  } | null>(null);
+
   // Deletion Modal State for Oportunidad
   const [opToDelete, setOpToDelete] = useState<OportunidadVenta | null>(null);
   const [cotToDeleteInModal, setCotToDeleteInModal] = useState<Cotizacion | null>(null);
 
   // Accordion Sections State in Modal (Todas cerradas por defecto)
-  const [openSections, setOpenSections] = useState<{ contacto: boolean; productos: boolean; finanzas: boolean; visita: boolean; produccion: boolean; reventa: boolean }>({
+  const [openSections, setOpenSections] = useState<{
+    contacto: boolean;
+    productos: boolean;
+    finanzas: boolean;
+    antecedentes: boolean;
+    visita: boolean;
+    produccionEventos: boolean;
+    produccionBitacora: boolean;
+    produccionOc: boolean;
+    reventaEventos: boolean;
+    reventaOc: boolean;
+  }>({
     contacto: false,
     productos: false,
     finanzas: false,
+    antecedentes: false,
     visita: false,
-    produccion: false,
-    reventa: false,
+    produccionEventos: false,
+    produccionBitacora: false,
+    produccionOc: false,
+    reventaEventos: false,
+    reventaOc: false,
   });
+
+  // Antecedentes Documentación State
+  const [nuevoAntecedenteFile, setNuevoAntecedenteFile] = useState<File | null>(null);
+  const [nuevoAntecedenteNombre, setNuevoAntecedenteNombre] = useState<string>('');
+  const [nuevoAntecedenteTipo, setNuevoAntecedenteTipo] = useState<TipoAntecedenteDocumento>('contrato');
+  const [antecedenteUploading, setAntecedenteUploading] = useState(false);
+  const [antecedenteErrorMsg, setAntecedenteErrorMsg] = useState('');
+  const [opAntecedentesList, setOpAntecedentesList] = useState<AntecedenteDocumento[]>([]);
+
+  // Reclamo Mode in Chat
+  const [isReclamoMode, setIsReclamoMode] = useState(false);
 
   // Area Sections Collapsible State (Secciones 1, 2 y 3) (Todas contraídas por defecto al entrar)
   const [areaExpanded, setAreaExpanded] = useState<{ comercial: boolean; produccion: boolean; reventa: boolean }>({
@@ -115,22 +169,28 @@ export default function PipelineVentasPage() {
     reventa: false,
   });
 
-  const [planificacionData, setPlanificacionData] = useState<{
-    id?: string;
-    estado?: string;
-    fecha_estimada_produccion?: string;
-    fecha_estimada_instalacion?: string;
-    observaciones?: string;
+  // Órdenes de Compra vinculadas a la Oportunidad
+  const [opOrdenesCompra, setOpOrdenesCompra] = useState<OrdenCompra[]>([]);
+  const [loadingOpOrdenes, setLoadingOpOrdenes] = useState(false);
+  const [showCreateOcModal, setShowCreateOcModal] = useState(false);
+  const [pdfPreviewOc, setPdfPreviewOc] = useState<OrdenCompra | null>(null);
+  const [resolvingRamaChangeOc, setResolvingRamaChangeOc] = useState(false);
+  const [ramaChangeOcModal, setRamaChangeOcModal] = useState<{
+    op: OportunidadVenta;
+    targetState: EstadoPipeline;
+    rama: 'produccion' | 'reventa';
+    ocCount: number;
   } | null>(null);
 
-  const [reventaData, setReventaData] = useState<{
-    id?: string;
-    estado?: string;
-    proveedor_nombre?: string;
-    fecha_despacho?: string;
-    observaciones?: string;
-    notas_postventa?: string;
-  } | null>(null);
+  // Bitácora de Producción Diaria y Stock de la Oportunidad
+  const [opProduccionDiaria, setOpProduccionDiaria] = useState<ProduccionDiaria[]>([]);
+  const [loadingProduccionDiaria, setLoadingProduccionDiaria] = useState(false);
+  const [cotizacionItemsOp, setCotizacionItemsOp] = useState<CotizacionItem[]>([]);
+  const [newProdProducto, setNewProdProducto] = useState('');
+  const [newProdCantidad, setNewProdCantidad] = useState<number>(0);
+  const [newProdFecha, setNewProdFecha] = useState(() => new Date().toISOString().split('T')[0]);
+  const [newProdResponsableId, setNewProdResponsableId] = useState('');
+  const [newProdObservaciones, setNewProdObservaciones] = useState('');
 
   // Modal Cotización Unificado State
   const [showUnifiedCotModal, setShowUnifiedCotModal] = useState(false);
@@ -141,6 +201,14 @@ export default function PipelineVentasPage() {
 
   // Toast / Mention Notifications
   const [toastAlert, setToastAlert] = useState<{ id: string; message: string; user: string } | null>(null);
+
+  const activitiesCacheRef = useRef<Record<string, ChatMensaje[]>>({});
+  const visitasCacheRef = useRef<Record<string, VisitaTerreno[]>>({});
+  const eventosProdLogCacheRef = useRef<Record<string, EventoProduccionLogistica[]>>({});
+  const ordenesCompraCacheRef = useRef<Record<string, OrdenCompra[]>>({});
+  const produccionDiariaCacheRef = useRef<Record<string, ProduccionDiaria[]>>({});
+  const cotizacionItemsCacheRef = useRef<Record<string, CotizacionItem[]>>({});
+  const antecedentesCacheRef = useRef<Record<string, AntecedenteDocumento[]>>({});
 
   // Modal Detalle de Oportunidad
   const [selectedOp, setSelectedOp] = useState<OportunidadVenta | null>(null);
@@ -194,7 +262,7 @@ export default function PipelineVentasPage() {
 
   // Activity Search & Filter State
   const [activitySearchQuery, setActivitySearchQuery] = useState('');
-  const [activityFilter, setActivityFilter] = useState<'all' | 'comentarios' | 'sistema'>('all');
+  const [activityFilter, setActivityFilter] = useState<'all' | 'comentarios' | 'sistema' | 'reclamos'>('all');
   const [showActivitySearch, setShowActivitySearch] = useState(false);
   const [likedMessages, setLikedMessages] = useState<Record<string, boolean>>({});
 
@@ -255,6 +323,12 @@ export default function PipelineVentasPage() {
   // Helper to load latest activities directly from Supabase for an opportunity
   const loadLatestActivities = async (opId: string) => {
     if (!isUUID(opId)) return;
+    const cached = activitiesCacheRef.current[opId];
+    if (cached) {
+      setSelectedOp((prev) => (prev && prev.id === opId ? { ...prev, chat_interno: cached } : prev));
+      return;
+    }
+
     try {
       const [actRes, opDataRes] = await Promise.all([
         supabase
@@ -283,6 +357,7 @@ export default function PipelineVentasPage() {
       }));
 
       const merged = mergeAndDeduplicateMessages([...jsonChat, ...tableChat]);
+      activitiesCacheRef.current[opId] = merged;
 
       setSelectedOp((prev) => (prev && prev.id === opId ? { ...prev, chat_interno: merged } : prev));
       setOportunidades((prev) =>
@@ -295,10 +370,16 @@ export default function PipelineVentasPage() {
 
   // Helper to load visits for an opportunity
   const loadVisitasOportunidad = async (op: OportunidadVenta) => {
+    const cached = visitasCacheRef.current[op.id];
+    if (cached) {
+      setOpVisitasList(cached);
+      return;
+    }
+
     try {
       const { data } = await supabase
         .from('visitas_terreno')
-        .select('*')
+        .select('*, tecnico:usuarios!tecnico_id(*)')
         .eq('oportunidad_id', op.id)
         .order('fecha_visita_terreno', { ascending: true });
 
@@ -312,7 +393,8 @@ export default function PipelineVentasPage() {
         list.unshift({
           id: `legacy-${op.id}`,
           oportunidad_id: op.id,
-          tecnico_visita: op.tecnico_visita || 'Felipe Valverde',
+          tecnico_visita: op.tecnico_visita || 'Responsable',
+          tecnico_id: op.tecnico_id || null,
           fecha_visita_terreno: op.fecha_visita_terreno,
           hora_visita_terreno: op.hora_visita_terreno || '09:00',
           estado_visita: op.estado_visita || 'programada',
@@ -320,6 +402,7 @@ export default function PipelineVentasPage() {
         });
       }
 
+      visitasCacheRef.current[op.id] = list;
       setOpVisitasList(list);
     } catch (err) {
       console.error('Error loading visitas:', err);
@@ -327,27 +410,123 @@ export default function PipelineVentasPage() {
     }
   };
 
-  const loadPlanificacionYReventa = async (opId: string) => {
-    if (!isUUID(opId)) return;
+  const loadEventosProduccionLogistica = async (opId: string) => {
+    if (!isUUID(opId)) {
+      setOpEventosProdLog([]);
+      return;
+    }
+
+    const cached = eventosProdLogCacheRef.current[opId];
+    if (cached) {
+      setOpEventosProdLog(cached);
+      return;
+    }
+
     try {
-      const [planRes, revRes] = await Promise.all([
-        supabase.from('proyectos_planificacion').select('*').eq('oportunidad_id', opId).maybeSingle(),
-        supabase.from('ordenes_reventa').select('*').eq('oportunidad_id', opId).maybeSingle(),
-      ]);
+      const { data, error } = await supabase
+        .from('eventos_produccion_logistica')
+        .select('*, responsable:usuarios!responsable_id(*)')
+        .eq('oportunidad_id', opId)
+        .order('fecha_evento', { ascending: true })
+        .order('hora_evento', { ascending: true });
 
-      if (planRes.data) {
-        setPlanificacionData(planRes.data);
-      } else {
-        setPlanificacionData(null);
-      }
-
-      if (revRes.data) {
-        setReventaData(revRes.data);
-      } else {
-        setReventaData(null);
-      }
+      if (error) throw error;
+      const list = (data || []) as EventoProduccionLogistica[];
+      eventosProdLogCacheRef.current[opId] = list;
+      setOpEventosProdLog(list);
     } catch (err) {
-      console.error('Error loading planificacion and reventa data:', err);
+      console.error('Error loading production/logistics events:', err);
+      setOpEventosProdLog([]);
+    }
+  };
+
+  const loadOrdenesCompraOportunidad = async (opId: string) => {
+    if (!isUUID(opId)) {
+      setOpOrdenesCompra([]);
+      return;
+    }
+
+    const cached = ordenesCompraCacheRef.current[opId];
+    if (cached) {
+      setOpOrdenesCompra(cached);
+      return;
+    }
+
+    setLoadingOpOrdenes(true);
+    try {
+      const { data, error } = await supabase
+        .from('ordenes_compra')
+        .select('*, proveedor:proveedores(*), items:orden_compra_items(*)')
+        .eq('oportunidad_id', opId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw new Error(error.message);
+      const list = (data || []) as OrdenCompra[];
+      ordenesCompraCacheRef.current[opId] = list;
+      setOpOrdenesCompra(list);
+    } catch (err) {
+      console.error('Error loading ordenes de compra:', err);
+      setOpOrdenesCompra([]);
+    } finally {
+      setLoadingOpOrdenes(false);
+    }
+  };
+
+  const mapAntecedenteRecord = (record: any): AntecedenteDocumento => ({
+    id: record.id,
+    oportunidad_id: record.oportunidad_id,
+    nombre: record.nombre,
+    tipo: record.tipo || 'otro',
+    url: record.public_url || '#',
+    bucket_id: record.bucket_id || 'documentos',
+    storage_path: record.storage_path,
+    mime_type: record.mime_type || null,
+    size_bytes: record.size_bytes ?? null,
+    fecha_iso: record.created_at || new Date().toISOString(),
+    subido_por: record.subido_por_nombre || 'Usuario',
+    subido_por_id: record.subido_por_id || null,
+    eliminado: record.eliminado || false,
+    eliminado_en: record.eliminado_en || null,
+    eliminado_por: record.eliminado_por || null,
+    created_at: record.created_at,
+    updated_at: record.updated_at,
+  });
+
+  const loadAntecedentesOportunidad = async (op: OportunidadVenta) => {
+    if (!isUUID(op.id)) {
+      const legacyDocs = Array.isArray(op.antecedentes) ? op.antecedentes : [];
+      setOpAntecedentesList(legacyDocs);
+      return;
+    }
+
+    const cached = antecedentesCacheRef.current[op.id];
+    if (cached) {
+      setOpAntecedentesList(cached);
+      setSelectedOp((prev) => (prev && prev.id === op.id ? { ...prev, antecedentes: cached } : prev));
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('oportunidad_antecedentes')
+        .select('*')
+        .eq('oportunidad_id', op.id)
+        .eq('eliminado', false)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const docs = (data || []).map(mapAntecedenteRecord);
+      antecedentesCacheRef.current[op.id] = docs;
+      setOpAntecedentesList(docs);
+      setSelectedOp((prev) => (prev && prev.id === op.id ? { ...prev, antecedentes: docs } : prev));
+      setOportunidades((prevOps) =>
+        prevOps.map((o) => (o.id === op.id ? { ...o, antecedentes: docs } : o))
+      );
+    } catch (err) {
+      console.error('Error loading antecedentes from Supabase:', err);
+      const legacyDocs = Array.isArray(op.antecedentes) ? op.antecedentes : [];
+      setOpAntecedentesList(legacyDocs);
     }
   };
 
@@ -357,9 +536,13 @@ export default function PipelineVentasPage() {
       contacto: false,
       productos: false,
       finanzas: false,
+      antecedentes: false,
       visita: false,
-      produccion: false,
-      reventa: false,
+      produccionEventos: false,
+      produccionBitacora: false,
+      produccionOc: false,
+      reventaEventos: false,
+      reventaOc: false,
     });
     setAreaExpanded({
       comercial: false,
@@ -370,7 +553,9 @@ export default function PipelineVentasPage() {
     setEditTitleValue(op.titulo);
     loadLatestActivities(op.id);
     loadVisitasOportunidad(op);
-    loadPlanificacionYReventa(op.id);
+    loadEventosProduccionLogistica(op.id);
+    loadOrdenesCompraOportunidad(op.id);
+    loadAntecedentesOportunidad(op);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       url.searchParams.set('oportunidad', op.id);
@@ -399,12 +584,14 @@ export default function PipelineVentasPage() {
   const [nuevoClienteId, setNuevoClienteId] = useState('');
   const [nuevaFechaLimite, setNuevaFechaLimite] = useState('');
   const [nuevoTipoVenta, setNuevoTipoVenta] = useState('Instalación');
+  const [nuevoOrigen, setNuevoOrigen] = useState('');
+  const [nuevaModalidadRequerimiento, setNuevaModalidadRequerimiento] = useState<'solo_material' | 'instalacion'>('instalacion');
   const [isActividadesExpanded, setIsActividadesExpanded] = useState(false);
 
   // Visitas a Terreno Múltiples State
   const [opVisitasList, setOpVisitasList] = useState<VisitaTerreno[]>([]);
   const [showAddVisitaForm, setShowAddVisitaForm] = useState(false);
-  const [newVisitaTecnico, setNewVisitaTecnico] = useState<string>('Felipe Valverde');
+  const [newVisitaTecnico, setNewVisitaTecnico] = useState<string>('');
   const [newVisitaFecha, setNewVisitaFecha] = useState<string>('');
   const [newVisitaHora, setNewVisitaHora] = useState<string>('09:00');
   const [newVisitaEstado, setNewVisitaEstado] = useState<string>('programada');
@@ -412,11 +599,26 @@ export default function PipelineVentasPage() {
 
   // Editing Visita State
   const [editingVisitaId, setEditingVisitaId] = useState<string | null>(null);
-  const [editVisitaTecnico, setEditVisitaTecnico] = useState<string>('Felipe Valverde');
+  const [editVisitaTecnico, setEditVisitaTecnico] = useState<string>('');
   const [editVisitaFecha, setEditVisitaFecha] = useState<string>('');
   const [editVisitaHora, setEditVisitaHora] = useState<string>('09:00');
   const [editVisitaEstado, setEditVisitaEstado] = useState<string>('programada');
   const [editVisitaNotas, setEditVisitaNotas] = useState<string>('');
+
+  // Eventos múltiples para calendario Producción y Logística
+  const [opEventosProdLog, setOpEventosProdLog] = useState<EventoProduccionLogistica[]>([]);
+  const [showAddProdLogEventForm, setShowAddProdLogEventForm] = useState(false);
+  const [newProdLogTipo, setNewProdLogTipo] = useState<TipoEventoProduccionLogistica>('produccion');
+  const [newProdLogTitulo, setNewProdLogTitulo] = useState('');
+  const [newProdLogFecha, setNewProdLogFecha] = useState('');
+  const [newProdLogHora, setNewProdLogHora] = useState('09:00');
+  const [newProdLogResponsableId, setNewProdLogResponsableId] = useState('');
+  const [newProdLogEstado, setNewProdLogEstado] = useState<EstadoEventoProduccionLogistica>('por_hacer');
+  const [newProdLogNotas, setNewProdLogNotas] = useState('');
+  const [newProdLogContexto, setNewProdLogContexto] = useState<ContextoEventoProduccionLogistica>('produccion_logistica');
+  const [editingProdLogEventId, setEditingProdLogEventId] = useState<string | null>(null);
+  const [produccionEventosEnabled, setProduccionEventosEnabled] = useState(true);
+  const [reventaEventosEnabled, setReventaEventosEnabled] = useState(true);
 
   // Ref y Estado para el feed de actividad con scroll
   const activityScrollRef = useRef<HTMLDivElement>(null);
@@ -460,10 +662,10 @@ export default function PipelineVentasPage() {
         const [opRes, cliRes, usrRes, cotRes, actRes] = await Promise.all([
           supabase
             .from('oportunidades')
-            .select('*, cliente:clientes(*), cotizaciones(*)')
+            .select('*, cliente:clientes(*)')
             .order('created_at', { ascending: false }),
           supabase.from('clientes').select('*'),
-          supabase.from('usuarios').select('*').eq('activo', true),
+          supabase.from('usuarios').select('*').eq('activo', true).order('nombre', { ascending: true }),
           supabase.from('cotizaciones').select('*, cliente:clientes(*), items:cotizacion_items(*)'),
           supabase.from('actividades_op').select('*').order('created_at', { ascending: true }),
         ]);
@@ -475,19 +677,17 @@ export default function PipelineVentasPage() {
             setClientes([]);
           }
 
-          if (usrRes.data) {
-            setUsuariosApp(usrRes.data as Usuario[]);
-          } else if (usersList && usersList.length > 0) {
-            setUsuariosApp(usersList);
-          } else {
-            setUsuariosApp([]);
-          }
+          const loadedUsers = (usrRes.data || usersList || []) as Usuario[];
+          setUsuariosApp(loadedUsers);
+          setPersonalTerrenoList(loadedUsers);
 
+          let mergedOps: OportunidadVenta[] = [];
           if (opRes.data) {
             const rawOps = opRes.data as OportunidadVenta[];
+            const allQuotes = (cotRes.data || []) as Cotizacion[];
             const allDbAct = actRes.data || [];
 
-            const mergedOps = rawOps.map((op) => {
+            mergedOps = rawOps.map((op) => {
               const jsonChat: ChatMensaje[] = Array.isArray(op.chat_interno) ? op.chat_interno : [];
               const tableChat: ChatMensaje[] = allDbAct
                 .filter((a: any) => a.oportunidad_id === op.id)
@@ -501,8 +701,13 @@ export default function PipelineVentasPage() {
                 }));
 
               const mergedChat = mergeAndDeduplicateMessages([...jsonChat, ...tableChat]);
+              activitiesCacheRef.current[op.id] = mergedChat;
 
-              return { ...op, chat_interno: mergedChat };
+              return {
+                ...op,
+                chat_interno: mergedChat,
+                cotizaciones: allQuotes.filter((c) => c.oportunidad_id === op.id),
+              };
             });
 
             setOportunidades(mergedOps);
@@ -519,25 +724,32 @@ export default function PipelineVentasPage() {
           // Auto open opportunity modal if searchParam ?oportunidad=id exists
           const targetOpId = searchParams.get('oportunidad');
           if (targetOpId && opRes.data) {
-            const found = opRes.data.find((o: any) => o.id === targetOpId);
+            const found = mergedOps.find((o) => o.id === targetOpId);
             if (found) {
               setOpenSections({
                 contacto: false,
                 productos: false,
                 finanzas: false,
+                antecedentes: false,
                 visita: false,
-                produccion: false,
-                reventa: false,
+                produccionEventos: false,
+                produccionBitacora: false,
+                produccionOc: false,
+                reventaEventos: false,
+                reventaOc: false,
               });
               setAreaExpanded({
                 comercial: false,
                 produccion: false,
                 reventa: false,
               });
-              setSelectedOp(found as OportunidadVenta);
+              setSelectedOp(found);
               setEditTitleValue(found.titulo);
               loadLatestActivities(found.id);
-              loadVisitasOportunidad(found as OportunidadVenta);
+              loadVisitasOportunidad(found);
+              loadEventosProduccionLogistica(found.id);
+              loadOrdenesCompraOportunidad(found.id);
+              loadAntecedentesOportunidad(found);
             }
           }
 
@@ -631,7 +843,26 @@ export default function PipelineVentasPage() {
         },
         () => {
           setSelectedOp((prev) => {
-            if (prev) loadVisitasOportunidad(prev);
+            if (prev) {
+              delete visitasCacheRef.current[prev.id];
+              loadVisitasOportunidad(prev);
+            }
+            return prev;
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'oportunidad_antecedentes',
+        },
+        (payload: any) => {
+          const opId = payload.new?.oportunidad_id || payload.old?.oportunidad_id;
+          if (opId) delete antecedentesCacheRef.current[opId];
+          setSelectedOp((prev) => {
+            if (prev && (!opId || prev.id === opId)) loadAntecedentesOportunidad(prev);
             return prev;
           });
         }
@@ -699,30 +930,58 @@ export default function PipelineVentasPage() {
     let ignore = false;
     if (selectedOp) {
       const pFiles = (selectedOp.comprobantes_pago || []).map((f) =>
-        typeof f === 'string' ? { name: f, url: '#' } : f
+        typeof f === 'string'
+          ? { name: f, url: '#' }
+          : { name: f.comprobante_nombre || f.nota || 'Comprobante', url: f.comprobante_url || '#' }
       );
       setPagoFiles(pFiles);
 
-      // Fetch persistent activities from actividades_op table in Supabase
       if (isUUID(selectedOp.id)) {
-        supabase
-          .from('actividades_op')
-          .select('*')
-          .eq('oportunidad_id', selectedOp.id)
-          .order('created_at', { ascending: true })
-          .then(({ data, error }: any) => {
-            if (!ignore && !error && data && data.length > 0) {
-              const actMsgs: ChatMensaje[] = data.map((d: any) => ({
-                id: d.id,
-                usuario_id: d.usuario_id || 'sistema',
-                usuario_nombre: d.usuario_nombre || 'Sistema',
-                contenido: d.contenido,
-                created_at: d.created_at,
-                tipo: d.tipo || 'actualizacion',
-              }));
-              setSelectedOp((prev) => (prev ? { ...prev, chat_interno: actMsgs } : null));
-            }
-          });
+        const cachedProduccion = produccionDiariaCacheRef.current[selectedOp.id];
+        if (cachedProduccion) {
+          setOpProduccionDiaria(cachedProduccion);
+        } else {
+          setLoadingProduccionDiaria(true);
+          supabase
+            .from('produccion_diaria')
+            .select('*, responsable:usuarios!responsable_id(*)')
+            .eq('oportunidad_id', selectedOp.id)
+            .order('fecha_produccion', { ascending: false })
+            .then(({ data }: any) => {
+              if (!ignore && data) {
+                const list = data as ProduccionDiaria[];
+                produccionDiariaCacheRef.current[selectedOp.id] = list;
+                setOpProduccionDiaria(list);
+              }
+              if (!ignore) setLoadingProduccionDiaria(false);
+            });
+        }
+
+        const latestQ = getActiveQuote(selectedOp);
+        if (latestQ && isUUID(latestQ.id)) {
+          const cachedItems = cotizacionItemsCacheRef.current[latestQ.id];
+          if (cachedItems) {
+            setCotizacionItemsOp(cachedItems);
+          } else {
+            supabase
+              .from('cotizacion_items')
+              .select('*')
+              .eq('cotizacion_id', latestQ.id)
+              .then(({ data }: any) => {
+                if (!ignore && data) {
+                  const items = data as CotizacionItem[];
+                  cotizacionItemsCacheRef.current[latestQ.id] = items;
+                  setCotizacionItemsOp(items);
+                }
+              });
+          }
+        } else {
+          setCotizacionItemsOp([]);
+        }
+
+        if (!antecedentesCacheRef.current[selectedOp.id]) {
+          loadAntecedentesOportunidad(selectedOp);
+        }
       }
     }
     return () => {
@@ -733,7 +992,7 @@ export default function PipelineVentasPage() {
   const SECCIONES_PIPELINE = [
     {
       id: 'ventas',
-      nombre: 'Sección 1: Área Comercial & Ventas',
+      nombre: 'Comercial y Ventas',
       descripcion: 'Gestión de prospección, cotizaciones, validación de pago y cierre comercial.',
       badge: 'Comercial',
       badgeBg: 'bg-amber-100 border-amber-300',
@@ -746,7 +1005,7 @@ export default function PipelineVentasPage() {
     },
     {
       id: 'produccion',
-      nombre: 'Sección 2: Área de Producción & Instalación',
+      nombre: 'Producción y Logística',
       descripcion: 'Planificación de fabricación, control de planta y ejecución de instalaciones en terreno.',
       badge: 'Producción',
       badgeBg: 'bg-purple-100 border-purple-300',
@@ -762,9 +1021,9 @@ export default function PipelineVentasPage() {
     },
     {
       id: 'reventa',
-      nombre: 'Sección 3: Área de Reventa & Logística',
+      nombre: 'Reventa y Logística',
       descripcion: 'Coordinación con proveedores, confirmación de stock y despachos.',
-      badge: 'Reventa & Logística',
+      badge: 'Reventa y Logística',
       badgeBg: 'bg-indigo-100 border-indigo-300',
       badgeText: 'text-indigo-900',
       etapas: [
@@ -777,6 +1036,209 @@ export default function PipelineVentasPage() {
       ],
     },
   ];
+
+  const getProdLogTipoLabel = (tipo: string) => {
+    if (tipo === 'obra') return 'Obra';
+    if (tipo === 'produccion') return 'Producción';
+    if (tipo === 'reventa') return 'Reventa';
+    return 'Logística';
+  };
+
+  const prodLogEstadoOptions: { value: EstadoEventoProduccionLogistica; label: string }[] = [
+    { value: 'por_hacer', label: 'Por hacer' },
+    { value: 'en_curso', label: 'En curso' },
+    { value: 'reprogramado', label: 'Reprogramado' },
+    { value: 'completado', label: 'Completado' },
+    { value: 'no_realizado', label: 'No realizado' },
+  ];
+
+  const getProdLogEstadoLabel = (estado?: string | null) =>
+    prodLogEstadoOptions.find((option) => option.value === estado)?.label || 'Por hacer';
+
+  const getProdLogEstadoClasses = (estado?: string | null) => {
+    if (estado === 'completado') return 'bg-emerald-950 text-emerald-300 border-emerald-800';
+    if (estado === 'no_realizado') return 'bg-red-950 text-red-300 border-red-800';
+    if (estado === 'reprogramado') return 'bg-purple-950 text-purple-300 border-purple-800';
+    if (estado === 'en_curso') return 'bg-amber-950 text-amber-300 border-amber-800';
+    return 'bg-blue-950 text-blue-300 border-blue-800';
+  };
+
+  const getProdLogTipoClasses = (tipo?: string | null) => {
+    if (tipo === 'produccion') return 'bg-purple-950 text-purple-300 border-purple-800';
+    if (tipo === 'obra') return 'bg-orange-950 text-orange-300 border-orange-800';
+    if (tipo === 'reventa') return 'bg-indigo-950 text-indigo-300 border-indigo-800';
+    return 'bg-sky-950 text-sky-300 border-sky-800';
+  };
+
+  const responsablesVisitas = personalTerrenoList.filter(
+    (p) => p.activo && (p.calendario_visitas ?? true)
+  );
+
+  const responsablesProduccionLogistica = personalTerrenoList.filter(
+    (p) => p.activo && (p.calendario_produccion ?? true)
+  );
+
+  const responsablesReventaLogistica = personalTerrenoList.filter(
+    (p) => p.activo && (p.calendario_reventa ?? true)
+  );
+
+  const getPersonalTerreno = (id?: string | null) =>
+    id ? personalTerrenoList.find((p) => p.id === id) : undefined;
+
+  const getResponsableVisitaNombre = (vis: VisitaTerreno) =>
+    vis.tecnico?.nombre ||
+    getPersonalTerreno(vis.tecnico_id)?.nombre ||
+    vis.tecnico_visita ||
+    'Responsable';
+
+  const getResponsableEventoNombre = (event: EventoProduccionLogistica) =>
+    event.responsable?.nombre ||
+    getPersonalTerreno(event.responsable_id)?.nombre ||
+    'Sin responsable';
+
+  const getEventDateParts = (event: EventoProduccionLogistica) => {
+    const sourceDate = event.fecha_inicio || event.fecha_evento || '';
+    const dateObj = sourceDate ? new Date(sourceDate) : null;
+    const isValidDate = dateObj && !Number.isNaN(dateObj.getTime());
+    return {
+      fecha: isValidDate
+        ? dateObj.toISOString().split('T')[0]
+        : event.fecha_evento || 'Sin fecha',
+      hora: isValidDate
+        ? dateObj.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
+        : event.hora_evento || '09:00',
+    };
+  };
+
+  const resetProdLogForm = (contexto: ContextoEventoProduccionLogistica, tipo: TipoEventoProduccionLogistica) => {
+    setNewProdLogContexto(contexto);
+    setNewProdLogTipo(tipo);
+    setNewProdLogEstado('por_hacer');
+    setNewProdLogTitulo(selectedOp?.titulo || '');
+    setNewProdLogFecha(new Date().toISOString().split('T')[0]);
+    setNewProdLogHora('09:00');
+    setNewProdLogResponsableId('');
+    setNewProdLogNotas('');
+    setEditingProdLogEventId(null);
+  };
+
+  const startEditProdLogEvent = (event: EventoProduccionLogistica) => {
+    const { fecha, hora } = getEventDateParts(event);
+    setNewProdLogContexto(event.contexto || 'produccion_logistica');
+    setNewProdLogTipo(event.tipo_evento);
+    setNewProdLogEstado((event.estado as EstadoEventoProduccionLogistica) || 'por_hacer');
+    setNewProdLogTitulo(event.titulo);
+    setNewProdLogFecha(fecha);
+    setNewProdLogHora(hora);
+    setNewProdLogResponsableId(event.responsable_id || '');
+    setNewProdLogNotas(event.observaciones || '');
+    setEditingProdLogEventId(event.id);
+    setShowAddProdLogEventForm(true);
+  };
+
+  const saveProdLogEvent = async (contexto: ContextoEventoProduccionLogistica) => {
+    if (!selectedOp || !newProdLogFecha || !newProdLogTitulo.trim()) return;
+
+    const startIso = new Date(`${newProdLogFecha}T${newProdLogHora || '08:00'}:00`).toISOString();
+    const endIso = new Date(new Date(startIso).getTime() + 3600000).toISOString();
+    const payload = {
+      contexto,
+      oportunidad_id: selectedOp.id,
+      planificacion_id: null,
+      tipo_evento: newProdLogTipo,
+      titulo: newProdLogTitulo.trim(),
+      fecha_inicio: startIso,
+      fecha_fin: endIso,
+      fecha_evento: newProdLogFecha,
+      hora_evento: newProdLogHora,
+      responsable_id: isUUID(newProdLogResponsableId) ? newProdLogResponsableId : null,
+      estado: newProdLogEstado,
+      observaciones: newProdLogNotas,
+      registrado_por: isUUID(currentUser?.id) ? currentUser?.id : null,
+    };
+
+    try {
+      const query = editingProdLogEventId
+        ? supabase
+            .from('eventos_produccion_logistica')
+            .update(payload)
+            .eq('id', editingProdLogEventId)
+            .select('*, responsable:usuarios!responsable_id(*)')
+            .single()
+        : supabase
+            .from('eventos_produccion_logistica')
+            .insert([payload])
+            .select('*, responsable:usuarios!responsable_id(*)')
+            .single();
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      if (data) {
+        const savedEvent = data as EventoProduccionLogistica;
+        setOpEventosProdLog((prev) => {
+          const next = editingProdLogEventId
+            ? prev.map((event) => (event.id === editingProdLogEventId ? savedEvent : event))
+            : [...prev, savedEvent];
+          eventosProdLogCacheRef.current[selectedOp.id] = next;
+          return next;
+        });
+      }
+
+      setShowAddProdLogEventForm(false);
+      setEditingProdLogEventId(null);
+      setNewProdLogTitulo(selectedOp.titulo);
+      setNewProdLogNotas('');
+      await addOportunidadActividad(
+        selectedOp.id,
+        editingProdLogEventId
+          ? `Evento de ${getProdLogTipoLabel(newProdLogTipo)} actualizado para ${newProdLogFecha}${newProdLogHora ? ` a las ${newProdLogHora}` : ''}.`
+          : `Evento de ${getProdLogTipoLabel(newProdLogTipo)} programado para ${newProdLogFecha}${newProdLogHora ? ` a las ${newProdLogHora}` : ''}.`
+      );
+    } catch (err) {
+      console.error('Error saving production/logistics event:', err);
+      setToastAlert({
+        id: Date.now().toString(),
+        message: 'No se pudo guardar el evento. Revisa los datos e intenta nuevamente.',
+        user: 'Sistema CRM',
+      });
+      setTimeout(() => setToastAlert(null), 5000);
+    }
+  };
+
+  const deleteProdLogEvent = async (event: EventoProduccionLogistica) => {
+    if (!confirm('¿Eliminar este evento del calendario?')) return;
+    try {
+      const { error } = await supabase
+        .from('eventos_produccion_logistica')
+        .delete()
+        .eq('id', event.id);
+      if (error) throw error;
+      setOpEventosProdLog((prev) => {
+        const next = prev.filter((item) => item.id !== event.id);
+        if (selectedOp) eventosProdLogCacheRef.current[selectedOp.id] = next;
+        return next;
+      });
+      if (editingProdLogEventId === event.id) {
+        setEditingProdLogEventId(null);
+        setShowAddProdLogEventForm(false);
+      }
+      if (selectedOp) {
+        await addOportunidadActividad(
+          selectedOp.id,
+          `Evento de ${getProdLogTipoLabel(event.tipo_evento)} eliminado del calendario.`
+        );
+      }
+    } catch (err) {
+      console.error('Error deleting production/logistics event:', err);
+      setToastAlert({
+        id: Date.now().toString(),
+        message: 'No se pudo eliminar el evento. Intenta nuevamente.',
+        user: 'Sistema CRM',
+      });
+      setTimeout(() => setToastAlert(null), 5000);
+    }
+  };
 
   const pipelineStates = SECCIONES_PIPELINE.flatMap((s) => s.etapas);
 
@@ -1075,7 +1537,7 @@ export default function PipelineVentasPage() {
   const addOportunidadActividad = async (
     opId: string,
     contenido: string,
-    tipo: 'comentario' | 'actualizacion' | 'abono' = 'actualizacion'
+    tipo: 'comentario' | 'actualizacion' | 'abono' | 'reclamo' = 'actualizacion'
   ) => {
     const targetOp = oportunidades.find((o) => o.id === opId) || selectedOp;
     if (!targetOp) return;
@@ -1106,6 +1568,10 @@ export default function PipelineVentasPage() {
           : o
       )
     );
+    activitiesCacheRef.current[opId] = mergeAndDeduplicateMessages([
+      ...(activitiesCacheRef.current[opId] || targetOp.chat_interno || []),
+      newMsg,
+    ]);
 
     if (isUUID(opId)) {
       try {
@@ -1132,29 +1598,174 @@ export default function PipelineVentasPage() {
     });
   };
 
-  // Mover Oportunidad en el Pipeline
+  // Bifurcación Explícita & Ejecución de Transición
+  const applyMoveWithRama = async (
+    opId: string,
+    targetState: EstadoPipeline,
+    rama: 'produccion' | 'reventa'
+  ) => {
+    const targetOp = oportunidades.find((o) => o.id === opId);
+    if (!targetOp) return;
+    const previousOportunidades = oportunidades;
+    const previousSelectedOp = selectedOp;
+
+    // Actualización optimista local
+    setOportunidades((prev) =>
+      prev.map((o) =>
+        o.id === opId ? { ...o, estado_pipeline: targetState, rama_destino: rama } : o
+      )
+    );
+
+    if (selectedOp && selectedOp.id === opId) {
+      setSelectedOp({ ...selectedOp, estado_pipeline: targetState, rama_destino: rama });
+    }
+
+    const stateLabel = pipelineStates.find((s) => s.id === targetState)?.label || targetState;
+    setToastAlert({
+      id: Date.now().toString(),
+      message: `Oportunidad ${targetOp.codigo} movida a ${stateLabel} (${rama === 'produccion' ? 'Producción y Logística' : 'Reventa y Logística'})`,
+      user: 'Sistema CRM',
+    });
+    setTimeout(() => setToastAlert(null), 4000);
+
+    if (isUUID(opId)) {
+      try {
+        const { error: oportunidadError } = await supabase
+          .from('oportunidades')
+          .update({
+            estado_pipeline: targetState,
+            rama_destino: rama,
+            rama_definida_en: new Date().toISOString(),
+            rama_definida_por: currentUser?.id || null,
+          })
+          .eq('id', opId);
+        if (oportunidadError) throw oportunidadError;
+      } catch (err) {
+        console.error('Error updating oportunidad state in Supabase:', err);
+        setOportunidades(previousOportunidades);
+        setSelectedOp(previousSelectedOp);
+        setToastAlert({
+          id: Date.now().toString(),
+          message: 'No se pudo cambiar la rama en Supabase. La oportunidad quedo sin cambios.',
+          user: 'Sistema CRM',
+        });
+        setTimeout(() => setToastAlert(null), 5000);
+        return;
+      }
+    }
+
+    await addOportunidadActividad(opId, `Etapa del pipeline actualizada a "${stateLabel}" (Rama: ${rama === 'produccion' ? 'Producción' : 'Reventa'})`);
+    await logSistema({
+      tipo_accion: 'estado_cambiado',
+      entidad: 'oportunidades',
+      entidad_id: opId,
+      descripcion: `Oportunidad ${targetOp.codigo} movida a ${stateLabel} (${rama})`,
+      usuario_id: currentUser?.id,
+    });
+  };
+
+  const requestMoveWithRama = async (
+    opId: string,
+    targetState: EstadoPipeline,
+    rama: 'produccion' | 'reventa'
+  ) => {
+    const targetOp = oportunidades.find((o) => o.id === opId);
+    if (!targetOp) return;
+
+    if (targetOp.rama_destino && targetOp.rama_destino !== rama && isUUID(opId)) {
+      const { count, error } = await supabase
+        .from('ordenes_compra')
+        .select('id', { count: 'exact', head: true })
+        .eq('oportunidad_id', opId);
+      if (error) {
+        console.error('Error checking OC count before branch change:', error);
+        return;
+      }
+      const ocCount = count || 0;
+
+      if (ocCount > 0) {
+        setRamaChangeOcModal({ op: targetOp, targetState, rama, ocCount });
+        return;
+      }
+    }
+
+    await applyMoveWithRama(opId, targetState, rama);
+  };
+
+  const resolveRamaChangeWithOc = async (action: 'desvincular' | 'eliminar') => {
+    if (!ramaChangeOcModal || resolvingRamaChangeOc) return;
+    const { op, targetState, rama } = ramaChangeOcModal;
+    setResolvingRamaChangeOc(true);
+
+    try {
+      if (action === 'desvincular') {
+        const { error } = await supabase
+          .from('ordenes_compra')
+          .update({ oportunidad_id: null })
+          .eq('oportunidad_id', op.id);
+        if (error) throw new Error(error.message);
+        await addOportunidadActividad(op.id, 'Ordenes de compra desvinculadas antes de cambiar la rama de la oportunidad.');
+      } else {
+        const { error } = await supabase
+          .from('ordenes_compra')
+          .delete()
+          .eq('oportunidad_id', op.id);
+        if (error) throw new Error(error.message);
+        await addOportunidadActividad(op.id, 'Ordenes de compra eliminadas antes de cambiar la rama de la oportunidad.');
+      }
+
+      setOpOrdenesCompra([]);
+      ordenesCompraCacheRef.current[op.id] = [];
+      setRamaChangeOcModal(null);
+      await applyMoveWithRama(op.id, targetState, rama);
+    } catch (err) {
+      console.error('Error resolving OC branch change:', err);
+      setToastAlert({
+        id: Date.now().toString(),
+        message: action === 'desvincular'
+          ? 'No se pudo desvincular la orden de compra. Intenta nuevamente.'
+          : 'No se pudo eliminar la orden de compra. Intenta nuevamente.',
+        user: 'Sistema CRM',
+      });
+      setTimeout(() => setToastAlert(null), 5000);
+    } finally {
+      setResolvingRamaChangeOc(false);
+    }
+  };
+
+  // Mover Oportunidad en el Pipeline (Sin gates bloqueantes de abono)
   const moveOportunidadToState = async (opId: string, targetState: EstadoPipeline) => {
     const targetOp = oportunidades.find((o) => o.id === opId);
     if (!targetOp || targetOp.estado_pipeline === targetState) return;
 
-    // Validar abono mínimo (50% o 100%) para pasar a Venta Cerrada o etapas de Producción / Reventa
-    const isRestrictedStage = targetState !== 'nueva' && targetState !== 'pagada';
-    if (isRestrictedStage) {
-      const montoTotal = getOportunidadTotalValue(targetOp);
-      const montoAbonado = getOportunidadAbonadoValue(targetOp);
-      const porcentajeAbonado = montoTotal > 0 ? (montoAbonado / montoTotal) * 100 : 100;
-
-      if (montoTotal > 0 && porcentajeAbonado < 50) {
-        setAbonoWarningModal({
-          op: targetOp,
-          targetStage: targetState,
-          montoTotal,
-          montoAbonado,
-          porcentajeActual: Math.round(porcentajeAbonado),
-        });
-        return; // Bloquear transición si el abono es inferior al 50%
-      }
+    if (currentUser?.rol !== 'admin') {
+      setToastAlert({
+        id: Date.now().toString(),
+        message: 'Solo un usuario admin puede cambiar la etapa o rama de una oportunidad.',
+        user: 'Sistema CRM',
+      });
+      setTimeout(() => setToastAlert(null), 5000);
+      return;
     }
+
+    // Si se mueve a etapas específicas de Producción o Reventa, asignar rama automáticamente
+    if (targetState.startsWith('prod_')) {
+      await requestMoveWithRama(opId, targetState, 'produccion');
+      return;
+    }
+    if (targetState.startsWith('rev_')) {
+      await requestMoveWithRama(opId, targetState, 'reventa');
+      return;
+    }
+
+    // Si se mueve a Venta Cerrada (entregada) y no tiene rama_destino aún, abrir modal de elección
+    if (targetState === 'entregada' && !targetOp.rama_destino) {
+      setRamaChoiceModal({ op: targetOp, targetState });
+      return;
+    }
+
+    // Si ya tiene rama o se mueve dentro de comercial
+    const rama = targetOp.rama_destino || (targetOp.tipo_venta === 'Suministro' || targetOp.tipo_venta === 'Reventa de Material' ? 'reventa' : 'produccion');
 
     // Actualización optimista local
     setOportunidades((prev) =>
@@ -1184,56 +1795,6 @@ export default function PipelineVentasPage() {
       }
     }
 
-    if (targetState === 'entregada') {
-      const isReventa = targetOp.tipo_venta === 'Suministro' || targetOp.tipo_venta === 'Reventa de Material';
-
-      if (isReventa) {
-        setToastAlert({
-          id: Date.now().toString(),
-          message: `Venta cerrada transferida automáticamente al Pipeline de Reventa & Proveedores.`,
-          user: 'Sistema CRM',
-        });
-        if (isUUID(opId)) {
-          try {
-            await supabase.from('ordenes_reventa').upsert([
-              {
-                oportunidad_id: opId,
-                codigo: targetOp.codigo,
-                titulo: targetOp.titulo,
-                cliente_id: targetOp.cliente_id,
-                estado: 'coordinacion_proveedor',
-                observaciones: 'Transferido automáticamente al cerrar venta de Suministro/Reventa.',
-              },
-            ], { onConflict: 'oportunidad_id' });
-          } catch (e) {
-            console.error('Error auto-creating reventa:', e);
-          }
-        }
-      } else {
-        setToastAlert({
-          id: Date.now().toString(),
-          message: `Venta cerrada transferida automáticamente al Pipeline de Producción.`,
-          user: 'Sistema CRM',
-        });
-        if (isUUID(opId)) {
-          try {
-            await supabase.from('proyectos_planificacion').upsert([
-              {
-                oportunidad_id: opId,
-                codigo: targetOp.codigo,
-                titulo: targetOp.titulo,
-                cliente_id: targetOp.cliente_id,
-                estado: 'pendiente',
-                observaciones: 'Transferido automáticamente al cerrar venta de Instalación.',
-              },
-            ], { onConflict: 'oportunidad_id' });
-          } catch (e) {
-            console.error('Error auto-creating planificacion:', e);
-          }
-        }
-      }
-    }
-
     await addOportunidadActividad(opId, `Etapa del pipeline actualizada a "${stateLabel}"`);
     await logSistema({
       tipo_accion: 'estado_cambiado',
@@ -1242,6 +1803,53 @@ export default function PipelineVentasPage() {
       descripcion: `Oportunidad ${targetOp.codigo} movida a ${stateLabel}`,
       usuario_id: currentUser?.id,
     });
+  };
+
+  // Registrar tanda de Producción Diaria
+  const handleRegisterProduccionDiaria = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOp || !newProdProducto.trim() || newProdCantidad <= 0) return;
+
+    try {
+      const latestQ = getActiveQuote(selectedOp);
+      const payload: any = {
+        oportunidad_id: selectedOp.id,
+        cotizacion_id: latestQ?.id || null,
+        producto: newProdProducto.trim(),
+        cantidad_producida: newProdCantidad,
+        fecha_produccion: newProdFecha || new Date().toISOString().split('T')[0],
+        responsable_id: newProdResponsableId || null,
+        observaciones: newProdObservaciones.trim() || null,
+        registrado_por: currentUser?.id || null,
+      };
+
+      const { data, error } = await supabase
+        .from('produccion_diaria')
+        .insert([payload])
+        .select('*, responsable:usuarios!responsable_id(*)')
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        const newRecord = data as ProduccionDiaria;
+        setOpProduccionDiaria((prev) => {
+          const next = [newRecord, ...prev];
+          produccionDiariaCacheRef.current[selectedOp.id] = next;
+          return next;
+        });
+      }
+
+      await addOportunidadActividad(
+        selectedOp.id,
+        `Fabricación registrada: ${newProdCantidad} un. de "${newProdProducto.trim()}" el ${payload.fecha_produccion}`
+      );
+
+      setNewProdCantidad(0);
+      setNewProdObservaciones('');
+    } catch (err) {
+      console.error('Error registrando produccion diaria:', err);
+    }
   };
 
   // Guardar campo individual en Supabase
@@ -1316,11 +1924,13 @@ export default function PipelineVentasPage() {
     if (!selectedOp || !chatInput.trim()) return;
 
     const msgContent = chatInput;
+    const msgTipo = isReclamoMode ? 'reclamo' : 'comentario';
     setChatInput('');
+    setIsReclamoMode(false);
     setMentionMenuOpen(false);
 
     // Add activity (saves to actividades_op table and logs_sistema)
-    await addOportunidadActividad(selectedOp.id, msgContent, 'comentario');
+    await addOportunidadActividad(selectedOp.id, msgContent, msgTipo);
 
     // Detect @ mentions in text
     const mentionsFound = usuariosApp.filter((u) =>
@@ -1392,24 +2002,144 @@ export default function PipelineVentasPage() {
     const file = e.target.files?.[0];
     if (!file || !selectedOp) return;
 
-    let publicUrl = '#';
     try {
-      const fileName = `pago_${Date.now()}_${file.name}`;
-      const { data, error } = await supabase.storage.from('documentos').upload(fileName, file);
-      if (!error && data) {
-        const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(fileName);
-        if (urlData) publicUrl = urlData.publicUrl;
-      } else {
-        publicUrl = URL.createObjectURL(file);
+      const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const fileName = `comprobantes/${selectedOp.id}/${Date.now()}_${cleanFileName}`;
+      const { data, error } = await supabase.storage.from('documentos').upload(fileName, file, {
+        contentType: file.type || undefined,
+        upsert: false,
+      });
+      if (error || !data) {
+        throw new Error(error?.message || 'Supabase Storage no confirmó la subida.');
       }
-    } catch {
-      publicUrl = URL.createObjectURL(file);
+
+      const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(fileName);
+      const publicUrl = urlData?.publicUrl || '#';
+      const fileObj = { name: file.name, url: publicUrl };
+      const updated = [...pagoFiles, fileObj];
+      setPagoFiles(updated);
+      updateOportunidadField(
+        selectedOp.id,
+        'comprobantes_pago',
+        updated.map((f) => ({ comprobante_nombre: f.name, comprobante_url: f.url }))
+      );
+    } catch (err: any) {
+      console.error('Error uploading payment document:', err);
+      setAbonoErrorMsg(`Error al subir comprobante a Supabase: ${err?.message || 'Error al subir.'}`);
+    }
+  };
+
+  // Upload Antecedente Document
+  const handleUploadAntecedente = async () => {
+    if (!nuevoAntecedenteFile || !selectedOp) {
+      setAntecedenteErrorMsg('Debes seleccionar un archivo para adjuntar.');
+      return;
     }
 
-    const fileObj = { name: file.name, url: publicUrl };
-    const updated = [...pagoFiles, fileObj];
-    setPagoFiles(updated);
-    updateOportunidadField(selectedOp.id, 'comprobantes_pago', updated.map((f) => f.name));
+    setAntecedenteUploading(true);
+    setAntecedenteErrorMsg('');
+
+    try {
+      if (!isUUID(selectedOp.id)) {
+        throw new Error('La oportunidad debe estar guardada en Supabase antes de adjuntar antecedentes.');
+      }
+
+      const cleanFileName = nuevoAntecedenteFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const storagePath = `antecedentes/${selectedOp.id}/${Date.now()}_${cleanFileName}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documentos')
+        .upload(storagePath, nuevoAntecedenteFile, {
+          contentType: nuevoAntecedenteFile.type || undefined,
+          upsert: false,
+        });
+
+      if (uploadError || !uploadData) {
+        throw new Error(uploadError?.message || 'Supabase Storage no confirmó la subida.');
+      }
+
+      const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(storagePath);
+      const publicUrl = urlData?.publicUrl || '#';
+
+      const { data: inserted, error: insertError } = await supabase
+        .from('oportunidad_antecedentes')
+        .insert({
+          oportunidad_id: selectedOp.id,
+          nombre: nuevoAntecedenteNombre.trim() || nuevoAntecedenteFile.name,
+          tipo: nuevoAntecedenteTipo,
+          bucket_id: 'documentos',
+          storage_path: storagePath,
+          public_url: publicUrl,
+          mime_type: nuevoAntecedenteFile.type || null,
+          size_bytes: nuevoAntecedenteFile.size,
+          subido_por_id: currentUser?.id && isUUID(currentUser.id) ? currentUser.id : null,
+          subido_por_nombre: currentUser?.nombre || 'Usuario',
+        })
+        .select()
+        .single();
+
+      if (insertError || !inserted) {
+        await supabase.storage.from('documentos').remove([storagePath]);
+        throw new Error(insertError?.message || 'No se pudo registrar la metadata del antecedente.');
+      }
+
+      const newDoc = mapAntecedenteRecord(inserted);
+      const existingDocs = antecedentesCacheRef.current[selectedOp.id] || opAntecedentesList;
+      const updatedDocs = [...existingDocs, newDoc];
+
+      antecedentesCacheRef.current[selectedOp.id] = updatedDocs;
+      setOpAntecedentesList(updatedDocs);
+      updateOportunidadField(selectedOp.id, 'antecedentes', updatedDocs);
+
+      await addOportunidadActividad(
+        selectedOp.id,
+        `Documento antecedente adjuntado: "${newDoc.nombre}" (${newDoc.tipo}) por ${currentUser?.nombre || 'Usuario'}.`,
+        'actualizacion'
+      );
+
+      setNuevoAntecedenteFile(null);
+      setNuevoAntecedenteNombre('');
+      setNuevoAntecedenteTipo('contrato');
+    } catch (err: any) {
+      console.error('Error uploading antecedente:', err);
+      setAntecedenteErrorMsg(`Error al subir archivo: ${err?.message || 'Error al subir.'}`);
+    } finally {
+      setAntecedenteUploading(false);
+    }
+  };
+
+  const handleDeleteAntecedente = async (docId: string) => {
+    if (!selectedOp || !confirm('¿Eliminar este documento de antecedentes?')) return;
+    const existingDocs = antecedentesCacheRef.current[selectedOp.id] || opAntecedentesList;
+    const updatedDocs = existingDocs.filter((d) => d.id !== docId);
+
+    setOpAntecedentesList(updatedDocs);
+    antecedentesCacheRef.current[selectedOp.id] = updatedDocs;
+    updateOportunidadField(selectedOp.id, 'antecedentes', updatedDocs);
+
+    if (isUUID(selectedOp.id)) {
+      const { error } = await supabase
+        .from('oportunidad_antecedentes')
+        .update({
+          eliminado: true,
+          eliminado_en: new Date().toISOString(),
+          eliminado_por: currentUser?.id && isUUID(currentUser.id) ? currentUser.id : null,
+        })
+        .eq('id', docId);
+
+      if (error) {
+        antecedentesCacheRef.current[selectedOp.id] = existingDocs;
+        setOpAntecedentesList(existingDocs);
+        updateOportunidadField(selectedOp.id, 'antecedentes', existingDocs);
+        console.error('Error deleting antecedente:', error);
+        return;
+      }
+    }
+
+    await addOportunidadActividad(
+      selectedOp.id,
+      `Documento antecedente eliminado de la oportunidad.`,
+      'actualizacion'
+    );
   };
 
   // Crear nueva Oportunidad
@@ -1428,6 +2158,8 @@ export default function PipelineVentasPage() {
       titulo: nuevoTitulo,
       cliente_id: validClienteId,
       tipo_venta: nuevoTipoVenta || 'Instalación',
+      origen: nuevoOrigen.trim() || null,
+      modalidad_requerimiento: nuevaModalidadRequerimiento,
       estado_pipeline: 'nueva' as const,
       fecha_inicio: today,
       fecha_limite: nuevaFechaLimite || null,
@@ -1450,13 +2182,15 @@ export default function PipelineVentasPage() {
         setNuevoClienteId('');
         setNuevaFechaLimite('');
         setNuevoTipoVenta('Instalación');
+        setNuevoOrigen('');
+        setNuevaModalidadRequerimiento('instalacion');
       } else {
         console.error('Error creating oportunidad in Supabase:', error?.message || error);
-        alert(`Error al crear la oportunidad en Supabase: ${error?.message || 'Comprueba los datos ingresados.'}`);
+        alert('No se pudo crear la oportunidad. Revisa los datos e intenta nuevamente.');
       }
     } catch (err: any) {
       console.error('Error creating oportunidad:', err);
-      alert(`Error al conectar con Supabase: ${err?.message || 'Error inesperado.'}`);
+      alert('No se pudo conectar con la base de datos. Intenta nuevamente.');
     }
   };
 
@@ -1466,6 +2200,53 @@ export default function PipelineVentasPage() {
     }
     setIsEditingTitle(false);
   };
+
+  const filteredOportunidades = oportunidades.filter((op) => {
+    // 1. Text Search (código, título, cliente nombre, cliente rut)
+    if (filterSearch.trim()) {
+      const q = filterSearch.toLowerCase().trim();
+      const matchesCodigo = op.codigo?.toLowerCase().includes(q);
+      const matchesTitulo = op.titulo?.toLowerCase().includes(q);
+      const matchesCliente = op.cliente?.nombre?.toLowerCase().includes(q);
+      const matchesRut = op.cliente?.rut?.toLowerCase().includes(q);
+      if (!matchesCodigo && !matchesTitulo && !matchesCliente && !matchesRut) {
+        return false;
+      }
+    }
+
+    // 2. Estado
+    if (filterEstado !== 'todos' && op.estado_pipeline !== filterEstado) {
+      return false;
+    }
+
+    // 3. Tipo de Venta
+    if (filterTipoVenta !== 'todos' && op.tipo_venta !== filterTipoVenta) {
+      return false;
+    }
+
+    // 4. Prioridad
+    if (filterPrioridad !== 'todos' && op.prioridad !== filterPrioridad) {
+      return false;
+    }
+
+    // 5. Asignado
+    if (filterAsignado !== 'todos') {
+      if (filterAsignado === 'me') {
+        if (op.asignado_a !== currentUser?.id) return false;
+      } else if (op.asignado_a !== filterAsignado) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  const produccionEventos = opEventosProdLog.filter(
+    (event) => (event.contexto || 'produccion_logistica') === 'produccion_logistica'
+  );
+  const reventaEventos = opEventosProdLog.filter(
+    (event) => event.contexto === 'reventa_logistica'
+  );
 
   return (
     <div className="space-y-6 text-[#363636] relative">
@@ -1500,7 +2281,7 @@ export default function PipelineVentasPage() {
         <div className="flex items-center gap-3 self-start md:self-auto">
           <button
             onClick={() => setShowNewOpModal(true)}
-            className="bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition flex items-center gap-1.5"
+            className="bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Nueva Oportunidad</span>
@@ -1509,7 +2290,7 @@ export default function PipelineVentasPage() {
           <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl border border-gray-200">
             <button
               onClick={() => setActiveTab('lista')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'lista' ? 'bg-[#F7931F] text-white shadow-xs' : 'text-gray-600 hover:text-[#363636]'
               }`}
             >
@@ -1518,7 +2299,7 @@ export default function PipelineVentasPage() {
             </button>
             <button
               onClick={() => setActiveTab('tablero')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'tablero' ? 'bg-[#F7931F] text-white shadow-xs' : 'text-gray-600 hover:text-[#363636]'
               }`}
             >
@@ -1529,52 +2310,198 @@ export default function PipelineVentasPage() {
         </div>
       </div>
 
+      {/* Barra de Filtros Avanzados (Ajustes 11 - Req 5) */}
+      <div className="bg-white p-4 rounded-3xl border border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
+          {/* Búsqueda por Texto */}
+          <div className="relative flex-1 min-w-[180px] max-w-sm">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Buscar por código, cliente, título, RUT..."
+              value={filterSearch}
+              onChange={(e) => setFilterSearch(e.target.value)}
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-8 py-2 text-[#363636] font-medium placeholder-gray-400 focus:outline-none focus:border-[#F7931F]"
+            />
+            {filterSearch && (
+              <button
+                onClick={() => setFilterSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Filtro Estado */}
+          <select
+            value={filterEstado}
+            onChange={(e) => setFilterEstado(e.target.value)}
+            className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold text-[#363636] focus:outline-none focus:border-[#F7931F] cursor-pointer"
+          >
+            <option value="todos">Todos los Estados</option>
+            <optgroup label="Comercial">
+              <option value="nueva">Nueva Oportunidad</option>
+              <option value="pagada">Pago Validado</option>
+              <option value="entregada">Venta Cerrada</option>
+            </optgroup>
+            <optgroup label="Producción">
+              <option value="prod_pendiente">Pendiente Planificación</option>
+              <option value="prod_cola">En Cola de Fabricación</option>
+              <option value="prod_fabricacion">En Fabricación</option>
+              <option value="prod_listo_instalacion">Listo p/ Instalación</option>
+              <option value="prod_instalacion">En Instalación</option>
+              <option value="prod_finalizado">Finalizado / Entregado</option>
+            </optgroup>
+            <optgroup label="Reventa">
+              <option value="rev_coordinacion">Coordinación Proveedor</option>
+              <option value="rev_stock">Confirmación Stock</option>
+              <option value="rev_listo_retiro">Listo para Retiro</option>
+              <option value="rev_listo_despacho">Listo para Despacho</option>
+              <option value="rev_entregado">Entregado al Cliente</option>
+              <option value="rev_postventa">Postventa & Seguimiento</option>
+            </optgroup>
+          </select>
+
+          {/* Filtro Tipo Venta */}
+          <select
+            value={filterTipoVenta}
+            onChange={(e) => setFilterTipoVenta(e.target.value)}
+            className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold text-[#363636] focus:outline-none focus:border-[#F7931F] cursor-pointer"
+          >
+            <option value="todos">Todos los Tipos de Venta</option>
+            <option value="Instalación">Instalación</option>
+            <option value="Suministro">Suministro</option>
+            <option value="Reventa de Material">Reventa de Material</option>
+          </select>
+
+          {/* Filtro Prioridad */}
+          <select
+            value={filterPrioridad}
+            onChange={(e) => setFilterPrioridad(e.target.value)}
+            className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold text-[#363636] focus:outline-none focus:border-[#F7931F] cursor-pointer"
+          >
+            <option value="todos">Todas las Prioridades</option>
+            <option value="Normal / Baja">Normal / Baja</option>
+            <option value="Alta">Alta</option>
+            <option value="Urgente">Urgente</option>
+          </select>
+
+          {/* Filtro Asignado */}
+          <select
+            value={filterAsignado}
+            onChange={(e) => setFilterAsignado(e.target.value)}
+            className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold text-[#363636] focus:outline-none focus:border-[#F7931F] cursor-pointer"
+          >
+            <option value="todos">Todos los Asignados</option>
+            {currentUser && <option value="me">👤 Asignados a mí</option>}
+            {usuariosApp.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.nombre} ({u.email})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Acciones de Filtro y Contador */}
+        <div className="flex items-center gap-3">
+          {(filterSearch || filterEstado !== 'todos' || filterTipoVenta !== 'todos' || filterPrioridad !== 'todos' || filterAsignado !== 'todos') && (
+            <button
+              onClick={() => {
+                setFilterSearch('');
+                setFilterEstado('todos');
+                setFilterTipoVenta('todos');
+                setFilterPrioridad('todos');
+                setFilterAsignado('todos');
+              }}
+              className="text-gray-500 hover:text-red-600 font-bold transition flex items-center gap-1 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Limpiar Filtros</span>
+            </button>
+          )}
+
+          <span className="font-extrabold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-xl border border-gray-200">
+            Mostrando <strong className="text-[#F7931F]">{filteredOportunidades.length}</strong> de {oportunidades.length}
+          </span>
+        </div>
+      </div>
+
       {loading ? (
         <div className="py-12 text-center text-gray-500 font-medium text-xs">
           Cargando oportunidades de venta...
         </div>
       ) : activeTab === 'tablero' ? (
-        /* Vista Tablero Kanban agrupada por Secciones */
-        <div className="space-y-8 animate-fadeIn">
-          {SECCIONES_PIPELINE.map((sec) => (
-            <div key={sec.id} className="space-y-4">
-              {/* Header de Sección */}
-              <div className={`p-4 rounded-3xl border ${sec.badgeBg} flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs`}>
-                <div className="flex items-center gap-3">
-                  <span className={`text-xs font-black uppercase tracking-wider ${sec.badgeText} px-3 py-1 rounded-xl bg-white border border-current shadow-2xs`}>
-                    {sec.badge}
+        <div className="space-y-4 animate-fadeIn">
+          <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+            <div className="flex min-w-max divide-x divide-gray-200">
+              {SECCIONES_PIPELINE.map((sec) => {
+                const sectionCount = filteredOportunidades.filter((o) =>
+                  sec.etapas.some((stage) => stage.id === o.estado_pipeline)
+                ).length;
+                const isActiveSection = activeBoardSection === sec.id;
+
+                return (
+                  <button
+                    key={sec.id}
+                    type="button"
+                    onClick={() => setActiveBoardSection(sec.id)}
+                    className={`px-5 py-3 text-left min-w-[220px] transition border-b-2 ${
+                      isActiveSection
+                        ? 'bg-[#363636] text-white border-[#F7931F]'
+                        : 'bg-white text-[#363636] border-transparent hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="block text-xs font-extrabold uppercase">{sec.nombre}</span>
+                    <span className={`block text-[11px] mt-1 ${isActiveSection ? 'text-gray-200' : 'text-gray-500'}`}>
+                      {sectionCount} {sectionCount === 1 ? 'oportunidad' : 'oportunidades'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {(() => {
+            const activeSection = SECCIONES_PIPELINE.find((sec) => sec.id === activeBoardSection) || SECCIONES_PIPELINE[0];
+
+            return (
+              <div className="p-4 rounded-lg border border-gray-200 bg-gray-50 space-y-4 min-h-[560px]">
+                <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+                  <h3 className="text-base font-extrabold text-[#363636]">{activeSection.nombre}</h3>
+                  <span className="text-xs font-mono font-bold text-gray-500">
+                    {activeSection.etapas.length} etapas
                   </span>
-                  <h3 className="text-base font-extrabold text-[#363636]">{sec.nombre}</h3>
                 </div>
-                <p className="text-xs text-gray-600 font-medium">{sec.descripcion}</p>
-              </div>
 
-              {/* Columnas Kanban de esta Sección */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-start">
-                {sec.etapas.map((col) => {
-                  const colOps = oportunidades.filter((o) => o.estado_pipeline === col.id);
-                  const isTargetColumn = dragOverColumn === col.id;
+                <div
+                  className="grid gap-4 overflow-x-auto pb-2"
+                  style={{ gridTemplateColumns: `repeat(${activeSection.etapas.length}, minmax(260px, 1fr))` }}
+                >
+                  {activeSection.etapas.map((stage) => {
+                    const colOps = filteredOportunidades.filter((o) => o.estado_pipeline === stage.id);
+                    const isTargetColumn = dragOverColumn === stage.id;
 
-                  return (
-                    <div
-                      key={col.id}
-                      onDragOver={(e) => handleDragOver(e, col.id)}
-                      onDrop={(e) => handleDrop(e, col.id)}
-                      className={`p-3.5 rounded-3xl border transition-all duration-200 space-y-3 flex flex-col justify-between shadow-sm min-h-[420px] ${
-                        isTargetColumn
-                          ? 'bg-orange-100/60 border-[#F7931F] ring-2 ring-[#F7931F]/30 scale-[1.01]'
-                          : 'bg-gray-50 border-gray-200'
-                      }`}
-                    >
-                      <div>
-                        <div className={`p-2 rounded-2xl border ${col.color} ${col.bg} flex items-center justify-between mb-3 shadow-xs`}>
-                          <span className="font-extrabold text-[11px] truncate">{col.label}</span>
-                          <span className="text-[10px] font-black bg-white px-2 py-0.5 rounded-full border border-gray-200 shadow-2xs shrink-0">
-                            {colOps.length}
-                          </span>
+                    return (
+                      <div
+                        key={stage.id}
+                        onDragOver={(e) => handleDragOver(e, stage.id)}
+                        onDrop={(e) => handleDrop(e, stage.id)}
+                        className={`rounded-lg border p-3 min-h-[470px] transition ${
+                          isTargetColumn
+                            ? 'bg-orange-50 border-[#F7931F] ring-2 ring-[#F7931F]/20'
+                            : 'bg-white border-gray-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between border-b border-gray-200 pb-2 mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2.5 h-2.5 rounded-full border ${stage.color}`} />
+                            <h4 className="text-xs font-black uppercase text-[#363636]">{stage.label}</h4>
+                          </div>
+                          <span className="text-[11px] font-mono font-bold text-gray-500">{colOps.length}</span>
                         </div>
 
-                        <div className="space-y-3 min-h-[320px]">
+                        <div className="space-y-3">
                           {colOps.map((op) => {
                             const latestQuote = getActiveQuote(op);
                             const montoTotal = getOportunidadTotalValue(op);
@@ -1589,18 +2516,18 @@ export default function PipelineVentasPage() {
                                 onDragStart={(e) => handleDragStart(e, op.id)}
                                 onDragEnd={handleDragEnd}
                                 onClick={() => handleOpenOportunidad(op)}
-                                className={`bg-white p-3.5 rounded-2xl border border-gray-200 space-y-2.5 shadow-sm hover:shadow-md hover:border-[#F7931F] transition cursor-pointer active:cursor-grabbing relative group ${
+                                className={`bg-white p-3 rounded-lg border border-gray-200 space-y-3 shadow-sm hover:shadow-md hover:border-[#F7931F] transition cursor-pointer active:cursor-grabbing relative group ${
                                   isBeingDragged ? 'opacity-40 border-dashed border-[#F7931F]' : ''
                                 }`}
                               >
-                                <div className="flex items-start justify-between">
+                                <div className="flex items-start justify-between gap-3">
                                   <div className="flex items-center gap-1.5">
                                     <GripVertical className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                                     <span className="font-mono font-bold text-[#363636] text-xs">{op.codigo}</span>
                                   </div>
-                                  <div className="flex items-center gap-1">
+                                  <div className="flex items-center gap-2">
                                     {latestQuote && (
-                                      <span className="text-[10px] font-extrabold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
+                                      <span className="text-[10px] font-extrabold text-blue-700">
                                         Cot. v{latestQuote.version || 1}
                                       </span>
                                     )}
@@ -1618,50 +2545,42 @@ export default function PipelineVentasPage() {
                                 </div>
 
                                 <div>
-                                  <p className="text-xs font-extrabold text-[#363636] leading-snug group-hover:text-[#F7931F] transition">
+                                  <p className="text-sm font-extrabold text-[#363636] leading-snug group-hover:text-[#F7931F] transition">
                                     {op.titulo}
                                   </p>
-                                  <div className="mt-1 flex items-center gap-1 text-[11px] text-[#F7931F] font-bold hover:underline" onClick={(e) => e.stopPropagation()}>
-                                    <Building className="w-3 h-3 shrink-0" />
+                                  <div className="mt-1 flex items-center gap-1 text-xs text-[#F7931F] font-bold hover:underline" onClick={(e) => e.stopPropagation()}>
+                                    <Building className="w-3.5 h-3.5 shrink-0" />
                                     <Link href={`/clientes/${op.cliente_id}`}>
                                       {op.cliente?.nombre || 'Ver Ficha Cliente'}
                                     </Link>
                                   </div>
                                 </div>
 
-                                {/* Fechas */}
-                                <div className="bg-gray-50 p-2 rounded-xl text-[10px] space-y-1 border border-gray-100">
+                                <div className="bg-gray-50 p-3 rounded-md text-[11px] space-y-1 border border-gray-100">
                                   <div className="flex items-center justify-between text-gray-600">
-                                    <span className="flex items-center gap-1">
-                                      <Calendar className="w-3 h-3 text-emerald-600" />
-                                      <span>Inicio:</span>
-                                    </span>
+                                    <span>Inicio</span>
                                     <span className="font-mono font-semibold">{op.fecha_inicio}</span>
                                   </div>
                                   {op.fecha_limite && (
                                     <div className="flex items-center justify-between text-gray-600">
-                                      <span className="flex items-center gap-1">
-                                        <Clock className="w-3 h-3 text-amber-600" />
-                                        <span>Límite:</span>
-                                      </span>
+                                      <span>Límite</span>
                                       <span className="font-mono font-bold text-amber-900">{op.fecha_limite}</span>
                                     </div>
                                   )}
                                 </div>
 
-                                {/* Resumen Financiero */}
-                                <div className="pt-1.5 border-t border-gray-100 text-[11px] space-y-1">
+                                <div className="pt-1.5 border-t border-gray-100 text-xs space-y-1">
                                   <div className="flex justify-between text-gray-700 font-bold">
-                                    <span>Total:</span>
+                                    <span>Total</span>
                                     <span>${montoTotal.toLocaleString('es-CL')}</span>
                                   </div>
                                   <div className="flex justify-between text-emerald-700 font-bold">
-                                    <span>Abonado:</span>
+                                    <span>Abonado</span>
                                     <span>${montoAbonado.toLocaleString('es-CL')}</span>
                                   </div>
                                   {saldoPendiente > 0 && (
                                     <div className="flex justify-between text-[#F7931F] font-black">
-                                      <span>Saldo:</span>
+                                      <span>Saldo</span>
                                       <span>${saldoPendiente.toLocaleString('es-CL')}</span>
                                     </div>
                                   )}
@@ -1671,159 +2590,176 @@ export default function PipelineVentasPage() {
                           })}
 
                           {colOps.length === 0 && (
-                            <div className="h-32 border-2 border-dashed border-gray-200 rounded-2xl flex items-center justify-center text-xs text-gray-400 font-medium">
+                            <div className="min-h-32 border border-dashed border-gray-300 rounded-lg flex items-center justify-center text-xs text-gray-400 font-medium bg-gray-50">
                               Sin oportunidades
                             </div>
                           )}
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })()}
         </div>
       ) : (
         /* Vista Lista Agrupada por Secciones del Pipeline */
         <div className="space-y-8 animate-fadeIn">
-          {SECCIONES_PIPELINE.map((sec) => (
-            <div key={sec.id} className="space-y-4">
-              {/* Header de Sección Banner */}
-              <div className={`p-4 rounded-3xl border ${sec.badgeBg} flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs`}>
-                <div className="flex items-center gap-3">
-                  <span className={`text-xs font-black uppercase tracking-wider ${sec.badgeText} px-3 py-1 rounded-xl bg-white border border-current shadow-2xs`}>
-                    {sec.badge}
-                  </span>
-                  <h3 className="text-base font-extrabold text-[#363636]">{sec.nombre}</h3>
+          {SECCIONES_PIPELINE.map((sec) => {
+            const isSecCollapsed = !!collapsedParentSections[sec.id];
+            const secOps = filteredOportunidades.filter((o) =>
+              sec.etapas.some((e) => e.id === o.estado_pipeline)
+            );
+
+            return (
+              <div key={sec.id} className="space-y-4">
+                {/* Header de Sección Colapsable */}
+                <div
+                  onClick={() =>
+                    setCollapsedParentSections((prev) => ({
+                      ...prev,
+                      [sec.id]: !prev[sec.id],
+                    }))
+                  }
+                  className="p-4 rounded-lg border border-gray-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs cursor-pointer hover:border-[#F7931F]/60 transition select-none"
+                >
+                  <div className="flex items-center gap-3">
+                    <button type="button" className="text-[#363636] cursor-pointer">
+                      {isSecCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                    </button>
+                    <h3 className="text-base font-extrabold text-[#363636]">{sec.nombre}</h3>
+                    <span className="text-xs font-mono font-bold px-2 py-0.5 border border-gray-200 bg-gray-50 text-[#363636]">
+                      {secOps.length} {secOps.length === 1 ? 'oportunidad' : 'oportunidades'}
+                    </span>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-600 font-medium">{sec.descripcion}</p>
-              </div>
 
-              {/* Tablas por etapa dentro de esta sección */}
-              <div className="space-y-4">
-                {sec.etapas.map((col) => {
-                  const isCollapsed = !!collapsedSections[col.id];
-                  const rawOps = oportunidades.filter((o) => o.estado_pipeline === col.id);
-                  const colOps = sortOpportunities(rawOps);
-                  const isTargetColumn = dragOverColumn === col.id;
+                {/* Tablas por etapa dentro de esta sección */}
+                {!isSecCollapsed && (
+                  <div className="space-y-4">
+                    {sec.etapas.map((col) => {
+                      const isCollapsed = !!collapsedSections[col.id];
+                      const rawOps = filteredOportunidades.filter((o) => o.estado_pipeline === col.id);
+                      const colOps = sortOpportunities(rawOps);
+                      const isTargetColumn = dragOverColumn === col.id;
 
-                  return (
-                    <div
-                      key={col.id}
-                      onDragOver={(e) => handleDragOver(e, col.id)}
-                      onDrop={(e) => handleDrop(e, col.id)}
-                      className={`space-y-2 mb-4 p-2 rounded-3xl transition-all duration-200 ${
-                        isTargetColumn
-                          ? 'bg-orange-100/60 border-2 border-[#F7931F] ring-2 ring-[#F7931F]/30 scale-[1.005]'
-                          : 'border border-transparent'
-                      }`}
-                    >
-                      <div
-                        onClick={() =>
-                          setCollapsedSections((prev) => ({
-                            ...prev,
-                            [col.id]: !prev[col.id],
-                          }))
-                        }
-                        className="flex items-center justify-between py-2 px-1 border-b border-gray-200/80 cursor-pointer select-none transition group"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <button type="button" className="text-gray-400 group-hover:text-[#363636] transition">
-                            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                          </button>
-
-                          <span className={`px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 ${col.bg} ${col.color} border border-transparent shadow-2xs`}>
-                            <div className="w-2 h-2 rounded-full border border-current shadow-xs" />
-                            <span>{col.label}</span>
-                          </span>
-
-                          <span className="font-mono text-xs text-gray-500 font-extrabold bg-gray-100 px-2 py-0.5 rounded-full border border-gray-200">
-                            {rawOps.length}
-                          </span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowNewOpModal(true);
-                          }}
-                          className="text-xs font-bold text-gray-500 hover:text-[#F7931F] transition flex items-center gap-1"
+                      return (
+                        <div
+                          key={col.id}
+                          onDragOver={(e) => handleDragOver(e, col.id)}
+                          onDrop={(e) => handleDrop(e, col.id)}
+                          className={`space-y-2 mb-4 p-2 rounded-lg transition-all duration-200 ${
+                            isTargetColumn
+                              ? 'bg-orange-100/60 border-2 border-[#F7931F] ring-2 ring-[#F7931F]/30 scale-[1.005]'
+                              : 'border border-transparent'
+                          }`}
                         >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Agregar Oportunidad</span>
-                        </button>
-                      </div>
+                          <div
+                            onClick={() =>
+                              setCollapsedSections((prev) => ({
+                                ...prev,
+                                [col.id]: !prev[col.id],
+                              }))
+                            }
+                            className="flex items-center justify-between py-2 px-1 border-b border-gray-200/80 cursor-pointer select-none transition group"
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <button type="button" className="text-gray-400 group-hover:text-[#363636] transition cursor-pointer">
+                                {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                              </button>
 
-                      {!isCollapsed && (
-                        <div>
-                          {colOps.length === 0 ? (
-                            <div className="py-4 px-2 text-xs text-gray-400 italic">
-                              No hay oportunidades en esta etapa.
+                              <span className={`px-2.5 py-1 text-xs font-black uppercase tracking-wider flex items-center gap-2 ${col.bg} ${col.color} border border-transparent shadow-2xs`}>
+                                <div className="w-2 h-2 rounded-full border border-current shadow-xs" />
+                                <span>{col.label}</span>
+                              </span>
+
+                              <span className="font-mono text-xs text-gray-500 font-extrabold bg-gray-100 px-2 py-0.5 border border-gray-200">
+                                {rawOps.length}
+                              </span>
                             </div>
-                          ) : (
-                            <div className="overflow-x-auto bg-white rounded-2xl border border-gray-200/80 shadow-xs">
-                              <table className="w-full text-left text-xs min-w-[1000px] table-fixed border-collapse">
-                                <thead className="text-gray-500 uppercase text-xs font-extrabold border-b border-gray-200 bg-gray-50/60">
-                                  <tr>
-                                    <th className="py-3 px-2 w-8 text-center align-middle"></th>
-                                    <th
-                                      style={{ width: `${columnWidths.codigo}px` }}
-                                      className="py-3 px-3 text-left text-xs font-extrabold uppercase tracking-wider align-middle relative group border-r border-gray-200/50"
-                                    >
-                                      <span>Código</span>
-                                      <div
-                                        onMouseDown={(e) => handleMouseDownResize('codigo', e)}
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#F7931F] active:bg-[#F7931F] z-10 transition opacity-0 group-hover:opacity-100"
-                                        title="Arrastrar para cambiar ancho de columna"
-                                      />
-                                    </th>
-                                    {renderSortHeader('Oportunidad / Nombre', 'titulo', 'titulo', 'left')}
-                                    {renderSortHeader('Cliente', 'cliente', 'cliente', 'left')}
-                                    {renderSortHeader('Tipo Venta', 'tipo_venta', 'tipo_venta', 'left')}
-                                    {renderSortHeader('Prioridad', 'prioridad', 'prioridad', 'left')}
-                                    {renderSortHeader('Fecha Inicio', 'fecha_inicio', 'fecha_inicio', 'left')}
-                                    {renderSortHeader('Fecha Límite', 'fecha_limite', 'fecha_limite', 'left')}
-                                    {renderSortHeader('Monto Total', 'monto', 'monto', 'right')}
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100 font-semibold text-[#363636]">
-                                  {colOps.map((op) => {
-                                    const montoTotal = getOportunidadTotalValue(op);
-                                    const isBeingDragged = draggedOpId === op.id;
 
-                                    return (
-                                      <tr
-                                        key={op.id}
-                                        draggable={true}
-                                        onDragStart={(e) => handleDragStart(e, op.id)}
-                                        onDragEnd={handleDragEnd}
-                                        onClick={() => handleOpenOportunidad(op)}
-                                        className={`hover:bg-orange-50/40 transition group cursor-grab active:cursor-grabbing text-xs ${
-                                          isBeingDragged ? 'opacity-40 bg-amber-50 border-dashed border-[#F7931F]' : ''
-                                        }`}
-                                      >
-                                        <td className="py-3 px-2 w-10 text-center align-middle" onClick={(e) => e.stopPropagation()}>
-                                          <div className="flex items-center justify-center gap-1">
-                                            <GripVertical className="w-3.5 h-3.5 text-gray-400 opacity-50 group-hover:opacity-100 transition shrink-0 cursor-grab" />
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                const rect = e.currentTarget.getBoundingClientRect();
-                                                setStageMenuPos({
-                                                  opId: op.id,
-                                                  top: rect.bottom + 4,
-                                                  left: rect.left,
-                                                });
-                                              }}
-                                              className={`w-3.5 h-3.5 rounded-full border shadow-2xs transition hover:scale-125 cursor-pointer ${getStageDotColor(op.estado_pipeline)}`}
-                                              title="Hacer clic para cambiar el estado del pipeline"
-                                            />
-                                          </div>
-                                        </td>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowNewOpModal(true);
+                              }}
+                              className="text-xs font-bold text-gray-500 hover:text-[#F7931F] transition flex items-center gap-1 cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Agregar Oportunidad</span>
+                            </button>
+                          </div>
+
+                          {!isCollapsed && (
+                            <div>
+                              {colOps.length === 0 ? (
+                                <div className="py-4 px-2 text-xs text-gray-400 italic">
+                                  No hay oportunidades en esta etapa.
+                                </div>
+                              ) : (
+                                <div className="overflow-x-auto bg-white rounded-lg border border-gray-200/80 shadow-xs">
+                                  <table className="w-full text-left text-xs min-w-[1000px] table-fixed border-collapse">
+                                    <thead className="text-gray-500 uppercase text-xs font-extrabold border-b border-gray-200 bg-gray-50/60">
+                                      <tr>
+                                        <th className="py-3 px-2 w-10 text-center align-middle"></th>
+                                        <th
+                                          style={{ width: `${columnWidths.codigo}px` }}
+                                          className="py-3 px-3 text-left text-xs font-extrabold uppercase tracking-wider align-middle relative group border-r border-gray-200/50"
+                                        >
+                                          <span>Código</span>
+                                          <div
+                                            onMouseDown={(e) => handleMouseDownResize('codigo', e)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#F7931F] active:bg-[#F7931F] z-10 transition opacity-0 group-hover:opacity-100"
+                                            title="Arrastrar para cambiar ancho de columna"
+                                          />
+                                        </th>
+                                        {renderSortHeader('Oportunidad / Nombre', 'titulo', 'titulo', 'left')}
+                                        {renderSortHeader('Cliente', 'cliente', 'cliente', 'left')}
+                                        {renderSortHeader('Tipo Venta', 'tipo_venta', 'tipo_venta', 'left')}
+                                        {renderSortHeader('Prioridad', 'prioridad', 'prioridad', 'left')}
+                                        {renderSortHeader('Fecha Inicio', 'fecha_inicio', 'fecha_inicio', 'left')}
+                                        {renderSortHeader('Fecha Límite', 'fecha_limite', 'fecha_limite', 'left')}
+                                        {renderSortHeader('Monto Total', 'monto', 'monto', 'right')}
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 font-semibold text-[#363636]">
+                                      {colOps.map((op) => {
+                                        const montoTotal = getOportunidadTotalValue(op);
+                                        const isBeingDragged = draggedOpId === op.id;
+
+                                        return (
+                                          <tr
+                                            key={op.id}
+                                            draggable={true}
+                                            onDragStart={(e) => handleDragStart(e, op.id)}
+                                            onDragEnd={handleDragEnd}
+                                            onClick={() => handleOpenOportunidad(op)}
+                                            className={`hover:bg-orange-50/40 transition group cursor-grab active:cursor-grabbing text-xs ${
+                                              isBeingDragged ? 'opacity-40 bg-amber-50 border-dashed border-[#F7931F]' : ''
+                                            }`}
+                                          >
+                                            <td className="py-3 px-2 w-10 text-center align-middle" onClick={(e) => e.stopPropagation()}>
+                                              <div className="flex items-center justify-center gap-1">
+                                                <GripVertical className="w-3.5 h-3.5 text-gray-400 opacity-50 group-hover:opacity-100 transition shrink-0 cursor-grab" />
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                    setStageMenuPos({
+                                                      opId: op.id,
+                                                      top: rect.bottom + 4,
+                                                      left: rect.left,
+                                                    });
+                                                  }}
+                                                  className={`w-3.5 h-3.5 rounded-full border shadow-2xs transition hover:scale-110 cursor-pointer ${getStageDotColor(op.estado_pipeline)}`}
+                                                  title="Hacer clic para cambiar el estado del pipeline"
+                                                />
+                                              </div>
+                                            </td>
 
                                         <td style={{ width: `${columnWidths.codigo}px` }} className="py-3 px-3 font-mono font-bold text-gray-600 text-xs align-middle truncate">
                                           {op.codigo}
@@ -1923,9 +2859,11 @@ export default function PipelineVentasPage() {
                     </div>
                   );
                 })}
-              </div>
-            </div>
-          ))}
+	              </div>
+	            )}
+	            </div>
+	          );
+	        })}
         </div>
       )}
 
@@ -1946,7 +2884,7 @@ export default function PipelineVentasPage() {
               style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${modalLeftColRatio}%` : '100%' }}
               className="flex flex-col h-full overflow-hidden pr-3 shrink-0"
             >
-              {/* Header Superior con Breadcrumb, Selector de Estado de Pipeline y Botón Eliminar Oportunidad */}
+              {/* Header Superior con Breadcrumb y Botón Eliminar Oportunidad */}
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 pb-3 text-sm shrink-0">
                 <div className="flex items-center gap-2.5 text-gray-300 font-medium">
                   <Building className="w-4 h-4 text-[#F7931F]" />
@@ -1958,26 +2896,6 @@ export default function PipelineVentasPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <label className="text-gray-300 font-extrabold text-xs uppercase tracking-wider">Etapa Pipeline:</label>
-                  <select
-                    value={selectedOp.estado_pipeline}
-                    onChange={async (e) => {
-                      const newStage = e.target.value as EstadoPipeline;
-                      await moveOportunidadToState(selectedOp.id, newStage);
-                    }}
-                    className="bg-[#27272a] text-[#F7931F] border border-[#F7931F]/80 rounded-xl px-3 py-1.5 text-xs font-black uppercase cursor-pointer focus:outline-none shadow-sm"
-                  >
-                    {SECCIONES_PIPELINE.map((sec) => (
-                      <optgroup key={sec.id} label={sec.nombre}>
-                        {sec.etapas.map((st) => (
-                          <option key={st.id} value={st.id}>
-                            {st.label}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-
                   <button
                     onClick={() => setOpToDelete(selectedOp)}
                     className="px-3 py-1.5 bg-red-500/20 hover:bg-red-600 text-red-300 hover:text-white rounded-xl transition border border-red-500/30 font-bold text-xs flex items-center gap-1.5"
@@ -2023,13 +2941,36 @@ export default function PipelineVentasPage() {
                 )}
               </div>
 
-              {/* Strip de Datos Clave Editables Directamente: Prioridad y Tipo Venta (Izquierda) | Fechas (Derecha) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-3 px-4 bg-[#222226] rounded-2xl border border-gray-800 text-xs text-gray-300 mb-4 shadow-sm">
-                {/* Columna Izquierda: Tipo de Venta y Prioridad */}
-                <div className="flex flex-wrap items-center gap-3">
-                  {/* Tipo Venta */}
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-gray-400 uppercase text-[11px]">Tipo Venta:</span>
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-2 text-sm">
+              {/* Strip de Datos Clave Editables Directamente: Etapa, Tipo de Venta, Prioridad, Vendedor, Fechas */}
+              <div className="p-3.5 bg-[#222226] rounded-2xl border border-gray-800 text-xs text-gray-300 mb-4 shadow-sm space-y-2.5">
+                <div className="grid gap-3 items-start [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+                  {/* 1. Etapa del Pipeline */}
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-gray-400 text-xs">Etapa del pipeline:</span>
+                    <select
+                      value={selectedOp.estado_pipeline}
+                      onChange={async (e) => {
+                        const newStage = e.target.value as EstadoPipeline;
+                        await moveOportunidadToState(selectedOp.id, newStage);
+                      }}
+                      className="bg-[#27272a] text-[#F7931F] border border-[#F7931F]/70 rounded-xl px-2.5 py-1.5 text-xs font-black cursor-pointer focus:outline-none shadow-xs truncate"
+                    >
+                      {SECCIONES_PIPELINE.map((sec) => (
+                        <optgroup key={sec.id} label={sec.nombre}>
+                          {sec.etapas.map((st) => (
+                            <option key={st.id} value={st.id}>
+                              {st.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 2. Tipo de Venta */}
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-gray-400 text-xs">Tipo de venta:</span>
                     <select
                       value={selectedOp.tipo_venta || 'Instalación'}
                       onChange={async (e) => {
@@ -2037,7 +2978,7 @@ export default function PipelineVentasPage() {
                         updateOportunidadField(selectedOp.id, 'tipo_venta', newTipo);
                         await addOportunidadActividad(selectedOp.id, `Tipo de venta cambiado a "${newTipo}" desde el detalle.`);
                       }}
-                      className="bg-[#27272a] text-[#F7931F] border border-gray-700 rounded-xl px-2.5 py-1 font-extrabold uppercase focus:outline-none cursor-pointer text-xs"
+                      className="bg-[#27272a] text-[#F7931F] border border-gray-700 rounded-xl px-2.5 py-1.5 font-extrabold focus:outline-none cursor-pointer text-xs truncate"
                     >
                       <option value="Instalación">Instalación</option>
                       <option value="Suministro">Suministro</option>
@@ -2045,30 +2986,89 @@ export default function PipelineVentasPage() {
                     </select>
                   </div>
 
-                  {/* Prioridad */}
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-gray-400 uppercase text-[11px]">Prioridad:</span>
+                  {/* 3. Origen */}
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-gray-400 text-xs">Origen:</span>
+                    <input
+                      type="text"
+                      defaultValue={selectedOp.origen || ''}
+                      onBlur={async (e) => {
+                        const origen = e.target.value.trim();
+                        if ((selectedOp.origen || '') === origen) return;
+                        updateOportunidadField(selectedOp.id, 'origen', origen || null);
+                        await addOportunidadActividad(
+                          selectedOp.id,
+                          origen ? `Origen actualizado a "${origen}".` : 'Origen de la oportunidad eliminado.'
+                        );
+                      }}
+                      placeholder="Ej: WhatsApp, referido, web..."
+                      className="bg-[#27272a] text-gray-200 border border-gray-700 rounded-xl px-2.5 py-1.5 font-semibold focus:outline-none focus:border-[#F7931F] text-xs"
+                    />
+                  </div>
+
+                  {/* 4. Sólo material o instalación */}
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-gray-400 text-xs">Requerimiento:</span>
+                    <select
+                      value={selectedOp.modalidad_requerimiento || 'instalacion'}
+                      onChange={async (e) => {
+                        const value = e.target.value as 'solo_material' | 'instalacion';
+                        updateOportunidadField(selectedOp.id, 'modalidad_requerimiento', value);
+                        await addOportunidadActividad(
+                          selectedOp.id,
+                          `Requerimiento actualizado a "${value === 'solo_material' ? 'Sólo material' : 'Instalación'}".`
+                        );
+                      }}
+                      className="bg-[#27272a] text-[#F7931F] border border-gray-700 rounded-xl px-2.5 py-1.5 font-extrabold focus:outline-none cursor-pointer text-xs"
+                    >
+                      <option value="solo_material">Sólo material</option>
+                      <option value="instalacion">Instalación</option>
+                    </select>
+                  </div>
+
+                  {/* 5. Prioridad */}
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-gray-400 text-xs">Prioridad:</span>
                     <select
                       value={selectedOp.prioridad || 'normal'}
                       onChange={async (e) => {
                         const newPrio = e.target.value as 'normal' | 'alta' | 'urgente';
                         updateOportunidadField(selectedOp.id, 'prioridad', newPrio);
-                        await addOportunidadActividad(selectedOp.id, `Prioridad cambiada a "${newPrio.toUpperCase()}" desde el detalle.`);
+                        await addOportunidadActividad(selectedOp.id, `Prioridad cambiada a "${newPrio}" desde el detalle.`);
                       }}
-                      className="bg-[#27272a] text-gray-200 border border-gray-700 rounded-xl px-2.5 py-1 font-extrabold uppercase focus:outline-none cursor-pointer text-xs"
+                      className="bg-[#27272a] text-gray-200 border border-gray-700 rounded-xl px-2.5 py-1.5 font-extrabold focus:outline-none cursor-pointer text-xs"
                     >
                       <option value="normal">Normal</option>
                       <option value="alta">Alta</option>
                       <option value="urgente">Urgente</option>
                     </select>
                   </div>
-                </div>
 
-                {/* Columna Derecha: Fechas (Fecha Inicio & Fecha Límite) */}
-                <div className="flex flex-wrap items-center justify-start md:justify-end gap-3">
-                  {/* Fecha Inicio */}
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-gray-400 uppercase text-[11px]">Fecha Inicio:</span>
+                  {/* 6. Vendedor Asignado */}
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-gray-400 text-xs">Vendedor:</span>
+                    <select
+                      value={selectedOp.asignado_a || ''}
+                      onChange={async (e) => {
+                        const newUserId = e.target.value || null;
+                        updateOportunidadField(selectedOp.id, 'asignado_a', newUserId);
+                        const userObj = usuariosApp.find((u) => u.id === newUserId);
+                        await addOportunidadActividad(selectedOp.id, `Vendedor asignado actualizado a "${userObj?.nombre || 'Sin asignar'}".`);
+                      }}
+                      className="bg-[#27272a] text-[#F7931F] border border-gray-700 rounded-xl px-2.5 py-1.5 font-bold focus:outline-none cursor-pointer text-xs truncate"
+                    >
+                      <option value="">-- Sin asignar --</option>
+                      {usuariosApp.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 7. Fecha de Inicio */}
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-gray-400 text-xs">Fecha de inicio:</span>
                     <input
                       type="date"
                       value={selectedOp.fecha_inicio || ''}
@@ -2077,13 +3077,14 @@ export default function PipelineVentasPage() {
                         updateOportunidadField(selectedOp.id, 'fecha_inicio', newDate);
                         await addOportunidadActividad(selectedOp.id, `Fecha de inicio actualizada a ${newDate} desde el detalle.`);
                       }}
-                      className="bg-[#27272a] text-gray-200 border border-gray-700 rounded-xl px-2 py-1 font-mono font-semibold focus:outline-none cursor-pointer text-xs"
-                    />
+                      className="bg-[#27272a] text-gray-200 border border-gray-700 rounded-xl px-2 py-1.5 font-mono font-semibold focus:outline-none cursor-pointer text-xs"
+                    >
+                    </input>
                   </div>
 
-                  {/* Fecha Límite */}
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-gray-400 uppercase text-[11px]">Fecha Límite:</span>
+                  {/* 8. Fecha Límite */}
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-gray-400 text-xs">Fecha límite:</span>
                     <input
                       type="date"
                       value={selectedOp.fecha_limite || ''}
@@ -2092,14 +3093,131 @@ export default function PipelineVentasPage() {
                         updateOportunidadField(selectedOp.id, 'fecha_limite', newDate);
                         await addOportunidadActividad(selectedOp.id, `Fecha límite actualizada a ${newDate} desde el detalle.`);
                       }}
-                      className="bg-[#27272a] text-amber-400 border border-amber-500/40 rounded-xl px-2 py-1 font-mono font-bold focus:outline-none cursor-pointer text-xs"
-                    />
+                      className="bg-[#27272a] text-amber-400 border border-amber-500/40 rounded-xl px-2 py-1.5 font-mono font-bold focus:outline-none cursor-pointer text-xs"
+                    >
+                    </input>
                   </div>
                 </div>
               </div>
 
-              {/* Listas Desplegables (Accordions) con Scroll Independiente */}
-              <div className="flex-1 overflow-y-auto space-y-4 pr-2 text-sm">
+              {(() => {
+                const activeClient = clientes.find((c) => c.id === selectedOp.cliente_id) || selectedOp.cliente;
+                const ejecutivoCliente = usuariosApp.find((u) => u.id === (activeClient?.usuario_id || selectedOp.asignado_a));
+                const currentPipelineSection = SECCIONES_PIPELINE.find((sec) =>
+                  sec.etapas.some((stage) => stage.id === selectedOp.estado_pipeline)
+                );
+                const currentPipelineStage = currentPipelineSection?.etapas.find(
+                  (stage) => stage.id === selectedOp.estado_pipeline
+                );
+
+                return (
+                  <div className="mb-4 bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
+                    <div className="w-full p-3.5 bg-[#27272a] text-[#F7931F] font-extrabold text-sm uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
+                      <span className="flex items-center gap-2.5">
+                        <User className="w-4 h-4 text-[#F7931F]" />
+                        <span>Información del cliente</span>
+                      </span>
+                      {selectedOp.cliente_id && (
+                        <Link
+                          href={`/clientes/${selectedOp.cliente_id}`}
+                          className="text-xs font-bold bg-[#F7931F]/20 hover:bg-[#F7931F] text-[#F7931F] hover:text-white px-3 py-1.5 rounded-xl transition normal-case"
+                        >
+                          Editar ficha del cliente
+                        </Link>
+                      )}
+                    </div>
+
+                    <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-300 text-sm">
+                      <div className="md:col-span-2 bg-[#18181b] border border-gray-800 rounded-2xl p-3.5 grid grid-cols-1 sm:grid-cols-[1fr_1fr_2fr] gap-3 items-end">
+                        <div>
+                          <span className="text-gray-400 font-semibold text-xs block mb-1">Área actual</span>
+                          <span className="text-white text-sm font-black block">
+                            {currentPipelineSection?.nombre || 'Sin área definida'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 font-semibold text-xs block mb-1">Etapa actual</span>
+                          <span className="text-[#F7931F] text-sm font-black block">
+                            {currentPipelineStage?.label || selectedOp.estado_pipeline}
+                          </span>
+                        </div>
+                        <div>
+                          <label className="text-gray-400 font-semibold text-xs block mb-1">
+                            Cambiar etapa de la oportunidad
+                          </label>
+                          <select
+                            value={selectedOp.estado_pipeline}
+                            onChange={async (e) => {
+                              const newStage = e.target.value as EstadoPipeline;
+                              await moveOportunidadToState(selectedOp.id, newStage);
+                            }}
+                            className="w-full bg-[#27272a] text-white border border-[#F7931F]/60 rounded-xl px-3 py-2 text-xs font-extrabold focus:outline-none focus:border-[#F7931F] cursor-pointer"
+                          >
+                            {SECCIONES_PIPELINE.map((sec) => (
+                              <optgroup key={sec.id} label={sec.nombre}>
+                                {sec.etapas.map((st) => (
+                                  <option key={st.id} value={st.id}>
+                                    {st.label}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-gray-400 font-semibold text-xs block mb-1">Razón social / Nombre</span>
+                        <strong className="text-white text-base block font-bold">{activeClient?.nombre || 'Hormiglass Cliente'}</strong>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 font-semibold text-xs block mb-1">Encargado del cliente</span>
+                        <span className="text-white text-base block font-bold">{ejecutivoCliente?.nombre || 'Sin encargado asignado'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 font-semibold text-xs block mb-1">RUT registrado</span>
+                        <span className="font-mono text-amber-400 font-bold text-sm block">{activeClient?.rut || 'Sin RUT'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 font-semibold text-xs block mb-1">Teléfono</span>
+                        <span className="flex items-center gap-1.5 font-bold text-white text-sm">
+                          <Phone className="w-4 h-4 text-[#F7931F]" />
+                          {activeClient?.telefono || 'No indicado'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 font-semibold text-xs block mb-1">Dirección de despacho / Obra</span>
+                        <span className="text-white text-sm font-bold block" title={activeClient?.direccion || selectedOp.direccion || 'Sin dirección'}>
+                          {activeClient?.direccion || selectedOp.direccion || 'Sin dirección'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 font-semibold text-xs block mb-1">Comuna / Región</span>
+                        <span className="text-white text-sm font-bold block">
+                          {[activeClient?.comuna || selectedOp.comuna, activeClient?.region || selectedOp.region || 'Región Metropolitana'].filter(Boolean).join(', ')}
+                        </span>
+                      </div>
+                      <div className="md:col-span-2">
+                        <span className="text-gray-400 font-semibold text-xs block mb-1">Correos electrónicos</span>
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                          <span className="bg-[#18181b] px-3 py-1.5 rounded-xl border border-gray-700 text-white font-mono text-xs flex items-center gap-1.5">
+                            <Mail className="w-3.5 h-3.5 text-[#F7931F]" />
+                            {activeClient?.correo || 'Sin correo principal'}
+                          </span>
+                          {activeClient?.correos_secundarios?.map((sec, idx) => (
+                            <span key={idx} className="bg-[#18181b] px-3 py-1.5 rounded-xl border border-gray-700 text-gray-300 font-mono text-xs flex items-center gap-1.5">
+                              <Mail className="w-3.5 h-3.5 text-gray-400" />
+                              {sec}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Listas Desplegables (Accordions) */}
                 {/* Banner Header: SECCIÓN 1: ÁREA COMERCIAL & VENTAS (Contraíble con Jerarquía) */}
                 <button
                   type="button"
@@ -2108,7 +3226,7 @@ export default function PipelineVentasPage() {
                 >
                   <div className="flex items-center gap-3">
                     <TrendingUp className="w-5 h-5 text-[#F7931F] group-hover:scale-110 transition-transform" />
-                    <span>Sección 1: Área Comercial & Ventas</span>
+                    <span>Área Comercial & Ventas</span>
                   </div>
                   <div className="flex items-center gap-2">
                     {areaExpanded.comercial ? (
@@ -2122,92 +3240,7 @@ export default function PipelineVentasPage() {
                 {areaExpanded.comercial && (
                   <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-amber-500/40 space-y-3.5 my-2.5 animate-fadeIn relative">
 
-                {/* Accordion 1: Contacto del Cliente */}
-                <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
-                  <button
-                    onClick={() => setOpenSections({ ...openSections, contacto: !openSections.contacto })}
-                    className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] text-[#F7931F] font-extrabold text-xs uppercase tracking-wider flex items-center justify-between border-b border-gray-800 transition"
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <User className="w-4 h-4 text-[#F7931F]" />
-                      <span>Contacto del Cliente</span>
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {selectedOp.cliente_id && (
-                        <Link
-                          href={`/clientes/${selectedOp.cliente_id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-[10px] font-bold bg-[#F7931F]/20 hover:bg-[#F7931F] text-[#F7931F] hover:text-white px-2.5 py-1 rounded-xl transition normal-case"
-                        >
-                          Editar Ficha del Cliente
-                        </Link>
-                      )}
-                      {openSections.contacto ? <ChevronUp className="w-4 h-4 text-[#F7931F]" /> : <ChevronDown className="w-4 h-4 text-[#F7931F]" />}
-                    </div>
-                  </button>
-
-                  {openSections.contacto && (() => {
-                    const activeClient = clientes.find((c) => c.id === selectedOp.cliente_id) || selectedOp.cliente;
-
-                    return (
-                      <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4 text-gray-300 animate-fadeIn">
-                        <div>
-                          <span className="text-gray-400 font-semibold text-xs block mb-1">Razón Social / Nombre:</span>
-                          <strong className="text-white text-sm block font-bold">{activeClient?.nombre || 'Hormiglass Cliente'}</strong>
-                        </div>
-                        <div>
-                          <span className="text-gray-400 font-semibold text-xs block mb-1">RUT Registrado:</span>
-                          <span className="font-mono text-amber-400 font-bold text-sm block">{activeClient?.rut || 'Sin RUT'}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-400 font-semibold text-xs block mb-1">Teléfono:</span>
-                          <span className="flex items-center gap-1.5 font-bold text-white text-sm">
-                            <Phone className="w-3.5 h-3.5 text-[#F7931F]" />
-                            {activeClient?.telefono || 'No indicado'}
-                          </span>
-                        </div>
-
-                        {/* Ubicación Desglosada: Dirección, Comuna, Región */}
-                        <div>
-                          <span className="text-gray-400 font-semibold text-xs block mb-1">Dirección de Despacho / Obra:</span>
-                          <span className="text-white text-xs font-bold block truncate" title={activeClient?.direccion || selectedOp.direccion || 'Sin dirección'}>
-                            {activeClient?.direccion || selectedOp.direccion || 'Sin dirección'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-400 font-semibold text-xs block mb-1">Comuna:</span>
-                          <span className="text-amber-400 text-xs font-bold block">
-                            {activeClient?.comuna || selectedOp.comuna || 'Sin comuna'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-400 font-semibold text-xs block mb-1">Región:</span>
-                          <span className="text-white text-xs font-medium block">
-                            {activeClient?.region || selectedOp.region || 'Región Metropolitana'}
-                          </span>
-                        </div>
-
-                        <div className="md:col-span-3">
-                          <span className="text-gray-400 font-semibold text-xs block mb-1">Correos Electrónicos:</span>
-                          <div className="flex flex-wrap items-center gap-2 mt-1">
-                            <span className="bg-[#18181b] px-3 py-1.5 rounded-xl border border-gray-700 text-white font-mono text-xs flex items-center gap-1.5">
-                              <Mail className="w-3.5 h-3.5 text-[#F7931F]" />
-                              {activeClient?.correo || 'Sin correo principal'}
-                            </span>
-                            {activeClient?.correos_secundarios?.map((sec, idx) => (
-                              <span key={idx} className="bg-[#18181b] px-3 py-1.5 rounded-xl border border-gray-700 text-gray-300 font-mono text-xs flex items-center gap-1.5">
-                                <Mail className="w-3.5 h-3.5 text-gray-400" />
-                                {sec}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {/* Accordion 2: Cotizaciones de la Oportunidad */}
+                {/* Accordion 1: Cotizaciones de la Oportunidad */}
                 <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
                   <button
                     onClick={() => setOpenSections({ ...openSections, productos: !openSections.productos })}
@@ -2571,7 +3604,7 @@ export default function PipelineVentasPage() {
 
                               {abonoErrorMsg && (
                                 <div className="p-3 bg-red-500/20 border border-red-500/40 text-red-300 rounded-xl text-xs font-bold animate-fadeIn">
-                                  ⚠️ {abonoErrorMsg}
+                                  {abonoErrorMsg}
                                 </div>
                               )}
 
@@ -2647,16 +3680,21 @@ export default function PipelineVentasPage() {
 
                                       let publicUrl = '#';
                                       try {
-                                        const fileName = `abono_${Date.now()}_${nuevoAbonoFile.name}`;
-                                        const { data, error } = await supabase.storage.from('documentos').upload(fileName, nuevoAbonoFile);
-                                        if (!error && data) {
-                                          const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(fileName);
-                                          if (urlData) publicUrl = urlData.publicUrl;
-                                        } else {
-                                          publicUrl = URL.createObjectURL(nuevoAbonoFile);
+                                        const cleanFileName = nuevoAbonoFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                                        const fileName = `abonos/${selectedOp.id}/${Date.now()}_${cleanFileName}`;
+                                        const { data, error } = await supabase.storage.from('documentos').upload(fileName, nuevoAbonoFile, {
+                                          contentType: nuevoAbonoFile.type || undefined,
+                                          upsert: false,
+                                        });
+                                        if (error || !data) {
+                                          throw new Error(error?.message || 'Supabase Storage no confirmó la subida.');
                                         }
-                                      } catch {
-                                        publicUrl = URL.createObjectURL(nuevoAbonoFile);
+                                        const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(fileName);
+                                        if (urlData) publicUrl = urlData.publicUrl;
+                                      } catch (err: any) {
+                                        console.error('Error uploading abono comprobante:', err);
+                                        setAbonoErrorMsg(`Error al subir comprobante a Supabase: ${err?.message || 'Error al subir.'}`);
+                                        return;
                                       }
 
                                       const existingComprobantes = selectedOp.comprobantes_pago || [];
@@ -2664,6 +3702,7 @@ export default function PipelineVentasPage() {
                                         id: `abono-${Date.now()}`,
                                         monto: rawVal,
                                         fecha: new Date().toLocaleDateString('es-CL') + ' ' + new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
+                                        fecha_iso: new Date().toISOString(),
                                         nota: nuevoAbonoNota || 'Abono registrado',
                                         creado_por: currentUser?.nombre || 'Vendedor',
                                         comprobante_nombre: nuevoAbonoFile.name,
@@ -2902,6 +3941,214 @@ export default function PipelineVentasPage() {
                   )}
                 </div>
 
+                {/* Accordion 3.5: Antecedentes & Documentación Exigida */}
+                <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
+                  <div className="w-full p-3.5 bg-[#27272a] text-[#F7931F] font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
+                    <button
+                      type="button"
+                      onClick={() => setOpenSections({ ...openSections, antecedentes: !openSections.antecedentes })}
+                      className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-xs uppercase tracking-wider text-[#F7931F]"
+                    >
+                      <FileCheck className="w-4 h-4 text-[#F7931F]" />
+                      <span>Antecedentes & Documentación</span>
+                      {opAntecedentesList.length > 0 && (
+                        <span className="text-xs bg-[#F7931F] text-white font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
+                          {opAntecedentesList.length}
+                        </span>
+                      )}
+                      {openSections.antecedentes ? <ChevronUp className="w-4 h-4 text-[#F7931F]" /> : <ChevronDown className="w-4 h-4 text-[#F7931F]" />}
+                    </button>
+
+                    <div className="flex items-center gap-3">
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedOp.requiere_antecedentes ?? false}
+                          onChange={async (e) => {
+                            const checked = e.target.checked;
+                            updateOportunidadField(selectedOp.id, 'requiere_antecedentes', checked);
+                            if (checked) {
+                              setOpenSections((prev) => ({ ...prev, antecedentes: true }));
+                            }
+                            if (isUUID(selectedOp.id)) {
+                              await supabase
+                                .from('oportunidades')
+                                .update({ requiere_antecedentes: checked })
+                                .eq('id', selectedOp.id);
+                            }
+                            await addOportunidadActividad(
+                              selectedOp.id,
+                              checked
+                                ? 'Se marcó la oportunidad como: Requiere enviar antecedentes (contratos, anexos, docs empresa/trabajador).'
+                                : 'Se desmarcó el requerimiento de antecedentes.'
+                            );
+                          }}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#F7931F]"></div>
+                        <span className="ml-2 text-xs font-bold text-gray-300 capitalize">
+                          {selectedOp.requiere_antecedentes ? 'Requiere Antecedentes' : 'Sin Antecedentes'}
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {openSections.antecedentes && (
+                    <div className="p-5 space-y-4 animate-fadeIn text-xs">
+                      {selectedOp.requiere_antecedentes ? (
+                        <div className="space-y-4">
+                          {/* Formulario de Carga */}
+                          <div className="bg-[#1c1c1f] p-4 rounded-2xl border border-gray-800 space-y-3">
+                            <h5 className="font-extrabold text-white flex items-center gap-2">
+                              <Plus className="w-4 h-4 text-[#F7931F]" />
+                              <span>Adjuntar Nuevo Antecedente</span>
+                            </h5>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div>
+                                <label className="block text-gray-400 font-bold text-[11px] mb-1">
+                                  Tipo de Documento *
+                                </label>
+                                <select
+                                  value={nuevoAntecedenteTipo}
+                                  onChange={(e) => setNuevoAntecedenteTipo(e.target.value as TipoAntecedenteDocumento)}
+                                  className="w-full bg-[#27272a] border border-gray-700 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-[#F7931F]"
+                                >
+                                  <option value="contrato">Contrato de Prestación</option>
+                                  <option value="anexo">Anexo de Contrato</option>
+                                  <option value="documento_empresa">Documento Empresa (RUT, Certificados)</option>
+                                  <option value="documento_trabajador">Documento Trabajador (EPP, Mutual, Cédula)</option>
+                                  <option value="otro">Otro Documento</option>
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-gray-400 font-bold text-[11px] mb-1">
+                                  Nombre / Descripción Documento
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="Ej: Contrato Marco 2026 / Nómina Cuadrilla"
+                                  value={nuevoAntecedenteNombre}
+                                  onChange={(e) => setNuevoAntecedenteNombre(e.target.value)}
+                                  className="w-full bg-[#27272a] border border-gray-700 rounded-xl px-3 py-2 text-white font-medium focus:outline-none focus:border-[#F7931F]"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-gray-400 font-bold text-[11px] mb-1">
+                                  Archivo (PDF, Imagen, Doc) *
+                                </label>
+                                <input
+                                  type="file"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0] || null;
+                                    setNuevoAntecedenteFile(f);
+                                    if (f && !nuevoAntecedenteNombre) {
+                                      setNuevoAntecedenteNombre(f.name);
+                                    }
+                                  }}
+                                  className="w-full text-xs text-gray-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-gray-800 file:text-[#F7931F] hover:file:bg-gray-700 cursor-pointer"
+                                />
+                              </div>
+                            </div>
+
+                            {antecedenteErrorMsg && (
+                              <p className="text-red-400 font-bold text-xs">{antecedenteErrorMsg}</p>
+                            )}
+
+                            <div className="flex justify-end pt-1">
+                              <button
+                                type="button"
+                                disabled={antecedenteUploading || !nuevoAntecedenteFile}
+                                onClick={handleUploadAntecedente}
+                                className="bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                              >
+                                <Paperclip className="w-3.5 h-3.5" />
+                                <span>{antecedenteUploading ? 'Subiendo Documento...' : 'Adjuntar Documento'}</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Listado de Antecedentes */}
+                          <div className="space-y-2">
+                            <h5 className="font-extrabold text-white text-xs">Documentos Adjuntos ({opAntecedentesList.length}):</h5>
+                            {opAntecedentesList.length === 0 ? (
+                              <div className="p-4 text-center text-gray-500 bg-[#1c1c1f] rounded-xl border border-gray-800">
+                                No se han adjuntado documentos de antecedentes todavía.
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                {opAntecedentesList.map((doc) => {
+                                  const tipoLabels: Record<TipoAntecedenteDocumento, { label: string; color: string }> = {
+                                    contrato: { label: 'Contrato', color: 'bg-blue-500/10 text-blue-400 border-blue-500/30' },
+                                    anexo: { label: 'Anexo', color: 'bg-purple-500/10 text-purple-400 border-purple-500/30' },
+                                    documento_empresa: { label: 'Doc. Empresa', color: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+                                    documento_trabajador: { label: 'Doc. Trabajador', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
+                                    otro: { label: 'Otro', color: 'bg-gray-500/10 text-gray-400 border-gray-500/30' },
+                                  };
+                                  const tipoConfig = tipoLabels[doc.tipo] || tipoLabels.otro;
+
+                                  return (
+                                    <div
+                                      key={doc.id}
+                                      className="bg-[#27272a] p-3 rounded-xl border border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <FileCheck className="w-5 h-5 text-[#F7931F] shrink-0" />
+                                        <div>
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-extrabold text-white text-xs">{doc.nombre}</span>
+                                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border uppercase ${tipoConfig.color}`}>
+                                              {tipoConfig.label}
+                                            </span>
+                                          </div>
+                                          <div className="text-[11px] text-gray-400 mt-0.5">
+                                            <span>Subido por: {doc.subido_por || 'Usuario'}</span>
+                                            {doc.fecha_iso && (
+                                              <span className="ml-2 text-gray-500 font-mono">
+                                                {new Date(doc.fecha_iso).toLocaleDateString('es-CL')}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                                        <a
+                                          href={doc.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="px-3 py-1.5 bg-[#18181b] hover:bg-orange-500/20 text-[#F7931F] rounded-xl font-bold border border-gray-700 transition text-xs flex items-center gap-1"
+                                        >
+                                          <Eye className="w-3.5 h-3.5" />
+                                          <span>Ver / Descargar</span>
+                                        </a>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteAntecedente(doc.id)}
+                                          className="p-1.5 bg-[#18181b] hover:bg-red-500/20 text-red-400 rounded-xl border border-gray-700 transition"
+                                          title="Eliminar Antecedente"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-4 text-center text-gray-400 bg-[#1c1c1f] rounded-2xl border border-gray-800">
+                          Esta oportunidad está marcada como <strong>Sin Antecedentes exigidos</strong>. Activa la casilla arriba si el cliente solicita envío de contratos, anexos o documentación técnica de trabajadores.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 {/* Accordion 4: Visita a Terreno */}
                 <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
                   <div className="w-full p-3.5 bg-[#27272a] text-[#F7931F] font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
@@ -2986,15 +4233,18 @@ export default function PipelineVentasPage() {
 
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
-                              <label className="block font-bold text-gray-400 mb-1">Técnico Asignado *</label>
+                              <label className="block font-bold text-gray-400 mb-1">Responsable *</label>
                               <select
                                 value={newVisitaTecnico}
                                 onChange={(e) => setNewVisitaTecnico(e.target.value)}
                                 className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-[#F7931F]"
                               >
-                                <option value="Felipe Valverde">Felipe Valverde</option>
-                                <option value="Marcos Catalán">Marcos Catalán</option>
-                                <option value="Edith Tapia">Edith Tapia</option>
+                                <option value="">Selecciona responsable</option>
+                                {responsablesVisitas.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.nombre}{p.rut ? ` - ${p.rut}` : ''}
+                                  </option>
+                                ))}
                               </select>
                             </div>
 
@@ -3028,9 +4278,9 @@ export default function PipelineVentasPage() {
                                 onChange={(e) => setNewVisitaEstado(e.target.value)}
                                 className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-extrabold uppercase focus:outline-none focus:border-[#F7931F]"
                               >
-                                <option value="programada">📅 Programada</option>
-                                <option value="realizada">✅ Realizada</option>
-                                <option value="cancelada">❌ Cancelada</option>
+                                <option value="programada">Programada</option>
+                                <option value="realizada">Realizada</option>
+                                <option value="cancelada">Cancelada</option>
                               </select>
                             </div>
 
@@ -3057,10 +4307,13 @@ export default function PipelineVentasPage() {
                             <button
                               type="button"
                               onClick={async () => {
-                                if (!selectedOp || !newVisitaFecha) return;
+                                if (!selectedOp || !newVisitaFecha || !newVisitaTecnico) return;
+                                const responsable = getPersonalTerreno(newVisitaTecnico);
+                                const responsableNombre = responsable?.nombre || '';
                                 const payload = {
                                   oportunidad_id: selectedOp.id,
-                                  tecnico_visita: newVisitaTecnico,
+                                  tecnico_visita: responsableNombre,
+                                  tecnico_id: newVisitaTecnico,
                                   fecha_visita_terreno: newVisitaFecha,
                                   hora_visita_terreno: newVisitaHora,
                                   estado_visita: newVisitaEstado,
@@ -3071,13 +4324,14 @@ export default function PipelineVentasPage() {
                                   const { data, error } = await supabase
                                     .from('visitas_terreno')
                                     .insert([payload])
-                                    .select('*')
+                                    .select('*, tecnico:usuarios!tecnico_id(*)')
                                     .single();
 
                                   if (!error && data) {
                                     setOpVisitasList((prev) => [...prev, data as VisitaTerreno]);
                                     updateOportunidadField(selectedOp.id, 'requiere_visita_terreno', true);
-                                    updateOportunidadField(selectedOp.id, 'tecnico_visita', newVisitaTecnico);
+                                    updateOportunidadField(selectedOp.id, 'tecnico_visita', responsableNombre);
+                                    updateOportunidadField(selectedOp.id, 'tecnico_id', newVisitaTecnico);
                                     updateOportunidadField(selectedOp.id, 'fecha_visita_terreno', newVisitaFecha);
                                     updateOportunidadField(selectedOp.id, 'hora_visita_terreno', newVisitaHora);
                                     updateOportunidadField(selectedOp.id, 'estado_visita', newVisitaEstado);
@@ -3087,7 +4341,8 @@ export default function PipelineVentasPage() {
                                       .from('oportunidades')
                                       .update({
                                         requiere_visita_terreno: true,
-                                        tecnico_visita: newVisitaTecnico,
+                                        tecnico_visita: responsableNombre,
+                                        tecnico_id: newVisitaTecnico,
                                         fecha_visita_terreno: newVisitaFecha,
                                         hora_visita_terreno: newVisitaHora,
                                         estado_visita: newVisitaEstado,
@@ -3099,7 +4354,7 @@ export default function PipelineVentasPage() {
                                     setNewVisitaNotas('');
                                     await addOportunidadActividad(
                                       selectedOp.id,
-                                      `Nueva Visita a Terreno programada para ${newVisitaFecha} a las ${newVisitaHora} hrs con el técnico ${newVisitaTecnico}.`
+                                      `Nueva Visita a Terreno programada para ${newVisitaFecha} a las ${newVisitaHora} hrs con ${responsableNombre}.`
                                     );
                                   }
                                 } catch (err) {
@@ -3117,15 +4372,13 @@ export default function PipelineVentasPage() {
                       {/* Lista de Visitas Registradas */}
                       {opVisitasList.length === 0 ? (
                         <div className="py-4 text-center text-gray-500 italic text-xs bg-[#27272a]/50 rounded-2xl border border-gray-800">
-                          No hay visitas a terreno registradas en este momento. Haz clic en <strong>"+ Agregar Visita a Terreno"</strong> para programar una.
+                          No hay visitas a terreno registradas en este momento. Haz clic en <strong>&quot;+ Agregar Visita a Terreno&quot;</strong> para programar una.
                         </div>
                       ) : (
                         <div className="space-y-2.5">
                           {opVisitasList.map((vis, vIdx) => {
-                            const isFelipe = vis.tecnico_visita === 'Felipe Valverde';
-                            const isMarcos = vis.tecnico_visita === 'Marcos Catalán';
-                            const isEdith = vis.tecnico_visita === 'Edith Tapia';
                             const isEditingThis = editingVisitaId === vis.id;
+                            const responsableNombre = getResponsableVisitaNombre(vis);
 
                             if (isEditingThis) {
                               return (
@@ -3140,15 +4393,18 @@ export default function PipelineVentasPage() {
 
                                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <div>
-                                      <label className="block font-bold text-gray-400 mb-1">Técnico Asignado</label>
+                                      <label className="block font-bold text-gray-400 mb-1">Responsable</label>
                                       <select
                                         value={editVisitaTecnico}
                                         onChange={(e) => setEditVisitaTecnico(e.target.value)}
                                         className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-[#F7931F]"
                                       >
-                                        <option value="Felipe Valverde">Felipe Valverde</option>
-                                        <option value="Marcos Catalán">Marcos Catalán</option>
-                                        <option value="Edith Tapia">Edith Tapia</option>
+                                        <option value="">Selecciona responsable</option>
+                                        {responsablesVisitas.map((p) => (
+                                          <option key={p.id} value={p.id}>
+                                            {p.nombre}{p.rut ? ` - ${p.rut}` : ''}
+                                          </option>
+                                        ))}
                                       </select>
                                     </div>
 
@@ -3181,9 +4437,9 @@ export default function PipelineVentasPage() {
                                         onChange={(e) => setEditVisitaEstado(e.target.value)}
                                         className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-extrabold uppercase focus:outline-none focus:border-[#F7931F]"
                                       >
-                                        <option value="programada">📅 Programada</option>
-                                        <option value="realizada">✅ Realizada</option>
-                                        <option value="cancelada">❌ Cancelada</option>
+                                        <option value="programada">Programada</option>
+                                        <option value="realizada">Realizada</option>
+                                        <option value="cancelada">Cancelada</option>
                                       </select>
                                     </div>
 
@@ -3209,9 +4465,13 @@ export default function PipelineVentasPage() {
                                     <button
                                       type="button"
                                       onClick={async () => {
+                                        const responsable = getPersonalTerreno(editVisitaTecnico);
+                                        const editResponsableNombre = responsable?.nombre || vis.tecnico_visita || '';
                                         const updatedVis = {
                                           ...vis,
-                                          tecnico_visita: editVisitaTecnico,
+                                          tecnico_visita: editResponsableNombre,
+                                          tecnico_id: editVisitaTecnico || null,
+                                          tecnico: responsable,
                                           fecha_visita_terreno: editVisitaFecha,
                                           hora_visita_terreno: editVisitaHora,
                                           estado_visita: editVisitaEstado,
@@ -3228,7 +4488,8 @@ export default function PipelineVentasPage() {
                                             await supabase
                                               .from('visitas_terreno')
                                               .update({
-                                                tecnico_visita: editVisitaTecnico,
+                                                tecnico_visita: editResponsableNombre,
+                                                tecnico_id: editVisitaTecnico || null,
                                                 fecha_visita_terreno: editVisitaFecha,
                                                 hora_visita_terreno: editVisitaHora,
                                                 estado_visita: editVisitaEstado,
@@ -3239,7 +4500,8 @@ export default function PipelineVentasPage() {
                                             await supabase
                                               .from('oportunidades')
                                               .update({
-                                                tecnico_visita: editVisitaTecnico,
+                                                tecnico_visita: editResponsableNombre,
+                                                tecnico_id: editVisitaTecnico || null,
                                                 fecha_visita_terreno: editVisitaFecha,
                                                 hora_visita_terreno: editVisitaHora,
                                                 estado_visita: editVisitaEstado,
@@ -3250,7 +4512,7 @@ export default function PipelineVentasPage() {
 
                                           await addOportunidadActividad(
                                             selectedOp.id,
-                                            `Visita a terreno actualizada: ${editVisitaFecha} (${editVisitaTecnico}).`
+                                            `Visita a terreno actualizada: ${editVisitaFecha} (${editResponsableNombre}).`
                                           );
                                         } catch (err) {
                                           console.error('Error updating visita:', err);
@@ -3268,36 +4530,20 @@ export default function PipelineVentasPage() {
                             return (
                               <div
                                 key={vis.id || vIdx}
-                                className="bg-[#27272a] p-3.5 rounded-2xl border border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-gray-700 transition"
+                                className="bg-[#27272a] p-3.5 rounded-2xl border border-gray-800 flex flex-col gap-3 hover:border-gray-700 transition"
                               >
-                                <div className="space-y-1">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
                                   <div className="flex flex-wrap items-center gap-2">
-                                    <span
-                                      className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
-                                        isFelipe
-                                          ? 'bg-blue-900/40 text-blue-300 border-blue-700'
-                                          : isMarcos
-                                          ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700'
-                                          : isEdith
-                                          ? 'bg-purple-900/40 text-purple-300 border-purple-700'
-                                          : 'bg-orange-900/40 text-orange-300 border-orange-700'
-                                      }`}
-                                    >
-                                      {vis.tecnico_visita || 'Técnico'}
+                                    <span className="text-[11px] font-black uppercase tracking-wider px-2 py-1 rounded-md bg-orange-950 text-orange-300 border border-orange-800">
+                                      {responsableNombre}
                                     </span>
 
-                                    <span className="font-mono text-gray-300 font-bold flex items-center gap-1">
-                                      <Calendar className="w-3.5 h-3.5 text-[#F7931F]" />
-                                      {vis.fecha_visita_terreno}
-                                    </span>
-
-                                    <span className="font-mono text-gray-400 font-semibold flex items-center gap-1">
-                                      <Clock className="w-3.5 h-3.5 text-gray-500" />
-                                      {vis.hora_visita_terreno || '09:00'} hrs
+                                    <span className="text-[11px] font-black px-2 py-1 rounded-md border bg-[#18181b] text-gray-300 border-gray-700">
+                                      Visitas a terreno
                                     </span>
 
                                     <span
-                                      className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border ${
+                                      className={`text-[11px] font-extrabold px-2 py-1 rounded-md border ${
                                         vis.estado_visita === 'realizada'
                                           ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
                                           : vis.estado_visita === 'cancelada'
@@ -3309,74 +4555,97 @@ export default function PipelineVentasPage() {
                                     </span>
                                   </div>
 
-                                  {vis.observaciones_visita && (
-                                    <p className="text-gray-300 text-xs italic pt-1">
-                                      "{vis.observaciones_visita}"
-                                    </p>
-                                  )}
-                                </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingVisitaId(vis.id);
+                                        setEditVisitaTecnico(
+                                          vis.tecnico_id ||
+                                          responsablesVisitas.find((p) => p.nombre === vis.tecnico_visita)?.id ||
+                                          ''
+                                        );
+                                        setEditVisitaFecha(vis.fecha_visita_terreno || '');
+                                        setEditVisitaHora(vis.hora_visita_terreno || '09:00');
+                                        setEditVisitaEstado(vis.estado_visita || 'programada');
+                                        setEditVisitaNotas(vis.observaciones_visita || '');
+                                      }}
+                                      className="p-1.5 bg-[#18181b] hover:bg-blue-600/30 text-blue-400 rounded-lg transition border border-gray-700"
+                                      title="Editar Visita"
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </button>
 
-                                <div className="flex items-center gap-2 self-end sm:self-auto">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingVisitaId(vis.id);
-                                      setEditVisitaTecnico(vis.tecnico_visita || 'Felipe Valverde');
-                                      setEditVisitaFecha(vis.fecha_visita_terreno || '');
-                                      setEditVisitaHora(vis.hora_visita_terreno || '09:00');
-                                      setEditVisitaEstado(vis.estado_visita || 'programada');
-                                      setEditVisitaNotas(vis.observaciones_visita || '');
-                                    }}
-                                    className="p-1.5 bg-[#18181b] hover:bg-blue-600/30 text-blue-400 rounded-lg transition border border-gray-700"
-                                    title="Editar Visita"
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      try {
-                                        const isLegacy = vis.id.startsWith('legacy-');
-                                        if (isUUID(vis.id) && !isLegacy) {
-                                          await supabase.from('visitas_terreno').delete().eq('id', vis.id);
-                                        }
-
-                                        const updatedList = opVisitasList.filter((v) => v.id !== vis.id);
-                                        setOpVisitasList(updatedList);
-
-                                        if (updatedList.length === 0 || isLegacy) {
-                                          if (isUUID(selectedOp.id)) {
-                                            await supabase.from('oportunidades').update({
-                                              fecha_visita_terreno: null,
-                                              hora_visita_terreno: null,
-                                              tecnico_visita: null,
-                                              estado_visita: null,
-                                              observaciones_visita: null,
-                                              requiere_visita_terreno: false,
-                                            }).eq('id', selectedOp.id);
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        try {
+                                          const isLegacy = vis.id.startsWith('legacy-');
+                                          if (isUUID(vis.id) && !isLegacy) {
+                                            await supabase.from('visitas_terreno').delete().eq('id', vis.id);
                                           }
 
-                                          setSelectedOp((prev) =>
-                                            prev ? { ...prev, requiere_visita_terreno: false, fecha_visita_terreno: undefined } : null
-                                          );
-                                          setOportunidades((prevOps) =>
-                                            prevOps.map((o) =>
-                                              o.id === selectedOp.id ? { ...o, requiere_visita_terreno: false, fecha_visita_terreno: undefined } : o
-                                            )
-                                          );
-                                        }
+                                          const updatedList = opVisitasList.filter((v) => v.id !== vis.id);
+                                          setOpVisitasList(updatedList);
 
-                                        await addOportunidadActividad(selectedOp.id, 'Una Visita a Terreno fue eliminada del sistema.');
-                                      } catch (err) {
-                                        console.error('Error deleting visita:', err);
-                                      }
-                                    }}
-                                    className="p-1.5 bg-[#18181b] hover:bg-red-600/30 text-red-400 rounded-lg transition border border-gray-700"
-                                    title="Eliminar Visita"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
+                                          if (updatedList.length === 0 || isLegacy) {
+                                            if (isUUID(selectedOp.id)) {
+                                              await supabase.from('oportunidades').update({
+                                                fecha_visita_terreno: null,
+                                                hora_visita_terreno: null,
+                                                tecnico_visita: null,
+                                                tecnico_id: null,
+                                                estado_visita: null,
+                                                observaciones_visita: null,
+                                                requiere_visita_terreno: false,
+                                              }).eq('id', selectedOp.id);
+                                            }
+
+                                            setSelectedOp((prev) =>
+                                              prev ? { ...prev, requiere_visita_terreno: false, fecha_visita_terreno: undefined } : null
+                                            );
+                                            setOportunidades((prevOps) =>
+                                              prevOps.map((o) =>
+                                                o.id === selectedOp.id ? { ...o, requiere_visita_terreno: false, fecha_visita_terreno: undefined } : o
+                                              )
+                                            );
+                                          }
+
+                                          await addOportunidadActividad(selectedOp.id, 'Una Visita a Terreno fue eliminada del sistema.');
+                                        } catch (err) {
+                                          console.error('Error deleting visita:', err);
+                                        }
+                                      }}
+                                      className="p-1.5 bg-[#18181b] hover:bg-red-600/30 text-red-400 rounded-lg transition border border-gray-700"
+                                      title="Eliminar Visita"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <strong className="text-white text-sm block">Visita a terreno</strong>
+                                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-300 font-bold">
+                                    <span className="font-mono flex items-center gap-1">
+                                      <Calendar className="w-3.5 h-3.5 text-[#F7931F]" />
+                                      {vis.fecha_visita_terreno}
+                                    </span>
+
+                                    <span className="font-mono flex items-center gap-1">
+                                      <Clock className="w-3.5 h-3.5 text-gray-500" />
+                                      {vis.hora_visita_terreno || '09:00'} hrs
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-gray-400 font-semibold">
+                                    {[selectedOp.codigo, selectedOp.cliente?.nombre].filter(Boolean).join(' · ')}
+                                  </div>
+
+                                  {vis.observaciones_visita && (
+                                    <p className="text-gray-400 text-xs pt-1">
+                                      {vis.observaciones_visita}
+                                    </p>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -3389,376 +4658,966 @@ export default function PipelineVentasPage() {
               </div>
             )}
 
-            {/* Banner & Acordeón de Sección 2: Área de Producción & Instalación (Contraíble con Jerarquía) */}
-                {(() => {
-                  const isProduccionUnlocked =
-                    selectedOp.estado_pipeline === 'entregada' ||
-                    selectedOp.estado_pipeline.startsWith('prod_') ||
-                    selectedOp.estado_pipeline.startsWith('rev_');
+            {/* Banner & Acordeón de Producción y Logística */}
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => setAreaExpanded((prev) => ({ ...prev, produccion: !prev.produccion }))}
+                className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] border border-purple-500/40 rounded-2xl flex items-center justify-between font-black text-sm sm:text-base uppercase tracking-wide text-purple-400 transition shadow-md cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <Factory className="w-5 h-5 text-purple-400 group-hover:scale-110 transition-transform" />
+                  <span>Producción y Logística</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {areaExpanded.produccion ? (
+                    <ChevronUp className="w-5 h-5 text-purple-400" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-purple-400" />
+                  )}
+                </div>
+              </button>
 
-                  if (!isProduccionUnlocked) {
-                    return (
-                      <div className="p-4 bg-[#222226] border border-gray-800 rounded-2xl space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="font-black text-sm sm:text-base uppercase tracking-wide text-purple-400 flex items-center gap-2.5">
-                            <Factory className="w-5 h-5" />
-                            <span>Sección 2: Área de Producción & Instalación</span>
-                          </span>
-                          <span className="text-[10px] font-bold bg-gray-800 text-gray-400 px-2.5 py-0.5 rounded-full border border-gray-700">
-                            Bloqueado
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-400 leading-relaxed pl-7">
-                          Esta sección se mostrará automáticamente al ingresar al estado <strong>Venta Cerrada</strong> o a la sección de <strong>Producción</strong>.
-                        </p>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div className="space-y-3">
+              {areaExpanded.produccion && (
+                <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-purple-500/40 space-y-3.5 my-2.5 animate-fadeIn relative">
+                  <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
+                    <div className="w-full p-3.5 bg-[#27272a] text-purple-400 font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
                       <button
                         type="button"
-                        onClick={() => setAreaExpanded((prev) => ({ ...prev, produccion: !prev.produccion }))}
-                        className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] border border-purple-500/40 rounded-2xl flex items-center justify-between font-black text-sm sm:text-base uppercase tracking-wide text-purple-400 transition shadow-md cursor-pointer group"
+                        onClick={() => setOpenSections({ ...openSections, produccionEventos: !openSections.produccionEventos })}
+                        className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-xs uppercase tracking-wider text-purple-400"
                       >
-                        <div className="flex items-center gap-3">
-                          <Factory className="w-5 h-5 text-purple-400 group-hover:scale-110 transition-transform" />
-                          <span>Sección 2: Área de Producción & Instalación</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {areaExpanded.produccion ? (
-                            <ChevronUp className="w-5 h-5 text-purple-400" />
-                          ) : (
-                            <ChevronDown className="w-5 h-5 text-purple-400" />
-                          )}
-                        </div>
+                        <Calendar className="w-4 h-4 text-purple-400" />
+                        <span>Eventos de Producción y Logística</span>
+                        {produccionEventos.length > 0 && (
+                          <span className="text-xs bg-purple-600 text-white font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
+                            {produccionEventos.length}
+                          </span>
+                        )}
+                        {openSections.produccionEventos ? <ChevronUp className="w-4 h-4 text-purple-400" /> : <ChevronDown className="w-4 h-4 text-purple-400" />}
                       </button>
 
-                      {areaExpanded.produccion && (
-                        <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-purple-500/40 space-y-3.5 my-2.5 animate-fadeIn relative">
-                          {/* Accordion 5: Datos de Producción & Fabricación */}
-                          <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
-                            <div className="w-full p-3.5 bg-[#27272a] text-[#F7931F] font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
-                              <button
-                                type="button"
-                                onClick={() => setOpenSections({ ...openSections, produccion: !openSections.produccion })}
-                                className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-xs uppercase tracking-wider text-[#F7931F]"
+                      <div className="flex items-center gap-3">
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={produccionEventosEnabled}
+                            onChange={(e) => setProduccionEventosEnabled(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-500"></div>
+                          <span className="ml-2 text-xs font-bold text-gray-200 capitalize tracking-normal">
+                            {produccionEventosEnabled ? 'Habilitado' : 'No Requiere'}
+                          </span>
+                        </label>
+                        {produccionEventosEnabled && (
+                          <Link
+                            href={`/planificacion/calendario?opId=${selectedOp.id}`}
+                            className="text-[11px] bg-purple-600 hover:bg-purple-700 text-white px-2.5 py-1 rounded-xl font-bold flex items-center gap-1 transition lowercase tracking-normal"
+                          >
+                            <span>Ver Calendario</span>
+                          </Link>
+                        )}
+                      </div>
+
+                    </div>
+
+                    {openSections.produccionEventos && produccionEventosEnabled && (
+                    <div className="p-4 space-y-4 text-xs text-gray-300 bg-[#1e1e22]">
+                      <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+                        <span className="font-bold text-white text-xs">Eventos registrados para esta oportunidad:</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            resetProdLogForm('produccion_logistica', 'produccion');
+                            setShowAddProdLogEventForm(!showAddProdLogEventForm || newProdLogContexto !== 'produccion_logistica');
+                          }}
+                          className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Agregar Evento</span>
+                        </button>
+                      </div>
+
+                      {showAddProdLogEventForm && newProdLogContexto === 'produccion_logistica' && (
+                        <div className="bg-[#27272a] p-4 rounded-2xl border border-purple-500/40 space-y-3 animate-fadeIn">
+                          <h4 className="font-extrabold text-white text-xs uppercase text-purple-400 flex items-center gap-1.5">
+                            <Plus className="w-4 h-4" />
+                            <span>Registrar Evento</span>
+                          </h4>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="block font-bold text-gray-400 mb-1">Tipo de evento *</label>
+                              <select
+                                value={newProdLogTipo}
+                                onChange={(e) => {
+                                  const nextTipo = e.target.value as TipoEventoProduccionLogistica;
+                                  setNewProdLogTipo(nextTipo);
+                                }}
+                                className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-purple-400"
                               >
-                                <Factory className="w-4 h-4 text-[#F7931F]" />
-                                <span>Datos de Producción & Fabricación</span>
-                                {planificacionData && (
-                                  <span className="text-xs bg-amber-500/20 text-amber-300 font-mono font-bold px-2 py-0.5 rounded-full border border-amber-500/30 capitalize">
-                                    {planificacionData.estado || 'Activo'}
-                                  </span>
-                                )}
-                                {openSections.produccion ? <ChevronUp className="w-4 h-4 text-[#F7931F]" /> : <ChevronDown className="w-4 h-4 text-[#F7931F]" />}
-                              </button>
+                                <option value="obra">Obra</option>
+                                <option value="logistica">Logística</option>
+                                <option value="produccion">Producción</option>
+                              </select>
                             </div>
 
-                            {openSections.produccion && (
-                              <div className="p-4 space-y-4 text-xs text-gray-300 bg-[#1e1e22]">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  <div>
-                                    <label className="block font-bold text-gray-300 mb-1">Estado de Producción</label>
-                                    <select
-                                      value={planificacionData?.estado || 'pendiente'}
-                                      onChange={async (e) => {
-                                        const newEst = e.target.value;
-                                        setPlanificacionData((prev) => ({ ...prev, estado: newEst }));
-                                        if (isUUID(selectedOp.id)) {
-                                          await supabase.from('proyectos_planificacion').upsert([
-                                            {
-                                              oportunidad_id: selectedOp.id,
-                                              codigo: selectedOp.codigo,
-                                              titulo: selectedOp.titulo,
-                                              cliente_id: selectedOp.cliente_id,
-                                              estado: newEst,
-                                            },
-                                          ], { onConflict: 'oportunidad_id' });
-                                          await addOportunidadActividad(selectedOp.id, `Estado de Producción actualizado a "${newEst.toUpperCase()}"`);
-                                        }
-                                      }}
-                                      className="w-full bg-[#18181b] border border-gray-700 text-amber-400 font-bold rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
+                            <div>
+                              <label className="block font-bold text-gray-400 mb-1">Fecha *</label>
+                              <input
+                                type="date"
+                                required
+                                value={newProdLogFecha}
+                                onChange={(e) => setNewProdLogFecha(e.target.value)}
+                                className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-purple-400"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block font-bold text-gray-400 mb-1">Hora</label>
+                              <input
+                                type="time"
+                                value={newProdLogHora}
+                                onChange={(e) => setNewProdLogHora(e.target.value)}
+                                className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-purple-400"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="block font-bold text-gray-400 mb-1">Título *</label>
+                              <input
+                                type="text"
+                                value={newProdLogTitulo}
+                                onChange={(e) => setNewProdLogTitulo(e.target.value)}
+                                className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-3 py-1.5 font-bold focus:outline-none focus:border-purple-400"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block font-bold text-gray-400 mb-1">Responsable</label>
+                              <select
+                                value={newProdLogResponsableId}
+                                onChange={(e) => setNewProdLogResponsableId(e.target.value)}
+                                className="w-full bg-[#1e1e22] text-gray-200 border border-gray-700 rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-purple-400"
+                              >
+                                <option value="">-- Sin asignar --</option>
+                                {responsablesProduccionLogistica.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.nombre}{p.rut ? ` - ${p.rut}` : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block font-bold text-gray-400 mb-1">Estado Inicial</label>
+                              <select
+                                value={newProdLogEstado}
+                                onChange={(e) => setNewProdLogEstado(e.target.value as EstadoEventoProduccionLogistica)}
+                                className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-extrabold uppercase focus:outline-none focus:border-purple-400"
+                              >
+                                {prodLogEstadoOptions.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block font-bold text-gray-400 mb-1">Notas / Instrucciones</label>
+                            <input
+                              type="text"
+                              placeholder="Ej: coordinar retiro, despacho, fabricación o instalación..."
+                              value={newProdLogNotas}
+                              onChange={(e) => setNewProdLogNotas(e.target.value)}
+                              className="w-full bg-[#1e1e22] text-gray-200 border border-gray-700 rounded-xl px-3 py-1.5 focus:outline-none focus:border-purple-400"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-800">
+                            <button
+                              type="button"
+                              onClick={() => setShowAddProdLogEventForm(false)}
+                              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-xl font-bold transition"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => saveProdLogEvent('produccion_logistica')}
+                              className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-extrabold transition shadow-sm"
+                            >
+                              {editingProdLogEventId ? 'Guardar cambios' : 'Guardar evento'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {produccionEventos.length === 0 ? (
+                        <div className="py-4 text-center text-gray-500 italic text-xs bg-[#27272a]/50 rounded-2xl border border-gray-800">
+                          No hay eventos registrados. Haz clic en <strong>&quot;+ Agregar Evento&quot;</strong> para programar obra, logística o producción.
+                        </div>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {produccionEventos.map((event) => {
+                            const { fecha, hora } = getEventDateParts(event);
+
+                            return (
+                              <div
+                                key={event.id}
+                                className="bg-[#27272a] p-3.5 rounded-2xl border border-gray-800 flex flex-col gap-3 text-gray-200 hover:border-gray-700 transition shadow-sm"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-black uppercase tracking-wider text-[11px] px-2 py-1 rounded-md text-orange-300 bg-orange-950 border border-orange-800">
+                                      {getResponsableEventoNombre(event)}
+                                    </span>
+                                    <span className={`text-[11px] font-black px-2 py-1 rounded-md border ${getProdLogTipoClasses(event.tipo_evento)}`}>
+                                      {getProdLogTipoLabel(event.tipo_evento)}
+                                    </span>
+                                    <span className={`text-[11px] font-extrabold px-2 py-1 rounded-md border ${getProdLogEstadoClasses(event.estado)}`}>
+                                      {getProdLogEstadoLabel(event.estado)}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => startEditProdLogEvent(event)}
+                                      className="p-1.5 bg-[#18181b] hover:bg-purple-600/30 text-purple-400 border border-gray-700 rounded-lg transition"
+                                      title="Editar evento"
                                     >
-                                      <option value="pendiente">Pendiente Planificación</option>
-                                      <option value="cola_produccion">En Cola de Fabricación</option>
-                                      <option value="fabricacion">En Fabricación</option>
-                                      <option value="listo_instalacion">Listo p/ Instalación</option>
-                                      <option value="instalacion">En Instalación</option>
-                                      <option value="finalizado">Finalizado / Entregado</option>
-                                    </select>
-                                  </div>
-
-                                  <div>
-                                    <label className="block font-bold text-gray-300 mb-1">Estimación Fabricación</label>
-                                    <input
-                                      type="date"
-                                      value={planificacionData?.fecha_estimada_produccion || ''}
-                                      onChange={async (e) => {
-                                        const val = e.target.value;
-                                        setPlanificacionData((prev) => ({ ...prev, fecha_estimada_produccion: val }));
-                                        if (isUUID(selectedOp.id)) {
-                                          await supabase.from('proyectos_planificacion').upsert([
-                                            {
-                                              oportunidad_id: selectedOp.id,
-                                              codigo: selectedOp.codigo,
-                                              titulo: selectedOp.titulo,
-                                              cliente_id: selectedOp.cliente_id,
-                                              fecha_estimada_produccion: val,
-                                            },
-                                          ], { onConflict: 'oportunidad_id' });
-                                        }
-                                      }}
-                                      className="w-full bg-[#18181b] border border-gray-700 text-white font-mono rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
-                                    />
+                                      <Edit className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => deleteProdLogEvent(event)}
+                                      className="p-1.5 bg-[#18181b] hover:bg-red-600/30 text-red-400 border border-gray-700 rounded-lg transition"
+                                      title="Eliminar evento"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
                                   </div>
                                 </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  <div>
-                                    <label className="block font-bold text-gray-300 mb-1">Estimación Instalación</label>
-                                    <input
-                                      type="date"
-                                      value={planificacionData?.fecha_estimada_instalacion || ''}
-                                      onChange={async (e) => {
-                                        const val = e.target.value;
-                                        setPlanificacionData((prev) => ({ ...prev, fecha_estimada_instalacion: val }));
-                                        if (isUUID(selectedOp.id)) {
-                                          await supabase.from('proyectos_planificacion').upsert([
-                                            {
-                                              oportunidad_id: selectedOp.id,
-                                              codigo: selectedOp.codigo,
-                                              titulo: selectedOp.titulo,
-                                              cliente_id: selectedOp.cliente_id,
-                                              fecha_estimada_instalacion: val,
-                                            },
-                                          ], { onConflict: 'oportunidad_id' });
-                                        }
-                                      }}
-                                      className="w-full bg-[#18181b] border border-gray-700 text-white font-mono rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
-                                    />
+                                <div className="space-y-1">
+                                  <strong className="text-white text-sm block">{event.titulo}</strong>
+                                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-300 font-bold">
+                                    <span className="font-mono flex items-center gap-1">
+                                      <Calendar className="w-3.5 h-3.5 text-purple-400" />
+                                      {fecha}
+                                    </span>
+                                    <span className="font-mono flex items-center gap-1">
+                                      <Clock className="w-3.5 h-3.5 text-gray-500" />
+                                      {hora}
+                                    </span>
                                   </div>
-                                </div>
-
-                                <div>
-                                  <label className="block font-bold text-gray-300 mb-1">Observaciones Técnicas / Planta</label>
-                                  <textarea
-                                    rows={2}
-                                    placeholder="Instrucciones específicas de corte, templado, armado o logística de instalación..."
-                                    value={planificacionData?.observaciones || ''}
-                                    onChange={async (e) => {
-                                      const val = e.target.value;
-                                      setPlanificacionData((prev) => ({ ...prev, observaciones: val }));
-                                      if (isUUID(selectedOp.id)) {
-                                        await supabase.from('proyectos_planificacion').upsert([
-                                          {
-                                            oportunidad_id: selectedOp.id,
-                                            codigo: selectedOp.codigo,
-                                            titulo: selectedOp.titulo,
-                                            cliente_id: selectedOp.cliente_id,
-                                            observaciones: val,
-                                          },
-                                        ], { onConflict: 'oportunidad_id' });
-                                      }
-                                    }}
-                                    className="w-full bg-[#18181b] border border-gray-700 text-white rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#F7931F]"
-                                  />
+                                  {event.observaciones && (
+                                    <span className="block text-xs text-gray-400">{event.observaciones}</span>
+                                  )}
                                 </div>
                               </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    )}
+                    {openSections.produccionEventos && !produccionEventosEnabled && (
+                      <div className="p-4 text-xs text-gray-400 bg-[#1e1e22]">
+                        Habilita eventos para registrar obra, logística o producción.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Accordion 2.2: Bitácora de Producción Diaria & Control de Stock de Obra (Ajustes 11 - Req 2) */}
+                  <div className="hidden">
+                    <button
+                      type="button"
+                      onClick={() => setOpenSections({ ...openSections, produccionBitacora: !openSections.produccionBitacora })}
+                      className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] text-purple-400 font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 transition cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2.5 text-left">
+                        <HardHat className="w-4 h-4 text-purple-400" />
+                        <span>Bitácora de Producción Diaria & Stock de Obra</span>
+                        <span className="text-xs text-purple-300 font-mono font-bold">
+                          {opProduccionDiaria.length} {opProduccionDiaria.length === 1 ? 'registro' : 'registros'}
+                        </span>
+                      </div>
+                      {openSections.produccionBitacora ? <ChevronUp className="w-4 h-4 text-purple-400" /> : <ChevronDown className="w-4 h-4 text-purple-400" />}
+                    </button>
+
+                    {openSections.produccionBitacora && (
+                    <div className="p-4 space-y-4 text-xs text-gray-300 bg-[#1e1e22]">
+                      {/* Tabla de Comparación contra Ítems Cotizados */}
+                      <div>
+                        <h5 className="font-extrabold text-gray-200 text-xs uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-purple-400" />
+                          <span>Control de Avance vs Cotización</span>
+                        </h5>
+
+                        {cotizacionItemsOp.length === 0 ? (
+                          <div className="p-3 bg-[#18181b] rounded-lg text-gray-400 text-center italic border border-gray-800">
+                            No hay ítems de cotización registrados para contrastar el avance.
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto rounded-lg border border-gray-800">
+                            <table className="w-full text-left text-xs bg-[#18181b]">
+                              <thead className="bg-[#27272a] text-gray-400 font-bold uppercase text-[10px] border-b border-gray-800">
+                                <tr>
+                                  <th className="py-2.5 px-3">Producto / Ítem</th>
+                                  <th className="py-2.5 px-3 text-center">Cant. Cotizada</th>
+                                  <th className="py-2.5 px-3 text-center">Fabricado</th>
+                                  <th className="py-2.5 px-3 text-center">Saldo Pendiente</th>
+                                  <th className="py-2.5 px-3 text-center">Avance</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-800">
+                                {cotizacionItemsOp.map((item, idx) => {
+                                  const cotizada = Number(item.cantidad) || 0;
+                                  const fabricado = opProduccionDiaria
+                                    .filter((p) => p.producto?.toLowerCase().trim() === item.producto?.toLowerCase().trim())
+                                    .reduce((sum, p) => sum + Number(p.cantidad_producida || 0), 0);
+                                  const saldo = Math.max(0, cotizada - fabricado);
+                                  const pct = cotizada > 0 ? Math.min(100, Math.round((fabricado / cotizada) * 100)) : 100;
+
+                                  return (
+                                    <tr key={item.id || idx} className="hover:bg-white/5">
+                                      <td className="py-2.5 px-3 font-bold text-white">
+                                        {item.producto}
+                                        {item.descripcion && (
+                                          <span className="block text-[10px] text-gray-400 font-normal">{item.descripcion}</span>
+                                        )}
+                                      </td>
+                                      <td className="py-2.5 px-3 text-center font-mono font-bold text-gray-300">
+                                        {cotizada}
+                                      </td>
+                                      <td className="py-2.5 px-3 text-center font-mono font-bold text-purple-400">
+                                        {fabricado}
+                                      </td>
+                                      <td className="py-2.5 px-3 text-center font-mono font-bold text-purple-300">
+                                        {saldo}
+                                      </td>
+                                      <td className="py-2.5 px-3 text-center">
+                                        <div className="flex items-center justify-center gap-2">
+                                          <div className="w-16 bg-gray-800 h-2 overflow-hidden border border-gray-700">
+                                            <div
+                                              className={`h-full ${pct >= 100 ? 'bg-emerald-500' : 'bg-purple-500'}`}
+                                              style={{ width: `${pct}%` }}
+                                            />
+                                          </div>
+                                          <span className="font-mono text-[10px] font-bold text-gray-300">{pct}%</span>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Formulario para Registrar Producción Diaria */}
+                      <form onSubmit={handleRegisterProduccionDiaria} className="p-3.5 bg-[#18181b] rounded-lg border border-gray-800 space-y-3">
+                        <h5 className="font-extrabold text-white text-xs uppercase text-purple-400 flex items-center gap-1.5">
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Registrar Tanda de Fabricación Diaria</span>
+                        </h5>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block font-bold text-gray-400 mb-1">Producto Fabricado *</label>
+                            {cotizacionItemsOp.length > 0 ? (
+                              <select
+                                required
+                                value={newProdProducto}
+                                onChange={(e) => setNewProdProducto(e.target.value)}
+                                className="w-full bg-[#27272a] text-white border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-purple-400"
+                              >
+                                <option value="">-- Seleccionar Producto --</option>
+                                {cotizacionItemsOp.map((it, idx) => (
+                                  <option key={it.id || idx} value={it.producto}>
+                                    {it.producto} ({it.cantidad} cotizados)
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                type="text"
+                                required
+                                placeholder="Ej. Pastelón 50x50 Gris"
+                                value={newProdProducto}
+                                onChange={(e) => setNewProdProducto(e.target.value)}
+                                className="w-full bg-[#27272a] text-white border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-purple-400"
+                              />
                             )}
+                          </div>
+
+                          <div>
+                            <label className="block font-bold text-gray-400 mb-1">Cantidad Producida *</label>
+                            <input
+                              type="number"
+                              required
+                              min={1}
+                              step={1}
+                              value={newProdCantidad || ''}
+                              onChange={(e) => setNewProdCantidad(Number(e.target.value))}
+                              placeholder="Ej. 25"
+                              className="w-full bg-[#27272a] text-white font-mono border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-purple-400"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block font-bold text-gray-400 mb-1">Fecha de Fabricación</label>
+                            <input
+                              type="date"
+                              value={newProdFecha}
+                              onChange={(e) => setNewProdFecha(e.target.value)}
+                              className="w-full bg-[#27272a] text-white font-mono border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-purple-400"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block font-bold text-gray-400 mb-1">Encargado / Responsable</label>
+                            <select
+                              value={newProdResponsableId}
+                              onChange={(e) => setNewProdResponsableId(e.target.value)}
+                              className="w-full bg-[#27272a] text-gray-200 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-purple-400"
+                            >
+                              <option value="">-- Sin asignar --</option>
+                              {responsablesProduccionLogistica.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.nombre}{p.rut ? ` - ${p.rut}` : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block font-bold text-gray-400 mb-1">Observaciones / Lote</label>
+                            <input
+                              type="text"
+                              placeholder="Lote #, detalle de mezcla, fraguado..."
+                              value={newProdObservaciones}
+                              onChange={(e) => setNewProdObservaciones(e.target.value)}
+                              className="w-full bg-[#27272a] text-white border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-purple-400"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end pt-1">
+                          <button
+                            type="submit"
+                            className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold px-4 py-1.5 rounded-lg transition text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Registrar Tanda</span>
+                          </button>
+                        </div>
+                      </form>
+
+                      {/* Historial de Fabricación Diaria */}
+                      {opProduccionDiaria.length > 0 && (
+                        <div className="space-y-2 pt-2">
+                          <h6 className="font-extrabold text-gray-400 text-[11px] uppercase tracking-wider">Historial de Tandas Registradas</h6>
+                          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                            {opProduccionDiaria.map((prod) => (
+                              <div
+                                key={prod.id}
+                                className="p-2.5 bg-[#18181b] rounded-lg border border-gray-800 flex items-center justify-between gap-3 text-xs"
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <span className="font-mono text-purple-400 font-bold bg-purple-950/60 px-2 py-0.5 border border-purple-800/40">
+                                    +{prod.cantidad_producida} un.
+                                  </span>
+                                  <div>
+                                    <strong className="text-white">{prod.producto}</strong>
+                                    {prod.observaciones && <span className="text-gray-400 block text-[10px]">{prod.observaciones}</span>}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-3 text-gray-400 font-mono text-[11px]">
+                                  {prod.responsable && <span>👤 {prod.responsable.nombre}</span>}
+                                  <span>{prod.fecha_produccion}</span>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
                     </div>
-                  );
-                })()}
+                    )}
+                  </div>
 
-                {/* Banner & Acordeón de Sección 3: Área de Reventa & Logística (Contraíble con Jerarquía) */}
-                {(() => {
-                  const isReventaUnlocked =
-                    selectedOp.estado_pipeline.startsWith('rev_') ||
-                    selectedOp.tipo_venta === 'Reventa de Material' ||
-                    selectedOp.tipo_venta === 'Suministro';
-
-                  if (!isReventaUnlocked) {
-                    return (
-                      <div className="p-4 bg-[#222226] border border-gray-800 rounded-2xl space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="font-black text-sm sm:text-base uppercase tracking-wide text-indigo-400 flex items-center gap-2.5">
-                            <Truck className="w-5 h-5" />
-                            <span>Sección 3: Área de Reventa & Logística</span>
-                          </span>
-                          <span className="text-[10px] font-bold bg-gray-800 text-gray-400 px-2.5 py-0.5 rounded-full border border-gray-700">
-                            Bloqueado
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-400 leading-relaxed pl-7">
-                          Esta sección se mostrará automáticamente al seleccionar el tipo <strong>Reventa de Material / Suministro</strong> o avanzar a la sección de <strong>Reventa & Logística</strong>.
-                        </p>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div className="space-y-3">
+                  {/* Accordion 2.3: Órdenes de Compra (OC) en Producción (Ajustes 11 - Req 7) */}
+                  {selectedOp.estado_pipeline?.startsWith('prod_') && (
+                  <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
+                    <div className="w-full p-3.5 bg-[#27272a] text-purple-400 font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
                       <button
                         type="button"
-                        onClick={() => setAreaExpanded((prev) => ({ ...prev, reventa: !prev.reventa }))}
-                        className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] border border-indigo-500/40 rounded-2xl flex items-center justify-between font-black text-sm sm:text-base uppercase tracking-wide text-indigo-400 transition shadow-md cursor-pointer group"
+                        onClick={() => setOpenSections({ ...openSections, produccionOc: !openSections.produccionOc })}
+                        className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-xs uppercase tracking-wider text-purple-400"
                       >
-                        <div className="flex items-center gap-3">
-                          <Truck className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
-                          <span>Sección 3: Área de Reventa & Logística</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {areaExpanded.reventa ? (
-                            <ChevronUp className="w-5 h-5 text-indigo-400" />
-                          ) : (
-                            <ChevronDown className="w-5 h-5 text-indigo-400" />
-                          )}
-                        </div>
+                        <ShoppingCart className="w-4 h-4 text-purple-400" />
+                        <span>Órdenes de Compra (OC) — Insumos de Fabricación</span>
+                        <span className="text-xs text-purple-300 font-mono font-bold">
+                          {opOrdenesCompra.length} {opOrdenesCompra.length === 1 ? 'OC' : 'OCs'}
+                        </span>
+                        {openSections.produccionOc ? <ChevronUp className="w-4 h-4 text-purple-400" /> : <ChevronDown className="w-4 h-4 text-purple-400" />}
                       </button>
 
-                      {areaExpanded.reventa && (
-                        <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-indigo-500/40 space-y-3.5 my-2.5 animate-fadeIn relative">
-                          {/* Accordion 6: Datos de Logística & Reventa */}
-                          <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
-                            <div className="w-full p-3.5 bg-[#27272a] text-[#F7931F] font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
-                              <button
-                                type="button"
-                                onClick={() => setOpenSections({ ...openSections, reventa: !openSections.reventa })}
-                                className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-xs uppercase tracking-wider text-[#F7931F]"
-                              >
-                                <Truck className="w-4 h-4 text-[#F7931F]" />
-                                <span>Datos de Logística & Reventa</span>
-                                {reventaData && (
-                                  <span className="text-xs bg-indigo-500/20 text-indigo-300 font-mono font-bold px-2 py-0.5 rounded-full border border-indigo-500/30 capitalize">
-                                    {reventaData.estado || 'Activo'}
-                                  </span>
-                                )}
-                                {openSections.reventa ? <ChevronUp className="w-4 h-4 text-[#F7931F]" /> : <ChevronDown className="w-4 h-4 text-[#F7931F]" />}
-                              </button>
-                            </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateOcModal(true)}
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Crear Orden de Compra</span>
+                      </button>
+                    </div>
 
-                            {openSections.reventa && (
-                              <div className="p-4 space-y-4 text-xs text-gray-300 bg-[#1e1e22]">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  <div>
-                                    <label className="block font-bold text-gray-300 mb-1">Estado Logístico</label>
-                                    <select
-                                      value={reventaData?.estado || 'coordinacion_proveedor'}
-                                      onChange={async (e) => {
-                                        const newEst = e.target.value;
-                                        setReventaData((prev) => ({ ...prev, estado: newEst }));
-                                        if (isUUID(selectedOp.id)) {
-                                          await supabase.from('ordenes_reventa').upsert([
-                                            {
-                                              oportunidad_id: selectedOp.id,
-                                              codigo: selectedOp.codigo,
-                                              titulo: selectedOp.titulo,
-                                              cliente_id: selectedOp.cliente_id,
-                                              estado: newEst,
-                                            },
-                                          ], { onConflict: 'oportunidad_id' });
-                                          await addOportunidadActividad(selectedOp.id, `Estado Logístico de Reventa actualizado a "${newEst.toUpperCase()}"`);
-                                        }
-                                      }}
-                                      className="w-full bg-[#18181b] border border-gray-700 text-indigo-400 font-bold rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
+                    {openSections.produccionOc && (
+                    <div className="p-4 space-y-3 text-xs bg-[#1e1e22]">
+                      {loadingOpOrdenes ? (
+                        <div className="text-center py-4 text-gray-400">Cargando órdenes de compra...</div>
+                      ) : opOrdenesCompra.length === 0 ? (
+                        <div className="p-4 bg-[#18181b] rounded-lg text-gray-400 text-center italic border border-gray-800">
+                          No hay órdenes de compra emitidas para esta oportunidad.
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto rounded-lg border border-gray-800">
+                          <table className="w-full text-left text-xs bg-[#18181b]">
+                            <thead className="bg-[#27272a] text-gray-400 font-bold uppercase text-[10px] border-b border-gray-800">
+                              <tr>
+	                                <th className="py-2.5 px-3">Folio OC</th>
+	                                <th className="py-2.5 px-3 text-center">Version</th>
+	                                <th className="py-2.5 px-3">Proveedor</th>
+                                <th className="py-2.5 px-3 text-center">Fecha</th>
+                                <th className="py-2.5 px-3 text-right">Total</th>
+                                <th className="py-2.5 px-3 text-center">Estado</th>
+                                <th className="py-2.5 px-3 text-center">Acciones</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-800">
+                              {opOrdenesCompra.map((oc) => (
+                                <tr key={oc.id} className="hover:bg-white/5">
+	                                  <td className="py-2.5 px-3 font-mono font-bold text-purple-300">
+	                                    {oc.numero_oc}
+	                                  </td>
+	                                  <td className="py-2.5 px-3 text-center font-mono text-gray-300">
+	                                    v{oc.version || 1}
+	                                  </td>
+	                                  <td className="py-2.5 px-3 font-bold text-white">
+                                    {oc.proveedor?.nombre || 'Proveedor'}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center font-mono text-gray-300">
+                                    {oc.fecha_emision}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-right font-mono font-bold text-white">
+                                    ${(oc.monto_total || 0).toLocaleString('es-CL')}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center">
+                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-[#27272a] text-purple-300 border border-gray-700">
+                                      {oc.estado}
+                                    </span>
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => setPdfPreviewOc(oc)}
+                                      className="px-2.5 py-1 bg-[#27272a] hover:bg-purple-600 text-white rounded-lg transition border border-gray-700 font-bold text-[11px] flex items-center gap-1 mx-auto cursor-pointer"
                                     >
-                                      <option value="coordinacion_proveedor">Coordinación Proveedor</option>
-                                      <option value="confirmacion_stock">Confirmación Stock</option>
-                                      <option value="listo_retiro">Listo para Retiro</option>
-                                      <option value="listo_despacho">Listo para Despacho</option>
-                                      <option value="entregado">Entregado al Cliente</option>
-                                      <option value="postventa">Postventa & Seguimiento</option>
-                                    </select>
-                                  </div>
-
-                                  <div>
-                                    <label className="block font-bold text-gray-300 mb-1">Proveedor Asignado</label>
-                                    <input
-                                      type="text"
-                                      placeholder="Nombre del proveedor o distribuidor..."
-                                      value={reventaData?.proveedor_nombre || ''}
-                                      onChange={async (e) => {
-                                        const val = e.target.value;
-                                        setReventaData((prev) => ({ ...prev, proveedor_nombre: val }));
-                                        if (isUUID(selectedOp.id)) {
-                                          await supabase.from('ordenes_reventa').upsert([
-                                            {
-                                              oportunidad_id: selectedOp.id,
-                                              codigo: selectedOp.codigo,
-                                              titulo: selectedOp.titulo,
-                                              cliente_id: selectedOp.cliente_id,
-                                              proveedor_nombre: val,
-                                            },
-                                          ], { onConflict: 'oportunidad_id' });
-                                        }
-                                      }}
-                                      className="w-full bg-[#18181b] border border-gray-700 text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
-                                    />
-                                  </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  <div>
-                                    <label className="block font-bold text-gray-300 mb-1">Fecha Despacho</label>
-                                    <input
-                                      type="date"
-                                      value={reventaData?.fecha_despacho || ''}
-                                      onChange={async (e) => {
-                                        const val = e.target.value;
-                                        setReventaData((prev) => ({ ...prev, fecha_despacho: val }));
-                                        if (isUUID(selectedOp.id)) {
-                                          await supabase.from('ordenes_reventa').upsert([
-                                            {
-                                              oportunidad_id: selectedOp.id,
-                                              codigo: selectedOp.codigo,
-                                              titulo: selectedOp.titulo,
-                                              cliente_id: selectedOp.cliente_id,
-                                              fecha_despacho: val,
-                                            },
-                                          ], { onConflict: 'oportunidad_id' });
-                                        }
-                                      }}
-                                      className="w-full bg-[#18181b] border border-gray-700 text-white font-mono rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
-                                    />
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <label className="block font-bold text-gray-300 mb-1">Notas de Postventa & Seguimiento</label>
-                                  <textarea
-                                    rows={2}
-                                    placeholder="Añadir observaciones de entrega, garantías o postventa..."
-                                    value={reventaData?.notas_postventa || ''}
-                                    onChange={async (e) => {
-                                      const val = e.target.value;
-                                      setReventaData((prev) => ({ ...prev, notas_postventa: val }));
-                                      if (isUUID(selectedOp.id)) {
-                                        await supabase.from('ordenes_reventa').upsert([
-                                          {
-                                            oportunidad_id: selectedOp.id,
-                                            codigo: selectedOp.codigo,
-                                            titulo: selectedOp.titulo,
-                                            cliente_id: selectedOp.cliente_id,
-                                            notas_postventa: val,
-                                          },
-                                        ], { onConflict: 'oportunidad_id' });
-                                      }
-                                    }}
-                                    className="w-full bg-[#18181b] border border-gray-700 text-white rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#F7931F]"
-                                  />
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                                      <FileText className="w-3 h-3" />
+                                      <span>Ver / Imprimir OC</span>
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
                       )}
                     </div>
-                  );
-                })()}
+                    )}
+                  </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Banner & Acordeón de Sección 3: Reventa y Logística (Ajustes 11) */}
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => setAreaExpanded((prev) => ({ ...prev, reventa: !prev.reventa }))}
+                className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] border border-indigo-500/40 rounded-2xl flex items-center justify-between font-black text-sm sm:text-base uppercase tracking-wide text-indigo-400 transition shadow-md cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <Truck className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
+                  <span>Reventa y Logística</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {areaExpanded.reventa ? (
+                    <ChevronUp className="w-5 h-5 text-indigo-400" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-indigo-400" />
+                  )}
+                </div>
+              </button>
+
+              {areaExpanded.reventa && (
+                <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-indigo-500/40 space-y-3.5 my-2.5 animate-fadeIn relative">
+                  <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
+                    <div className="w-full p-3.5 bg-[#27272a] text-indigo-400 font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
+                      <button
+                        type="button"
+                        onClick={() => setOpenSections({ ...openSections, reventaEventos: !openSections.reventaEventos })}
+                        className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-xs uppercase tracking-wider text-indigo-400"
+                      >
+                        <Calendar className="w-4 h-4 text-indigo-400" />
+                        <span>Eventos de Reventa y Logística</span>
+                        {reventaEventos.length > 0 && (
+                          <span className="text-xs bg-indigo-600 text-white font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
+                            {reventaEventos.length}
+                          </span>
+                        )}
+                        {openSections.reventaEventos ? <ChevronUp className="w-4 h-4 text-indigo-400" /> : <ChevronDown className="w-4 h-4 text-indigo-400" />}
+                      </button>
+
+                      <div className="flex items-center gap-3">
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={reventaEventosEnabled}
+                            onChange={(e) => setReventaEventosEnabled(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
+                          <span className="ml-2 text-xs font-bold text-gray-200 capitalize tracking-normal">
+                            {reventaEventosEnabled ? 'Habilitado' : 'No Requiere'}
+                          </span>
+                        </label>
+                        {reventaEventosEnabled && (
+                          <Link
+                            href={`/reventa/calendario?opId=${selectedOp.id}`}
+                            className="text-[11px] bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-xl font-bold flex items-center gap-1 transition lowercase tracking-normal"
+                          >
+                            <span>Ver Calendario</span>
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+
+                    {openSections.reventaEventos && reventaEventosEnabled && (
+                      <div className="p-4 space-y-4 text-xs text-gray-300 bg-[#1e1e22]">
+                        <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+                          <span className="font-bold text-white text-xs">Eventos registrados para esta oportunidad:</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              resetProdLogForm('reventa_logistica', 'reventa');
+                              setShowAddProdLogEventForm(!showAddProdLogEventForm || newProdLogContexto !== 'reventa_logistica');
+                            }}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>Agregar Evento</span>
+                          </button>
+                        </div>
+
+                        {showAddProdLogEventForm && newProdLogContexto === 'reventa_logistica' && (
+                          <div className="bg-[#27272a] p-4 rounded-2xl border border-indigo-500/40 space-y-3 animate-fadeIn">
+                            <h4 className="font-extrabold text-white text-xs uppercase text-indigo-400 flex items-center gap-1.5">
+                              <Plus className="w-4 h-4" />
+                              <span>Registrar Evento</span>
+                            </h4>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div>
+                                <label className="block font-bold text-gray-400 mb-1">Tipo de evento *</label>
+                                <select
+                                  value={newProdLogTipo}
+                                  onChange={(e) => {
+                                    const nextTipo = e.target.value as TipoEventoProduccionLogistica;
+                                    setNewProdLogTipo(nextTipo);
+                                  }}
+                                  className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-indigo-400"
+                                >
+                                  <option value="logistica">Logística</option>
+                                  <option value="reventa">Reventa</option>
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block font-bold text-gray-400 mb-1">Fecha *</label>
+                                <input
+                                  type="date"
+                                  required
+                                  value={newProdLogFecha}
+                                  onChange={(e) => setNewProdLogFecha(e.target.value)}
+                                  className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-indigo-400"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block font-bold text-gray-400 mb-1">Hora</label>
+                                <input
+                                  type="time"
+                                  value={newProdLogHora}
+                                  onChange={(e) => setNewProdLogHora(e.target.value)}
+                                  className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-indigo-400"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div>
+                                <label className="block font-bold text-gray-400 mb-1">Título *</label>
+                                <input
+                                  type="text"
+                                  value={newProdLogTitulo}
+                                  onChange={(e) => setNewProdLogTitulo(e.target.value)}
+                                  className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-3 py-1.5 font-bold focus:outline-none focus:border-indigo-400"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block font-bold text-gray-400 mb-1">Responsable</label>
+                                <select
+                                  value={newProdLogResponsableId}
+                                  onChange={(e) => setNewProdLogResponsableId(e.target.value)}
+                                  className="w-full bg-[#1e1e22] text-gray-200 border border-gray-700 rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-indigo-400"
+                                >
+                                  <option value="">-- Sin asignar --</option>
+                                  {(responsablesReventaLogistica.length > 0 ? responsablesReventaLogistica : personalTerrenoList).map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.nombre}{p.rut ? ` - ${p.rut}` : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block font-bold text-gray-400 mb-1">Estado Inicial</label>
+                                <select
+                                  value={newProdLogEstado}
+                                  onChange={(e) => setNewProdLogEstado(e.target.value as EstadoEventoProduccionLogistica)}
+                                  className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-extrabold uppercase focus:outline-none focus:border-indigo-400"
+                                >
+                                  {prodLogEstadoOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block font-bold text-gray-400 mb-1">Notas / Instrucciones</label>
+                              <input
+                                type="text"
+                                placeholder="Ej: coordinar proveedor, retiro, despacho o entrega..."
+                                value={newProdLogNotas}
+                                onChange={(e) => setNewProdLogNotas(e.target.value)}
+                                className="w-full bg-[#1e1e22] text-gray-200 border border-gray-700 rounded-xl px-3 py-1.5 focus:outline-none focus:border-indigo-400"
+                              />
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-800">
+                              <button
+                                type="button"
+                                onClick={() => setShowAddProdLogEventForm(false)}
+                                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-xl font-bold transition"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => saveProdLogEvent('reventa_logistica')}
+                                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-extrabold transition shadow-sm"
+                              >
+                                {editingProdLogEventId ? 'Guardar cambios' : 'Guardar evento'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {reventaEventos.length === 0 ? (
+                          <div className="py-4 text-center text-gray-500 italic text-xs bg-[#27272a]/50 rounded-2xl border border-gray-800">
+                            No hay eventos registrados. Haz clic en <strong>&quot;+ Agregar Evento&quot;</strong> para programar obra, logística o producción.
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5">
+                            {reventaEventos.map((event) => {
+                              const { fecha, hora } = getEventDateParts(event);
+
+                              return (
+                                <div
+                                  key={event.id}
+                                  className="bg-[#27272a] p-3.5 rounded-2xl border border-gray-800 flex flex-col gap-3 text-gray-200 hover:border-gray-700 transition shadow-sm"
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="font-black uppercase tracking-wider text-[11px] px-2 py-1 rounded-md text-orange-300 bg-orange-950 border border-orange-800">
+                                        {getResponsableEventoNombre(event)}
+                                      </span>
+                                      <span className={`text-[11px] font-black px-2 py-1 rounded-md border ${getProdLogTipoClasses(event.tipo_evento)}`}>
+                                        {getProdLogTipoLabel(event.tipo_evento)}
+                                      </span>
+                                      <span className={`text-[11px] font-extrabold px-2 py-1 rounded-md border ${getProdLogEstadoClasses(event.estado)}`}>
+                                        {getProdLogEstadoLabel(event.estado)}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => startEditProdLogEvent(event)}
+                                        className="p-1.5 bg-[#18181b] hover:bg-indigo-600/30 text-indigo-400 border border-gray-700 rounded-lg transition"
+                                        title="Editar evento"
+                                      >
+                                        <Edit className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => deleteProdLogEvent(event)}
+                                        className="p-1.5 bg-[#18181b] hover:bg-red-600/30 text-red-400 border border-gray-700 rounded-lg transition"
+                                        title="Eliminar evento"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <strong className="text-white text-sm block">{event.titulo}</strong>
+                                    <div className="flex flex-wrap items-center gap-3 text-xs text-gray-300 font-bold">
+                                      <span className="font-mono flex items-center gap-1">
+                                        <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                                        {fecha}
+                                      </span>
+                                      <span className="font-mono flex items-center gap-1">
+                                        <Clock className="w-3.5 h-3.5 text-gray-500" />
+                                        {hora}
+                                      </span>
+                                    </div>
+                                    {event.observaciones && (
+                                      <span className="block text-xs text-gray-400">{event.observaciones}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {openSections.reventaEventos && !reventaEventosEnabled && (
+                      <div className="p-4 text-xs text-gray-400 bg-[#1e1e22]">
+                        Habilita eventos para registrar obra, logística o producción.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Accordion 3.2: Órdenes de Compra (OC) en Reventa (Ajustes 11 - Req 7) */}
+                  {selectedOp.estado_pipeline?.startsWith('rev_') && (
+                  <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
+                    <div className="w-full p-3.5 bg-[#27272a] text-indigo-400 font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
+                      <button
+                        type="button"
+                        onClick={() => setOpenSections({ ...openSections, reventaOc: !openSections.reventaOc })}
+                        className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-xs uppercase tracking-wider text-indigo-400"
+                      >
+                        <ShoppingCart className="w-4 h-4 text-indigo-400" />
+                        <span>Órdenes de Compra a Proveedores / Distribución</span>
+                        <span className="text-xs text-indigo-300 font-mono font-bold">
+                          {opOrdenesCompra.length} {opOrdenesCompra.length === 1 ? 'OC' : 'OCs'}
+                        </span>
+                        {openSections.reventaOc ? <ChevronUp className="w-4 h-4 text-indigo-400" /> : <ChevronDown className="w-4 h-4 text-indigo-400" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateOcModal(true)}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Crear Orden de Compra</span>
+                      </button>
+                    </div>
+
+                    {openSections.reventaOc && (
+                    <div className="p-4 space-y-3 text-xs bg-[#1e1e22]">
+                      {loadingOpOrdenes ? (
+                        <div className="text-center py-4 text-gray-400">Cargando órdenes de compra...</div>
+                      ) : opOrdenesCompra.length === 0 ? (
+                        <div className="p-4 bg-[#18181b] rounded-lg text-gray-400 text-center italic border border-gray-800">
+                          No hay órdenes de compra emitidas para esta oportunidad.
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto rounded-lg border border-gray-800">
+                          <table className="w-full text-left text-xs bg-[#18181b]">
+                            <thead className="bg-[#27272a] text-gray-400 font-bold uppercase text-[10px] border-b border-gray-800">
+                              <tr>
+	                                <th className="py-2.5 px-3">Folio OC</th>
+	                                <th className="py-2.5 px-3 text-center">Version</th>
+	                                <th className="py-2.5 px-3">Proveedor</th>
+                                <th className="py-2.5 px-3 text-center">Fecha</th>
+                                <th className="py-2.5 px-3 text-right">Total</th>
+                                <th className="py-2.5 px-3 text-center">Estado</th>
+                                <th className="py-2.5 px-3 text-center">Acciones</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-800">
+                              {opOrdenesCompra.map((oc) => (
+                                <tr key={oc.id} className="hover:bg-white/5">
+	                                  <td className="py-2.5 px-3 font-mono font-bold text-indigo-300">
+	                                    {oc.numero_oc}
+	                                  </td>
+	                                  <td className="py-2.5 px-3 text-center font-mono text-gray-300">
+	                                    v{oc.version || 1}
+	                                  </td>
+	                                  <td className="py-2.5 px-3 font-bold text-white">
+                                    {oc.proveedor?.nombre || 'Proveedor'}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center font-mono text-gray-300">
+                                    {oc.fecha_emision}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-right font-mono font-bold text-white">
+                                    ${(oc.monto_total || 0).toLocaleString('es-CL')}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center">
+                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-[#27272a] text-indigo-300 border border-gray-700">
+                                      {oc.estado}
+                                    </span>
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => setPdfPreviewOc(oc)}
+                                      className="px-2.5 py-1 bg-[#27272a] hover:bg-indigo-600 text-white rounded-lg transition border border-gray-700 font-bold text-[11px] flex items-center gap-1 mx-auto cursor-pointer"
+                                    >
+                                      <FileText className="w-3 h-3" />
+                                      <span>Ver / Imprimir OC</span>
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                    )}
+                  </div>
+                  )}
+                </div>
+              )}
+            </div>
               </div>
             </div>
 
@@ -3801,40 +5660,51 @@ export default function PipelineVentasPage() {
                   </div>
                 </div>
 
-                {/* Barra de Filtros de Actividad (Todos / Comentarios / Acciones de Sistema) */}
+                {/* Barra de Filtros de Actividad (Todos / Comentarios / Acciones / Reclamos) */}
                 <div className="flex items-center gap-1.5 p-1 bg-[#18181b] rounded-xl border border-gray-800 text-xs">
                   <button
                     type="button"
                     onClick={() => setActivityFilter('all')}
-                    className={`flex-1 py-1 px-2 rounded-lg font-extrabold transition flex items-center justify-center gap-1 ${
+                    className={`flex-1 py-1 px-1.5 rounded-lg font-extrabold transition flex items-center justify-center gap-1 ${
                       activityFilter === 'all'
                         ? 'bg-[#F7931F] text-white shadow-sm'
                         : 'text-gray-400 hover:text-white hover:bg-white/5'
                     }`}
                   >
-                    <span>🌐 Todos</span>
+                    <span>Todos</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setActivityFilter('comentarios')}
-                    className={`flex-1 py-1 px-2 rounded-lg font-extrabold transition flex items-center justify-center gap-1 ${
+                    className={`flex-1 py-1 px-1.5 rounded-lg font-extrabold transition flex items-center justify-center gap-1 ${
                       activityFilter === 'comentarios'
                         ? 'bg-[#F7931F] text-white shadow-sm'
                         : 'text-gray-400 hover:text-white hover:bg-white/5'
                     }`}
                   >
-                    <span>💬 Comentarios</span>
+                    <span>Comentarios</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setActivityFilter('sistema')}
-                    className={`flex-1 py-1 px-2 rounded-lg font-extrabold transition flex items-center justify-center gap-1 ${
+                    className={`flex-1 py-1 px-1.5 rounded-lg font-extrabold transition flex items-center justify-center gap-1 ${
                       activityFilter === 'sistema'
                         ? 'bg-[#F7931F] text-white shadow-sm'
                         : 'text-gray-400 hover:text-white hover:bg-white/5'
                     }`}
                   >
-                    <span>⚡ Acciones</span>
+                    <span>Acciones</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivityFilter('reclamos')}
+                    className={`flex-1 py-1 px-1.5 rounded-lg font-extrabold transition flex items-center justify-center gap-1 ${
+                      activityFilter === 'reclamos'
+                        ? 'bg-red-500 text-white shadow-sm'
+                        : 'text-red-400 hover:text-white hover:bg-red-500/10'
+                    }`}
+                  >
+                    <span>Reclamos</span>
                   </button>
                 </div>
 
@@ -3874,11 +5744,15 @@ export default function PipelineVentasPage() {
 
                     if (activityFilter === 'comentarios') {
                       filteredList = filteredList.filter(
-                        (m) => m.tipo === 'comentario' || (!m.tipo && !m.contenido?.startsWith('['))
+                        (m) => (m.tipo === 'comentario' || (!m.tipo && !m.contenido?.startsWith('['))) && m.tipo !== 'reclamo'
                       );
                     } else if (activityFilter === 'sistema') {
                       filteredList = filteredList.filter(
-                        (m) => m.tipo !== 'comentario' && (m.tipo || m.contenido?.startsWith('['))
+                        (m) => m.tipo !== 'comentario' && m.tipo !== 'reclamo' && (m.tipo || m.contenido?.startsWith('['))
+                      );
+                    } else if (activityFilter === 'reclamos') {
+                      filteredList = filteredList.filter(
+                        (m) => m.tipo === 'reclamo'
                       );
                     }
 
@@ -3900,8 +5774,10 @@ export default function PipelineVentasPage() {
                     }
 
                     return sortedList.map((msg) => {
+                      const isReclamoMsg = msg.tipo === 'reclamo';
                       const isUserComment =
                         msg.tipo === 'comentario' ||
+                        isReclamoMsg ||
                         (!msg.tipo && !msg.contenido?.startsWith('['));
 
                       const msgDate = new Date(msg.created_at);
@@ -3919,17 +5795,38 @@ export default function PipelineVentasPage() {
                         return (
                           <div
                             key={msg.id}
-                            className="bg-[#1c1c1f] p-4 rounded-2xl border border-gray-800/80 shadow-md space-y-3 transition hover:border-gray-700"
+                            className={`p-4 rounded-2xl border shadow-md space-y-3 transition ${
+                              isReclamoMsg
+                                ? 'bg-red-950/25 border-red-500/50 hover:border-red-400'
+                                : 'bg-[#1c1c1f] border-gray-800/80 hover:border-gray-700'
+                            }`}
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2.5">
-                                <div className="w-8 h-8 rounded-full bg-[#F7931F]/20 text-[#F7931F] font-black text-xs flex items-center justify-center border border-[#F7931F]/40 shrink-0">
-                                  <User className="w-4 h-4 text-[#F7931F]" />
+                                <div
+                                  className={`w-8 h-8 rounded-full font-black text-xs flex items-center justify-center border shrink-0 ${
+                                    isReclamoMsg
+                                      ? 'bg-red-500/20 text-red-400 border-red-500/40'
+                                      : 'bg-[#F7931F]/20 text-[#F7931F] border-[#F7931F]/40'
+                                  }`}
+                                >
+                                  {isReclamoMsg ? (
+                                    <AlertTriangle className="w-4 h-4 text-red-400" />
+                                  ) : (
+                                    <User className="w-4 h-4 text-[#F7931F]" />
+                                  )}
                                 </div>
                                 <div>
-                                  <span className="font-extrabold text-white text-sm block leading-none">
-                                    {msg.usuario_nombre}
-                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-extrabold text-white text-sm block leading-none">
+                                      {msg.usuario_nombre}
+                                    </span>
+                                    {isReclamoMsg && (
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-red-500/20 text-red-400 border border-red-500/40">
+                                        Reclamo / Postventa
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
 
@@ -3942,16 +5839,7 @@ export default function PipelineVentasPage() {
                               {renderMessageContentWithMentions(msg.contenido)}
                             </p>
 
-                            <div className="flex items-center justify-between pt-2 border-t border-gray-800 text-xs">
-                              <div className="flex items-center gap-2 text-gray-400">
-                                <button
-                                  type="button"
-                                  className="hover:text-[#F7931F] transition flex items-center gap-1 p-1 rounded hover:bg-white/5"
-                                  title="Reaccionar"
-                                >
-                                  <Smile className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
+                            <div className="flex items-center justify-end pt-2 border-t border-gray-800 text-xs">
                               <button
                                 type="button"
                                 onClick={() => setChatInput(`@${msg.usuario_nombre} `)}
@@ -4127,34 +6015,26 @@ export default function PipelineVentasPage() {
 
                       <button
                         type="button"
-                        className="p-1.5 hover:text-[#F7931F] hover:bg-white/5 rounded-lg transition"
-                        title="Asignar integrante"
+                        onClick={() => setIsReclamoMode(!isReclamoMode)}
+                        className={`px-2.5 py-1 rounded-xl transition flex items-center gap-1 text-xs font-black ${
+                          isReclamoMode
+                            ? 'bg-red-500 text-white shadow-sm'
+                            : 'text-gray-400 hover:text-red-400 hover:bg-white/5'
+                        }`}
+                        title="Marcar este mensaje como Reclamo / Postventa"
                       >
-                        <User className="w-4 h-4" />
-                      </button>
-
-                      <button
-                        type="button"
-                        className="p-1.5 hover:text-[#F7931F] hover:bg-white/5 rounded-lg transition"
-                        title="Emojis"
-                      >
-                        <Smile className="w-4 h-4" />
-                      </button>
-
-                      <button
-                        type="button"
-                        className="p-1.5 hover:text-[#F7931F] hover:bg-white/5 rounded-lg transition"
-                        title="Grabación de voz"
-                      >
-                        <Mic className="w-4 h-4" />
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        <span>{isReclamoMode ? 'Modo Reclamo' : 'Reclamo'}</span>
                       </button>
                     </div>
 
                     <button
                       type="button"
                       onClick={handleSendChatMessage}
-                      className="bg-[#F7931F] hover:bg-[#e08316] text-white p-2.5 rounded-xl transition flex items-center justify-center shadow-md shrink-0"
-                      title="Enviar comentario"
+                      className={`${
+                        isReclamoMode ? 'bg-red-500 hover:bg-red-600' : 'bg-[#F7931F] hover:bg-[#e08316]'
+                      } text-white p-2.5 rounded-xl transition flex items-center justify-center shadow-md shrink-0`}
+                      title={isReclamoMode ? 'Registrar Reclamo' : 'Enviar comentario'}
                     >
                       <Send className="w-4 h-4" />
                     </button>
@@ -4191,6 +6071,23 @@ export default function PipelineVentasPage() {
       <PdfPreviewModal
         cotizacion={previewCotizacion}
         onClose={() => setPreviewCotizacion(null)}
+      />
+
+      <OrdenCompraModal
+        isOpen={showCreateOcModal}
+        onClose={() => setShowCreateOcModal(false)}
+        oportunidadIdInicial={selectedOp?.id}
+        onSuccess={async () => {
+          if (!selectedOp) return;
+          delete ordenesCompraCacheRef.current[selectedOp.id];
+          await loadOrdenesCompraOportunidad(selectedOp.id);
+          await addOportunidadActividad(selectedOp.id, 'Nueva orden de compra vinculada a esta oportunidad.');
+        }}
+      />
+
+      <OrdenCompraPdfPreviewModal
+        orden={pdfPreviewOc}
+        onClose={() => setPdfPreviewOc(null)}
       />
 
       {/* Modal Crear Nueva Oportunidad */}
@@ -4250,6 +6147,31 @@ export default function PipelineVentasPage() {
                 </select>
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Origen</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: WhatsApp, referido, web..."
+                    value={nuevoOrigen}
+                    onChange={(e) => setNuevoOrigen(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Sólo material o instalación</label>
+                  <select
+                    value={nuevaModalidadRequerimiento}
+                    onChange={(e) => setNuevaModalidadRequerimiento(e.target.value as 'solo_material' | 'instalacion')}
+                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F]"
+                  >
+                    <option value="solo_material">Sólo material</option>
+                    <option value="instalacion">Instalación</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
                 <label className="block font-bold text-gray-700 mb-1">Fecha Límite de Término del Trabajo</label>
                 <input
@@ -4295,7 +6217,7 @@ export default function PipelineVentasPage() {
 
             <div className="space-y-2 text-xs text-gray-700">
               <p>
-                ¿Estás seguro de que deseas eliminar la oportunidad <strong className="font-mono text-[#363636]">{opToDelete.codigo}</strong> ("{opToDelete.titulo}")?
+                ¿Estás seguro de que deseas eliminar la oportunidad <strong className="font-mono text-[#363636]">{opToDelete.codigo}</strong> (&quot;{opToDelete.titulo}&quot;)?
               </p>
               <p className="bg-red-50 p-3 rounded-xl border border-red-200 text-red-900 font-medium">
                 Esta acción eliminará permanentemente la oportunidad de la base de datos de Supabase.
@@ -4426,9 +6348,13 @@ export default function PipelineVentasPage() {
                     contacto: false,
                     productos: false,
                     finanzas: true,
+                    antecedentes: false,
                     visita: false,
-                    produccion: false,
-                    reventa: false,
+                    produccionEventos: false,
+                    produccionBitacora: false,
+                    produccionOc: false,
+                    reventaEventos: false,
+                    reventaOc: false,
                   });
                 }}
                 className="px-4 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold rounded-xl transition shadow-sm flex items-center gap-1.5"
@@ -4436,6 +6362,64 @@ export default function PipelineVentasPage() {
                 <DollarSign className="w-4 h-4" />
                 <span>Registrar Abono Ahora</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {ramaChangeOcModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[120] animate-fadeIn">
+          <div className="bg-white border border-gray-200 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-[#363636]">
+            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+              <h3 className="text-base font-extrabold flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-[#F7931F]" />
+                <span>Resolver OC antes de cambiar de rama</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setRamaChangeOcModal(null)}
+                className="text-gray-400 hover:text-[#363636] font-bold"
+              >
+                x
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-gray-700">
+              <p>
+                La oportunidad <strong>{ramaChangeOcModal.op.codigo}</strong> tiene <strong>{ramaChangeOcModal.ocCount}</strong> orden(es) de compra vinculada(s).
+              </p>
+              <p className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-orange-950 font-medium">
+                Para moverla a {ramaChangeOcModal.rama === 'produccion' ? 'Produccion e Instalacion' : 'Reventa y Logistica'}, primero debes desvincular o eliminar esas OCs. No pueden quedar asignadas a ambas ramas.
+              </p>
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row justify-end gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setRamaChangeOcModal(null)}
+                disabled={resolvingRamaChangeOc}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => resolveRamaChangeWithOc('desvincular')}
+                disabled={resolvingRamaChangeOc}
+                className="px-4 py-2 bg-white hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed text-[#363636] border border-gray-300 font-extrabold rounded-xl transition"
+              >
+                {resolvingRamaChangeOc ? 'Resolviendo...' : 'Desvincular OC y Cambiar Rama'}
+              </button>
+              {currentUser?.rol === 'admin' && (
+                <button
+                  type="button"
+                  onClick={() => resolveRamaChangeWithOc('eliminar')}
+                  disabled={resolvingRamaChangeOc}
+                  className="px-4 py-2 bg-[#363636] hover:bg-black disabled:opacity-60 disabled:cursor-not-allowed text-white font-extrabold rounded-xl transition"
+                >
+                  Eliminar OC y Cambiar Rama
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -4549,4 +6533,3 @@ export default function PipelineVentasPage() {
     </div>
   );
 }
-

@@ -65,13 +65,28 @@ export default function LoginPage() {
         return;
       }
 
+      if (data.session) {
+        await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+      }
+
       const { data: perfil, error: perfilError } = await supabase
         .from('usuarios')
         .select('activo')
         .eq('auth_id', data.user.id)
         .maybeSingle();
 
-      if (perfilError || !perfil || perfil.activo === false) {
+      if (perfilError) {
+        console.error('Error validando perfil de acceso:', perfilError.message);
+        await supabase.auth.signOut();
+        setError('No se pudo validar tu perfil de acceso. Intenta nuevamente.');
+        setLoading(false);
+        return;
+      }
+
+      if (!perfil || perfil.activo === false) {
         await supabase.auth.signOut();
         setError('Tu cuenta no está habilitada para acceder al sistema.');
         setLoading(false);

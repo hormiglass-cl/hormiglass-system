@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '../../lib/supabase/client';
-import { OportunidadVenta, Cliente } from '../../lib/types';
+import { OportunidadVenta, Cliente, Usuario } from '../../lib/types';
 import { useAuth } from '../../lib/context/AuthContext';
 import {
   Calendar as CalendarIcon,
@@ -27,7 +27,17 @@ import {
 const isUUID = (str: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
 
-const TECNICOS = ['Felipe Valverde', 'Marcos Catalán', 'Edith Tapia'] as const;
+type VisitaTerrenoRow = {
+  id: string;
+  oportunidad?: OportunidadVenta | null;
+  tecnico_visita?: string;
+  tecnico_id?: string | null;
+  tecnico?: Usuario;
+  fecha_visita_terreno?: string;
+  hora_visita_terreno?: string;
+  estado_visita?: string;
+  observaciones_visita?: string;
+};
 
 export default function VisitasTerrenoPage() {
   const { currentUser } = useAuth();
@@ -35,6 +45,7 @@ export default function VisitasTerrenoPage() {
   const highlightedOpId = searchParams.get('opId');
 
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
+  const [personalVisitas, setPersonalVisitas] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTecnico, setSelectedTecnico] = useState<string>('todos');
   const [selectedEstado, setSelectedEstado] = useState<string>('todos');
@@ -47,23 +58,34 @@ export default function VisitasTerrenoPage() {
 
   const fetchOportunidades = async () => {
     try {
-      const [opRes, visRes] = await Promise.all([
+      const [opRes, visRes, respRes] = await Promise.all([
         supabase
           .from('oportunidades')
           .select('*, cliente:clientes(*)')
           .eq('requiere_visita_terreno', true),
         supabase
           .from('visitas_terreno')
-          .select('*, oportunidad:oportunidades(*, cliente:clientes(*))')
+          .select('*, oportunidad:oportunidades(*, cliente:clientes(*)), tecnico:usuarios!tecnico_id(*)')
           .order('fecha_visita_terreno', { ascending: true }),
+        supabase
+          .from('usuarios')
+          .select('*')
+          .eq('activo', true)
+          .order('nombre', { ascending: true }),
       ]);
+
+      if (respRes.data) {
+        const users = respRes.data as Usuario[];
+        const filteredUsers = users.filter((u) => u.calendario_visitas !== false);
+        setPersonalVisitas(filteredUsers.length > 0 ? filteredUsers : users);
+      }
 
       const combinedOps: OportunidadVenta[] = [];
 
       // Add visits from visitas_terreno table (only for active opportunities where requiere_visita_terreno !== false)
       if (visRes.data) {
-        for (const v of visRes.data) {
-          const parentOp = v.oportunidad as any;
+        for (const v of visRes.data as VisitaTerrenoRow[]) {
+          const parentOp = v.oportunidad;
 
           // Skip visit if parent opportunity is turned off (requiere_visita_terreno === false)
           if (!parentOp || parentOp.requiere_visita_terreno === false) {
@@ -78,6 +100,8 @@ export default function VisitasTerrenoPage() {
             estado_pipeline: parentOp?.estado_pipeline || 'nueva',
             fecha_inicio: parentOp?.fecha_inicio || v.fecha_visita_terreno,
             tecnico_visita: v.tecnico_visita,
+            tecnico_id: v.tecnico_id,
+            tecnico: v.tecnico,
             fecha_visita_terreno: v.fecha_visita_terreno,
             hora_visita_terreno: v.hora_visita_terreno,
             estado_visita: v.estado_visita,
@@ -111,7 +135,9 @@ export default function VisitasTerrenoPage() {
 
   useEffect(() => {
     let ignore = false;
-    fetchOportunidades();
+    const loadTimer = window.setTimeout(() => {
+      if (!ignore) fetchOportunidades();
+    }, 0);
 
     const channel1 = supabase
       .channel('realtime_visitas_table')
@@ -135,16 +161,32 @@ export default function VisitasTerrenoPage() {
       )
       .subscribe();
 
+    const channel3 = supabase
+      .channel('realtime_visitas_responsables')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'usuarios' },
+        () => {
+          if (!ignore) fetchOportunidades();
+        }
+      )
+      .subscribe();
+
     return () => {
       ignore = true;
+      window.clearTimeout(loadTimer);
       supabase.removeChannel(channel1);
       supabase.removeChannel(channel2);
+      supabase.removeChannel(channel3);
     };
   }, []);
 
   // Update field visit in Supabase
-  const updateVisitaField = async (opId: string, field: string, value: any) => {
+  const updateVisitaField = async (opId: string, field: keyof OportunidadVenta, value: string | null) => {
     try {
+      const parentOpId = selectedVisitaOp?.id === opId
+        ? selectedVisitaOp.cotizacion_actual_id || opId
+        : opId;
       setOportunidades((prev) =>
         prev.map((o) => (o.id === opId ? { ...o, [field]: value } : o))
       );
@@ -153,10 +195,71 @@ export default function VisitasTerrenoPage() {
       }
       await Promise.all([
         supabase.from('visitas_terreno').update({ [field]: value }).eq('id', opId),
-        supabase.from('oportunidades').update({ [field]: value }).eq('id', opId),
+        supabase.from('oportunidades').update({ [field]: value }).eq('id', parentOpId),
       ]);
     } catch (err) {
       console.error(`Error updating ${field} for visita:`, err);
+    }
+  };
+
+  const updateVisitaResponsable = async (opId: string, personalId: string) => {
+    const responsable = personalVisitas.find((p) => p.id === personalId);
+    const nombre = responsable?.nombre || '';
+    const parentOpId = selectedVisitaOp?.id === opId
+      ? selectedVisitaOp.cotizacion_actual_id || opId
+      : opId;
+
+    setOportunidades((prev) =>
+      prev.map((o) =>
+        o.id === opId
+          ? { ...o, tecnico_id: personalId, tecnico: responsable, tecnico_visita: nombre }
+          : o
+      )
+    );
+    setSelectedVisitaOp((prev) =>
+      prev && prev.id === opId
+        ? { ...prev, tecnico_id: personalId, tecnico: responsable, tecnico_visita: nombre }
+        : prev
+    );
+
+    await Promise.all([
+      supabase
+        .from('visitas_terreno')
+        .update({ tecnico_id: personalId, tecnico_visita: nombre })
+        .eq('id', opId),
+      supabase
+        .from('oportunidades')
+        .update({ tecnico_id: personalId, tecnico_visita: nombre })
+        .eq('id', parentOpId),
+    ]);
+  };
+
+  const deleteVisita = async (visita: OportunidadVenta) => {
+    try {
+      const visId = visita.id;
+      const parentOpId = visita.cotizacion_actual_id || visita.id;
+
+      if (isUUID(visId)) {
+        await supabase.from('visitas_terreno').delete().eq('id', visId);
+      }
+
+      if (isUUID(parentOpId)) {
+        await supabase.from('oportunidades').update({
+          fecha_visita_terreno: null,
+          hora_visita_terreno: null,
+          tecnico_visita: null,
+          tecnico_id: null,
+          estado_visita: null,
+          observaciones_visita: null,
+          requiere_visita_terreno: false,
+        }).eq('id', parentOpId);
+      }
+
+      setOportunidades((prev) => prev.filter((o) => o.id !== visId && o.id !== parentOpId));
+      setSelectedVisitaOp((prev) => (prev?.id === visId ? null : prev));
+    } catch (err) {
+      console.error('Error deleting visita from calendar:', err);
+      fetchOportunidades();
     }
   };
 
@@ -177,24 +280,26 @@ export default function VisitasTerrenoPage() {
   const goToToday = () => setCurrentDate(new Date());
 
   // Filter visits
+  const [selectedTecnicos, setSelectedTecnicos] = useState<string[]>([]);
+  const [showTecnicoMenu, setShowTecnicoMenu] = useState(false);
+
   const filteredVisitas = oportunidades.filter((op) => {
-    const matchesTecnico = selectedTecnico === 'todos' || op.tecnico_visita === selectedTecnico;
+    const matchesTecnico =
+      selectedTecnicos.length === 0 ||
+      (op.tecnico_id && selectedTecnicos.includes(op.tecnico_id));
     const matchesEstado = selectedEstado === 'todos' || (op.estado_visita || 'programada') === selectedEstado;
     return matchesTecnico && matchesEstado;
   });
 
-  const getTecnicoColor = (tec?: string) => {
-    switch (tec) {
-      case 'Felipe Valverde':
-        return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500' };
-      case 'Marcos Catalán':
-        return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500' };
-      case 'Edith Tapia':
-        return { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', dot: 'bg-purple-500' };
-      default:
-        return { bg: 'bg-orange-50', text: 'text-[#F7931F]', border: 'border-orange-200', dot: 'bg-[#F7931F]' };
-    }
-  };
+  const getTecnicoColor = () => ({
+    bg: 'bg-orange-50',
+    text: 'text-[#F7931F]',
+    border: 'border-orange-200',
+    dot: 'bg-[#F7931F]',
+  });
+
+  const getResponsableNombre = (op: OportunidadVenta) =>
+    op.tecnico?.nombre || op.tecnico_visita || 'Responsable';
 
   const getEstadoBadge = (est?: string) => {
     switch (est) {
@@ -208,121 +313,172 @@ export default function VisitasTerrenoPage() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6 animate-fadeIn">
+    <div className="space-y-5 text-[#363636] animate-fadeIn">
       {/* Header */}
-      <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-black uppercase text-[#F7931F] bg-orange-50 px-2.5 py-0.5 rounded-full border border-orange-200">
-              Control de Terreno
-            </span>
-          </div>
           <h1 className="text-2xl font-extrabold text-[#363636] flex items-center gap-2.5">
-            <CalendarIcon className="w-7 h-7 text-[#F7931F]" />
-            <span>Calendario de Visitas a Terreno</span>
+            <CalendarIcon className="w-6 h-6 text-[#F7931F]" />
+            <span>Calendario de visitas a terreno</span>
           </h1>
-          <p className="text-xs text-gray-500 mt-1">
-            Programación y asignación técnica de inspecciones en terreno para <strong>Felipe Valverde</strong>, <strong>Marcos Catalán</strong> y <strong>Edith Tapia</strong>.
+          <p className="text-xs text-gray-500 mt-0.5">
+            Planificación y asignación de inspecciones en terreno asociadas a oportunidades.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={goToToday}
-            className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-[#363636] font-bold text-xs rounded-xl transition"
+        <div className="flex items-center gap-2.5">
+          <Link
+            href="/ventas"
+            className="bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold text-xs px-4 py-2 rounded-xl transition flex items-center gap-2 shadow-sm"
           >
-            Hoy
-          </button>
-          <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1 border border-gray-200">
+            <Plus className="w-4 h-4" />
+            <span>Programar visita desde pipeline</span>
+          </Link>
+        </div>
+      </div>
+
+      {/* Control Bar: Mes + Filtros */}
+      <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-4 text-xs">
+        {/* Navegación de Mes */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-gray-100 rounded-xl p-1 border border-gray-200">
             <button
               onClick={prevMonth}
               className="p-1.5 hover:bg-white text-gray-700 rounded-lg transition"
-              title="Mes Anterior"
+              title="Mes anterior"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="text-xs font-black text-[#363636] px-3 font-mono">
+            <span className="font-extrabold text-[#363636] px-3 font-mono text-sm">
               {monthNames[month]} {year}
             </span>
             <button
               onClick={nextMonth}
               className="p-1.5 hover:bg-white text-gray-700 rounded-lg transition"
-              title="Mes Siguiente"
+              title="Mes siguiente"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-        </div>
-      </div>
 
-      {/* Tabs de Filtro por Técnico y Estado */}
-      <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
-        {/* Técnicos */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mr-1">Técnico:</span>
           <button
-            onClick={() => setSelectedTecnico('todos')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-              selectedTecnico === 'todos'
-                ? 'bg-[#363636] text-white shadow-xs'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
+            onClick={goToToday}
+            className="px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-[#F7931F] font-bold rounded-xl border border-orange-200 transition"
           >
-            Todos ({oportunidades.length})
+            Hoy
           </button>
-
-          {TECNICOS.map((tec) => {
-            const count = oportunidades.filter((o) => o.tecnico_visita === tec).length;
-            const style = getTecnicoColor(tec);
-            const isSelected = selectedTecnico === tec;
-
-            return (
-              <button
-                key={tec}
-                onClick={() => setSelectedTecnico(tec)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-2 ${
-                  isSelected
-                    ? `${style.bg} ${style.text} ${style.border} ring-2 ring-current`
-                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                <div className={`w-2 h-2 rounded-full ${style.dot}`} />
-                <span>{tec}</span>
-                <span className="text-[10px] bg-white/80 px-1.5 py-0.5 rounded-full font-mono font-extrabold border">
-                  {count}
-                </span>
-              </button>
-            );
-          })}
         </div>
 
-        {/* Estado */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Estado:</span>
-          <select
-            value={selectedEstado}
-            onChange={(e) => setSelectedEstado(e.target.value)}
-            className="text-xs font-bold px-3 py-1.5 rounded-xl border border-gray-200 bg-white text-[#363636] focus:outline-none focus:border-[#F7931F]"
-          >
-            <option value="todos">Todos los Estados</option>
-            <option value="programada">📅 Programadas</option>
-            <option value="realizada">✅ Realizadas</option>
-            <option value="cancelada">❌ Canceladas</option>
-          </select>
+        {/* Filtros */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Técnico (Multi-Selección Desplegable) */}
+          <div className="relative">
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-gray-500">Técnico:</span>
+              <button
+                type="button"
+                onClick={() => setShowTecnicoMenu(!showTecnicoMenu)}
+                className="bg-gray-50 hover:bg-gray-100 border border-gray-300 rounded-xl px-3 py-1.5 text-[#363636] font-bold text-xs flex items-center justify-between gap-2 min-w-[170px] cursor-pointer"
+              >
+                <span className="truncate">
+                  {selectedTecnicos.length === 0
+                    ? 'Todos los técnicos'
+                    : selectedTecnicos.length === 1
+                    ? personalVisitas.find((p) => p.id === selectedTecnicos[0])?.nombre || '1 seleccionado'
+                    : `${selectedTecnicos.length} seleccionados`}
+                </span>
+                <ChevronRight className={`w-3.5 h-3.5 text-gray-500 transition-transform ${showTecnicoMenu ? 'rotate-90' : ''}`} />
+              </button>
+            </div>
+
+            {showTecnicoMenu && (
+              <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-2xl shadow-xl p-3 z-30 space-y-2 text-xs">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
+                  <span className="font-extrabold text-[#363636] text-[11px] uppercase tracking-wider">
+                    Filtrar técnicos
+                  </span>
+                  {selectedTecnicos.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTecnicos([])}
+                      className="text-[10px] text-[#F7931F] font-bold hover:underline"
+                    >
+                      Limpiar filtro
+                    </button>
+                  )}
+                </div>
+
+                <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
+                  <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-bold text-[#363636]">
+                    <input
+                      type="checkbox"
+                      checked={selectedTecnicos.length === 0}
+                      onChange={() => setSelectedTecnicos([])}
+                      className="rounded text-[#F7931F] focus:ring-[#F7931F]"
+                    />
+                    <span>Todos los técnicos</span>
+                  </label>
+
+                  {personalVisitas.map((p) => {
+                    const isChecked = selectedTecnicos.includes(p.id);
+                    const count = oportunidades.filter((o) => o.tecnico_id === p.id).length;
+                    return (
+                      <label
+                        key={p.id}
+                        className="flex items-center justify-between p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-medium text-gray-700"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              if (isChecked) {
+                                setSelectedTecnicos(selectedTecnicos.filter((id) => id !== p.id));
+                              } else {
+                                setSelectedTecnicos([...selectedTecnicos, p.id]);
+                              }
+                            }}
+                            className="rounded text-[#F7931F] focus:ring-[#F7931F]"
+                          />
+                          <span className="truncate">{p.nombre}</span>
+                        </div>
+                        <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded-full font-mono text-gray-600 font-bold shrink-0">
+                          {count}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Estado */}
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-gray-500">Estado:</span>
+            <select
+              value={selectedEstado}
+              onChange={(e) => setSelectedEstado(e.target.value)}
+              className="bg-gray-50 border border-gray-300 rounded-xl px-2.5 py-1.5 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F]"
+            >
+              <option value="todos">Todos los estados</option>
+              <option value="programada">Programadas</option>
+              <option value="realizada">Realizadas</option>
+              <option value="cancelada">Canceladas</option>
+            </select>
+          </div>
         </div>
       </div>
 
-      {/* Grid del Calendario */}
-      <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden">
-        {/* Dias de la semana */}
-        <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-200 text-center text-xs font-extrabold text-gray-500 uppercase tracking-wider py-3">
-          <div>Lun</div>
-          <div>Mar</div>
-          <div>Mié</div>
-          <div>Jue</div>
-          <div>Vie</div>
-          <div className="text-orange-600">Sáb</div>
-          <div className="text-orange-600">Dom</div>
+      {/* Grid del Calendario Mensual */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        {/* Días de la semana */}
+        <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-xs font-bold text-gray-600">
+          {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((d) => (
+            <div key={d} className="py-2.5 border-r last:border-r-0 border-gray-200">
+              {d}
+            </div>
+          ))}
         </div>
 
         {/* Celdas de Dias */}
@@ -370,8 +526,9 @@ export default function VisitasTerrenoPage() {
                 {/* Tarjetas de visitas en el día */}
                 <div className="space-y-1.5 overflow-y-auto max-h-[110px] pr-0.5">
                   {dayVisitas.map((op) => {
-                    const color = getTecnicoColor(op.tecnico_visita);
+                    const color = getTecnicoColor();
                     const est = getEstadoBadge(op.estado_visita);
+                    const responsableNombre = getResponsableNombre(op);
 
                     return (
                       <div
@@ -381,12 +538,25 @@ export default function VisitasTerrenoPage() {
                       >
                         <div className="flex items-center justify-between gap-1 mb-1">
                           <span className={`font-black uppercase tracking-wider text-[9px] px-1.5 py-0.5 rounded-md ${color.text} bg-white/80 border`}>
-                            {op.tecnico_visita || 'Técnico'}
+                            {responsableNombre}
                           </span>
-                          <span className="font-mono text-[9px] text-gray-500 font-bold flex items-center gap-0.5">
-                            <Clock className="w-3 h-3 text-gray-400" />
-                            {op.hora_visita_terreno || '09:00'}
-                          </span>
+                          <div className="flex items-center gap-1">
+                            <span className="font-mono text-[9px] text-gray-500 font-bold flex items-center gap-0.5">
+                              <Clock className="w-3 h-3 text-gray-400" />
+                              {op.hora_visita_terreno || '09:00'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteVisita(op);
+                              }}
+                              className="p-1 bg-white/80 hover:bg-red-50 text-red-600 border border-red-100 rounded-md shrink-0"
+                              title="Eliminar visita"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
 
                         <div className="font-bold text-[#363636] truncate leading-tight" title={op.titulo}>
@@ -458,13 +628,22 @@ export default function VisitasTerrenoPage() {
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">Técnico Asignado</label>
                   <select
-                    value={selectedVisitaOp.tecnico_visita || 'Felipe Valverde'}
-                    onChange={(e) => updateVisitaField(selectedVisitaOp.id, 'tecnico_visita', e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F]"
+                    value={
+                      selectedVisitaOp.tecnico_id ||
+                      personalVisitas.find((p) => p.nombre === selectedVisitaOp.tecnico_visita)?.id ||
+                      ''
+                    }
+                    onChange={(e) => {
+                      updateVisitaResponsable(selectedVisitaOp.id, e.target.value);
+                    }}
+                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F] cursor-pointer"
                   >
-                    <option value="Felipe Valverde">Felipe Valverde</option>
-                    <option value="Marcos Catalán">Marcos Catalán</option>
-                    <option value="Edith Tapia">Edith Tapia</option>
+                    <option value="">Selecciona responsable</option>
+                    {personalVisitas.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.nombre}{t.rut ? ` - ${t.rut}` : ''}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -475,9 +654,9 @@ export default function VisitasTerrenoPage() {
                     onChange={(e) => updateVisitaField(selectedVisitaOp.id, 'estado_visita', e.target.value)}
                     className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-black uppercase focus:outline-none focus:border-[#F7931F]"
                   >
-                    <option value="programada">📅 Programada</option>
-                    <option value="realizada">✅ Realizada</option>
-                    <option value="cancelada">❌ Canceladas</option>
+                    <option value="programada">Programada</option>
+                    <option value="realizada">Realizada</option>
+                    <option value="cancelada">Cancelada</option>
                   </select>
                 </div>
               </div>
@@ -531,26 +710,7 @@ export default function VisitasTerrenoPage() {
                   onClick={async () => {
                     if (!selectedVisitaOp) return;
                     try {
-                      const visId = selectedVisitaOp.id;
-                      const parentOpId = selectedVisitaOp.cotizacion_actual_id || selectedVisitaOp.id;
-
-                      if (isUUID(visId)) {
-                        await supabase.from('visitas_terreno').delete().eq('id', visId);
-                      }
-
-                      if (isUUID(parentOpId)) {
-                        await supabase.from('oportunidades').update({
-                          fecha_visita_terreno: null,
-                          hora_visita_terreno: null,
-                          tecnico_visita: null,
-                          estado_visita: null,
-                          observaciones_visita: null,
-                          requiere_visita_terreno: false,
-                        }).eq('id', parentOpId);
-                      }
-
-                      setOportunidades((prev) => prev.filter((o) => o.id !== visId && o.id !== parentOpId));
-                      setSelectedVisitaOp(null);
+                      await deleteVisita(selectedVisitaOp);
                     } catch (err) {
                       console.error('Error deleting visita from calendar:', err);
                     }

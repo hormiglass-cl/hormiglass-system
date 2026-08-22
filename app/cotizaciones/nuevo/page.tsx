@@ -19,15 +19,13 @@ import {
   Search,
   Check,
   ChevronDown,
+  Tag,
+  Calendar,
 } from 'lucide-react';
 
 function generateCotNumber(version = 1): string {
   const sequence = Math.floor(1000 + Math.random() * 9000);
   return `COT-2026-${sequence}-v${version}`;
-}
-
-function generateLocalId(): string {
-  return `cot-${Date.now()}`;
 }
 
 function NuevaCotizacionForm() {
@@ -47,20 +45,30 @@ function NuevaCotizacionForm() {
 
   const [oportunidadId, setOportunidadId] = useState<string | undefined>(paramOpId || undefined);
   const [version, setVersion] = useState<number>(1);
+
+  // Reference and dates
+  const [referenciaCliente, setReferenciaCliente] = useState('');
+  const [fechaValidez, setFechaValidez] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().split('T')[0];
+  });
+
   const todayStr = new Date().toISOString().split('T')[0];
   const [fechaInicioCompromiso, setFechaInicioCompromiso] = useState(todayStr);
   const [fechaLimiteCompromiso, setFechaLimiteCompromiso] = useState('');
-  const [plazoEntrega, setPlazoEntrega] = useState('5 días hábiles');
-  const [condicionesPago, setCondicionesPago] = useState('50% abono / 50% al despacho');
-  const [observaciones, setObservaciones] = useState('Precios de fábrica San Bernardo. Garantía 5 años en instalación.');
+  const [plazoEntrega, setPlazoEntrega] = useState('Inmediato');
+  const [condicionesPago, setCondicionesPago] = useState('Acuse de recibo');
+  const [observaciones, setObservaciones] = useState('Garantía oficial Hormiglass en prefabricados.');
   const [loading, setLoading] = useState(false);
 
   const [items, setItems] = useState<CotizacionItem[]>([
     {
-      producto: 'Pastelón Antideslizante Piedra Natural 50x50 cm',
-      cantidad: 150,
-      precio_unitario: 6500,
-      total_item: 975000,
+      producto: 'Suministro de placas prefabricadas de hormigón',
+      cantidad: 1,
+      precio_unitario: 100000,
+      descuento_porcentaje: 0,
+      total_item: 100000,
     },
   ]);
 
@@ -70,7 +78,6 @@ function NuevaCotizacionForm() {
       const { data } = await supabase.from('clientes').select('*').order('nombre');
       if (!ignore) {
         const loadedClientes: Cliente[] = data ? (data as Cliente[]) : [];
-
         setClientes(loadedClientes);
 
         if (paramClienteId) {
@@ -92,11 +99,20 @@ function NuevaCotizacionForm() {
             setClienteId(targetCot.cliente_id);
             setOportunidadId(targetCot.oportunidad_id);
             setVersion((targetCot.version || 1) + 1);
-            setPlazoEntrega(targetCot.plazo_entrega || '5 días hábiles');
-            setCondicionesPago(targetCot.condiciones_pago || '50% abono / 50% al despacho');
-            setObservaciones(`Versión ${(targetCot.version || 1) + 1} basada en ${targetCot.numero_cotizacion}`);
+            setReferenciaCliente(targetCot.referencia_cliente || '');
+            if (targetCot.fecha_validez) {
+              setFechaValidez(targetCot.fecha_validez.split('T')[0]);
+            }
+            setPlazoEntrega(targetCot.plazo_entrega || 'Inmediato');
+            setCondicionesPago(targetCot.condiciones_pago || 'Acuse de recibo');
+            setObservaciones(targetCot.comentario_publico || targetCot.observaciones || `Versión ${(targetCot.version || 1) + 1} basada en ${targetCot.numero_cotizacion}`);
             if (targetCot.items && targetCot.items.length > 0) {
-              setItems(targetCot.items);
+              setItems(
+                targetCot.items.map((it) => ({
+                  ...it,
+                  descuento_porcentaje: it.descuento_porcentaje || 0,
+                }))
+              );
             }
           }
         }
@@ -126,11 +142,10 @@ function NuevaCotizacionForm() {
     const updated = [...items];
     const item = { ...updated[index], [field]: value };
 
-    if (field === 'cantidad' || field === 'precio_unitario') {
-      const qty = Number(item.cantidad) || 0;
-      const price = Number(item.precio_unitario) || 0;
-      item.total_item = qty * price;
-    }
+    const qty = Number(item.cantidad) || 0;
+    const price = Number(item.precio_unitario) || 0;
+    const dto = Number(item.descuento_porcentaje) || 0;
+    item.total_item = Math.round(qty * price * (1 - dto / 100));
 
     updated[index] = item;
     setItems(updated);
@@ -143,6 +158,7 @@ function NuevaCotizacionForm() {
         producto: '',
         cantidad: 1,
         precio_unitario: 0,
+        descuento_porcentaje: 0,
         total_item: 0,
       },
     ]);
@@ -153,10 +169,20 @@ function NuevaCotizacionForm() {
     setItems(items.filter((_, i) => i !== index));
   };
 
-  // Financial calculations
-  const subtotalNeto = items.reduce((acc, it) => acc + (it.total_item || 0), 0);
-  const ivaCalculado = Math.round(subtotalNeto * 0.19);
-  const totalFinal = subtotalNeto + ivaCalculado;
+  // Financial calculations matching template
+  const totalNetoAntesDescuento = items.reduce(
+    (acc, it) => acc + (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0),
+    0
+  );
+  const descuentoTotal = items.reduce((acc, it) => {
+    const q = Number(it.cantidad) || 0;
+    const p = Number(it.precio_unitario) || 0;
+    const dto = Number(it.descuento_porcentaje) || 0;
+    return acc + Math.round((q * p * dto) / 100);
+  }, 0);
+  const totalSinIva = Math.max(0, totalNetoAntesDescuento - descuentoTotal);
+  const ivaCalculado = Math.round(totalSinIva * 0.19);
+  const totalFinal = totalSinIva + ivaCalculado;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,8 +202,10 @@ function NuevaCotizacionForm() {
           oportunidad_id: (oportunidadId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(oportunidadId)) ? oportunidadId : null,
           version: version,
           estado: 'borrador',
-          subtotal: subtotalNeto,
-          descuento: 0,
+          referencia_cliente: referenciaCliente || null,
+          fecha_validez: fechaValidez || null,
+          subtotal: totalSinIva,
+          descuento: descuentoTotal,
           iva_porcentaje: 19,
           monto_iva: ivaCalculado,
           monto_total: totalFinal,
@@ -186,6 +214,7 @@ function NuevaCotizacionForm() {
           fecha_limite_compromiso: fechaLimiteCompromiso || null,
           condiciones_pago: condicionesPago,
           observaciones: observaciones,
+          comentario_publico: observaciones,
         }])
         .select()
         .single();
@@ -199,7 +228,7 @@ function NuevaCotizacionForm() {
           producto: it.producto,
           cantidad: Number(it.cantidad),
           precio_unitario: Number(it.precio_unitario),
-          descuento_porcentaje: 0,
+          descuento_porcentaje: Number(it.descuento_porcentaje || 0),
           total_item: Number(it.total_item),
         }));
 
@@ -260,10 +289,10 @@ function NuevaCotizacionForm() {
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-            {/* Buscador Interactivo de Clientes (RUT, Nombre, Razón Social, Email) */}
+            {/* Buscador Interactivo de Clientes */}
             <div className="relative">
               <label className="block font-bold text-gray-700 mb-1">
-                Buscar & Seleccionar Cliente (por RUT, Nombre, Razón Social o Email) *
+                Buscar & Seleccionar Cliente *
               </label>
 
               <div
@@ -332,42 +361,60 @@ function NuevaCotizacionForm() {
               )}
             </div>
 
-            <div>
-              <label className="block font-bold text-gray-700 mb-1">Plazo de Entrega Compromiso (Rango de Fechas)</label>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-[10px] text-gray-500 block">Fecha Inicio</span>
-                  <input
-                    type="date"
-                    value={fechaInicioCompromiso}
-                    onChange={(e) => setFechaInicioCompromiso(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-2.5 py-1.5 text-[#363636] font-medium text-xs focus:outline-none focus:border-[#F7931F]"
-                  />
-                </div>
-                <div>
-                  <span className="text-[10px] text-gray-500 block">Fecha Límite</span>
-                  <input
-                    type="date"
-                    value={fechaLimiteCompromiso}
-                    onChange={(e) => setFechaLimiteCompromiso(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-2.5 py-1.5 text-[#363636] font-bold text-amber-700 text-xs focus:outline-none focus:border-[#F7931F]"
-                  />
-                </div>
+            {/* Metadatos: Ref. Cliente & Fecha de Validez */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1 flex items-center gap-1">
+                  <Tag className="w-3.5 h-3.5 text-[#F7931F]" />
+                  <span>Ref. Cliente</span>
+                </label>
+                <input
+                  type="text"
+                  value={referenciaCliente}
+                  onChange={(e) => setReferenciaCliente(e.target.value)}
+                  placeholder="Ej: NEMICEPS"
+                  className="w-full bg-white border border-gray-300 rounded-xl px-2.5 py-1.5 text-[#363636] font-medium text-xs focus:outline-none focus:border-[#F7931F]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-[#F7931F]" />
+                  <span>Fecha Validez</span>
+                </label>
+                <input
+                  type="date"
+                  value={fechaValidez}
+                  onChange={(e) => setFechaValidez(e.target.value)}
+                  className="w-full bg-white border border-gray-300 rounded-xl px-2.5 py-1.5 text-[#363636] font-medium text-xs focus:outline-none focus:border-[#F7931F]"
+                />
               </div>
             </div>
 
             <div>
-              <label className="block font-bold text-gray-700 mb-1">Condiciones de Pago Pactadas</label>
+              <label className="block font-bold text-gray-700 mb-1">Plazo de Entrega (Retraso disponible)</label>
               <input
                 type="text"
-                value={condicionesPago}
-                onChange={(e) => setCondicionesPago(e.target.value)}
+                value={plazoEntrega}
+                onChange={(e) => setPlazoEntrega(e.target.value)}
+                placeholder="Inmediato / 5 días hábiles"
                 className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
               />
             </div>
 
             <div>
-              <label className="block font-bold text-gray-700 mb-1">Observaciones / Garantía</label>
+              <label className="block font-bold text-gray-700 mb-1">Términos de Pago</label>
+              <input
+                type="text"
+                value={condicionesPago}
+                onChange={(e) => setCondicionesPago(e.target.value)}
+                placeholder="Acuse de recibo / 50% abono"
+                className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block font-bold text-gray-700 mb-1">Comentario público / Observaciones</label>
               <input
                 type="text"
                 value={observaciones}
@@ -383,7 +430,7 @@ function NuevaCotizacionForm() {
           <div className="flex items-center justify-between border-b border-gray-200 pb-3">
             <h2 className="text-sm font-extrabold text-[#363636] flex items-center gap-2">
               <Calculator className="w-4 h-4 text-[#F7931F]" />
-              <span>Detalle de Productos y Servicios (Neto)</span>
+              <span>Partidas y Productos (Monto en Chile Peso)</span>
             </h2>
 
             <button
@@ -407,7 +454,7 @@ function NuevaCotizacionForm() {
                   <input
                     type="text"
                     required
-                    placeholder="Ej. Pastelón Liso 40x40 cm / Cierro Bulldog 2.0m"
+                    placeholder="Descripción de la partida..."
                     value={item.producto}
                     onChange={(e) => handleItemChange(idx, 'producto', e.target.value)}
                     className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-[#363636] focus:outline-none focus:border-[#F7931F]"
@@ -421,26 +468,38 @@ function NuevaCotizacionForm() {
                     min="1"
                     required
                     value={item.cantidad}
-                    onChange={(e) => handleItemChange(idx, 'cantidad', e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                    onChange={(e) => handleItemChange(idx, 'cantidad', Number(e.target.value))}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-[#363636] text-center focus:outline-none focus:border-[#F7931F]"
                   />
                 </div>
 
                 <div className="col-span-2">
-                  <label className="block text-[10px] font-bold text-gray-600 mb-0.5">P. Unitario Neto ($)</label>
+                  <label className="block text-[10px] font-bold text-gray-600 mb-0.5">P.U. Neto ($)</label>
                   <input
                     type="number"
                     min="0"
                     required
                     value={item.precio_unitario}
-                    onChange={(e) => handleItemChange(idx, 'precio_unitario', e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                    onChange={(e) => handleItemChange(idx, 'precio_unitario', Number(e.target.value))}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-[#363636] text-right font-mono focus:outline-none focus:border-[#F7931F]"
                   />
                 </div>
 
-                <div className="col-span-2 text-right">
-                  <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Total Neto ($)</label>
-                  <span className="font-extrabold text-[#363636] block py-1.5">
+                <div className="col-span-1">
+                  <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Dto. %</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={item.descuento_porcentaje || 0}
+                    onChange={(e) => handleItemChange(idx, 'descuento_porcentaje', Number(e.target.value))}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-[#363636] text-center focus:outline-none focus:border-[#F7931F]"
+                  />
+                </div>
+
+                <div className="col-span-1 text-right">
+                  <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Base Imp.</label>
+                  <span className="font-extrabold text-[#363636] block py-1.5 font-mono text-[11px]">
                     ${(item.total_item || 0).toLocaleString('es-CL')}
                   </span>
                 </div>
@@ -449,7 +508,8 @@ function NuevaCotizacionForm() {
                   <button
                     type="button"
                     onClick={() => handleRemoveItem(idx)}
-                    className="p-1 text-gray-400 hover:text-red-500 transition"
+                    disabled={items.length === 1}
+                    className="p-1 text-gray-400 hover:text-red-500 transition disabled:opacity-30"
                     title="Eliminar Ítem"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -459,19 +519,27 @@ function NuevaCotizacionForm() {
             ))}
           </div>
 
-          {/* Resumen de Totales e IVA */}
-          <div className="pt-4 border-t border-gray-200 flex flex-col items-end space-y-2 text-xs">
-            <div className="w-full sm:w-72 flex justify-between text-gray-700">
-              <span>Subtotal Neto:</span>
-              <span className="font-bold text-[#363636]">${subtotalNeto.toLocaleString('es-CL')}</span>
+          {/* Resumen de Totales e IVA idéntico al documento oficial */}
+          <div className="pt-4 border-t border-gray-200 flex flex-col items-end space-y-1.5 text-xs">
+            <div className="w-full sm:w-80 flex justify-between text-gray-600">
+              <span>Total neto antes del descuento:</span>
+              <span className="font-mono font-bold text-[#363636]">${totalNetoAntesDescuento.toLocaleString('es-CL')}</span>
             </div>
-            <div className="w-full sm:w-72 flex justify-between text-gray-700">
-              <span>IVA (19% Legal Chile):</span>
-              <span className="font-bold text-[#363636]">${ivaCalculado.toLocaleString('es-CL')}</span>
+            <div className="w-full sm:w-80 flex justify-between text-gray-600">
+              <span>Descuento total:</span>
+              <span className="font-mono font-bold text-red-600">-${descuentoTotal.toLocaleString('es-CL')}</span>
             </div>
-            <div className="w-full sm:w-72 flex justify-between text-base font-black text-[#F7931F] pt-2 border-t border-gray-200">
-              <span>Total Cotización:</span>
-              <span>${totalFinal.toLocaleString('es-CL')}</span>
+            <div className="w-full sm:w-80 flex justify-between text-gray-700 font-bold">
+              <span>Total (sin IVA):</span>
+              <span className="font-mono">${totalSinIva.toLocaleString('es-CL')}</span>
+            </div>
+            <div className="w-full sm:w-80 flex justify-between text-gray-600">
+              <span>Total impuestos 19%:</span>
+              <span className="font-mono font-bold text-[#363636]">${ivaCalculado.toLocaleString('es-CL')}</span>
+            </div>
+            <div className="w-full sm:w-80 flex justify-between text-sm font-black text-[#F7931F] pt-2 border-t border-gray-200 bg-orange-50/50 p-1.5 rounded-lg">
+              <span>Total (impuesto inc.):</span>
+              <span className="font-mono">${totalFinal.toLocaleString('es-CL')}</span>
             </div>
           </div>
         </div>

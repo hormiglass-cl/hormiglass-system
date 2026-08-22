@@ -77,11 +77,12 @@ export default function ReventaPage() {
     try {
       setLoading(true);
 
+      // Cargar todas las oportunidades de reventa y las órdenes de reventa
       const [opRes, revRes] = await Promise.all([
         supabase
           .from('oportunidades')
           .select('*, cliente:clientes(*), cotizaciones(*), abonos(*)')
-          .eq('estado_pipeline', 'entregada'),
+          .or('rama_destino.eq.reventa,estado_pipeline.in.(entregada,reventa_coordinacion,reventa_stock,reventa_retiro,reventa_despacho,reventa_entregado,reventa_postventa)'),
         supabase
           .from('ordenes_reventa')
           .select('*'),
@@ -95,7 +96,7 @@ export default function ReventaPage() {
       const combined: (OrdenReventa & { oportunidad?: OportunidadVenta })[] = [];
 
       (opRes.data || []).forEach((op: any) => {
-        const isReventa = op.tipo_venta === 'Suministro' || op.tipo_venta === 'Reventa de Material';
+        const isReventa = op.rama_destino === 'reventa' || (!op.rama_destino && (op.tipo_venta === 'Suministro' || op.tipo_venta === 'Reventa de Material'));
         if (!isReventa) return; // Solo reventa en esta página
 
         const revRecord = revMap.get(op.id);
@@ -331,6 +332,13 @@ export default function ReventaPage() {
               <LayoutGrid className="w-4 h-4" />
               <span>Tablero</span>
             </button>
+            <Link
+              href="/reventa/calendario"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-bold text-xs transition text-gray-600 hover:text-[#363636] hover:bg-white"
+            >
+              <Calendar className="w-4 h-4 text-[#F7931F]" />
+              <span>Calendario Reventa</span>
+            </Link>
           </div>
         </div>
       </div>

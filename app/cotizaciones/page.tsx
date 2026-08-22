@@ -115,6 +115,7 @@ export default function CotizacionesPage() {
   const filtered = cotizaciones.filter(
     (c) =>
       c.numero_cotizacion.toLowerCase().includes(search.toLowerCase()) ||
+      (c.referencia_cliente && c.referencia_cliente.toLowerCase().includes(search.toLowerCase())) ||
       (c.cliente && c.cliente.nombre.toLowerCase().includes(search.toLowerCase())) ||
       (c.cliente && c.cliente.rut.toLowerCase().includes(search.toLowerCase()))
   );

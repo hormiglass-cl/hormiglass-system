@@ -3,8 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createClient } from '../../lib/supabase/client';
-import { MOCK_CLIENTES, MOCK_OPORTUNIDADES } from '../../lib/supabase/mock-data';
-import { Cliente, NICHOS_CLIENTE_DEFAULT, OportunidadVenta } from '../../lib/types';
+import { Cliente, NICHOS_CLIENTE_DEFAULT, OportunidadVenta, Usuario } from '../../lib/types';
 import { logSistema } from '../../lib/logger';
 import {
   Users,
@@ -27,15 +26,24 @@ import { REGIONES_CHILE, TODAS_COMUNAS_CHILE } from '../../lib/chile-data';
 
 interface ColumnState {
   rut: boolean;
+  ejecutivo: boolean;
   nicho: boolean;
   cant_oportunidades: boolean;
   contacto: boolean;
-  ubicacion: boolean;
 }
+
+const DEFAULT_CLIENT_COLUMNS: ColumnState = {
+  rut: true,
+  ejecutivo: true,
+  nicho: true,
+  cant_oportunidades: true,
+  contacto: true,
+};
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
+  const [usuariosList, setUsuariosList] = useState<Usuario[]>([]);
   const [nichos, setNichos] = useState<string[]>(NICHOS_CLIENTE_DEFAULT);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -52,35 +60,29 @@ export default function ClientesPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Column visibility state
-  const [columns, setColumns] = useState<ColumnState>({
-    rut: true,
-    nicho: true,
-    cant_oportunidades: true,
-    contacto: true,
-    ubicacion: true,
+  const [columns, setColumns] = useState<ColumnState>(() => {
+    if (typeof window === 'undefined') return DEFAULT_CLIENT_COLUMNS;
+    const savedCols = window.localStorage.getItem('hormiglass_client_cols_v4');
+    if (!savedCols) return DEFAULT_CLIENT_COLUMNS;
+    try {
+      return { ...DEFAULT_CLIENT_COLUMNS, ...JSON.parse(savedCols) };
+    } catch {
+      return DEFAULT_CLIENT_COLUMNS;
+    }
   });
 
   useEffect(() => {
-    const savedCols = localStorage.getItem('hormiglass_client_cols_v3');
-    if (savedCols) {
-      try {
-        setColumns(JSON.parse(savedCols));
-      } catch {
-        // ignore
-      }
+    try {
+      window.localStorage.setItem('hormiglass_client_cols_v4', JSON.stringify(columns));
+    } catch {
+      // ignore
     }
-  }, []);
+  }, [columns]);
 
   const toggleColumn = (key: keyof ColumnState) => {
     const updated = { ...columns, [key]: !columns[key] };
     setColumns(updated);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('hormiglass_client_cols_v3', JSON.stringify(updated));
-    }
   };
-
-  // Hover state for tooltip on opportunities count
-  const [activeTooltipId, setActiveTooltipId] = useState<string | null>(null);
 
   // Form states
   const [nombre, setNombre] = useState('');
@@ -90,6 +92,7 @@ export default function ClientesPage() {
   const [rutDv, setRutDv] = useState('');
   const [nichoSeleccionado, setNichoSeleccionado] = useState<string>(NICHOS_CLIENTE_DEFAULT[0]);
   const [tipoVentaSeleccionado, setTipoVentaSeleccionado] = useState<string>('Instalación');
+  const [asignadoA, setAsignadoA] = useState<string>('');
   const [nuevoNichoInput, setNuevoNichoInput] = useState('');
   const [showAddNichoInput, setShowAddNichoInput] = useState(false);
   const [telefono, setTelefono] = useState('');
@@ -114,10 +117,11 @@ export default function ClientesPage() {
     let ignore = false;
     async function getClientesData() {
       try {
-        const [cliRes, opRes, nichoRes] = await Promise.all([
+        const [cliRes, opRes, nichoRes, userRes] = await Promise.all([
           supabase.from('clientes').select('*').order('created_at', { ascending: false }),
-          supabase.from('oportunidades').select('*'),
+          supabase.from('oportunidades').select('id, cliente_id'),
           supabase.from('campos_personalizados').select('opciones').eq('campo_supabase', 'nicho').maybeSingle(),
+          supabase.from('usuarios').select('*').eq('activo', true).order('nombre', { ascending: true }),
         ]);
 
         if (!ignore) {
@@ -131,6 +135,10 @@ export default function ClientesPage() {
             setOportunidades(opRes.data as OportunidadVenta[]);
           } else {
             setOportunidades([]);
+          }
+
+          if (userRes.data) {
+            setUsuariosList(userRes.data as Usuario[]);
           }
 
           if (nichoRes.data && nichoRes.data.opciones && nichoRes.data.opciones.length > 0) {
@@ -272,35 +280,16 @@ export default function ClientesPage() {
         );
         setTimeout(() => setSuccessMsg(''), 4000);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error deleting client(s):', err);
-      setDuplicateError(`Error al eliminar: ${err.message}`);
+      setDuplicateError(`Error al eliminar: ${err instanceof Error ? err.message : 'No se pudo eliminar.'}`);
     }
 
     setClientsToDelete(null);
   };
 
-  const getOportunidadesBreakdown = (clienteId: string, clientRut?: string, clientName?: string) => {
-    const clientOps = oportunidades.filter(
-      (o) =>
-        o.cliente_id === clienteId ||
-        (clientRut && o.cliente?.rut === clientRut) ||
-        (clientName && o.cliente?.nombre === clientName)
-    );
-
-    const nuevas = clientOps.filter((o) => o.estado_pipeline === 'nueva').length;
-    const pagadas = clientOps.filter((o) => o.estado_pipeline === 'pagada').length;
-    const programadas = clientOps.filter((o) => o.estado_pipeline === 'programada').length;
-    const entregadas = clientOps.filter((o) => o.estado_pipeline === 'entregada').length;
-
-    return {
-      total: clientOps.length,
-      nuevas,
-      pagadas,
-      programadas,
-      entregadas,
-    };
-  };
+  const getOportunidadesCount = (clienteId: string) =>
+    oportunidades.filter((o) => o.cliente_id === clienteId).length;
 
   // Chilean RUT Modulo 11 validation helpers
   const calcularDV = (rutBody: string): string => {
@@ -382,6 +371,7 @@ export default function ClientesPage() {
       tipo_cliente: tipoClienteCalculado,
       nicho: nichoSeleccionado,
       tipo_venta: tipoVentaSeleccionado || 'Instalación',
+      asignado_a: asignadoA || undefined,
       telefono: telefono || undefined,
       correo: correo || undefined,
       correos_secundarios: secArray.length > 0 ? secArray : undefined,
@@ -411,9 +401,9 @@ export default function ClientesPage() {
         descripcion: `Nuevo cliente registrado: ${nombre} (${formattedRut})`,
         datos_nuevos: data,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error creating client in Supabase:', err);
-      setDuplicateError(`Error de conexión con Supabase: ${err.message || 'No se pudo crear el cliente.'}`);
+      setDuplicateError(`Error de conexión con Supabase: ${err instanceof Error ? err.message : 'No se pudo crear el cliente.'}`);
       return;
     }
 
@@ -527,8 +517,8 @@ export default function ClientesPage() {
 
             {showColumnMenu && (
               <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-2xl shadow-xl p-3 z-30 space-y-2 text-xs">
-                <p className="font-extrabold text-[#363636] border-b border-gray-100 pb-1.5 text-[11px] uppercase tracking-wider">
-                  Campos Visibles en Tabla
+                <p className="font-extrabold text-[#363636] border-b border-gray-100 pb-1.5 text-xs">
+                  Campos visibles en tabla
                 </p>
 
                 <div className="space-y-1">
@@ -545,11 +535,21 @@ export default function ClientesPage() {
                   <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-medium">
                     <input
                       type="checkbox"
+                      checked={columns.ejecutivo}
+                      onChange={() => toggleColumn('ejecutivo')}
+                      className="rounded text-[#F7931F] focus:ring-[#F7931F]"
+                    />
+                    <span>Ejecutivo asignado</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-medium">
+                    <input
+                      type="checkbox"
                       checked={columns.nicho}
                       onChange={() => toggleColumn('nicho')}
                       className="rounded text-[#F7931F] focus:ring-[#F7931F]"
                     />
-                    <span>Nicho de Mercado</span>
+                    <span>Nicho de mercado</span>
                   </label>
 
                   <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-medium">
@@ -559,7 +559,7 @@ export default function ClientesPage() {
                       onChange={() => toggleColumn('cant_oportunidades')}
                       className="rounded text-[#F7931F] focus:ring-[#F7931F]"
                     />
-                    <span>Oportunidades de Venta</span>
+                    <span>Oportunidades de venta</span>
                   </label>
 
                   <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-medium">
@@ -569,17 +569,7 @@ export default function ClientesPage() {
                       onChange={() => toggleColumn('contacto')}
                       className="rounded text-[#F7931F] focus:ring-[#F7931F]"
                     />
-                    <span>Contacto (Tel/Emails)</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-medium">
-                    <input
-                      type="checkbox"
-                      checked={columns.ubicacion}
-                      onChange={() => toggleColumn('ubicacion')}
-                      className="rounded text-[#F7931F] focus:ring-[#F7931F]"
-                    />
-                    <span>Ubicación (Comuna)</span>
+                    <span>Contacto (tel/emails)</span>
                   </label>
                 </div>
               </div>
@@ -593,7 +583,7 @@ export default function ClientesPage() {
         <div className="overflow-visible">
           <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
-              <tr className="bg-[#363636] text-white text-xs font-bold uppercase tracking-wider">
+              <tr className="bg-[#363636] text-white text-xs font-bold">
                 <th className="py-4 px-4 w-12 text-center">
                   <input
                     type="checkbox"
@@ -602,31 +592,31 @@ export default function ClientesPage() {
                     className="rounded text-[#F7931F] focus:ring-[#F7931F] cursor-pointer accent-[#F7931F]"
                   />
                 </th>
-                <th className="py-4 px-6 min-w-[200px]">Cliente / Razón Social</th>
+                <th className="py-4 px-6 min-w-[200px]">Cliente / Razón social</th>
                 {columns.rut && <th className="py-4 px-6 min-w-[130px]">RUT</th>}
-                {columns.nicho && <th className="py-4 px-6 min-w-[160px]">Nicho de Mercado</th>}
-                {columns.cant_oportunidades && <th className="py-4 px-6 min-w-[180px]">Oportunidades de Venta</th>}
+                {columns.ejecutivo && <th className="py-4 px-6 min-w-[170px]">Ejecutivo asignado</th>}
+                {columns.nicho && <th className="py-4 px-6 min-w-[160px]">Nicho de mercado</th>}
+                {columns.cant_oportunidades && <th className="py-4 px-6 min-w-[180px]">Oportunidades de venta</th>}
                 {columns.contacto && <th className="py-4 px-6 min-w-[200px]">Contacto</th>}
-                {columns.ubicacion && <th className="py-4 px-6 min-w-[220px]">Dirección & Ubicación</th>}
                 <th className="py-4 px-6 text-right min-w-[120px]">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 text-xs text-[#363636]">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-gray-500 font-medium">
+                  <td colSpan={7} className="py-8 text-center text-gray-500 font-medium">
                     Cargando directorio de clientes...
                   </td>
                 </tr>
               ) : filteredClientes.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-gray-500 font-medium">
+                  <td colSpan={7} className="py-8 text-center text-gray-500 font-medium">
                     No se encontraron clientes registrados.
                   </td>
                 </tr>
               ) : (
                 paginatedClientes.map((cli) => {
-                  const bd = getOportunidadesBreakdown(cli.id, cli.rut, cli.nombre);
+                  const oportunidadesCount = getOportunidadesCount(cli.id);
                   const isSelected = selectedClientIds.includes(cli.id);
 
                   return (
@@ -649,15 +639,44 @@ export default function ClientesPage() {
                         >
                           <span className="text-sm font-bold leading-tight group-hover:underline">{cli.nombre}</span>
                           {cli.apellido_razon_social && cli.apellido_razon_social !== cli.nombre && (
-                            <span className="text-[11px] text-gray-500 font-normal">{cli.apellido_razon_social}</span>
+                            <span className="text-xs text-gray-500 font-normal">{cli.apellido_razon_social}</span>
                           )}
                         </Link>
                       </td>
 
                       {/* RUT (sin puntos y con guion) */}
                       {columns.rut && (
-                        <td className="py-4 px-6 font-mono font-semibold text-gray-700">
+                        <td className="py-4 px-6 font-mono font-semibold text-gray-700 text-xs">
                           {formatRutClean(cli.rut)}
+                        </td>
+                      )}
+
+                      {/* Ejecutivo Asignado (al lado del RUT) */}
+                      {columns.ejecutivo && (
+                        <td className="py-4 px-6">
+                          <select
+                            value={cli.asignado_a || ''}
+                            onChange={async (e) => {
+                              const newUid = e.target.value || null;
+                              setClientes((prev) =>
+                                prev.map((c) => (c.id === cli.id ? { ...c, asignado_a: newUid } : c))
+                              );
+                              try {
+                                const { error } = await supabase.from('clientes').update({ asignado_a: newUid }).eq('id', cli.id);
+                                if (error) console.error('Error updating asignado_a on cliente:', error);
+                              } catch (err) {
+                                console.error('Error updating asignado_a on cliente:', err);
+                              }
+                            }}
+                            className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-blue-50 text-blue-900 border border-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer min-w-[150px] truncate"
+                          >
+                            <option value="">-- Sin asignar --</option>
+                            {usuariosList.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.nombre}
+                              </option>
+                            ))}
+                          </select>
                         </td>
                       )}
 
@@ -667,7 +686,7 @@ export default function ClientesPage() {
                           <select
                             value={cli.nicho || 'Constructora B2B'}
                             onChange={(e) => handleUpdateNicho(cli.id, e.target.value)}
-                            className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full bg-orange-50 text-[#F7931F] border border-orange-200 focus:outline-none focus:ring-1 focus:ring-[#F7931F] cursor-pointer"
+                            className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-orange-50 text-[#F7931F] border border-orange-200 focus:outline-none focus:ring-1 focus:ring-[#F7931F] cursor-pointer min-w-[150px]"
                           >
                             {nichos.map((n) => (
                               <option key={n} value={n}>{n}</option>
@@ -676,43 +695,12 @@ export default function ClientesPage() {
                         </td>
                       )}
 
-                      {/* Cantidad de Oportunidades de Venta + Tooltip Hover con Desglose */}
+                      {/* Cantidad de oportunidades de venta asignadas */}
                       {columns.cant_oportunidades && (
-                        <td className="py-4 px-6 relative">
-                          <div
-                            onMouseEnter={() => setActiveTooltipId(cli.id)}
-                            onMouseLeave={() => setActiveTooltipId(null)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1 bg-orange-50 text-[#F7931F] border border-orange-200 rounded-full font-bold cursor-pointer transition hover:bg-[#F7931F] hover:text-white"
-                          >
+                        <td className="py-4 px-6">
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 text-[#F7931F] border border-orange-200 rounded-xl font-bold text-xs">
                             <TrendingUp className="w-3.5 h-3.5" />
-                            <span>{bd.total} {bd.total === 1 ? 'oportunidad' : 'oportunidades'}</span>
-
-                            {/* Tooltip flotante al pasar el cursor */}
-                            {activeTooltipId === cli.id && (
-                              <div className="absolute left-4 top-10 w-56 bg-[#363636] text-white p-3 rounded-2xl shadow-xl z-40 text-xs space-y-1.5 animate-fadeIn pointer-events-none">
-                                <p className="font-extrabold border-b border-gray-600 pb-1 text-[11px] text-[#F7931F] uppercase">
-                                  Estado en Pipeline
-                                </p>
-                                <div className="space-y-1 text-[11px]">
-                                  <div className="flex justify-between">
-                                    <span className="text-amber-400 font-semibold">Nuevas:</span>
-                                    <span className="font-bold">{bd.nuevas}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-blue-400 font-semibold">Pago Validado:</span>
-                                    <span className="font-bold">{bd.pagadas}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-purple-400 font-semibold">En Programación:</span>
-                                    <span className="font-bold">{bd.programadas}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-emerald-400 font-semibold">Entregadas & Cierre:</span>
-                                    <span className="font-bold">{bd.entregadas}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
+                            <span>{oportunidadesCount} {oportunidadesCount === 1 ? 'oportunidad' : 'oportunidades'}</span>
                           </div>
                         </td>
                       )}
@@ -737,19 +725,6 @@ export default function ClientesPage() {
                               +{cli.correos_secundarios.length} correo(s) sec.
                             </div>
                           )}
-                        </td>
-                      )}
-
-                      {/* Dirección & Ubicación */}
-                      {columns.ubicacion && (
-                        <td className="py-4 px-6 space-y-1">
-                          <p className="font-bold text-[#363636] text-xs flex items-center gap-1.5" title={cli.direccion || 'Sin dirección'}>
-                            <MapPin className="w-3.5 h-3.5 text-[#F7931F] shrink-0" />
-                            <span className="truncate max-w-[220px]">{cli.direccion || 'Sin dirección'}</span>
-                          </p>
-                          <p className="text-[11px] text-gray-500 font-medium pl-5">
-                            {[cli.comuna, cli.region].filter(Boolean).join(', ') || 'Sin comuna / región'}
-                          </p>
                         </td>
                       )}
 
@@ -818,15 +793,15 @@ export default function ClientesPage() {
             )}
 
             <form onSubmit={handleCreateCliente} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">Nicho de Mercado *</label>
+                  <label className="block font-bold text-gray-700 mb-1">Nicho de mercado *</label>
                   {!showAddNichoInput ? (
                     <div className="flex gap-1.5">
                       <select
                         value={nichoSeleccionado}
                         onChange={(e) => setNichoSeleccionado(e.target.value)}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F] font-semibold"
+                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F] font-semibold text-xs"
                       >
                         {nichos.map((n) => (
                           <option key={n} value={n}>{n}</option>
@@ -835,7 +810,7 @@ export default function ClientesPage() {
                       <button
                         type="button"
                         onClick={() => setShowAddNichoInput(true)}
-                        className="p-2 bg-orange-50 hover:bg-[#F7931F] text-[#F7931F] hover:text-white rounded-xl border border-orange-200 transition"
+                        className="p-2 bg-orange-50 hover:bg-[#F7931F] text-[#F7931F] hover:text-white rounded-xl border border-orange-200 transition cursor-pointer"
                         title="Crear nuevo nicho"
                       >
                         <Plus className="w-4 h-4" />
@@ -848,12 +823,12 @@ export default function ClientesPage() {
                         placeholder="Ej. Minería / Obras Viales"
                         value={nuevoNichoInput}
                         onChange={(e) => setNuevoNichoInput(e.target.value)}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-2.5 py-1.5 text-[#363636]"
+                        className="w-full bg-white border border-gray-300 rounded-xl px-2.5 py-1.5 text-[#363636] text-xs"
                       />
                       <button
                         type="button"
                         onClick={handleCreateNicho}
-                        className="px-3 py-1 bg-[#F7931F] text-white font-bold rounded-xl text-[11px]"
+                        className="px-3 py-1 bg-[#F7931F] text-white font-bold rounded-xl text-xs cursor-pointer"
                       >
                         Guardar
                       </button>
@@ -862,7 +837,38 @@ export default function ClientesPage() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">RUT Empresa / Persona *</label>
+                  <label className="block font-bold text-gray-700 mb-1">Tipo de venta habitual</label>
+                  <select
+                    value={tipoVentaSeleccionado}
+                    onChange={(e) => setTipoVentaSeleccionado(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F] font-semibold text-xs"
+                  >
+                    <option value="Instalación">Instalación</option>
+                    <option value="Suministro">Suministro</option>
+                    <option value="Reventa de Material">Reventa de Material</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Ejecutivo asignado</label>
+                  <select
+                    value={asignadoA}
+                    onChange={(e) => setAsignadoA(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F] font-semibold text-xs"
+                  >
+                    <option value="">-- Sin asignar --</option>
+                    {usuariosList.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">RUT empresa / persona *</label>
                   <div className="flex items-center gap-1.5">
                     <div className="flex-1">
                       <input
@@ -898,7 +904,7 @@ export default function ClientesPage() {
                     <div className="mt-1">
                       {validarRutChileno(rutBody, rutDv).valido ? (
                         <span className="text-[10px] text-emerald-600 font-bold">
-                          ✓ RUT Válido ({rutBody}-{rutDv.toUpperCase()})
+                          ✓ RUT válido ({rutBody}-{rutDv.toUpperCase()})
                         </span>
                       ) : (
                         <span className="text-[10px] text-red-500 font-bold">
@@ -908,22 +914,22 @@ export default function ClientesPage() {
                     </div>
                   )}
                 </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Nombre comercial *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ej. Constructora Besalco / Juan Pérez"
+                    value={nombre}
+                    onChange={(e) => setNombre(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Nombre Comercial *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej. Constructora Besalco / Juan Pérez"
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Razón Social *</label>
+                <label className="block font-bold text-gray-700 mb-1">Razón social *</label>
                 <div className="space-y-2 bg-gray-50 p-3 rounded-2xl border border-gray-200">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3 text-xs font-semibold text-[#363636]">
                     <label className="flex items-center gap-1.5 cursor-pointer">
@@ -959,8 +965,8 @@ export default function ClientesPage() {
                       className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F] font-medium"
                     />
                   ) : (
-                    <p className="text-[11px] text-gray-500 italic">
-                      Se registrará automáticamente como: <strong className="text-[#363636] font-semibold">{nombre || 'Mismo Nombre Comercial'}</strong>
+                    <p className="text-xs text-gray-500 italic">
+                      Se registrará automáticamente como: <strong className="text-[#363636] font-semibold">{nombre || 'Mismo nombre comercial'}</strong>
                     </p>
                   )}
                 </div>
@@ -979,7 +985,7 @@ export default function ClientesPage() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">Correo Primario (Deduplicación)</label>
+                  <label className="block font-bold text-gray-700 mb-1">Correo primario (deduplicación)</label>
                   <input
                     type="email"
                     placeholder="contacto@empresa.cl"
@@ -1062,9 +1068,9 @@ export default function ClientesPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-extrabold transition shadow-md"
+                  className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-extrabold transition shadow-md cursor-pointer"
                 >
-                  Guardar Cliente
+                  Guardar cliente
                 </button>
               </div>
             </form>
@@ -1126,4 +1132,3 @@ export default function ClientesPage() {
     </div>
   );
 }
-

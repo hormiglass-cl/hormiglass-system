@@ -19,7 +19,17 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       if (!currentUser && pathname !== '/login' && !pathname.startsWith('/auth')) {
         router.replace('/login');
       } else if (currentUser && pathname === '/login') {
-        router.replace('/');
+        if (currentUser.rol === 'mano_obra') {
+          router.replace('/rrhh');
+        } else {
+          router.replace('/');
+        }
+      } else if (currentUser && currentUser.rol === 'mano_obra') {
+        const manoObraAllowed = ['/rrhh', '/visitas', '/planificacion/calendario', '/reventa/calendario', '/notificaciones'];
+        const isAllowed = manoObraAllowed.some((route) => pathname.startsWith(route)) || pathname.startsWith('/auth');
+        if (!isAllowed) {
+          router.replace('/rrhh');
+        }
       }
     }
   }, [currentUser, loading, pathname, router]);

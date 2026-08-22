@@ -1,0 +1,5 @@
+ALTER TABLE public.proyectos_planificacion
+  ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE public.ordenes_reventa
+  ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT TRUE;

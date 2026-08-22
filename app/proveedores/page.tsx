@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { createClient } from '../../lib/supabase/client';
 import { Proveedor, PedidoProveedor } from '../../lib/types';
 import {
@@ -35,6 +36,8 @@ export default function ProveedoresPage() {
   const [contactoProv, setContactoProv] = useState('');
   const [telefonoProv, setTelefonoProv] = useState('');
   const [correoProv, setCorreoProv] = useState('');
+  const [direccionProv, setDireccionProv] = useState('');
+  const [comunaProv, setComunaProv] = useState('');
 
   const [proveedorId, setProveedorId] = useState('');
   const [descripcionPedido, setDescripcionPedido] = useState('');
@@ -95,6 +98,8 @@ export default function ProveedoresPage() {
       contacto: contactoProv,
       telefono: telefonoProv,
       correo: correoProv,
+      direccion: direccionProv,
+      comuna: comunaProv,
     };
 
     try {
@@ -116,6 +121,10 @@ export default function ProveedoresPage() {
     setNombreProv('');
     setRutProv('');
     setContactoProv('');
+    setTelefonoProv('');
+    setCorreoProv('');
+    setDireccionProv('');
+    setComunaProv('');
   };
 
   const handleAddPedido = async (e: React.FormEvent) => {
@@ -192,6 +201,13 @@ export default function ProveedoresPage() {
             <Plus className="w-4 h-4" />
             <span>Generar Orden de Compra</span>
           </button>
+          <Link
+            href="/ordenes-compra/nuevo"
+            className="bg-white hover:bg-orange-50 text-[#F7931F] font-semibold text-xs px-4 py-2.5 rounded-xl border border-orange-200 transition flex items-center gap-2"
+          >
+            <FileText className="w-4 h-4" />
+            <span>OC Oficial</span>
+          </Link>
         </div>
       </div>
 
@@ -210,13 +226,22 @@ export default function ProveedoresPage() {
                 <p className="text-xs text-gray-400 font-mono">RUT: {prov.rut}</p>
                 <div className="text-xs text-gray-300 pt-2 space-y-0.5">
                   <p>Contacto: <span className="font-semibold text-white">{prov.contacto || 'General'}</span></p>
+                  <p>Dirección: <span className="text-gray-300">{[prov.direccion, prov.comuna].filter(Boolean).join(', ') || 'No registrada'}</span></p>
                   <p>Teléfono: <span className="text-gray-300">{prov.telefono}</span></p>
                   <p>Correo: <span className="text-gray-300">{prov.correo}</span></p>
                 </div>
               </div>
-              <span className="text-[10px] font-bold uppercase bg-gray-800 text-emerald-400 px-2 py-0.5 rounded border border-gray-700">
-                Verificado
-              </span>
+              <div className="flex flex-col items-end gap-2">
+                <span className="text-[10px] font-bold uppercase bg-gray-800 text-emerald-400 px-2 py-0.5 rounded border border-gray-700">
+                  Verificado
+                </span>
+                <Link
+                  href={`/ordenes-compra/nuevo?proveedor_id=${prov.id}`}
+                  className="text-[10px] font-black uppercase bg-orange-50 text-[#F7931F] px-2 py-1 rounded-lg border border-orange-200 hover:bg-[#F7931F] hover:text-white transition"
+                >
+                  Crear OC
+                </Link>
+              </div>
             </div>
           ))}
         </div>
@@ -304,6 +329,44 @@ export default function ProveedoresPage() {
                   onChange={(e) => setContactoProv(e.target.value)}
                   className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
                 />
+              </div>
+              <div>
+                <label className="block text-gray-300 mb-1">Dirección</label>
+                <input
+                  type="text"
+                  value={direccionProv}
+                  onChange={(e) => setDireccionProv(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-300 mb-1">Comuna</label>
+                <input
+                  type="text"
+                  value={comunaProv}
+                  onChange={(e) => setComunaProv(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-gray-300 mb-1">Teléfono</label>
+                  <input
+                    type="text"
+                    value={telefonoProv}
+                    onChange={(e) => setTelefonoProv(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-300 mb-1">Correo</label>
+                  <input
+                    type="email"
+                    value={correoProv}
+                    onChange={(e) => setCorreoProv(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                  />
+                </div>
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button

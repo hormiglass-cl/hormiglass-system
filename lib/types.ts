@@ -1,11 +1,15 @@
-export type UserRole = 'admin' | 'user';
+export type UserRole = 'admin' | 'user' | 'mano_obra';
 
 export interface Usuario {
   id: string;
   nombre: string;
   email: string;
+  rut?: string | null;
   rol: UserRole;
   activo: boolean;
+  calendario_visitas?: boolean;
+  calendario_produccion?: boolean;
+  calendario_reventa?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -35,13 +39,14 @@ export interface Cliente {
   direccion?: string;
   comuna?: string;
   region?: string;
-  asignado_a?: string;
+  asignado_a?: string | null;
+  usuario_id?: string | null;
   created_by?: string;
   created_at?: string;
   updated_at?: string;
 }
 
-export type TipoNotaActividad = 'nota' | 'reunion' | 'llamada' | 'recordatorio';
+export type TipoNotaActividad = 'nota' | 'reunion' | 'llamada' | 'recordatorio' | 'reclamo';
 
 export interface NotaActividad {
   id: string;
@@ -61,6 +66,7 @@ export interface CotizacionItem {
   id?: string;
   cotizacion_id?: string;
   producto: string;
+  descripcion?: string | null;
   cantidad: number;
   precio_unitario: number;
   descuento_porcentaje?: number;
@@ -81,10 +87,14 @@ export interface Cotizacion {
   monto_iva: number;
   monto_total: number;
   plazo_entrega?: string;
+  referencia_cliente?: string;
+  fecha_validez?: string;
+  comentario_publico?: string;
   fecha_inicio_compromiso?: string;
   fecha_limite_compromiso?: string;
   condiciones_pago?: string;
   observaciones?: string;
+  fecha_aprobacion?: string;
   pdf_url?: string;
   created_at?: string;
   cliente?: Cliente;
@@ -94,6 +104,7 @@ export interface Cotizacion {
 
 export type TipoVenta = 'directa' | 'programacion';
 export type ModalidadEntrega = 'retiro' | 'despacho' | 'instalacion';
+export type ModalidadRequerimiento = 'solo_material' | 'instalacion';
 export type CondicionPago = 'total' | 'abono50' | 'oc' | 'especial';
 export type MedioPago = 'efectivo' | 'transferencia' | 'debito' | 'credito' | 'webpay' | 'cheque';
 export type TipoDocumento = 'boleta' | 'factura' | 'factura_anticipo' | 'nota_venta';
@@ -144,19 +155,50 @@ export interface ChatMensaje {
   contenido?: string;
   menciones?: string[];
   created_at: string;
-  tipo?: 'comentario' | 'actualizacion' | 'abono' | string;
+  tipo?: 'comentario' | 'actualizacion' | 'abono' | 'reclamo' | string;
+}
+
+export type TipoAntecedenteDocumento =
+  | 'contrato'
+  | 'anexo'
+  | 'documento_empresa'
+  | 'documento_trabajador'
+  | 'otro';
+
+export interface AntecedenteDocumento {
+  id: string;
+  oportunidad_id?: string;
+  nombre: string;
+  tipo: TipoAntecedenteDocumento;
+  url: string;
+  bucket_id?: string;
+  storage_path?: string;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+  fecha_iso: string;
+  subido_por?: string;
+  subido_por_id?: string | null;
+  eliminado?: boolean;
+  eliminado_en?: string | null;
+  eliminado_por?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface VisitaTerreno {
   id: string;
   oportunidad_id: string;
   tecnico_visita: 'Felipe Valverde' | 'Marcos Catalán' | 'Edith Tapia' | string;
+  tecnico_id?: string | null;
+  responsable_calendario_id?: string | null;
   fecha_visita_terreno: string;
   hora_visita_terreno?: string;
   estado_visita?: 'programada' | 'realizada' | 'cancelada' | string;
   observaciones_visita?: string;
   created_at?: string;
   oportunidad?: OportunidadVenta;
+  tecnico?: Usuario;
+  responsable_calendario?: ResponsableCalendario;
 }
 
 export interface Abono {
@@ -170,6 +212,17 @@ export interface Abono {
   created_at?: string;
 }
 
+export interface ComprobantePago {
+  id?: string;
+  monto?: number;
+  fecha?: string;
+  fecha_iso?: string;
+  nota?: string;
+  creado_por?: string;
+  comprobante_nombre?: string;
+  comprobante_url?: string;
+}
+
 export interface OportunidadVenta {
   id: string;
   codigo: string;
@@ -181,6 +234,11 @@ export interface OportunidadVenta {
   asignado_a?: string | null;
   prioridad?: PrioridadOportunidad;
   tipo_venta?: 'Instalación' | 'Suministro' | 'Reventa de Material' | string;
+  origen?: string | null;
+  modalidad_requerimiento?: ModalidadRequerimiento | string;
+  rama_destino?: 'produccion' | 'reventa' | null;
+  rama_definida_en?: string | null;
+  rama_definida_por?: string | null;
   comuna?: string;
   region?: string;
   direccion?: string;
@@ -193,6 +251,10 @@ export interface OportunidadVenta {
   requiere_visita_terreno?: boolean;
   visitas_terreno?: VisitaTerreno[];
   tecnico_visita?: 'Felipe Valverde' | 'Marcos Catalán' | 'Edith Tapia' | string;
+  tecnico_id?: string | null;
+  tecnico?: Usuario;
+  responsable_visita_id?: string | null;
+  responsable_visita?: ResponsableCalendario;
   fecha_visita_terreno?: string;
   hora_visita_terreno?: string;
   estado_visita?: 'programada' | 'realizada' | 'cancelada' | string;
@@ -200,8 +262,10 @@ export interface OportunidadVenta {
   modalidad_entrega?: ModalidadEntrega;
   condicion_pago?: CondicionPago;
   productos?: string[];
-  comprobantes_pago?: string[];
+  comprobantes_pago?: ComprobantePago[];
   monto_abonado?: number;
+  requiere_antecedentes?: boolean;
+  antecedentes?: AntecedenteDocumento[];
   /** @deprecated No existe tabla `abonos` en Supabase — el embed .select('*, abonos(*)') no resuelve nada. Usar comprobantes_pago (ver Fase 4 del plan de seguridad). */
   abonos?: Abono[];
   chat_mensajes?: ChatMensaje[];
@@ -213,6 +277,7 @@ export interface OportunidadVenta {
   cotizaciones?: Cotizacion[];
   cotizacion_actual?: Cotizacion;
   cotizacion_actual_id?: string;
+  produccion_diaria?: ProduccionDiaria[];
 }
 
 export interface Venta {
@@ -248,7 +313,73 @@ export interface Proveedor {
   contacto?: string;
   telefono?: string;
   correo?: string;
+  direccion?: string;
+  comuna?: string;
+  region?: string;
   created_at?: string;
+}
+
+export type EstadoOrdenCompra = 'borrador' | 'emitida' | 'aprobada' | 'recibida' | 'cancelada';
+
+export interface OrdenCompraItem {
+  id?: string;
+  orden_compra_id?: string;
+  articulo_codigo?: string;
+  descripcion: string;
+  cantidad: number;
+  precio_unitario: number;
+  total_item: number;
+}
+
+export interface OrdenCompra {
+  id: string;
+  numero_oc: string;
+  proveedor_id: string;
+  oportunidad_id?: string;
+  usuario_id?: string;
+  fecha_emision: string;
+  version?: number;
+  estado: EstadoOrdenCompra;
+  envie_a_nombre: string;
+  envie_a_rut: string;
+  envie_a_contacto: string;
+  envie_a_direccion: string;
+  envie_a_telefono: string;
+  envie_a_email: string;
+  condicion_pago: string;
+  contacto_pago_nombre?: string;
+  contacto_pago_telefono?: string;
+  contacto_pago_email?: string;
+  instrucciones_especiales?: string;
+  subtotal: number;
+  iva_porcentaje: number;
+  monto_iva: number;
+  costo_envio: number;
+  otros_cargos: number;
+  monto_total: number;
+  pdf_url?: string;
+  created_at?: string;
+  updated_at?: string;
+  proveedor?: Proveedor;
+  oportunidad?: OportunidadVenta;
+  items?: OrdenCompraItem[];
+}
+
+export interface ProduccionDiaria {
+  id: string;
+  oportunidad_id: string;
+  cotizacion_id?: string | null;
+  cotizacion_item_id?: string | null;
+  producto: string;
+  cantidad_producida: number;
+  fecha_produccion: string;
+  responsable_id?: string | null;
+  responsable_calendario_id?: string | null;
+  responsable?: Usuario;
+  observaciones?: string;
+  registrado_por?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export type EstadoPedidoProveedor = 'solicitado' | 'oc_generada' | 'esperando_entrega' | 'recibido';
@@ -307,10 +438,60 @@ export interface ProyectoPlanificacion {
   cliente_id: string;
   cliente?: Cliente;
   estado: EstadoPlanificacion;
+  cuadrilla_id?: string | null;
+  encargado_fabricacion_id?: string | null;
+  cuadrilla?: Usuario;
+  encargado_fabricacion?: Usuario;
   fecha_estimada_instalacion?: string;
   fecha_estimada_produccion?: string;
   observaciones?: string;
   created_at?: string;
+}
+
+export type TipoEventoProduccionLogistica = 'obra' | 'produccion' | 'reventa' | 'logistica';
+export type EstadoEventoProduccionLogistica =
+  | 'por_hacer'
+  | 'en_curso'
+  | 'reprogramado'
+  | 'completado'
+  | 'no_realizado';
+export type ContextoEventoProduccionLogistica = 'produccion_logistica' | 'reventa_logistica';
+export type TipoCalendarioResponsable = 'visitas_terreno' | 'produccion_logistica' | 'reventa_logistica';
+
+export interface EventoProduccionLogistica {
+  id: string;
+  contexto?: ContextoEventoProduccionLogistica;
+  oportunidad_id: string;
+  planificacion_id?: string | null;
+  tipo_evento: TipoEventoProduccionLogistica;
+  titulo: string;
+  fecha_inicio: string;
+  fecha_fin: string;
+  fecha_evento?: string;
+  hora_evento?: string | null;
+  responsable_id?: string | null;
+  responsable_calendario_id?: string | null;
+  responsable?: Usuario;
+  responsable_calendario?: ResponsableCalendario;
+  estado: EstadoEventoProduccionLogistica | string;
+  observaciones?: string | null;
+  registrado_por?: string | null;
+  oportunidad?: OportunidadVenta;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ResponsableCalendario {
+  id: string;
+  nombre: string;
+  rut?: string | null;
+  cargo?: string | null;
+  telefono?: string | null;
+  email?: string | null;
+  calendarios: TipoCalendarioResponsable[];
+  activo: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export type EstadoReventa =
@@ -333,6 +514,146 @@ export interface OrdenReventa {
   fecha_despacho?: string;
   observaciones?: string;
   notas_postventa?: string;
+  created_at?: string;
+}
+
+// ==============================================================================
+// TIPOS RECURSOS HUMANOS (RR.HH.)
+// ==============================================================================
+
+export type EstadoDisponibilidad =
+  | 'disponible'
+  | 'en_terreno'
+  | 'permiso'
+  | 'licencia'
+  | 'vacaciones'
+  | 'falta';
+
+export type CategoriaDocumentoTrabajador =
+  | 'contratos'
+  | 'anexos'
+  | 'liquidaciones'
+  | 'comprobantes'
+  | 'licencias'
+  | 'certificados'
+  | 'otros';
+
+export type TipoPermisoAusencia =
+  | 'permiso'
+  | 'vacaciones'
+  | 'licencia_medica'
+  | 'falta_injustificada'
+  | 'dia_administrativo';
+
+export type EstadoPermiso = 'aprobado' | 'pendiente' | 'rechazado';
+
+export const CARGOS_RRHH_DEFAULT = [
+  'Maestro de Obra & Instalación',
+  'Técnico Visita a Terreno',
+  'Jefe de Patio & Logística',
+  'Gerente Comercial & Ventas',
+  'Instalador Especialista',
+  'Ayudante de Cuadrilla',
+  'Operario de Planta & Fabricación',
+  'Chofer / Despachador',
+  'Coordinador de Planificación',
+  'Ejecutivo de Ventas',
+  'Administración & Finanzas',
+];
+
+export const AREAS_RRHH_DEFAULT = [
+  'Operaciones & Terreno',
+  'Taller & Planta',
+  'Comercial & Ventas',
+  'Logística & Despacho',
+  'Administración & Finanzas',
+];
+
+export interface Trabajador {
+  id: string;
+  nombre: string;
+  rut: string;
+  email?: string | null;
+  telefono?: string | null;
+  direccion?: string | null;
+  comuna?: string | null;
+  region?: string | null;
+  cargo: string;
+  area: string;
+  tipo_contrato: string;
+  fecha_ingreso?: string;
+  sueldo_base?: number;
+  estado_disponibilidad: EstadoDisponibilidad;
+  activo: boolean;
+  contacto_emergencia_nombre?: string | null;
+  contacto_emergencia_telefono?: string | null;
+  banco?: string | null;
+  tipo_cuenta?: string | null;
+  numero_cuenta?: string | null;
+  usuario_id?: string | null;
+  observaciones?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  documentos?: TrabajadorDocumento[];
+  permisos?: TrabajadorPermisoAusencia[];
+  liquidaciones?: TrabajadorLiquidacion[];
+  notas?: TrabajadorNota[];
+}
+
+export interface TrabajadorDocumento {
+  id: string;
+  trabajador_id: string;
+  categoria: CategoriaDocumentoTrabajador;
+  nombre_archivo: string;
+  url: string;
+  storage_path?: string | null;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+  fecha_emision?: string;
+  subido_por?: string | null;
+  notas?: string | null;
+  created_at?: string;
+}
+
+export interface TrabajadorPermisoAusencia {
+  id: string;
+  trabajador_id: string;
+  tipo: TipoPermisoAusencia;
+  fecha_inicio: string;
+  fecha_fin: string;
+  hora_inicio?: string | null;
+  hora_fin?: string | null;
+  jornada_completa: boolean;
+  motivo?: string | null;
+  estado: EstadoPermiso;
+  bloquea_calendario: boolean;
+  comprobante_url?: string | null;
+  aprobado_por?: string | null;
+  created_at?: string;
+}
+
+export interface TrabajadorLiquidacion {
+  id: string;
+  trabajador_id: string;
+  mes: number;
+  anio: number;
+  monto_sueldo_base: number;
+  bonos: number;
+  descuentos: number;
+  monto_liquido: number;
+  estado_pago: 'pendiente' | 'pagado';
+  fecha_pago?: string;
+  comprobante_url?: string | null;
+  created_at?: string;
+}
+
+export interface TrabajadorNota {
+  id: string;
+  trabajador_id: string;
+  usuario_id?: string | null;
+  tipo: 'nota' | 'felicitacion' | 'amonestacion' | 'evaluacion' | 'seguimiento';
+  contenido: string;
+  usuario?: Usuario;
   created_at?: string;
 }
 

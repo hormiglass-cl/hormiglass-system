@@ -4,12 +4,22 @@ export type TipoAccionLog = 'creacion' | 'actualizacion' | 'eliminacion' | 'come
 
 interface LogSistemaParams {
   tipo_accion: TipoAccionLog;
-  entidad: 'clientes' | 'cotizaciones' | 'oportunidades' | 'actividades' | 'notificaciones' | 'sistema';
+  entidad:
+    | 'clientes'
+    | 'cotizaciones'
+    | 'ordenes_compra'
+    | 'oportunidades'
+    | 'actividades'
+    | 'notificaciones'
+    | 'eventos_produccion_logistica'
+    | 'usuarios'
+    | 'trabajadores'
+    | 'sistema';
   entidad_id?: string;
   descripcion: string;
   usuario_id?: string | null;
-  datos_anteriores?: any;
-  datos_nuevos?: any;
+  datos_anteriores?: unknown;
+  datos_nuevos?: unknown;
 }
 
 export async function logSistema({

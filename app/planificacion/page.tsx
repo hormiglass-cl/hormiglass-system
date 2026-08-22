@@ -78,12 +78,12 @@ export default function PlanificacionPage() {
     try {
       setLoading(true);
 
-      // Cargar todas las oportunidades cerradas y los proyectos de planificación
+      // Cargar todas las oportunidades de producción y los proyectos de planificación
       const [opRes, planRes] = await Promise.all([
         supabase
           .from('oportunidades')
           .select('*, cliente:clientes(*), cotizaciones(*), abonos(*)')
-          .eq('estado_pipeline', 'entregada'),
+          .or('rama_destino.eq.produccion,estado_pipeline.in.(entregada,en_produccion,listo_despacho,terminada)'),
         supabase
           .from('proyectos_planificacion')
           .select('*'),
@@ -97,7 +97,7 @@ export default function PlanificacionPage() {
       const combined: (ProyectoPlanificacion & { oportunidad?: OportunidadVenta })[] = [];
 
       (opRes.data || []).forEach((op: any) => {
-        const isReventa = op.tipo_venta === 'Suministro' || op.tipo_venta === 'Reventa de Material';
+        const isReventa = op.rama_destino === 'reventa' || (!op.rama_destino && (op.tipo_venta === 'Suministro' || op.tipo_venta === 'Reventa de Material'));
         if (isReventa) return; // Solo produccion/instalacion en esta página
 
         const planRecord = planMap.get(op.id);
@@ -709,7 +709,7 @@ export default function PlanificacionPage() {
                   )}
                 </div>
 
-                {/* Accordion 5: Datos de Producción & Fabricación */}
+                {/* Accordion 5: Datos de Producción y Logística */}
                 <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
                   <button
                     type="button"
@@ -718,7 +718,7 @@ export default function PlanificacionPage() {
                   >
                     <div className="flex items-center gap-2.5">
                       <Factory className="w-4 h-4 text-[#F7931F]" />
-                      <span>5. Datos de Producción & Fabricación</span>
+                      <span>5. Datos de Producción y Logística</span>
                     </div>
                     {openSections.produccion ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </button>
