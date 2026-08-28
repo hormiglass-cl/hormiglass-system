@@ -22,15 +22,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" suppressHydrationWarning>
-      <body className="bg-white text-[#363636] min-h-screen antialiased font-sans" suppressHydrationWarning>
+      <body className="bg-[#f6f8fa] text-[#213343] min-h-screen antialiased font-sans" suppressHydrationWarning>
         <AuthProvider>
           <AuthGuard>
-            <div className="flex min-h-screen bg-white">
+            <div className="flex min-h-screen bg-[#f6f8fa]">
               <Sidebar />
               <div className="flex-1 flex flex-col min-w-0 min-h-screen">
                 <Navbar />
-                <main className="flex-1 p-4 sm:p-6 md:p-8 w-full">
-                  <div className="max-w-[96vw] xl:max-w-[1750px] mx-auto">
+                <main className="flex-1 px-4 py-4 sm:px-5 md:px-6 w-full">
+                  <div className="max-w-[1800px] mx-auto">
                     {children}
                   </div>
                 </main>

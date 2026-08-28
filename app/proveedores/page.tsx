@@ -179,7 +179,7 @@ export default function ProveedoresPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-800 pb-5">
         <div>
           <h1 className="text-2xl font-extrabold text-white flex items-center gap-2">
-            <Truck className="w-6 h-6 text-[#F7931F]" />
+            <Truck className="w-6 h-6 text-[#f97316]" />
             <span>Proveedores & Órdenes de Compra (OC)</span>
           </h1>
           <p className="text-xs text-gray-400 mt-1">
@@ -190,20 +190,20 @@ export default function ProveedoresPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => setShowProvModal(true)}
-            className="bg-gray-800 hover:bg-gray-700 text-gray-200 font-semibold text-xs px-3.5 py-2.5 rounded-xl border border-gray-700 transition"
+            className="bg-gray-800 hover:bg-gray-700 text-gray-200 font-semibold text-xs px-3.5 py-2.5 rounded-md border border-gray-700 transition"
           >
             + Nuevo Proveedor
           </button>
           <button
             onClick={() => setShowPedidoModal(true)}
-            className="bg-[#F7931F] hover:bg-[#e08316] text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-lg transition flex items-center gap-2"
+            className="bg-[#f97316] hover:bg-[#ea580c] text-white font-semibold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
             <span>Generar Orden de Compra</span>
           </button>
           <Link
             href="/ordenes-compra/nuevo"
-            className="bg-white hover:bg-orange-50 text-[#F7931F] font-semibold text-xs px-4 py-2.5 rounded-xl border border-orange-200 transition flex items-center gap-2"
+            className="bg-white hover:bg-orange-50 text-[#f97316] font-semibold text-xs px-4 py-2.5 rounded-md border border-orange-200 transition flex items-center gap-2"
           >
             <FileText className="w-4 h-4" />
             <span>OC Oficial</span>
@@ -214,13 +214,13 @@ export default function ProveedoresPage() {
       {/* Directorio de Proveedores */}
       <div className="space-y-4">
         <h2 className="text-sm font-bold text-white flex items-center gap-2">
-          <Building className="w-4 h-4 text-[#F7931F]" />
+          <Building className="w-4 h-4 text-[#f97316]" />
           <span>Directorio de Proveedores</span>
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {proveedores.map((prov) => (
-            <div key={prov.id} className="bg-gray-900 p-4 rounded-2xl border border-gray-800 flex items-start justify-between">
+            <div key={prov.id} className="bg-gray-900 p-4 rounded-lg border border-gray-800 flex items-start justify-between">
               <div className="space-y-1">
                 <h3 className="font-bold text-white text-sm">{prov.nombre}</h3>
                 <p className="text-xs text-gray-400 font-mono">RUT: {prov.rut}</p>
@@ -237,7 +237,7 @@ export default function ProveedoresPage() {
                 </span>
                 <Link
                   href={`/ordenes-compra/nuevo?proveedor_id=${prov.id}`}
-                  className="text-[10px] font-black uppercase bg-orange-50 text-[#F7931F] px-2 py-1 rounded-lg border border-orange-200 hover:bg-[#F7931F] hover:text-white transition"
+                  className="text-[10px] font-black uppercase bg-orange-50 text-[#f97316] px-2 py-1 rounded-lg border border-orange-200 hover:bg-[#f97316] hover:text-white transition"
                 >
                   Crear OC
                 </Link>
@@ -248,15 +248,15 @@ export default function ProveedoresPage() {
       </div>
 
       {/* Historial de Órdenes de Compra */}
-      <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-visible shadow-xl space-y-3 p-4">
+      <div className="bg-gray-900 rounded-lg border border-gray-800 overflow-visible shadow-sm space-y-3 p-4">
         <h2 className="text-sm font-bold text-white flex items-center gap-2 border-b border-gray-800 pb-3">
-          <FileText className="w-4 h-4 text-[#F7931F]" />
+          <FileText className="w-4 h-4 text-[#f97316]" />
           <span>Órdenes de Compra Registradas ({pedidos.length})</span>
         </h2>
 
         <div className="overflow-visible">
           <table className="w-full text-left text-xs">
-            <thead className="bg-gray-800/60 text-gray-400 uppercase text-[10px] tracking-wider border-b border-gray-800">
+            <thead className="bg-gray-800/60 text-gray-400 uppercase text-[10px] tracking-normal border-b border-gray-800">
               <tr>
                 <th className="p-3">Fecha</th>
                 <th className="p-3">Proveedor</th>
@@ -296,7 +296,7 @@ export default function ProveedoresPage() {
       {/* Modal Nuevo Proveedor */}
       {showProvModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-xs">
             <h3 className="text-base font-bold text-white">Registrar Proveedor</h3>
             <form onSubmit={handleAddProveedor} className="space-y-3">
               <div>
@@ -307,7 +307,7 @@ export default function ProveedoresPage() {
                   placeholder="Ej. Cementos Polpaico S.A."
                   value={nombreProv}
                   onChange={(e) => setNombreProv(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
                 />
               </div>
               <div>
@@ -318,7 +318,7 @@ export default function ProveedoresPage() {
                   placeholder="90.120.000-4"
                   value={rutProv}
                   onChange={(e) => setRutProv(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
                 />
               </div>
               <div>
@@ -327,7 +327,7 @@ export default function ProveedoresPage() {
                   type="text"
                   value={contactoProv}
                   onChange={(e) => setContactoProv(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
                 />
               </div>
               <div>
@@ -336,7 +336,7 @@ export default function ProveedoresPage() {
                   type="text"
                   value={direccionProv}
                   onChange={(e) => setDireccionProv(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
                 />
               </div>
               <div>
@@ -345,7 +345,7 @@ export default function ProveedoresPage() {
                   type="text"
                   value={comunaProv}
                   onChange={(e) => setComunaProv(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -355,7 +355,7 @@ export default function ProveedoresPage() {
                     type="text"
                     value={telefonoProv}
                     onChange={(e) => setTelefonoProv(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
                   />
                 </div>
                 <div>
@@ -364,7 +364,7 @@ export default function ProveedoresPage() {
                     type="email"
                     value={correoProv}
                     onChange={(e) => setCorreoProv(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
                   />
                 </div>
               </div>
@@ -372,11 +372,11 @@ export default function ProveedoresPage() {
                 <button
                   type="button"
                   onClick={() => setShowProvModal(false)}
-                  className="px-4 py-2 bg-gray-800 text-gray-300 rounded-xl"
+                  className="px-4 py-2 bg-gray-800 text-gray-300 rounded-md"
                 >
                   Cancelar
                 </button>
-                <button type="submit" className="px-4 py-2 bg-[#F7931F] text-white font-bold rounded-xl">
+                <button type="submit" className="px-4 py-2 bg-[#f97316] text-white font-bold rounded-md">
                   Guardar
                 </button>
               </div>
@@ -388,7 +388,7 @@ export default function ProveedoresPage() {
       {/* Modal Nueva Orden de Compra */}
       {showPedidoModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-xs">
             <h3 className="text-base font-bold text-white">Generar Orden de Compra (OC)</h3>
             <form onSubmit={handleAddPedido} className="space-y-3">
               <div>
@@ -396,7 +396,7 @@ export default function ProveedoresPage() {
                 <select
                   value={proveedorId}
                   onChange={(e) => setProveedorId(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
                 >
                   {proveedores.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -413,7 +413,7 @@ export default function ProveedoresPage() {
                   placeholder="Ej. Cemento Portland 50 sacos 25kg"
                   value={descripcionPedido}
                   onChange={(e) => setDescripcionPedido(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
                 />
               </div>
               <div>
@@ -423,18 +423,18 @@ export default function ProveedoresPage() {
                   required
                   value={montoPedido}
                   onChange={(e) => setMontoPedido(Number(e.target.value))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowPedidoModal(false)}
-                  className="px-4 py-2 bg-gray-800 text-gray-300 rounded-xl"
+                  className="px-4 py-2 bg-gray-800 text-gray-300 rounded-md"
                 >
                   Cancelar
                 </button>
-                <button type="submit" className="px-4 py-2 bg-[#F7931F] text-white font-bold rounded-xl">
+                <button type="submit" className="px-4 py-2 bg-[#f97316] text-white font-bold rounded-md">
                   Generar OC
                 </button>
               </div>

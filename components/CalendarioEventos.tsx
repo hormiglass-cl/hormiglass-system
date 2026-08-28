@@ -398,12 +398,12 @@ export function CalendarioEventos({
   });
 
   return (
-    <div className="space-y-5 text-[#363636]">
+    <div className="space-y-5 text-[#213343]">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-[#363636] flex items-center gap-2.5">
-            <CalendarIcon className="w-6 h-6 text-[#F7931F]" />
+          <h1 className="text-2xl font-extrabold text-[#213343] flex items-center gap-2.5">
+            <CalendarIcon className="w-6 h-6 text-[#f97316]" />
             <span>{titulo}</span>
           </h1>
           {subtitulo && <p className="text-xs text-gray-500 mt-0.5">{subtitulo}</p>}
@@ -412,7 +412,7 @@ export function CalendarioEventos({
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => handleOpenNewModal()}
-            className="bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold text-xs px-4 py-2 rounded-xl transition flex items-center gap-2 shadow-sm"
+            className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold text-xs px-4 py-2 rounded-md transition flex items-center gap-2 shadow-sm"
           >
             <Plus className="w-4 h-4" />
             <span>Programar evento</span>
@@ -421,10 +421,10 @@ export function CalendarioEventos({
       </div>
 
       {/* Control Bar: Mes + Filtros */}
-      <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-4 text-xs">
+      <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-4 text-xs">
         {/* Navegación de Mes */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center bg-gray-100 rounded-xl p-1 border border-gray-200">
+          <div className="flex items-center bg-gray-100 rounded-md p-1 border border-gray-200">
             <button
               onClick={prevMonth}
               className="p-1.5 hover:bg-white text-gray-700 rounded-lg transition"
@@ -432,7 +432,7 @@ export function CalendarioEventos({
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="font-extrabold text-[#363636] px-3 font-mono text-sm">
+            <span className="font-extrabold text-[#213343] px-3 font-mono text-sm">
               {monthNames[month]} {year}
             </span>
             <button
@@ -446,7 +446,7 @@ export function CalendarioEventos({
 
           <button
             onClick={goToToday}
-            className="px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-[#F7931F] font-bold rounded-xl border border-orange-200 transition"
+            className="px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-[#f97316] font-bold rounded-md border border-orange-200 transition"
           >
             Hoy
           </button>
@@ -460,7 +460,7 @@ export function CalendarioEventos({
             <select
               value={selectedTipo}
               onChange={(e) => setSelectedTipo(e.target.value)}
-              className="bg-gray-50 border border-gray-300 rounded-xl px-2.5 py-1.5 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F]"
+              className="bg-gray-50 border border-gray-300 rounded-md px-2.5 py-1.5 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
             >
               <option value="todos">Todos los tipos</option>
               {tiposPermitidos.map((t) => (
@@ -478,7 +478,7 @@ export function CalendarioEventos({
               <button
                 type="button"
                 onClick={() => setShowResponsableMenu(!showResponsableMenu)}
-                className="bg-gray-50 hover:bg-gray-100 border border-gray-300 rounded-xl px-3 py-1.5 text-[#363636] font-bold text-xs flex items-center justify-between gap-2 min-w-[170px] cursor-pointer"
+                className="bg-gray-50 hover:bg-gray-100 border border-gray-300 rounded-md px-3 py-1.5 text-[#213343] font-bold text-xs flex items-center justify-between gap-2 min-w-[170px] cursor-pointer"
               >
                 <span className="truncate">
                   {selectedResponsables.length === 0
@@ -492,16 +492,16 @@ export function CalendarioEventos({
             </div>
 
             {showResponsableMenu && (
-              <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-2xl shadow-xl p-3 z-30 space-y-2 text-xs">
+              <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-sm p-3 z-30 space-y-2 text-xs">
                 <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
-                  <span className="font-extrabold text-[#363636] text-[11px] uppercase tracking-wider">
+                  <span className="font-extrabold text-[#213343] text-[11px] uppercase tracking-normal">
                     Filtrar responsables
                   </span>
                   {selectedResponsables.length > 0 && (
                     <button
                       type="button"
                       onClick={() => setSelectedResponsables([])}
-                      className="text-[10px] text-[#F7931F] font-bold hover:underline"
+                      className="text-[10px] text-[#f97316] font-bold hover:underline"
                     >
                       Limpiar filtro
                     </button>
@@ -509,12 +509,12 @@ export function CalendarioEventos({
                 </div>
 
                 <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
-                  <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-bold text-[#363636]">
+                  <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-bold text-[#213343]">
                     <input
                       type="checkbox"
                       checked={selectedResponsables.length === 0}
                       onChange={() => setSelectedResponsables([])}
-                      className="rounded text-[#F7931F] focus:ring-[#F7931F]"
+                      className="rounded text-[#f97316] focus:ring-[#F7931F]"
                     />
                     <span>Todos los responsables</span>
                   </label>
@@ -538,7 +538,7 @@ export function CalendarioEventos({
                                 setSelectedResponsables([...selectedResponsables, p.id]);
                               }
                             }}
-                            className="rounded text-[#F7931F] focus:ring-[#F7931F]"
+                            className="rounded text-[#f97316] focus:ring-[#F7931F]"
                           />
                           <span className="truncate">{p.nombre}</span>
                         </div>
@@ -559,7 +559,7 @@ export function CalendarioEventos({
             <select
               value={selectedEstado}
               onChange={(e) => setSelectedEstado(e.target.value)}
-              className="bg-gray-50 border border-gray-300 rounded-xl px-2.5 py-1.5 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F]"
+              className="bg-gray-50 border border-gray-300 rounded-md px-2.5 py-1.5 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
             >
               <option value="todos">Todos los estados</option>
               {Object.entries(ESTADOS_EVENTO_CONFIG).map(([key, conf]) => (
@@ -573,7 +573,7 @@ export function CalendarioEventos({
       </div>
 
       {/* Calendario Grid Mensual */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
         {/* Cabecera de días de la semana */}
         <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-xs font-bold text-gray-600">
           {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((d) => (
@@ -618,7 +618,7 @@ export function CalendarioEventos({
                   <div className="flex items-center justify-between mb-1.5">
                     <span
                       className={`text-xs font-black w-6 h-6 flex items-center justify-center rounded-full ${
-                        isToday ? 'bg-[#F7931F] text-white shadow-xs' : 'text-[#363636]'
+                        isToday ? 'bg-[#f97316] text-white shadow-xs' : 'text-[#213343]'
                       }`}
                     >
                       {dayNum}
@@ -626,7 +626,7 @@ export function CalendarioEventos({
 
                     <button
                       onClick={() => handleOpenNewModal(dateStr)}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-[#F7931F] transition rounded-md"
+                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-[#f97316] transition rounded-md"
                       title="Agregar evento este día"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -654,12 +654,12 @@ export function CalendarioEventos({
                         <div
                           key={ev.id}
                           onClick={() => handleOpenEditModal(ev)}
-                          className={`p-2 rounded-xl border text-[11px] leading-tight cursor-pointer transition shadow-2xs hover:scale-[1.01] space-y-1 bg-orange-50/70 border-orange-200 hover:bg-orange-100/60 ${
+                          className={`p-2 rounded-md border text-[11px] leading-tight cursor-pointer transition shadow-2xs hover:scale-[1.01] space-y-1 bg-orange-50/70 border-orange-200 hover:bg-orange-100/60 ${
                             isHighlighted ? 'ring-2 ring-[#F7931F]' : ''
                           }`}
                         >
                           <div className="flex items-center justify-between gap-1">
-                            <span className="font-extrabold text-[9.5px] px-1.5 py-0.5 rounded-md text-[#F7931F] bg-white border border-orange-200 truncate max-w-[120px]">
+                            <span className="font-extrabold text-[9.5px] px-1.5 py-0.5 rounded-md text-[#f97316] bg-white border border-orange-200 truncate max-w-[120px]">
                               {ev.responsable?.nombre || 'Sin responsable'}
                             </span>
                             <span className="font-mono text-[9.5px] text-gray-500 font-bold flex items-center gap-0.5 shrink-0">
@@ -668,7 +668,7 @@ export function CalendarioEventos({
                             </span>
                           </div>
 
-                          <div className="font-bold text-[#363636] truncate leading-tight flex items-center gap-1">
+                          <div className="font-bold text-[#213343] truncate leading-tight flex items-center gap-1">
                             <TipoIcon className={`w-3.5 h-3.5 shrink-0 ${tipoConf.color}`} />
                             <span className="truncate">{ev.titulo}</span>
                           </div>
@@ -703,16 +703,16 @@ export function CalendarioEventos({
 
       {/* Modal Nuevo Evento */}
       {isNewModalOpen && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 z-50 animate-fadeIn">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-2xl text-[#363636] max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 z-50 ">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-sm text-[#213343] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h3 className="text-base font-extrabold text-[#363636] flex items-center gap-2">
-                <CalendarIcon className="w-5 h-5 text-[#F7931F]" />
+              <h3 className="text-base font-extrabold text-[#213343] flex items-center gap-2">
+                <CalendarIcon className="w-5 h-5 text-[#f97316]" />
                 <span>Programar Nuevo Evento ({titulo})</span>
               </h3>
               <button
                 onClick={() => setIsNewModalOpen(false)}
-                className="text-gray-400 hover:text-[#363636] text-xl font-bold"
+                className="text-gray-400 hover:text-[#213343] text-xl font-bold"
               >
                 ✕
               </button>
@@ -725,7 +725,7 @@ export function CalendarioEventos({
                   required
                   value={formOpId}
                   onChange={(e) => setFormOpId(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
                 >
                   <option value="">-- Seleccionar Oportunidad --</option>
                   {oportunidades.map((op) => (
@@ -744,9 +744,9 @@ export function CalendarioEventos({
                     return (
                       <div
                         key={cal.id}
-                        className={`px-3 py-2 rounded-xl border font-extrabold text-xs text-center ${
+                        className={`px-3 py-2 rounded-md border font-extrabold text-xs text-center ${
                           isCurrent
-                            ? 'bg-orange-50 text-[#F7931F] border-orange-300'
+                            ? 'bg-orange-50 text-[#f97316] border-orange-300'
                             : 'bg-gray-50 text-gray-500 border-gray-200'
                         }`}
                       >
@@ -764,7 +764,7 @@ export function CalendarioEventos({
                     required
                     value={formTipo}
                     onChange={(e) => setFormTipo(e.target.value as TipoEventoProduccionLogistica)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
                   >
                     {tiposPermitidos.map((t) => (
                       <option key={t} value={t}>
@@ -780,7 +780,7 @@ export function CalendarioEventos({
                     required
                     value={formEstado}
                     onChange={(e) => setFormEstado(e.target.value as EstadoEventoProduccionLogistica)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
                   >
                     {Object.entries(ESTADOS_EVENTO_CONFIG).map(([key, conf]) => (
                       <option key={key} value={key}>
@@ -799,7 +799,7 @@ export function CalendarioEventos({
                   placeholder="Ej: Montaje e Instalación Cierros"
                   value={formTitulo}
                   onChange={(e) => setFormTitulo(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -811,7 +811,7 @@ export function CalendarioEventos({
                     required
                     value={formFechaInicio}
                     onChange={(e) => setFormFechaInicio(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
 
@@ -822,7 +822,7 @@ export function CalendarioEventos({
                     required
                     value={formFechaFin}
                     onChange={(e) => setFormFechaFin(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
               </div>
@@ -832,7 +832,7 @@ export function CalendarioEventos({
                 <select
                   value={formResponsableId}
                   onChange={(e) => setFormResponsableId(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 >
                   <option value="">-- Sin Asignar --</option>
                   {personalList.map((p) => (
@@ -850,7 +850,7 @@ export function CalendarioEventos({
                   placeholder="Detalles operacionales, contacto en terreno o materiales..."
                   value={formObservaciones}
                   onChange={(e) => setFormObservaciones(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl p-2.5 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md p-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -858,14 +858,14 @@ export function CalendarioEventos({
                 <button
                   type="button"
                   onClick={() => setIsNewModalOpen(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={savingLoading}
-                  className="bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold px-5 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                  className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold px-5 py-2 rounded-md transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
                 >
                   <Save className="w-4 h-4" />
                   <span>{savingLoading ? 'Guardando...' : 'Crear Evento'}</span>
@@ -878,16 +878,16 @@ export function CalendarioEventos({
 
       {/* Modal Editar / Eliminar Evento */}
       {isEditModalOpen && selectedEvento && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 z-50 animate-fadeIn">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-2xl text-[#363636] max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 z-50 ">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-sm text-[#213343] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h3 className="text-base font-extrabold text-[#363636] flex items-center gap-2">
-                <Edit className="w-5 h-5 text-[#F7931F]" />
+              <h3 className="text-base font-extrabold text-[#213343] flex items-center gap-2">
+                <Edit className="w-5 h-5 text-[#f97316]" />
                 <span>Editar Evento</span>
               </h3>
               <button
                 onClick={() => setIsEditModalOpen(false)}
-                className="text-gray-400 hover:text-[#363636] text-xl font-bold"
+                className="text-gray-400 hover:text-[#213343] text-xl font-bold"
               >
                 ✕
               </button>
@@ -900,7 +900,7 @@ export function CalendarioEventos({
                   <select
                     value={formTipo}
                     onChange={(e) => setFormTipo(e.target.value as TipoEventoProduccionLogistica)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
                   >
                     {tiposPermitidos.map((t) => (
                       <option key={t} value={t}>
@@ -915,7 +915,7 @@ export function CalendarioEventos({
                   <select
                     value={formEstado}
                     onChange={(e) => setFormEstado(e.target.value as EstadoEventoProduccionLogistica)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
                   >
                     {Object.entries(ESTADOS_EVENTO_CONFIG).map(([key, conf]) => (
                       <option key={key} value={key}>
@@ -933,7 +933,7 @@ export function CalendarioEventos({
                   required
                   value={formTitulo}
                   onChange={(e) => setFormTitulo(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -945,7 +945,7 @@ export function CalendarioEventos({
                     required
                     value={formFechaInicio}
                     onChange={(e) => setFormFechaInicio(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
 
@@ -956,7 +956,7 @@ export function CalendarioEventos({
                     required
                     value={formFechaFin}
                     onChange={(e) => setFormFechaFin(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
               </div>
@@ -966,7 +966,7 @@ export function CalendarioEventos({
                 <select
                   value={formResponsableId}
                   onChange={(e) => setFormResponsableId(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 >
                   <option value="">-- Sin Asignar --</option>
                   {personalList.map((p) => (
@@ -983,7 +983,7 @@ export function CalendarioEventos({
                   rows={2}
                   value={formObservaciones}
                   onChange={(e) => setFormObservaciones(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl p-2.5 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md p-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -991,7 +991,7 @@ export function CalendarioEventos({
                 <button
                   type="button"
                   onClick={() => handleDeleteEvento(selectedEvento.id)}
-                  className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-xl transition flex items-center gap-1.5"
+                  className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-md transition flex items-center gap-1.5"
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>Eliminar Evento</span>
@@ -1001,14 +1001,14 @@ export function CalendarioEventos({
                   <button
                     type="button"
                     onClick={() => setIsEditModalOpen(false)}
-                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     disabled={savingLoading}
-                    className="bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold px-5 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                    className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold px-5 py-2 rounded-md transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
                   >
                     <Save className="w-4 h-4" />
                     <span>{savingLoading ? 'Guardando...' : 'Guardar Cambios'}</span>

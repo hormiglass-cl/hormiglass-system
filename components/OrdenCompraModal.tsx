@@ -394,43 +394,43 @@ export function OrdenCompraModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-      <div className="bg-white border border-gray-200 rounded-3xl max-w-4xl w-full p-6 space-y-5 shadow-2xl text-[#363636] max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
+      <div className="bg-white border border-gray-200 rounded-lg max-w-4xl w-full p-6 space-y-5 shadow-sm text-[#213343] max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-gray-200 pb-3">
           <h3 className="text-lg font-extrabold flex items-center gap-2">
-            <FileText className="w-5 h-5 text-[#F7931F]" />
+            <FileText className="w-5 h-5 text-[#f97316]" />
             <span>{initialOrden ? `Editar OC ${initialOrden.numero_oc}` : 'Emitir Nueva Orden de Compra'}</span>
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-[#363636] text-xl font-bold">x</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-[#213343] text-xl font-bold">x</button>
         </div>
 
         {errorMsg && (
-          <div className="bg-orange-50 border border-orange-200 text-orange-950 p-3.5 rounded-2xl text-xs font-bold flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-[#F7931F]" />
+          <div className="bg-orange-50 border border-orange-200 text-orange-950 p-3.5 rounded-lg text-xs font-bold flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-[#f97316]" />
             <span>{errorMsg}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-200">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
             <div className="lg:col-span-2 relative">
               <label className="block font-bold text-gray-700 mb-1">Proveedor *</label>
               <button
                 type="button"
                 onClick={() => setSupplierOpen(!supplierOpen)}
-                className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-left font-bold flex items-center justify-between"
+                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-left font-bold flex items-center justify-between"
               >
                 <span className="truncate">{selectedProveedor ? selectedProveedor.nombre : 'Seleccionar proveedor...'}</span>
                 <ChevronDown className="w-4 h-4 text-gray-400" />
               </button>
               {supplierOpen && (
-                <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 p-2 max-h-64 overflow-y-auto space-y-1">
+                <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-sm z-50 p-2 max-h-64 overflow-y-auto space-y-1">
                   <input
                     type="text"
                     value={supplierSearch}
                     onChange={(e) => setSupplierSearch(e.target.value)}
                     placeholder="Buscar proveedor..."
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs mb-1"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-md px-3 py-2 text-xs mb-1"
                   />
                   {filteredProveedores.map((prov) => (
                     <button
@@ -440,13 +440,13 @@ export function OrdenCompraModal({
                         setProveedorId(prov.id);
                         setSupplierOpen(false);
                       }}
-                      className="w-full p-2 hover:bg-orange-50 rounded-xl cursor-pointer flex items-center justify-between text-left"
+                      className="w-full p-2 hover:bg-orange-50 rounded-md cursor-pointer flex items-center justify-between text-left"
                     >
                       <span>
                         <span className="block font-bold">{prov.nombre}</span>
                         <span className="block text-[10px] text-gray-500 font-mono">RUT: {prov.rut}</span>
                       </span>
-                      {prov.id === proveedorId && <Check className="w-4 h-4 text-[#F7931F]" />}
+                      {prov.id === proveedorId && <Check className="w-4 h-4 text-[#f97316]" />}
                     </button>
                   ))}
                 </div>
@@ -455,17 +455,17 @@ export function OrdenCompraModal({
 
             <div>
               <label className="block font-bold text-gray-700 mb-1">Numero OC *</label>
-              <input value={numeroOc} onChange={(e) => setNumeroOc(e.target.value)} className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 font-mono font-bold" />
+              <input value={numeroOc} onChange={(e) => setNumeroOc(e.target.value)} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 font-mono font-bold" />
             </div>
 
             <div>
               <label className="block font-bold text-gray-700 mb-1">Fecha</label>
-              <input type="date" value={fechaEmision} onChange={(e) => setFechaEmision(e.target.value)} className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 font-bold" />
+              <input type="date" value={fechaEmision} onChange={(e) => setFechaEmision(e.target.value)} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 font-bold" />
             </div>
 
             <div>
               <label className="block font-bold text-gray-700 mb-1">Estado</label>
-              <select value={estado} onChange={(e) => setEstado(e.target.value as EstadoOrdenCompra)} className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 font-bold">
+              <select value={estado} onChange={(e) => setEstado(e.target.value as EstadoOrdenCompra)} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 font-bold">
                 <option value="borrador">Borrador</option>
                 <option value="emitida">Emitida</option>
                 <option value="aprobada">Aprobada</option>
@@ -476,7 +476,7 @@ export function OrdenCompraModal({
 
             <div className="lg:col-span-3">
               <label className="block font-bold text-gray-700 mb-1">Oportunidad asociada</label>
-              <select value={oportunidadId} onChange={(e) => setOportunidadId(e.target.value)} className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 font-bold">
+              <select value={oportunidadId} onChange={(e) => setOportunidadId(e.target.value)} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 font-bold">
                 <option value="">-- Sin oportunidad vinculada --</option>
                 {oportunidades.map((op) => (
                   <option key={op.id} value={op.id}>{op.codigo} - {op.titulo}</option>
@@ -486,36 +486,36 @@ export function OrdenCompraModal({
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-white p-4 rounded-2xl border border-gray-200 space-y-3">
-              <h4 className="font-black text-[#F7931F] uppercase">Envie A</h4>
+            <div className="bg-white p-4 rounded-lg border border-gray-200 space-y-3">
+              <h4 className="font-black text-[#f97316] uppercase">Envie A</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input value="Sociedad Inmobiliaria Hormiglass Spa" disabled className="sm:col-span-2 bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 font-bold" />
-                <input value="77.615.313-3" disabled className="bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 font-bold" />
-                <input value={envieAContacto} onChange={(e) => setEnvieAContacto(e.target.value)} placeholder="Contacto" className="bg-white border border-gray-300 rounded-xl px-3 py-2" />
-                <input value={envieADireccion} onChange={(e) => setEnvieADireccion(e.target.value)} placeholder="Direccion" className="sm:col-span-2 bg-white border border-gray-300 rounded-xl px-3 py-2" />
-                <input value={envieATelefono} onChange={(e) => setEnvieATelefono(e.target.value)} placeholder="Telefono" className="bg-white border border-gray-300 rounded-xl px-3 py-2" />
-                <input value={envieAEmail} onChange={(e) => setEnvieAEmail(e.target.value)} placeholder="Email" className="bg-white border border-gray-300 rounded-xl px-3 py-2" />
+                <input value="Sociedad Inmobiliaria Hormiglass Spa" disabled className="sm:col-span-2 bg-gray-100 border border-gray-200 rounded-md px-3 py-2 font-bold" />
+                <input value="77.615.313-3" disabled className="bg-gray-100 border border-gray-200 rounded-md px-3 py-2 font-bold" />
+                <input value={envieAContacto} onChange={(e) => setEnvieAContacto(e.target.value)} placeholder="Contacto" className="bg-white border border-gray-300 rounded-md px-3 py-2" />
+                <input value={envieADireccion} onChange={(e) => setEnvieADireccion(e.target.value)} placeholder="Direccion" className="sm:col-span-2 bg-white border border-gray-300 rounded-md px-3 py-2" />
+                <input value={envieATelefono} onChange={(e) => setEnvieATelefono(e.target.value)} placeholder="Telefono" className="bg-white border border-gray-300 rounded-md px-3 py-2" />
+                <input value={envieAEmail} onChange={(e) => setEnvieAEmail(e.target.value)} placeholder="Email" className="bg-white border border-gray-300 rounded-md px-3 py-2" />
               </div>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-gray-200 space-y-3">
-              <h4 className="font-black text-[#F7931F] uppercase">Pago</h4>
+            <div className="bg-white p-4 rounded-lg border border-gray-200 space-y-3">
+              <h4 className="font-black text-[#f97316] uppercase">Pago</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input value={condicionPago} onChange={(e) => setCondicionPago(e.target.value)} placeholder="Condicion de pago" className="bg-white border border-gray-300 rounded-xl px-3 py-2" />
-                <input value={contactoPagoNombre} onChange={(e) => setContactoPagoNombre(e.target.value)} placeholder="Nombre contacto" className="bg-white border border-gray-300 rounded-xl px-3 py-2" />
-                <input value={contactoPagoTelefono} onChange={(e) => setContactoPagoTelefono(e.target.value)} placeholder="Telefono" className="bg-white border border-gray-300 rounded-xl px-3 py-2" />
-                <input value={contactoPagoEmail} onChange={(e) => setContactoPagoEmail(e.target.value)} placeholder="Email" className="bg-white border border-gray-300 rounded-xl px-3 py-2" />
+                <input value={condicionPago} onChange={(e) => setCondicionPago(e.target.value)} placeholder="Condicion de pago" className="bg-white border border-gray-300 rounded-md px-3 py-2" />
+                <input value={contactoPagoNombre} onChange={(e) => setContactoPagoNombre(e.target.value)} placeholder="Nombre contacto" className="bg-white border border-gray-300 rounded-md px-3 py-2" />
+                <input value={contactoPagoTelefono} onChange={(e) => setContactoPagoTelefono(e.target.value)} placeholder="Telefono" className="bg-white border border-gray-300 rounded-md px-3 py-2" />
+                <input value={contactoPagoEmail} onChange={(e) => setContactoPagoEmail(e.target.value)} placeholder="Email" className="bg-white border border-gray-300 rounded-md px-3 py-2" />
               </div>
             </div>
           </div>
 
-          <div className="space-y-3 bg-white p-4 rounded-2xl border border-gray-200">
+          <div className="space-y-3 bg-white p-4 rounded-lg border border-gray-200">
             <div className="flex items-center justify-between border-b border-gray-100 pb-2">
               <span className="font-extrabold flex items-center gap-1.5">
-                <Calculator className="w-4 h-4 text-[#F7931F]" />
+                <Calculator className="w-4 h-4 text-[#f97316]" />
                 <span>Articulos (valores netos en peso chileno)</span>
               </span>
-              <button type="button" onClick={handleAddItem} className="bg-orange-50 hover:bg-[#F7931F] text-[#F7931F] hover:text-white px-2.5 py-1 rounded-xl text-[11px] font-bold border border-orange-200 transition flex items-center gap-1">
+              <button type="button" onClick={handleAddItem} className="bg-orange-50 hover:bg-[#f97316] text-[#f97316] hover:text-white px-2.5 py-1 rounded-md text-[11px] font-bold border border-orange-200 transition flex items-center gap-1">
                 <Plus className="w-3.5 h-3.5" />
                 <span>Agregar item</span>
               </button>
@@ -531,7 +531,7 @@ export function OrdenCompraModal({
                 <span className="col-span-1 text-center">Quitar</span>
               </div>
               {items.map((item, index) => (
-                <div key={index} className="grid grid-cols-12 gap-2 items-center bg-gray-50 p-2.5 rounded-xl border border-gray-200">
+                <div key={index} className="grid grid-cols-12 gap-2 items-center bg-gray-50 p-2.5 rounded-md border border-gray-200">
                   <input value={item.articulo_codigo || ''} onChange={(e) => handleItemChange(index, 'articulo_codigo', e.target.value)} placeholder="Codigo" aria-label="Codigo articulo" className="col-span-12 sm:col-span-2 bg-white border border-gray-300 rounded-lg px-2 py-1.5" />
                   <input value={item.descripcion} onChange={(e) => handleItemChange(index, 'descripcion', e.target.value)} placeholder="Descripcion" aria-label="Descripcion articulo" className="col-span-12 sm:col-span-4 bg-white border border-gray-300 rounded-lg px-2 py-1.5 font-bold" />
                   <input type="number" min="0" step="0.01" value={item.cantidad} onChange={(e) => handleItemChange(index, 'cantidad', e.target.value)} aria-label="Cantidad" className="col-span-6 sm:col-span-2 bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-right font-bold" />
@@ -540,7 +540,7 @@ export function OrdenCompraModal({
                     <input type="number" min="0" step="1" value={item.precio_unitario} onChange={(e) => handleItemChange(index, 'precio_unitario', e.target.value)} aria-label="Precio unitario en pesos chilenos" className="w-full bg-white border border-gray-300 rounded-lg pl-9 pr-2 py-1.5 text-right font-bold" />
                   </div>
                   <div className="col-span-10 sm:col-span-1 font-black text-right">{formatCLP(Number(item.total_item || 0))}</div>
-                  <button type="button" onClick={() => handleRemoveItem(index)} className="col-span-1 text-gray-400 hover:text-[#363636] flex justify-center">
+                  <button type="button" onClick={() => handleRemoveItem(index)} className="col-span-1 text-gray-400 hover:text-[#213343] flex justify-center">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -551,9 +551,9 @@ export function OrdenCompraModal({
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
             <div>
               <label className="block font-bold text-gray-700 mb-1">Comentarios o instrucciones especiales</label>
-              <textarea value={instrucciones} onChange={(e) => setInstrucciones(e.target.value)} rows={5} className="w-full bg-white border border-gray-300 rounded-2xl px-3 py-2" />
+              <textarea value={instrucciones} onChange={(e) => setInstrucciones(e.target.value)} rows={5} className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2" />
             </div>
-            <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 space-y-2">
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-2">
               <div className="flex justify-between"><span>Subtotal</span><strong>{formatCLP(subtotal)}</strong></div>
               <div className="flex justify-between"><span>IVA 19%</span><strong>{formatCLP(montoIva)}</strong></div>
               <label className="flex items-center justify-between gap-3">
@@ -570,7 +570,7 @@ export function OrdenCompraModal({
                   <input type="number" value={otrosCargos} onChange={(e) => setOtrosCargos(Number(e.target.value) || 0)} aria-label="Otros cargos en pesos chilenos" className="w-full bg-white border border-gray-300 rounded-lg pl-9 pr-2 py-1 text-right font-bold" />
                 </span>
               </label>
-              <div className="flex justify-between border-t border-gray-300 pt-3 text-base text-[#F7931F] font-black">
+              <div className="flex justify-between border-t border-gray-300 pt-3 text-base text-[#f97316] font-black">
                 <span>Total</span>
                 <span>{formatCLP(montoTotal)}</span>
               </div>
@@ -578,8 +578,8 @@ export function OrdenCompraModal({
           </div>
 
           <div className="pt-3 flex items-center justify-end gap-3 border-t border-gray-200">
-            <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition">Cancelar</button>
-            <button type="submit" disabled={loading} className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-extrabold transition shadow-md flex items-center gap-1.5">
+            <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-bold transition">Cancelar</button>
+            <button type="submit" disabled={loading} className="px-5 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-extrabold transition shadow-sm flex items-center gap-1.5">
               <Save className="w-4 h-4" />
               <span>{loading ? 'Guardando...' : 'Guardar OC'}</span>
             </button>
@@ -588,17 +588,17 @@ export function OrdenCompraModal({
       </div>
 
       {showVersionConfirmModal && initialOrden && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-fadeIn">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl text-[#363636]">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[60] ">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-[#213343]">
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h3 className="text-base font-extrabold text-[#363636] flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-[#F7931F]" />
+              <h3 className="text-base font-extrabold text-[#213343] flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-[#f97316]" />
                 <span>Confirmar Guardado de Cambios</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowVersionConfirmModal(false)}
-                className="text-gray-400 hover:text-[#363636] font-bold"
+                className="text-gray-400 hover:text-[#213343] font-bold"
               >
                 x
               </button>
@@ -606,9 +606,9 @@ export function OrdenCompraModal({
 
             <div className="space-y-3 text-xs text-gray-700">
               <p>
-                Se detectaron cambios en la OC <strong className="font-mono text-[#363636]">{initialOrden.numero_oc} (Version v{initialOrden.version || 1})</strong>.
+                Se detectaron cambios en la OC <strong className="font-mono text-[#213343]">{initialOrden.numero_oc} (Version v{initialOrden.version || 1})</strong>.
               </p>
-              <p className="bg-orange-50 p-3 rounded-xl border border-orange-200 text-orange-950 font-medium">
+              <p className="bg-orange-50 p-3 rounded-md border border-orange-200 text-orange-950 font-medium">
                 Puedes guardar como una version nueva incrementada (v{nextVersionPreview || (initialOrden.version || 1) + 1}) o sobreescribir la version actual.
               </p>
             </div>
@@ -618,7 +618,7 @@ export function OrdenCompraModal({
                 type="button"
                 onClick={() => saveOrdenToBackend(false)}
                 disabled={loading}
-                className="w-full sm:w-auto px-4 py-2.5 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-800 font-bold rounded-xl border border-gray-300 transition flex items-center justify-center gap-1.5"
+                className="w-full sm:w-auto px-4 py-2.5 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-800 font-bold rounded-md border border-gray-300 transition flex items-center justify-center gap-1.5"
               >
                 <span>Sobreescribir Version Actual</span>
               </button>
@@ -627,7 +627,7 @@ export function OrdenCompraModal({
                 type="button"
                 onClick={() => saveOrdenToBackend(true)}
                 disabled={loading}
-                className="w-full sm:w-auto px-4 py-2.5 bg-[#F7931F] hover:bg-[#e08316] disabled:opacity-50 text-white font-extrabold rounded-xl transition shadow-md flex items-center justify-center gap-1.5"
+                className="w-full sm:w-auto px-4 py-2.5 bg-[#f97316] hover:bg-[#ea580c] disabled:opacity-50 text-white font-extrabold rounded-md transition shadow-sm flex items-center justify-center gap-1.5"
               >
                 <Save className="w-4 h-4" />
                 <span>Crear Nueva Version (v{nextVersionPreview || (initialOrden.version || 1) + 1})</span>

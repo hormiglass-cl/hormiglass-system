@@ -427,15 +427,15 @@ export default function ConfiguracionPage() {
   );
 
   return (
-    <div className="space-y-6 pb-12 text-[#363636] animate-fadeIn">
+    <div className="space-y-6 pb-12 text-[#213343] ">
       {/* Cabecera Principal */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-gray-200 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-lg border border-gray-200 shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-orange-50 text-[#F7931F] rounded-2xl">
+          <div className="p-3 bg-orange-50 text-[#f97316] rounded-lg">
             <Settings className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-black text-[#363636] tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-black text-[#213343] tracking-normal">
               Configuración del Sistema
             </h1>
             <p className="text-xs text-gray-500 font-medium mt-0.5">
@@ -451,7 +451,7 @@ export default function ConfiguracionPage() {
               setUserErrorMsg('');
               setShowUserModal(true);
             }}
-            className="bg-[#F7931F] hover:bg-[#e08316] text-white px-4 py-2.5 rounded-2xl font-black text-xs transition shadow-md flex items-center gap-2 self-start sm:self-auto cursor-pointer"
+            className="bg-[#f97316] hover:bg-[#ea580c] text-white px-4 py-2.5 rounded-lg font-black text-xs transition shadow-sm flex items-center gap-2 self-start sm:self-auto cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
             <span>Registrar Usuario</span>
@@ -461,7 +461,7 @@ export default function ConfiguracionPage() {
         {mainTab === 'campos' && (
           <button
             onClick={handleOpenNewField}
-            className="bg-[#F7931F] hover:bg-[#e08316] text-white px-4 py-2.5 rounded-2xl font-black text-xs transition shadow-md flex items-center gap-2 self-start sm:self-auto cursor-pointer"
+            className="bg-[#f97316] hover:bg-[#ea580c] text-white px-4 py-2.5 rounded-lg font-black text-xs transition shadow-sm flex items-center gap-2 self-start sm:self-auto cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Nuevo Campo</span>
@@ -471,27 +471,27 @@ export default function ConfiguracionPage() {
 
       {/* Mensajes de Éxito / Error */}
       {successMsg && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-2.5 text-emerald-800 text-xs font-bold animate-fadeIn">
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2.5 text-emerald-800 text-xs font-bold ">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
 
       {userErrorMsg && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-2.5 text-red-800 text-xs font-bold animate-fadeIn">
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2.5 text-red-800 text-xs font-bold ">
           <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
           <span>{userErrorMsg}</span>
         </div>
       )}
 
       {/* Selector de Pestañas Superiores */}
-      <div className="bg-white p-2 rounded-3xl border border-gray-200 shadow-xs flex items-center gap-2">
+      <div className="bg-white p-2 rounded-lg border border-gray-200 shadow-xs flex items-center gap-2">
         <button
           onClick={() => setMainTab('usuarios')}
-          className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-xs font-black transition cursor-pointer ${
+          className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-xs font-black transition cursor-pointer ${
             mainTab === 'usuarios'
-              ? 'bg-[#F7931F] text-white shadow-sm'
-              : 'text-gray-600 hover:bg-orange-50 hover:text-[#F7931F]'
+              ? 'bg-[#f97316] text-white shadow-sm'
+              : 'text-gray-600 hover:bg-orange-50 hover:text-[#f97316]'
           }`}
         >
           <Users className="w-4 h-4" />
@@ -500,10 +500,10 @@ export default function ConfiguracionPage() {
 
         <button
           onClick={() => setMainTab('campos')}
-          className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-xs font-black transition cursor-pointer ${
+          className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-xs font-black transition cursor-pointer ${
             mainTab === 'campos'
-              ? 'bg-[#F7931F] text-white shadow-sm'
-              : 'text-gray-600 hover:bg-orange-50 hover:text-[#F7931F]'
+              ? 'bg-[#f97316] text-white shadow-sm'
+              : 'text-gray-600 hover:bg-orange-50 hover:text-[#f97316]'
           }`}
         >
           <Sliders className="w-4 h-4" />
@@ -515,11 +515,11 @@ export default function ConfiguracionPage() {
       {/* PESTAÑA 1: USUARIOS, ACCESOS Y CALENDARIOS                */}
       {/* ========================================================= */}
       {mainTab === 'usuarios' && (
-        <div className="space-y-6 animate-fadeIn">
+        <div className="space-y-6 ">
           {/* Matriz Informativa de Roles */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-            <div className="bg-white p-4 rounded-3xl border border-gray-200 shadow-sm flex items-start gap-3">
-              <div className="w-8 h-8 rounded-2xl bg-red-100 text-red-700 flex items-center justify-center font-black shrink-0">
+            <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-red-100 text-red-700 flex items-center justify-center font-black shrink-0">
                 A
               </div>
               <div>
@@ -530,8 +530,8 @@ export default function ConfiguracionPage() {
               </div>
             </div>
 
-            <div className="bg-white p-4 rounded-3xl border border-gray-200 shadow-sm flex items-start gap-3">
-              <div className="w-8 h-8 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center font-black shrink-0">
+            <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-black shrink-0">
                 U
               </div>
               <div>
@@ -542,8 +542,8 @@ export default function ConfiguracionPage() {
               </div>
             </div>
 
-            <div className="bg-white p-4 rounded-3xl border border-gray-200 shadow-sm flex items-start gap-3">
-              <div className="w-8 h-8 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-black shrink-0">
+            <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center font-black shrink-0">
                 M
               </div>
               <div>
@@ -556,10 +556,10 @@ export default function ConfiguracionPage() {
           </div>
 
           {/* Tabla Unificada de Usuarios y Calendarios */}
-          <div className="bg-white rounded-3xl border border-gray-200 overflow-hidden shadow-sm">
-            <div className="p-4 border-b border-gray-200 font-extrabold text-sm text-[#363636] flex items-center justify-between">
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+            <div className="p-4 border-b border-gray-200 font-extrabold text-sm text-[#213343] flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-[#F7931F]" />
+                <Users className="w-4 h-4 text-[#f97316]" />
                 <span>Usuarios Registrados en Supabase ({usersList.length})</span>
               </div>
               <span className="text-xs font-semibold text-gray-400">
@@ -581,12 +581,12 @@ export default function ConfiguracionPage() {
                     <th className="py-3.5 px-4 text-right">Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 text-[#363636]">
+                <tbody className="divide-y divide-gray-100 text-[#213343]">
                   {paginatedUsers.map((usr) => (
                     <tr key={usr.id} className="hover:bg-orange-50/30 transition">
                       {/* Usuario / Nombre */}
-                      <td className="py-3 px-4 font-bold text-[#363636] flex items-center gap-2.5">
-                        <div className="w-8 h-8 bg-[#363636] text-white rounded-xl flex items-center justify-center font-black text-xs">
+                      <td className="py-3 px-4 font-bold text-[#213343] flex items-center gap-2.5">
+                        <div className="w-8 h-8 bg-[#213343] text-white rounded-md flex items-center justify-center font-black text-xs">
                           {usr.nombre.charAt(0).toUpperCase()}
                         </div>
                         <span>{usr.nombre}</span>
@@ -600,7 +600,7 @@ export default function ConfiguracionPage() {
                         <select
                           value={usr.rol}
                           onChange={(e) => updateUserRole(usr.id, e.target.value as UserRole, usr.activo)}
-                          className="bg-white text-[#363636] font-bold text-xs border border-gray-300 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#F7931F] cursor-pointer"
+                          className="bg-white text-[#213343] font-bold text-xs border border-gray-300 rounded-md px-2.5 py-1.5 focus:outline-none focus:border-[#f97316] cursor-pointer"
                         >
                           <option value="admin">Admin (Acceso Total)</option>
                           <option value="user">User (Acceso Comercial)</option>
@@ -617,8 +617,8 @@ export default function ConfiguracionPage() {
                           title="Activar/Desactivar presencia en Calendario de Visitas a Terreno"
                         >
                           {(usr.calendario_visitas ?? true) ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-[#F7931F] bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
-                              <ToggleRight className="w-4 h-4 text-[#F7931F]" />
+                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-[#f97316] bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
+                              <ToggleRight className="w-4 h-4 text-[#f97316]" />
                               <span>Activo</span>
                             </span>
                           ) : (
@@ -639,8 +639,8 @@ export default function ConfiguracionPage() {
                           title="Activar/Desactivar presencia en Calendario de Producción & Logística"
                         >
                           {(usr.calendario_produccion ?? true) ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-[#F7931F] bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
-                              <ToggleRight className="w-4 h-4 text-[#F7931F]" />
+                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-[#f97316] bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
+                              <ToggleRight className="w-4 h-4 text-[#f97316]" />
                               <span>Activo</span>
                             </span>
                           ) : (
@@ -661,8 +661,8 @@ export default function ConfiguracionPage() {
                           title="Activar/Desactivar presencia en Calendario de Reventa & Logística"
                         >
                           {(usr.calendario_reventa ?? true) ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-[#F7931F] bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
-                              <ToggleRight className="w-4 h-4 text-[#F7931F]" />
+                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-[#f97316] bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
+                              <ToggleRight className="w-4 h-4 text-[#f97316]" />
                               <span>Activo</span>
                             </span>
                           ) : (
@@ -692,7 +692,7 @@ export default function ConfiguracionPage() {
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => handleOpenEditUser(usr)}
-                            className="p-1.5 bg-orange-50 hover:bg-[#F7931F] text-[#F7931F] hover:text-white rounded-xl transition border border-orange-200 cursor-pointer"
+                            className="p-1.5 bg-orange-50 hover:bg-[#f97316] text-[#f97316] hover:text-white rounded-md transition border border-orange-200 cursor-pointer"
                             title="Editar Usuario"
                           >
                             <Edit className="w-3.5 h-3.5" />
@@ -700,7 +700,7 @@ export default function ConfiguracionPage() {
 
                           <button
                             onClick={() => updateUserRole(usr.id, usr.rol, !usr.activo)}
-                            className={`text-xs px-2.5 py-1 rounded-xl font-bold transition cursor-pointer ${
+                            className={`text-xs px-2.5 py-1 rounded-md font-bold transition cursor-pointer ${
                               usr.activo
                                 ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
                                 : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
@@ -711,7 +711,7 @@ export default function ConfiguracionPage() {
 
                           <button
                             onClick={() => setUserToDelete(usr)}
-                            className="p-1.5 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-xl transition border border-red-200 cursor-pointer"
+                            className="p-1.5 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-md transition border border-red-200 cursor-pointer"
                             title="Eliminar usuario"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -739,14 +739,14 @@ export default function ConfiguracionPage() {
       {/* PESTAÑA 2: CAMPOS PERSONALIZADOS DEL SISTEMA              */}
       {/* ========================================================= */}
       {mainTab === 'campos' && (
-        <div className="space-y-4 animate-fadeIn">
+        <div className="space-y-4 ">
           {/* Sub-Pestañas de Entidades */}
           <div className="flex items-center gap-2 border-b border-gray-200 pb-3">
             <button
               onClick={() => setActiveEntityTab('clientes')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
                 activeEntityTab === 'clientes'
-                  ? 'bg-orange-100 text-[#F7931F]'
+                  ? 'bg-orange-100 text-[#f97316]'
                   : 'bg-white text-gray-600 hover:bg-gray-100'
               }`}
             >
@@ -756,9 +756,9 @@ export default function ConfiguracionPage() {
 
             <button
               onClick={() => setActiveEntityTab('oportunidades')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
                 activeEntityTab === 'oportunidades'
-                  ? 'bg-orange-100 text-[#F7931F]'
+                  ? 'bg-orange-100 text-[#f97316]'
                   : 'bg-white text-gray-600 hover:bg-gray-100'
               }`}
             >
@@ -768,9 +768,9 @@ export default function ConfiguracionPage() {
 
             <button
               onClick={() => setActiveEntityTab('cotizaciones')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
                 activeEntityTab === 'cotizaciones'
-                  ? 'bg-orange-100 text-[#F7931F]'
+                  ? 'bg-orange-100 text-[#f97316]'
                   : 'bg-white text-gray-600 hover:bg-gray-100'
               }`}
             >
@@ -780,7 +780,7 @@ export default function ConfiguracionPage() {
           </div>
 
           {/* Tabla de Campos */}
-          <div className="bg-white rounded-3xl border border-gray-200 overflow-hidden shadow-sm">
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs min-w-[700px]">
                 <thead className="bg-gray-50/80 text-gray-500 font-bold border-b border-gray-200">
@@ -793,7 +793,7 @@ export default function ConfiguracionPage() {
                     <th className="py-3.5 px-4 text-right">Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 text-[#363636]">
+                <tbody className="divide-y divide-gray-100 text-[#213343]">
                   {filteredFields.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="py-8 text-center text-gray-400 font-medium">
@@ -803,7 +803,7 @@ export default function ConfiguracionPage() {
                   ) : (
                     filteredFields.map((f, idx) => (
                       <tr key={`${f.entidad}-${f.campo_supabase}-${f.id || idx}`} className="hover:bg-orange-50/30 transition">
-                        <td className="py-3.5 px-4 font-extrabold text-[#363636]">
+                        <td className="py-3.5 px-4 font-extrabold text-[#213343]">
                           {f.nombre}
                         </td>
                         <td className="py-3.5 px-4 font-mono font-bold text-gray-600">
@@ -812,7 +812,7 @@ export default function ConfiguracionPage() {
                           </span>
                         </td>
                         <td className="py-3.5 px-4 font-semibold text-gray-700 capitalize flex items-center gap-1.5">
-                          <Database className="w-3.5 h-3.5 text-[#F7931F]" />
+                          <Database className="w-3.5 h-3.5 text-[#f97316]" />
                           <span>{f.tipo}</span>
                         </td>
                         <td className="py-3.5 px-4 text-gray-500 text-[11px]">
@@ -839,7 +839,7 @@ export default function ConfiguracionPage() {
                         <td className="py-3.5 px-4 text-right space-x-2">
                           <button
                             onClick={() => handleEditField(f)}
-                            className="p-1.5 bg-orange-50 hover:bg-[#F7931F] text-[#F7931F] hover:text-white rounded-xl transition border border-orange-200 cursor-pointer"
+                            className="p-1.5 bg-orange-50 hover:bg-[#f97316] text-[#f97316] hover:text-white rounded-md transition border border-orange-200 cursor-pointer"
                             title="Editar Campo"
                           >
                             <Edit className="w-3.5 h-3.5" />
@@ -847,7 +847,7 @@ export default function ConfiguracionPage() {
                           {!f.es_sistema && (
                             <button
                               onClick={() => handleDeleteField(f.id)}
-                              className="p-1.5 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-xl transition border border-red-200 cursor-pointer"
+                              className="p-1.5 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-md transition border border-red-200 cursor-pointer"
                               title="Eliminar Campo"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -868,14 +868,14 @@ export default function ConfiguracionPage() {
       {/* MODAL: REGISTRAR NUEVO USUARIO                            */}
       {/* ========================================================= */}
       {showUserModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl text-[#363636]">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 ">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-[#213343]">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="text-lg font-extrabold text-[#363636] flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-[#F7931F]" />
+              <h3 className="text-lg font-extrabold text-[#213343] flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-[#f97316]" />
                 <span>Registrar Nuevo Usuario</span>
               </h3>
-              <button onClick={() => setShowUserModal(false)} className="text-gray-400 hover:text-[#363636] text-lg font-bold cursor-pointer">
+              <button onClick={() => setShowUserModal(false)} className="text-gray-400 hover:text-[#213343] text-lg font-bold cursor-pointer">
                 ✕
               </button>
             </div>
@@ -889,7 +889,7 @@ export default function ConfiguracionPage() {
                   value={userNombre}
                   onChange={(e) => setUserNombre(e.target.value)}
                   placeholder="Ej. Marco Antonio"
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-semibold focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-semibold focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -901,7 +901,7 @@ export default function ConfiguracionPage() {
                   value={userEmail}
                   onChange={(e) => setUserEmail(e.target.value)}
                   placeholder="usuario@hormiglass.cl"
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-semibold focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-semibold focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -914,7 +914,7 @@ export default function ConfiguracionPage() {
                   value={userPassword}
                   onChange={(e) => setUserPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-semibold focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-semibold focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -923,7 +923,7 @@ export default function ConfiguracionPage() {
                 <select
                   value={userRol}
                   onChange={(e) => setUserRol(e.target.value as UserRole)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F] cursor-pointer"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316] cursor-pointer"
                 >
                   <option value="mano_obra">Mano de Obra (Solo RR.HH. & Calendarios)</option>
                   <option value="user">User (Acceso Comercial)</option>
@@ -933,10 +933,10 @@ export default function ConfiguracionPage() {
 
               {/* Toggles de los 3 Calendarios */}
               <div className="pt-2 border-t border-gray-100 space-y-2">
-                <span className="text-[11px] font-bold text-gray-500 block uppercase tracking-wider">
+                <span className="text-[11px] font-bold text-gray-500 block uppercase tracking-normal">
                   Asignación en los 3 Calendarios:
                 </span>
-                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#F7931F]">
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#f97316]">
                   <input
                     type="checkbox"
                     checked={userCalVisitas}
@@ -945,7 +945,7 @@ export default function ConfiguracionPage() {
                   />
                   <span>Disponible para Visitas a Terreno</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#F7931F]">
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#f97316]">
                   <input
                     type="checkbox"
                     checked={userCalProduccion}
@@ -954,7 +954,7 @@ export default function ConfiguracionPage() {
                   />
                   <span>Disponible para Producción, Obras & Fabricación</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#F7931F]">
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#f97316]">
                   <input
                     type="checkbox"
                     checked={userCalReventa}
@@ -969,13 +969,13 @@ export default function ConfiguracionPage() {
                 <button
                   type="button"
                   onClick={() => setShowUserModal(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition cursor-pointer"
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-bold transition cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-extrabold transition shadow-md cursor-pointer"
+                  className="px-5 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-extrabold transition shadow-sm cursor-pointer"
                 >
                   Crear Usuario
                 </button>
@@ -989,11 +989,11 @@ export default function ConfiguracionPage() {
       {/* MODAL: EDITAR USUARIO                                     */}
       {/* ========================================================= */}
       {showEditUserModal && editingUser && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn text-[#363636]">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50  text-[#213343]">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="text-base font-extrabold text-[#363636] flex items-center gap-2">
-                <Edit className="w-5 h-5 text-[#F7931F]" />
+              <h3 className="text-base font-extrabold text-[#213343] flex items-center gap-2">
+                <Edit className="w-5 h-5 text-[#f97316]" />
                 <span>Editar Usuario & Calendarios</span>
               </h3>
               <button
@@ -1001,7 +1001,7 @@ export default function ConfiguracionPage() {
                   setShowEditUserModal(false);
                   setEditingUser(null);
                 }}
-                className="text-gray-400 hover:text-[#363636] font-bold cursor-pointer"
+                className="text-gray-400 hover:text-[#213343] font-bold cursor-pointer"
               >
                 ✕
               </button>
@@ -1015,7 +1015,7 @@ export default function ConfiguracionPage() {
                   required
                   value={editUserNombre}
                   onChange={(e) => setEditUserNombre(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-medium text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-medium text-[#213343] focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -1025,7 +1025,7 @@ export default function ConfiguracionPage() {
                   type="email"
                   disabled
                   value={editingUser.email}
-                  className="w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 font-mono text-gray-500 cursor-not-allowed"
+                  className="w-full bg-gray-100 border border-gray-200 rounded-md px-3 py-2 font-mono text-gray-500 cursor-not-allowed"
                 />
               </div>
 
@@ -1034,7 +1034,7 @@ export default function ConfiguracionPage() {
                 <select
                   value={editUserRol}
                   onChange={(e) => setEditUserRol(e.target.value as UserRole)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold text-[#363636] focus:outline-none focus:border-[#F7931F] cursor-pointer"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold text-[#213343] focus:outline-none focus:border-[#f97316] cursor-pointer"
                 >
                   <option value="admin">Admin (Acceso Total)</option>
                   <option value="user">User (Acceso Comercial)</option>
@@ -1047,7 +1047,7 @@ export default function ConfiguracionPage() {
                 <select
                   value={editUserActivo ? 'true' : 'false'}
                   onChange={(e) => setEditUserActivo(e.target.value === 'true')}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold text-[#363636] focus:outline-none focus:border-[#F7931F] cursor-pointer"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold text-[#213343] focus:outline-none focus:border-[#f97316] cursor-pointer"
                 >
                   <option value="true">Activo (Acceso Permitido)</option>
                   <option value="false">Inactivo / Bloqueado</option>
@@ -1056,10 +1056,10 @@ export default function ConfiguracionPage() {
 
               {/* Toggles de los 3 Calendarios */}
               <div className="pt-2 border-t border-gray-100 space-y-2">
-                <span className="text-[11px] font-bold text-gray-500 block uppercase tracking-wider">
+                <span className="text-[11px] font-bold text-gray-500 block uppercase tracking-normal">
                   Asignación en los 3 Calendarios:
                 </span>
-                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#F7931F]">
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#f97316]">
                   <input
                     type="checkbox"
                     checked={editUserCalVisitas}
@@ -1068,7 +1068,7 @@ export default function ConfiguracionPage() {
                   />
                   <span>Disponible para Visitas a Terreno</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#F7931F]">
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#f97316]">
                   <input
                     type="checkbox"
                     checked={editUserCalProduccion}
@@ -1077,7 +1077,7 @@ export default function ConfiguracionPage() {
                   />
                   <span>Disponible para Producción, Obras & Fabricación</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#F7931F]">
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700 hover:text-[#f97316]">
                   <input
                     type="checkbox"
                     checked={editUserCalReventa}
@@ -1095,13 +1095,13 @@ export default function ConfiguracionPage() {
                     setShowEditUserModal(false);
                     setEditingUser(null);
                   }}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition cursor-pointer"
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-bold transition cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-extrabold transition shadow-md cursor-pointer"
+                  className="px-5 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-extrabold transition shadow-sm cursor-pointer"
                 >
                   Guardar Cambios
                 </button>
@@ -1115,21 +1115,21 @@ export default function ConfiguracionPage() {
       {/* MODAL: CONFIRMAR ELIMINACIÓN DE USUARIO                   */}
       {/* ========================================================= */}
       {userToDelete && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl text-[#363636]">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 ">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-[#213343]">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="text-base font-extrabold text-red-700 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
                 <span>Eliminar Usuario de Supabase</span>
               </h3>
-              <button onClick={() => setUserToDelete(null)} className="text-gray-400 hover:text-[#363636] font-bold cursor-pointer">
+              <button onClick={() => setUserToDelete(null)} className="text-gray-400 hover:text-[#213343] font-bold cursor-pointer">
                 ✕
               </button>
             </div>
 
             <div className="space-y-2 text-xs text-gray-700">
               <p>
-                ¿Estás seguro de que deseas eliminar permanentemente al usuario <strong className="text-[#363636]">{userToDelete.nombre}</strong> (<span className="font-mono text-gray-900">{userToDelete.email}</span>)?
+                ¿Estás seguro de que deseas eliminar permanentemente al usuario <strong className="text-[#213343]">{userToDelete.nombre}</strong> (<span className="font-mono text-gray-900">{userToDelete.email}</span>)?
               </p>
             </div>
 
@@ -1137,14 +1137,14 @@ export default function ConfiguracionPage() {
               <button
                 type="button"
                 onClick={() => setUserToDelete(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition cursor-pointer"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDeleteUser}
-                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-xl transition shadow-md flex items-center gap-1.5 cursor-pointer"
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-md transition shadow-sm flex items-center gap-1.5 cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Confirmar Eliminación</span>
@@ -1159,13 +1159,13 @@ export default function ConfiguracionPage() {
       {/* ========================================================= */}
       {showFieldModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl text-[#363636]">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-[#213343]">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="text-base font-extrabold text-[#363636] flex items-center gap-2">
-                <Sliders className="w-5 h-5 text-[#F7931F]" />
+              <h3 className="text-base font-extrabold text-[#213343] flex items-center gap-2">
+                <Sliders className="w-5 h-5 text-[#f97316]" />
                 <span>{editingField ? 'Editar Campo' : 'Nuevo Campo Personalizado'}</span>
               </h3>
-              <button onClick={() => setShowFieldModal(false)} className="text-gray-400 hover:text-[#363636] font-bold cursor-pointer">
+              <button onClick={() => setShowFieldModal(false)} className="text-gray-400 hover:text-[#213343] font-bold cursor-pointer">
                 ✕
               </button>
             </div>
@@ -1179,7 +1179,7 @@ export default function ConfiguracionPage() {
                   placeholder="Ej. Tipo de Vidrio Especial"
                   value={nombre}
                   onChange={(e) => setNombre(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -1192,7 +1192,7 @@ export default function ConfiguracionPage() {
                   placeholder="ej. tipo_vidrio_especial"
                   value={campoSupabase}
                   onChange={(e) => setCampoSupabase(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-mono text-gray-700 focus:outline-none focus:border-[#F7931F] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-mono text-gray-700 focus:outline-none focus:border-[#f97316] disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -1202,7 +1202,7 @@ export default function ConfiguracionPage() {
                   value={entidad}
                   onChange={(e) => setEntidad(e.target.value as any)}
                   disabled={!!editingField}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F] disabled:bg-gray-100 cursor-pointer"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316] disabled:bg-gray-100 cursor-pointer"
                 >
                   <option value="clientes">Clientes & Contactos</option>
                   <option value="oportunidades">Oportunidades & Pipeline</option>
@@ -1216,7 +1216,7 @@ export default function ConfiguracionPage() {
                   value={tipo}
                   onChange={(e) => setTipo(e.target.value as any)}
                   disabled={editingField?.es_sistema}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F] disabled:bg-gray-100 cursor-pointer"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316] disabled:bg-gray-100 cursor-pointer"
                 >
                   <option value="texto">Texto Simple</option>
                   <option value="numero">Número</option>
@@ -1235,7 +1235,7 @@ export default function ConfiguracionPage() {
                     placeholder="Opción 1, Opción 2, Opción 3"
                     value={opcionesInput}
                     onChange={(e) => setOpcionesInput(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
               )}
@@ -1244,13 +1244,13 @@ export default function ConfiguracionPage() {
                 <button
                   type="button"
                   onClick={() => setShowFieldModal(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition cursor-pointer"
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-bold transition cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-extrabold transition shadow-md flex items-center gap-1.5 cursor-pointer"
+                  className="px-5 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-extrabold transition shadow-sm flex items-center gap-1.5 cursor-pointer"
                 >
                   <Save className="w-4 h-4" />
                   <span>{editingField ? 'Guardar Cambios' : 'Crear Campo'}</span>

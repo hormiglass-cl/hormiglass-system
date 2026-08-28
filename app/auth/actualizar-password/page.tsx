@@ -45,8 +45,8 @@ export default function ActualizarPasswordPage() {
   };
 
   return (
-    <div className="fixed inset-0 bg-[#363636] z-50 flex items-center justify-center p-4 text-[#363636]">
-      <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-gray-200 shadow-2xl space-y-6">
+    <div className="fixed inset-0 bg-[#213343] z-50 flex items-center justify-center p-4 text-[#213343]">
+      <div className="max-w-md w-full bg-white p-8 rounded-lg border border-gray-200 shadow-sm space-y-6">
         <div className="text-center space-y-3">
           <div className="flex justify-center mb-2">
             <Image
@@ -58,17 +58,17 @@ export default function ActualizarPasswordPage() {
               priority
             />
           </div>
-          <h2 className="text-xl font-extrabold text-[#363636]">Define tu contraseña</h2>
+          <h2 className="text-xl font-extrabold text-[#213343]">Define tu contraseña</h2>
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 p-3.5 rounded-2xl text-xs flex items-center gap-2 font-medium">
+          <div className="bg-red-50 border border-red-200 text-red-700 p-3.5 rounded-lg text-xs flex items-center gap-2 font-medium">
             <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
             <span>{error}</span>
           </div>
         )}
         {ok && (
-          <div className="bg-green-50 border border-green-200 text-green-700 p-3.5 rounded-2xl text-xs flex items-center gap-2 font-medium">
+          <div className="bg-green-50 border border-green-200 text-green-700 p-3.5 rounded-lg text-xs flex items-center gap-2 font-medium">
             <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
             <span>Contraseña actualizada. Redirigiendo...</span>
           </div>
@@ -84,7 +84,7 @@ export default function ActualizarPasswordPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-300 rounded-2xl pl-9 pr-3 py-2.5 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-9 pr-3 py-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 placeholder="••••••••"
               />
             </div>
@@ -99,7 +99,7 @@ export default function ActualizarPasswordPage() {
                 required
                 value={confirmar}
                 onChange={(e) => setConfirmar(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-300 rounded-2xl pl-9 pr-3 py-2.5 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-9 pr-3 py-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 placeholder="••••••••"
               />
             </div>
@@ -108,7 +108,7 @@ export default function ActualizarPasswordPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold py-3 rounded-2xl transition shadow-md disabled:opacity-50 text-sm mt-2"
+            className="w-full bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold py-3 rounded-lg transition shadow-sm disabled:opacity-50 text-sm mt-2"
           >
             {loading ? 'Guardando...' : 'Guardar contraseña'}
           </button>

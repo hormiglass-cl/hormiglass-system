@@ -29,15 +29,15 @@ export function PipelineFunnelChart({
   const maxNominal = Math.max(...stages.map((s) => s.nominalMonto), 1);
 
   return (
-    <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm space-y-5">
+    <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
         <div>
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-xl bg-orange-50 text-[#F7931F]">
+            <div className="p-1.5 rounded-md bg-orange-50 text-[#f97316]">
               <Target className="w-4 h-4" />
             </div>
-            <h3 className="font-extrabold text-base text-[#363636]">
+            <h3 className="font-extrabold text-base text-[#213343]">
               Proyecciones de Venta en Pipeline
             </h3>
           </div>
@@ -47,11 +47,11 @@ export function PipelineFunnelChart({
         </div>
 
         {/* Resumen Ponderado */}
-        <div className="bg-orange-50 border border-orange-200 px-3.5 py-1.5 rounded-2xl text-right">
+        <div className="bg-orange-50 border border-orange-200 px-3.5 py-1.5 rounded-lg text-right">
           <span className="text-[10.5px] text-gray-500 font-bold block">
             Proyección ponderada
           </span>
-          <span className="text-sm font-black text-[#F7931F]">
+          <span className="text-sm font-black text-[#f97316]">
             ${totalPipelineWeighted.toLocaleString('es-CL')} CLP
           </span>
         </div>
@@ -66,24 +66,24 @@ export function PipelineFunnelChart({
               : 12;
 
           return (
-            <div key={st.stageId} className="space-y-1.5 p-3 rounded-2xl bg-gray-50/70 border border-gray-200 hover:border-orange-200 transition">
+            <div key={st.stageId} className="space-y-1.5 p-3 rounded-lg bg-gray-50/70 border border-gray-200 hover:border-orange-200 transition">
               <div className="flex items-center justify-between font-bold">
                 <div className="flex items-center gap-2">
                   <span
                     className="w-2.5 h-2.5 rounded-full"
                     style={{ backgroundColor: st.color }}
                   />
-                  <span className="text-[#363636]">{st.label}</span>
+                  <span className="text-[#213343]">{st.label}</span>
                   <span className="text-[10px] bg-white border border-gray-200 px-2 py-0.5 rounded-full text-gray-600 font-semibold">
                     {st.count} ops · {st.probabilidad}% prob.
                   </span>
                 </div>
 
                 <div className="text-right">
-                  <span className="font-black text-[#363636] block">
+                  <span className="font-black text-[#213343] block">
                     ${st.nominalMonto.toLocaleString('es-CL')}
                   </span>
-                  <span className="text-[10px] text-[#F7931F] font-bold block">
+                  <span className="text-[10px] text-[#f97316] font-bold block">
                     Pond: ${st.weightedMonto.toLocaleString('es-CL')}
                   </span>
                 </div>
@@ -107,11 +107,11 @@ export function PipelineFunnelChart({
       {/* Link al Pipeline */}
       <div className="pt-1 flex items-center justify-between text-xs">
         <span className="text-gray-500 font-medium">
-          Total nominal en embudo: <strong className="text-[#363636] font-bold">${totalPipelineNominal.toLocaleString('es-CL')} CLP</strong>
+          Total nominal en embudo: <strong className="text-[#213343] font-bold">${totalPipelineNominal.toLocaleString('es-CL')} CLP</strong>
         </span>
         <Link
           href="/ventas"
-          className="text-[#F7931F] hover:underline font-bold flex items-center gap-1 cursor-pointer"
+          className="text-[#f97316] hover:underline font-bold flex items-center gap-1 cursor-pointer"
         >
           <span>Gestionar pipeline</span>
           <ChevronRight className="w-4 h-4" />

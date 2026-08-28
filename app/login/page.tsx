@@ -148,8 +148,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="fixed inset-0 bg-[#363636] z-50 flex items-center justify-center p-4 text-[#363636]">
-      <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-gray-200 shadow-2xl space-y-6">
+    <div className="fixed inset-0 bg-[#213343] z-50 flex items-center justify-center p-4 text-[#213343]">
+      <div className="max-w-md w-full bg-white p-8 rounded-lg border border-gray-200 shadow-sm space-y-6">
         <div className="text-center space-y-3">
           <div className="flex justify-center mb-2">
             <Image
@@ -161,7 +161,7 @@ export default function LoginPage() {
               priority
             />
           </div>
-          <h2 className="text-xl font-extrabold text-[#363636]">
+          <h2 className="text-xl font-extrabold text-[#213343]">
             {mode === 'login' ? 'Inicio de Sesión' : 'Crear Nueva Cuenta'}
           </h2>
           <p className="text-xs text-gray-500 font-medium">
@@ -172,7 +172,7 @@ export default function LoginPage() {
         </div>
 
         {/* Selector de Pestañas: Login vs Registro */}
-        <div className="flex bg-gray-100 p-1 rounded-2xl text-xs font-extrabold">
+        <div className="flex bg-gray-100 p-1 rounded-lg text-xs font-extrabold">
           <button
             type="button"
             onClick={() => {
@@ -180,9 +180,9 @@ export default function LoginPage() {
               setError('');
               setSuccessMsg('');
             }}
-            className={`flex-1 py-2 rounded-xl transition text-center flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-2 rounded-md transition text-center flex items-center justify-center gap-1.5 ${
               mode === 'login'
-                ? 'bg-white text-[#363636] shadow-sm'
+                ? 'bg-white text-[#213343] shadow-sm'
                 : 'text-gray-500 hover:text-gray-800'
             }`}
           >
@@ -196,9 +196,9 @@ export default function LoginPage() {
               setError('');
               setSuccessMsg('');
             }}
-            className={`flex-1 py-2 rounded-xl transition text-center flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-2 rounded-md transition text-center flex items-center justify-center gap-1.5 ${
               mode === 'register'
-                ? 'bg-white text-[#363636] shadow-sm'
+                ? 'bg-white text-[#213343] shadow-sm'
                 : 'text-gray-500 hover:text-gray-800'
             }`}
           >
@@ -208,7 +208,7 @@ export default function LoginPage() {
         </div>
 
         {(error || inactiveNotice) && (
-          <div className="bg-red-50 border border-red-200 text-red-700 p-3.5 rounded-2xl text-xs flex items-center gap-2 font-medium">
+          <div className="bg-red-50 border border-red-200 text-red-700 p-3.5 rounded-lg text-xs flex items-center gap-2 font-medium">
             <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
             <span>
               {cooldownSeconds > 0
@@ -219,7 +219,7 @@ export default function LoginPage() {
         )}
 
         {successMsg && (
-          <div className="bg-green-50 border border-green-200 text-green-700 p-3.5 rounded-2xl text-xs flex items-center gap-2 font-medium">
+          <div className="bg-green-50 border border-green-200 text-green-700 p-3.5 rounded-lg text-xs flex items-center gap-2 font-medium">
             <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
             <span>{successMsg}</span>
           </div>
@@ -236,7 +236,7 @@ export default function LoginPage() {
                   required
                   value={nombre}
                   onChange={(e) => setNombre(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-2xl pl-9 pr-3 py-2.5 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-9 pr-3 py-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                   placeholder="Ej: Marcos Catalán"
                 />
               </div>
@@ -252,7 +252,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-300 rounded-2xl pl-9 pr-3 py-2.5 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-9 pr-3 py-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 placeholder="correo@hormiglass.cl"
               />
             </div>
@@ -268,7 +268,7 @@ export default function LoginPage() {
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-300 rounded-2xl pl-9 pr-10 py-2.5 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-9 pr-10 py-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 placeholder="••••••••"
               />
               <button
@@ -284,7 +284,7 @@ export default function LoginPage() {
 
           {mode === 'login' && (
             <div className="text-right">
-              <Link href="/auth/recuperar" className="text-[11px] font-bold text-[#F7931F] hover:underline">
+              <Link href="/auth/recuperar" className="text-[11px] font-bold text-[#f97316] hover:underline">
                 ¿Olvidaste tu contraseña?
               </Link>
             </div>
@@ -293,7 +293,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading || cooldownSeconds > 0}
-            className="w-full bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold py-3 rounded-2xl transition shadow-md flex items-center justify-center gap-2 disabled:opacity-50 text-sm mt-2 cursor-pointer disabled:cursor-not-allowed"
+            className="w-full bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold py-3 rounded-lg transition shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 text-sm mt-2 cursor-pointer disabled:cursor-not-allowed"
           >
             {cooldownSeconds > 0 ? (
               <>

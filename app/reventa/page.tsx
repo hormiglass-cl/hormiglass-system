@@ -289,17 +289,17 @@ export default function ReventaPage() {
   });
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6 animate-fadeIn">
+    <div className="p-6 max-w-7xl mx-auto space-y-6 ">
       {/* Top Header Estilo Ventas 100% Idéntico */}
-      <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-black uppercase text-[#F7931F] bg-orange-50 px-2.5 py-0.5 rounded-full border border-orange-200">
+            <span className="text-[10px] font-black uppercase text-[#f97316] bg-orange-50 px-2.5 py-0.5 rounded-full border border-orange-200">
               Gestión Logística & Proveedores
             </span>
           </div>
-          <h1 className="text-2xl font-extrabold text-[#363636] flex items-center gap-2.5">
-            <Truck className="w-7 h-7 text-[#F7931F]" />
+          <h1 className="text-2xl font-extrabold text-[#213343] flex items-center gap-2.5">
+            <Truck className="w-7 h-7 text-[#f97316]" />
             <span>Pipeline de Reventa & Proveedores</span>
           </h1>
           <p className="text-xs text-gray-500 mt-1">
@@ -309,12 +309,12 @@ export default function ReventaPage() {
 
         <div className="flex flex-wrap items-center gap-3">
           {/* Toggle Vista Lista vs Tablero */}
-          <div className="flex items-center bg-gray-100 p-1 rounded-2xl border border-gray-200">
+          <div className="flex items-center bg-gray-100 p-1 rounded-lg border border-gray-200">
             <button
               onClick={() => setActiveTab('lista')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-bold text-xs transition ${
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-bold text-xs transition ${
                 activeTab === 'lista'
-                  ? 'bg-[#F7931F] text-white shadow-sm'
+                  ? 'bg-[#f97316] text-white shadow-sm'
                   : 'text-gray-600 hover:text-black'
               }`}
             >
@@ -323,9 +323,9 @@ export default function ReventaPage() {
             </button>
             <button
               onClick={() => setActiveTab('tablero')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-bold text-xs transition ${
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-bold text-xs transition ${
                 activeTab === 'tablero'
-                  ? 'bg-[#F7931F] text-white shadow-sm'
+                  ? 'bg-[#f97316] text-white shadow-sm'
                   : 'text-gray-600 hover:text-black'
               }`}
             >
@@ -334,9 +334,9 @@ export default function ReventaPage() {
             </button>
             <Link
               href="/reventa/calendario"
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-bold text-xs transition text-gray-600 hover:text-[#363636] hover:bg-white"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-bold text-xs transition text-gray-600 hover:text-[#213343] hover:bg-white"
             >
-              <Calendar className="w-4 h-4 text-[#F7931F]" />
+              <Calendar className="w-4 h-4 text-[#f97316]" />
               <span>Calendario Reventa</span>
             </Link>
           </div>
@@ -344,20 +344,20 @@ export default function ReventaPage() {
       </div>
 
       {/* Barra de Búsqueda */}
-      <div className="flex items-center bg-white border border-gray-200 rounded-2xl px-4 py-2.5 text-xs shadow-sm">
+      <div className="flex items-center bg-white border border-gray-200 rounded-lg px-4 py-2.5 text-xs shadow-sm">
         <Search className="w-4 h-4 text-gray-400 mr-2" />
         <input
           type="text"
           placeholder="Buscar por código, suministro, cliente o proveedor..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full bg-transparent text-[#363636] focus:outline-none placeholder-gray-400 font-semibold"
+          className="w-full bg-transparent text-[#213343] focus:outline-none placeholder-gray-400 font-semibold"
         />
       </div>
 
       {/* VISTA 1: LISTA AGRUPADA POR ESTADOS (EXACTO A IMAGEN 1 DE VENTAS) */}
       {activeTab === 'lista' ? (
-        <div className="space-y-6 animate-fadeIn">
+        <div className="space-y-6 ">
           {ETAPAS_REVENTA.map((col) => {
             const isCollapsed = !!collapsedSections[col.id];
             const colOrdenes = filteredOrdenes.filter((o) => o.estado === col.id);
@@ -372,11 +372,11 @@ export default function ReventaPage() {
                   className="flex items-center justify-between py-2 px-1 border-b border-gray-200/80 cursor-pointer select-none transition group"
                 >
                   <div className="flex items-center gap-2.5">
-                    <button type="button" className="text-gray-400 group-hover:text-[#363636] transition">
+                    <button type="button" className="text-gray-400 group-hover:text-[#213343] transition">
                       {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
 
-                    <span className={`px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 ${col.bg} ${col.color} border ${col.border} shadow-2xs`}>
+                    <span className={`px-3 py-1 rounded-md text-xs font-black uppercase tracking-normal flex items-center gap-2 ${col.bg} ${col.color} border ${col.border} shadow-2xs`}>
                       <div className="w-2 h-2 rounded-full border border-current shadow-xs" />
                       <span>{col.label}</span>
                     </span>
@@ -395,21 +395,21 @@ export default function ReventaPage() {
                         No hay órdenes de reventa en esta etapa.
                       </div>
                     ) : (
-                      <div className="overflow-x-auto bg-white rounded-2xl border border-gray-200/80 shadow-xs">
+                      <div className="overflow-x-auto bg-white rounded-lg border border-gray-200/80 shadow-xs">
                         <table className="w-full text-left text-xs min-w-[1050px] table-fixed border-collapse">
                           <thead className="text-gray-500 uppercase text-xs font-extrabold border-b border-gray-200 bg-gray-50/50">
                             <tr>
                               <th className="py-3 px-3 w-10 text-center"></th>
-                              <th className="py-3 px-3 w-28 text-left font-extrabold uppercase tracking-wider">Código</th>
-                              <th className="py-3 px-3 text-left font-extrabold uppercase tracking-wider">Oportunidad / Suministro</th>
-                              <th className="py-3 px-3 text-left font-extrabold uppercase tracking-wider">Cliente</th>
-                              <th className="py-3 px-3 text-left font-extrabold uppercase tracking-wider">Proveedor</th>
-                              <th className="py-3 px-3 text-left font-extrabold uppercase tracking-wider">Prioridad</th>
-                              <th className="py-3 px-3 text-left font-extrabold uppercase tracking-wider">Fecha Despacho</th>
-                              <th className="py-3 px-3 text-right font-extrabold uppercase tracking-wider">Monto Total</th>
+                              <th className="py-3 px-3 w-28 text-left font-extrabold uppercase tracking-normal">Código</th>
+                              <th className="py-3 px-3 text-left font-extrabold uppercase tracking-normal">Oportunidad / Suministro</th>
+                              <th className="py-3 px-3 text-left font-extrabold uppercase tracking-normal">Cliente</th>
+                              <th className="py-3 px-3 text-left font-extrabold uppercase tracking-normal">Proveedor</th>
+                              <th className="py-3 px-3 text-left font-extrabold uppercase tracking-normal">Prioridad</th>
+                              <th className="py-3 px-3 text-left font-extrabold uppercase tracking-normal">Fecha Despacho</th>
+                              <th className="py-3 px-3 text-right font-extrabold uppercase tracking-normal">Monto Total</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-gray-100 font-semibold text-[#363636]">
+                          <tbody className="divide-y divide-gray-100 font-semibold text-[#213343]">
                             {colOrdenes.map((ord) => {
                               const op = ord.oportunidad;
                               const monto = getOportunidadTotalValue(op);
@@ -421,11 +421,11 @@ export default function ReventaPage() {
                                   onClick={() => handleOpenOrdenModal(ord)}
                                 >
                                   <td className="py-3 px-3 text-center">
-                                    <div className="w-3 h-3 rounded-full border border-gray-400 bg-white group-hover:border-[#F7931F] mx-auto" />
+                                    <div className="w-3 h-3 rounded-full border border-gray-400 bg-white group-hover:border-[#f97316] mx-auto" />
                                   </td>
-                                  <td className="py-3 px-3 font-mono font-bold text-[#F7931F]">{ord.codigo}</td>
-                                  <td className="py-3 px-3 font-bold text-[#363636]">{ord.titulo}</td>
-                                  <td className="py-3 px-3 text-[#F7931F] font-bold">
+                                  <td className="py-3 px-3 font-mono font-bold text-[#f97316]">{ord.codigo}</td>
+                                  <td className="py-3 px-3 font-bold text-[#213343]">{ord.titulo}</td>
+                                  <td className="py-3 px-3 text-[#f97316] font-bold">
                                     {ord.cliente?.nombre || 'Jesus Rodriguez'}
                                   </td>
                                   <td className="py-3 px-3 text-amber-700 font-bold">{ord.proveedor_nombre || 'Por asignar'}</td>
@@ -435,7 +435,7 @@ export default function ReventaPage() {
                                     </span>
                                   </td>
                                   <td className="py-3 px-3 font-mono text-gray-600">{ord.fecha_despacho || 'Por definir'}</td>
-                                  <td className="py-3 px-3 text-right font-bold text-[#363636]">
+                                  <td className="py-3 px-3 text-right font-bold text-[#213343]">
                                     ${monto.toLocaleString('es-CL')}
                                   </td>
                                 </tr>
@@ -460,7 +460,7 @@ export default function ReventaPage() {
             return (
               <div
                 key={col.id}
-                className="bg-gray-50 rounded-3xl border border-gray-200 p-4 flex flex-col min-h-[600px] shadow-sm space-y-3"
+                className="bg-gray-50 rounded-lg border border-gray-200 p-4 flex flex-col min-h-[600px] shadow-sm space-y-3"
               >
                 <div className="flex items-center justify-between pb-2 border-b border-gray-200">
                   <span className={`text-xs font-black uppercase px-3 py-1 rounded-full border ${col.bg} ${col.color} ${col.border}`}>
@@ -473,7 +473,7 @@ export default function ReventaPage() {
 
                 <div className="space-y-3 flex-1 overflow-y-auto pr-0.5">
                   {colOrdenes.length === 0 ? (
-                    <div className="h-32 flex items-center justify-center text-center text-gray-400 italic text-xs border border-dashed border-gray-200 rounded-2xl bg-white/50">
+                    <div className="h-32 flex items-center justify-center text-center text-gray-400 italic text-xs border border-dashed border-gray-200 rounded-lg bg-white/50">
                       Sin órdenes aquí
                     </div>
                   ) : (
@@ -487,10 +487,10 @@ export default function ReventaPage() {
                         <div
                           key={ord.id}
                           onClick={() => handleOpenOrdenModal(ord)}
-                          className="bg-white hover:bg-orange-50/20 p-4 rounded-2xl border border-gray-200 hover:border-[#F7931F] transition cursor-pointer space-y-3 shadow-sm group"
+                          className="bg-white hover:bg-orange-50/20 p-4 rounded-lg border border-gray-200 hover:border-[#f97316] transition cursor-pointer space-y-3 shadow-sm group"
                         >
                           <div className="flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-1.5 font-mono font-bold text-[#363636]">
+                            <div className="flex items-center gap-1.5 font-mono font-bold text-[#213343]">
                               <GripVertical className="w-3.5 h-3.5 text-gray-400" />
                               <span>{ord.codigo}</span>
                             </div>
@@ -499,12 +499,12 @@ export default function ReventaPage() {
                             </span>
                           </div>
 
-                          <h4 className="font-extrabold text-[#363636] text-sm leading-snug group-hover:text-[#F7931F] transition">
+                          <h4 className="font-extrabold text-[#213343] text-sm leading-snug group-hover:text-[#f97316] transition">
                             {ord.titulo}
                           </h4>
 
-                          <div className="flex items-center gap-1.5 text-xs text-[#F7931F] font-bold">
-                            <User className="w-3.5 h-3.5 text-[#F7931F] shrink-0" />
+                          <div className="flex items-center gap-1.5 text-xs text-[#f97316] font-bold">
+                            <User className="w-3.5 h-3.5 text-[#f97316] shrink-0" />
                             <span className="truncate">{ord.cliente?.nombre || 'Jesus Rodriguez'}</span>
                           </div>
 
@@ -530,7 +530,7 @@ export default function ReventaPage() {
                               <span>Abonado:</span>
                               <span>${abonado.toLocaleString('es-CL')}</span>
                             </div>
-                            <div className="flex items-center justify-between text-[#F7931F] font-black">
+                            <div className="flex items-center justify-between text-[#f97316] font-black">
                               <span>Saldo Pendiente:</span>
                               <span>${saldo.toLocaleString('es-CL')}</span>
                             </div>
@@ -542,7 +542,7 @@ export default function ReventaPage() {
                               value={ord.estado}
                               onClick={(e) => e.stopPropagation()}
                               onChange={(e) => moveOrdenState(ord.id, ord.oportunidad_id, e.target.value as EstadoReventa)}
-                              className="bg-gray-100 text-[#363636] text-[10px] font-bold rounded-lg px-2 py-1 border border-gray-200 focus:outline-none focus:border-[#F7931F]"
+                              className="bg-gray-100 text-[#213343] text-[10px] font-bold rounded-lg px-2 py-1 border border-gray-200 focus:outline-none focus:border-[#f97316]"
                             >
                               {ETAPAS_REVENTA.map((e) => (
                                 <option key={e.id} value={e.id}>
@@ -565,25 +565,25 @@ export default function ReventaPage() {
       {/* FULL UNIFIED OPORTUNIDAD MODAL (Nativo en Reventa sin redirigir) */}
       {selectedOp && (
         <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 z-50 animate-fadeIn"
+          className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 z-50 "
           onClick={(e) => {
             if (e.target === e.currentTarget) setSelectedOp(null);
           }}
         >
-          <div className="bg-[#18181b] text-gray-100 border border-gray-800 rounded-3xl max-w-7xl w-full p-4 sm:p-6 shadow-2xl h-[95vh] overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="bg-[#18181b] text-gray-100 border border-gray-800 rounded-lg max-w-7xl w-full p-4 sm:p-6 shadow-sm h-[95vh] overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Columna Izquierda (7/12 Cols) */}
             <div className="lg:col-span-7 flex flex-col h-full overflow-hidden pr-2 border-r border-gray-800/80">
               {/* Header Modal */}
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 pb-3 text-sm shrink-0">
                 <div className="flex items-center gap-2.5 text-gray-300 font-medium">
-                  <Building className="w-4 h-4 text-[#F7931F]" />
+                  <Building className="w-4 h-4 text-[#f97316]" />
                   <span className="font-bold text-sm text-white">{selectedOp.cliente?.nombre || 'Jesus Rodriguez'}</span>
                   <span className="text-gray-600">/</span>
                   <span className="text-gray-200 font-bold font-mono text-sm">{selectedOp.codigo}</span>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-indigo-400 uppercase bg-indigo-950/60 px-3 py-1 rounded-xl border border-indigo-700/50">
+                  <span className="text-xs font-bold text-indigo-400 uppercase bg-indigo-950/60 px-3 py-1 rounded-md border border-indigo-700/50">
                     Estado Logístico: {selectedOrden?.estado?.toUpperCase() || 'REVENTA'}
                   </span>
                   <button
@@ -603,14 +603,14 @@ export default function ReventaPage() {
               {/* Acordeones (Todos cerrados por defecto) */}
               <div className="flex-1 overflow-y-auto space-y-3.5 pr-2 py-4 scrollbar-thin">
                 {/* Accordion 1: Contacto */}
-                <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
+                <div className="bg-[#222226] rounded-lg border border-gray-800 overflow-hidden shadow-sm">
                   <button
                     type="button"
                     onClick={() => setOpenSections({ ...openSections, contacto: !openSections.contacto })}
-                    className="w-full p-4 bg-[#27272a] text-[#F7931F] font-extrabold text-sm uppercase tracking-wider flex items-center justify-between border-b border-gray-800"
+                    className="w-full p-4 bg-[#27272a] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-gray-800"
                   >
                     <div className="flex items-center gap-2.5">
-                      <User className="w-4 h-4 text-[#F7931F]" />
+                      <User className="w-4 h-4 text-[#f97316]" />
                       <span>1. Contacto del Cliente</span>
                     </div>
                     {openSections.contacto ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -632,14 +632,14 @@ export default function ReventaPage() {
                 </div>
 
                 {/* Accordion 2: Cotizaciones */}
-                <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
+                <div className="bg-[#222226] rounded-lg border border-gray-800 overflow-hidden shadow-sm">
                   <button
                     type="button"
                     onClick={() => setOpenSections({ ...openSections, productos: !openSections.productos })}
-                    className="w-full p-4 bg-[#27272a] text-[#F7931F] font-extrabold text-sm uppercase tracking-wider flex items-center justify-between border-b border-gray-800"
+                    className="w-full p-4 bg-[#27272a] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-gray-800"
                   >
                     <div className="flex items-center gap-2.5">
-                      <FileText className="w-4 h-4 text-[#F7931F]" />
+                      <FileText className="w-4 h-4 text-[#f97316]" />
                       <span>2. Cotizaciones de la Oportunidad</span>
                     </div>
                     {openSections.productos ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -652,14 +652,14 @@ export default function ReventaPage() {
                 </div>
 
                 {/* Accordion 3: Finanzas & Abonos */}
-                <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
+                <div className="bg-[#222226] rounded-lg border border-gray-800 overflow-hidden shadow-sm">
                   <button
                     type="button"
                     onClick={() => setOpenSections({ ...openSections, finanzas: !openSections.finanzas })}
-                    className="w-full p-4 bg-[#27272a] text-[#F7931F] font-extrabold text-sm uppercase tracking-wider flex items-center justify-between border-b border-gray-800"
+                    className="w-full p-4 bg-[#27272a] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-gray-800"
                   >
                     <div className="flex items-center gap-2.5">
-                      <DollarSign className="w-4 h-4 text-[#F7931F]" />
+                      <DollarSign className="w-4 h-4 text-[#f97316]" />
                       <span>3. Finanzas & Abonos</span>
                     </div>
                     {openSections.finanzas ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -667,17 +667,17 @@ export default function ReventaPage() {
                   {openSections.finanzas && (
                     <div className="p-4 space-y-3 text-xs text-gray-300 bg-[#1e1e22]">
                       <div className="grid grid-cols-3 gap-2 text-center">
-                        <div className="p-2 bg-[#18181b] rounded-xl border border-gray-800">
+                        <div className="p-2 bg-[#18181b] rounded-md border border-gray-800">
                           <span className="text-[10px] text-gray-500 font-bold uppercase">Total Venta</span>
                           <p className="font-extrabold text-white">${getOportunidadTotalValue(selectedOp).toLocaleString('es-CL')}</p>
                         </div>
-                        <div className="p-2 bg-[#18181b] rounded-xl border border-gray-800">
+                        <div className="p-2 bg-[#18181b] rounded-md border border-gray-800">
                           <span className="text-[10px] text-emerald-400 font-bold uppercase">Abonado</span>
                           <p className="font-extrabold text-emerald-400">${getOportunidadAbonadoValue(selectedOp).toLocaleString('es-CL')}</p>
                         </div>
-                        <div className="p-2 bg-[#18181b] rounded-xl border border-gray-800">
-                          <span className="text-[10px] text-[#F7931F] font-bold uppercase">Saldo Pendiente</span>
-                          <p className="font-extrabold text-[#F7931F]">${(getOportunidadTotalValue(selectedOp) - getOportunidadAbonadoValue(selectedOp)).toLocaleString('es-CL')}</p>
+                        <div className="p-2 bg-[#18181b] rounded-md border border-gray-800">
+                          <span className="text-[10px] text-[#f97316] font-bold uppercase">Saldo Pendiente</span>
+                          <p className="font-extrabold text-[#f97316]">${(getOportunidadTotalValue(selectedOp) - getOportunidadAbonadoValue(selectedOp)).toLocaleString('es-CL')}</p>
                         </div>
                       </div>
                     </div>
@@ -685,14 +685,14 @@ export default function ReventaPage() {
                 </div>
 
                 {/* Accordion 6: Datos de Logística & Reventa */}
-                <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
+                <div className="bg-[#222226] rounded-lg border border-gray-800 overflow-hidden shadow-sm">
                   <button
                     type="button"
                     onClick={() => setOpenSections({ ...openSections, reventa: !openSections.reventa })}
-                    className="w-full p-4 bg-[#27272a] text-[#F7931F] font-extrabold text-sm uppercase tracking-wider flex items-center justify-between border-b border-gray-800"
+                    className="w-full p-4 bg-[#27272a] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-gray-800"
                   >
                     <div className="flex items-center gap-2.5">
-                      <Truck className="w-4 h-4 text-[#F7931F]" />
+                      <Truck className="w-4 h-4 text-[#f97316]" />
                       <span>6. Datos de Logística & Reventa</span>
                     </div>
                     {openSections.reventa ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -708,7 +708,7 @@ export default function ReventaPage() {
                             onChange={(e) => {
                               if (selectedOrden) moveOrdenState(selectedOrden.id, selectedOrden.oportunidad_id, e.target.value as EstadoReventa);
                             }}
-                            className="w-full bg-[#18181b] border border-gray-700 text-indigo-400 font-bold rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
+                            className="w-full bg-[#18181b] border border-gray-700 text-indigo-400 font-bold rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
                           >
                             {ETAPAS_REVENTA.map((e) => (
                               <option key={e.id} value={e.id}>
@@ -739,7 +739,7 @@ export default function ReventaPage() {
                                 }
                               }
                             }}
-                            className="w-full bg-[#18181b] border border-gray-700 text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
+                            className="w-full bg-[#18181b] border border-gray-700 text-white rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
                           />
                         </div>
                       </div>
@@ -765,7 +765,7 @@ export default function ReventaPage() {
                                 }
                               }
                             }}
-                            className="w-full bg-[#18181b] border border-gray-700 text-white font-mono rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
+                            className="w-full bg-[#18181b] border border-gray-700 text-white font-mono rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
                           />
                         </div>
                       </div>
@@ -791,7 +791,7 @@ export default function ReventaPage() {
                               }
                             }
                           }}
-                          className="w-full bg-[#18181b] border border-gray-700 text-white rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#F7931F]"
+                          className="w-full bg-[#18181b] border border-gray-700 text-white rounded-md p-2.5 text-xs focus:outline-none focus:border-[#f97316]"
                         />
                       </div>
                     </div>
@@ -801,11 +801,11 @@ export default function ReventaPage() {
             </div>
 
             {/* Columna Derecha (5/12 Cols): Feed de Actividades & Chat */}
-            <div className="lg:col-span-5 bg-[#222226] rounded-2xl border border-gray-800 p-4 flex flex-col justify-between h-full overflow-hidden shadow-xl">
+            <div className="lg:col-span-5 bg-[#222226] rounded-lg border border-gray-800 p-4 flex flex-col justify-between h-full overflow-hidden shadow-sm">
               <div className="space-y-3.5 flex-1 flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between border-b border-gray-800 pb-3">
-                  <h3 className="font-black text-base text-white uppercase tracking-wider flex items-center gap-2">
-                    <MessageSquare className="w-5 h-5 text-[#F7931F]" />
+                  <h3 className="font-black text-base text-white uppercase tracking-normal flex items-center gap-2">
+                    <MessageSquare className="w-5 h-5 text-[#f97316]" />
                     <span>Actividad & Chat Feed</span>
                   </h3>
                 </div>
@@ -817,9 +817,9 @@ export default function ReventaPage() {
                     </div>
                   ) : (
                     opActivities.map((act) => (
-                      <div key={act.id} className="bg-[#18181b] p-3 rounded-2xl border border-gray-800 space-y-1">
+                      <div key={act.id} className="bg-[#18181b] p-3 rounded-lg border border-gray-800 space-y-1">
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-[#F7931F]">{act.usuario_nombre}</span>
+                          <span className="font-bold text-[#f97316]">{act.usuario_nombre}</span>
                           <span className="text-[10px] text-gray-500 font-mono">
                             {new Date(act.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
                           </span>
@@ -839,11 +839,11 @@ export default function ReventaPage() {
                   value={newChatText}
                   onChange={(e) => setNewChatText(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSendChatMessage()}
-                  className="flex-1 bg-[#18181b] border border-gray-700 text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
+                  className="flex-1 bg-[#18181b] border border-gray-700 text-white rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
                 />
                 <button
                   onClick={handleSendChatMessage}
-                  className="p-2 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl transition"
+                  className="p-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md transition"
                 >
                   <Send className="w-4 h-4" />
                 </button>

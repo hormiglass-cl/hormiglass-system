@@ -8,13 +8,13 @@ This version has breaking changes — APIs, conventions, and file structure may 
 <claude-mem-context>
 # Memory Context
 
-# [hormiglass-system] recent context, 2026-08-21 10:59pm GMT-4
+# [hormiglass-system] recent context, 2026-08-28 4:51pm GMT-4
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (20,088t read) | 785,184t work | 97% savings
+Stats: 50 obs (18,305t read) | 1,432,621t work | 99% savings
 
 ### Jul 20, 2026
 S152 Crear CRM propio para Hormiglass con Next.js + Supabase + Vercel, incluyendo CLAUDE.md y archivo de memoria del proyecto (Jul 20 at 2:08 PM)
@@ -29,58 +29,58 @@ S159 Sincronizar archivos CRM del worktree al local hormiglass-system y subir a 
 S174 Security hardening + Supabase single-source-of-truth plan for hormiglass-system CRM (Next.js 15 + Supabase) (Jul 21 at 12:30 PM)
 ### Aug 5, 2026
 S175 Fix Supabase MCP connection error "resource: Resource must be a valid MCP endpoint" in hormiglass-system project (Aug 5 at 10:00 PM)
-### Aug 20, 2026
-794 11:05p 🔵 Hormiglass CRM Database Schema — ordenes_compra Current Structure
-795 " 🔵 Hormiglass CRM Full Schema Map — 17 Tables, Security Gaps Documented
-796 11:08p ✅ schema.sql Updated to Reflect Migrations 0008–0013 State
-797 " ✅ schema.sql Table Ordering Fixed — personal_terreno Moved Before Its Dependents
-798 " ✅ schema.sql Index Definitions Added for All New Tables
-799 11:09p 🔵 RLS Helper Functions and Full Policy Architecture Documented
-800 " ✅ schema.sql Now Includes RLS Helper Functions Documentation
-801 11:10p ✅ Schema Documentation Phase Completed — Moving to New Feature Implementation
-802 " 🔵 New Verification Plan Started Before Feature Implementation
-804 " 🔵 Critical Role Constraint Mismatch — DB Allows Only 'admin'|'user' But App Expects Full Role Set
-805 " 🔵 Production Data State — Clean Slate for OC Feature Implementation
-803 " ✅ supabase/schema.sql Updated as Complete Schema Snapshot
-806 11:11p 🔴 Migration 0014 Applied — OC RLS Policies Aligned to Actual 'admin'|'user' Role System
-807 11:12p 🔵 Migration 0014 Confirmed Applied — Live RLS Policies Verified in Production
-808 " 🔵 RLS Helper Functions Confirmed Fail-Closed Without JWT
-809 " 🔵 RLS Helper Functions Verified With Simulated User JWT
-810 " 🔵 Full RLS End-to-End Test Passed for ordenes_compra With 'user' Role
-811 " ✅ schema.sql Updated to Reflect Migration 0014 Policy Changes
-812 11:15p 🔴 Critical RLS Role Mismatch Fixed — Legacy Roles Blocked All Operational Users
-### Aug 21, 2026
-813 8:37p 🔵 Hormiglass CRM — Implementation Plans 12 & 13 Review Session Started
-814 " 🔵 Hormiglass Plan 12 — DB Migrations Fully Applied, UI Implementation Confirmed
-815 " 🔵 Hormiglass Project Stack — Next.js 16 + React 19 + Supabase JS 2.110
-816 8:38p 🟣 Plan 12 — All 6 Phases Fully Implemented in UI Code
-817 " 🔵 Plan 13 A.2 Incomplete — Smile Icon and AtSign Button Remain in Activity Feed Toolbar
-818 " 🟣 Plan 13 C — 3-Column HubSpot-Style Client Profile Fully Implemented
-819 " 🟣 Plan 13 D — Clients Table Has Ejecutivo Column; Dirección/Ubicación Removed
-822 8:39p 🟣 New Feature Requests: Edit/Delete Events in Oportunidades, Typography Scale, Client Info Panel, Tags Layout
-820 " 🔵 Hormiglass CRM Implementation Audit: Plans 12 & 13 Partial Completion
-821 " 🔵 Build Passes Clean but ESLint Has 211 Problems Across Codebase
-823 8:49p 🔵 Git Status: 50+ Files Uncommitted Across Plans 8–13
-824 " 🔵 actividades_op.tipo Has No CHECK Constraint — Free TEXT in Schema and All Migrations
-825 " 🔵 Ventas Page Structure: Client Contact Inside Área Comercial Accordion
-826 " 🔵 Event Cards in Ventas: Read-Only, No Edit/Delete; Both Sections Share Unfiltered opEventosProdLog
-827 8:50p 🔵 Ventas Page State: Edit/Delete Exists for Visitas but Not for ProdLog Events; No editingProdLogId State
-828 " 🔴 Migration 0031 Fixed: Added CHECK Constraint on actividades_op.tipo
-829 " 🔴 Removed (c as any) Casts in clientes/[id] and Added Typed Imports to ventas/page
-830 " 🟣 Added Typed State for ProdLog Event Edit/Delete in ventas/page.tsx
-831 " 🔄 Unified ProdLog Estado Options to Match Migration 0028's 5 New Estado Values
-832 8:51p 🟣 Added Edit/Delete Handler Functions for ProdLog Events in ventas/page.tsx
-833 " 🔵 apply_patch Failed for produccionEventos/reventaEventos Filter Variables — Context Mismatch
-834 8:52p 🔴 Fixed: produccionEventos and reventaEventos Derived Arrays Added Before JSX Return
-835 " 🟣 Client Info Panel Moved Above Área Comercial in Oportunidad Detail
-836 " 🔵 Old "Contacto del Cliente" Accordion Confirmed at Lines 2980–3063 Inside areaExpanded.comercial
-837 " 🔄 Removed Duplicate "Contacto del Cliente" Accordion from Área Comercial
-838 8:53p ✅ Tags Grid Layout Changed from 6-Column to 2-Column in Oportunidad Attribute Strip
-839 " 🔴 Producción Section Badge and "Agregar Evento" Button Now Use Filtered produccionEventos Array
-840 " 🔵 Old Inline Save Handler and opEventosProdLog.map() Still Present in Producción Section
-841 " 🔄 Producción Section Save Handler Replaced with saveProdLogEvent(); Event List Now Uses produccionEventos
-842 8:54p 🔵 Producción Event Cards Confirmed Read-Only at Lines 4599–4629; Card JSX Needs Edit/Delete Buttons
-843 " 🟣 Pipeline left panel: scrollable layout request for ventas/page.tsx
+### Aug 27, 2026
+972 11:43p 🔴 Duplicate Code Block Removed from app/recordatorios/page.tsx
+973 " 🔄 Dashboard TypeScript Hardening: Eliminated `any` Casts and Inline Magic Arrays
+974 " 🟣 Production Build Passes with /administracion and /recordatorios as Static Routes
+975 " ⚖️ Migration Apply Blocked — Falling Back to execute_sql for Database State Verification
+976 11:45p 🔵 Supabase Install Blocked by Sandbox Network Restriction in hormiglass-system
+977 11:48p 🔵 RLS Policies for recordatorios Table Confirmed Not Yet Applied
+978 11:52p 🔵 Supabase CLI Available via npx but Cannot Link to Remote Project
+979 11:57p 🚨 6 High-Severity npm Vulnerabilities Found in hormiglass-system
+980 " 🟣 Parallel Codex Session Completed: /administracion and /recordatorios Routes
+981 " ⚖️ Upgrade next + eslint-config-next to 16.3.3 to Fix All 6 Audit Vulnerabilities
+### Aug 28, 2026
+982 12:05a 🟣 Recordatorios table gains empresa column for multi-company scoping
+983 " ⚖️ Administración restructured as top-level nav hub with sub-sections for Empresas and RRHH
+984 12:12a 🟣 Administración restructured as top-level navigation with sub-sections
+985 " 🔴 Fixed synchronous setState inside useEffect in Administración page
+986 " 🔵 Supabase CLI not in shell PATH; npx supabase has telemetry write permission issue
+987 12:29a 🟣 Per-empresa task management added to Administración with 4-state workflow
+988 " 🔄 Administración sidebar navigation simplified — no standalone "Inicio" or "Recordatorios" items
+989 " ✅ Supabase migration 0041 adds empresa and estado columns to recordatorios table
+990 9:54a ⚖️ HubSpot-inspired minimalist redesign planned for entire Hormiglass CRM
+991 " 🔄 Dashboard visually migrated to minimalist operational workspace style
+992 " 🔵 Full lint audit reveals 213 pre-existing problems across untouched modules
+993 10:12a 🔵 Recordatorios Table Schema — Existing Columns and RLS Pattern
+994 " 🔵 Supabase CLI EPERM Telemetry Write Failure in Sandbox
+995 " 🟣 Planned Migration 0042 — Urgency Classification and Activity Timeline for Recordatorios
+996 " ⚖️ Company Isolation in Admin Views — No Cross-Company Navigation Within a Section
+997 11:22a 🟣 Empresa Legal Names and RUTs Added to Hormiglass CRM
+998 " 🔵 @ Mention and File Upload Pattern in ventas/page.tsx
+999 " 🔵 Migration 0042 Already Applied — recordatorio_actividades and urgencia Column Confirmed in Schema
+1000 " ⚖️ Task Attachments Will Reuse Existing 'administracion' Storage Bucket
+1001 3:17p ⚖️ Administrative Sections Architecture: Fixed Per-Company Model Selected
+1002 " 🔵 Supabase CLI: Not in System PATH, npx Available but Blocked by EPERM on Telemetry
+1003 " 🟣 Plan: Add `seccion` Column to `recordatorios` Table for Per-Company Section Classification
+1004 3:26p ⚖️ Sidebar Navigation: Only Company Names Shown, Sections Hidden
+1005 " 🔴 React Compiler Memoization Error Fixed in Dashboard via `currentUserId` Extraction
+1006 " 🟣 Production Build Passes After Admin Section Restructure
+1007 " 🟣 Migration Created: `seccion` Column Added to `recordatorios` Table with Per-Company Constraints
+1008 3:30p 🟣 Migration `20260828191700` Applied to Remote Supabase Database
+1009 3:34p 🟣 ClickUp-Style Administrative Sections Fully Implemented in Hormiglass CRM
+1010 " 🔵 `administracion_documentos` Table Missing `seccion` Column for Per-Section Document Upload
+1011 3:37p 🟣 `administracion_documentos` Extended with `seccion` Column — Documents Now Per-Section
+1012 " ✅ Admin Page UX Redesign: Sections Move to Sidebar, Documents Available on All Sections, "Documentos Varios" Removed
+1013 4:30p ✅ Sidebar Redesigned: Administration Section Collapsible with RRHH and Company Sub-Items
+1014 " ⚖️ Uniform Sections for All Three Companies: New Migration Planned to Replace Per-Company Constraints
+1015 4:34p 🟣 Migration `20260828203012` Applied: Uniform Sections Across All Three Companies
+1016 " 🔵 Supabase `db query --linked` Hangs on Constraint Verification Queries
+1017 4:39p 🔵 Hormiglass CRM Admin Section Data Model
+1018 " 🟣 Unified Admin Sections Across All 3 Companies
+1019 " ⚖️ Promote Legal and Prevención to First-Class Sections
+1020 4:42p 🔴 Supabase CLI db query Syntax Fix
+1021 " 🟣 Migration 20260828203837 Applied to Remote Supabase
 
-Access 785k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1433k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

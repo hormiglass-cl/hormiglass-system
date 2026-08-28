@@ -122,7 +122,7 @@ export default function CajaPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-800 pb-5">
         <div>
           <h1 className="text-2xl font-extrabold text-white flex items-center gap-2">
-            <DollarSign className="w-6 h-6 text-[#F7931F]" />
+            <DollarSign className="w-6 h-6 text-[#f97316]" />
             <span>Caja & Estado de Resultados</span>
           </h1>
           <p className="text-xs text-gray-400 mt-1">
@@ -132,7 +132,7 @@ export default function CajaPage() {
 
         <button
           onClick={() => setShowModal(true)}
-          className="bg-[#F7931F] hover:bg-[#e08316] text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-lg transition flex items-center gap-2 self-start md:self-auto"
+          className="bg-[#f97316] hover:bg-[#ea580c] text-white font-semibold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2 self-start md:self-auto"
         >
           <Plus className="w-4 h-4" />
           <span>Registrar Movimiento</span>
@@ -141,7 +141,7 @@ export default function CajaPage() {
 
       {/* Tarjetas KPI de Estado de Resultados */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800 shadow-sm">
+        <div className="bg-gray-900 p-5 rounded-lg border border-gray-800 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-400">Total Ingresos</span>
             <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg">
@@ -152,7 +152,7 @@ export default function CajaPage() {
           <span className="text-xs text-gray-400 font-medium">Abonos y Ventas Liquidadas</span>
         </div>
 
-        <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800 shadow-sm">
+        <div className="bg-gray-900 p-5 rounded-lg border border-gray-800 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-400">Total Egresos</span>
             <div className="p-2 bg-red-500/10 text-red-400 rounded-lg">
@@ -163,10 +163,10 @@ export default function CajaPage() {
           <span className="text-xs text-gray-400 font-medium">Pagos Proveedores y Operación</span>
         </div>
 
-        <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800 shadow-sm">
+        <div className="bg-gray-900 p-5 rounded-lg border border-gray-800 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-400">Resultado Neto (Margen)</span>
-            <div className="p-2 bg-[#F7931F]/10 text-[#F7931F] rounded-lg">
+            <div className="p-2 bg-[#f97316]/10 text-[#f97316] rounded-lg">
               <DollarSign className="w-5 h-5" />
             </div>
           </div>
@@ -176,14 +176,14 @@ export default function CajaPage() {
       </div>
 
       {/* Historial de Movimientos de Caja */}
-      <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-visible shadow-xl p-4 space-y-4">
+      <div className="bg-gray-900 rounded-lg border border-gray-800 overflow-visible shadow-sm p-4 space-y-4">
         <h2 className="text-sm font-bold text-white border-b border-gray-800 pb-3">
           Historial de Movimientos de Caja ({movimientos.length})
         </h2>
 
         <div className="overflow-visible">
           <table className="w-full text-left text-xs">
-            <thead className="bg-gray-800/60 text-gray-400 uppercase text-[10px] tracking-wider border-b border-gray-800">
+            <thead className="bg-gray-800/60 text-gray-400 uppercase text-[10px] tracking-normal border-b border-gray-800">
               <tr>
                 <th className="p-3.5">Fecha</th>
                 <th className="p-3.5">Tipo</th>
@@ -242,7 +242,7 @@ export default function CajaPage() {
       {/* Modal Registrar Movimiento */}
       {showModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-xs">
             <h3 className="text-base font-bold text-white">Registrar Movimiento de Caja</h3>
             <form onSubmit={handleAddMovimiento} className="space-y-3">
               <div>
@@ -250,7 +250,7 @@ export default function CajaPage() {
                 <select
                   value={tipo}
                   onChange={(e) => setTipo(e.target.value as TipoMovimientoCaja)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
                 >
                   <option value="ingreso">Ingreso (Abono / Cobro Venta)</option>
                   <option value="egreso">Egreso (Pago Proveedor / Gasto Operativo)</option>
@@ -264,7 +264,7 @@ export default function CajaPage() {
                   required
                   value={monto}
                   onChange={(e) => setMonto(Number(e.target.value))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
                 />
               </div>
 
@@ -276,7 +276,7 @@ export default function CajaPage() {
                   placeholder="Ej. Abono 50% / Materia Prima / Flete"
                   value={categoria}
                   onChange={(e) => setCategoria(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
                 />
               </div>
 
@@ -287,7 +287,7 @@ export default function CajaPage() {
                   placeholder="Detalle o respaldo del movimiento..."
                   value={descripcion}
                   onChange={(e) => setDescripcion(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
                 />
               </div>
 
@@ -295,11 +295,11 @@ export default function CajaPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 bg-gray-800 text-gray-300 rounded-xl"
+                  className="px-4 py-2 bg-gray-800 text-gray-300 rounded-md"
                 >
                   Cancelar
                 </button>
-                <button type="submit" className="px-4 py-2 bg-[#F7931F] text-white font-bold rounded-xl">
+                <button type="submit" className="px-4 py-2 bg-[#f97316] text-white font-bold rounded-md">
                   Guardar Movimiento
                 </button>
               </div>

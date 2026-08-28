@@ -21,15 +21,15 @@ export function FinancialBalanceCard({
   const percentPendiente = 100 - percentRecaudado;
 
   return (
-    <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm space-y-5">
+    <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-gray-100 pb-3">
         <div>
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-xl bg-emerald-50 text-emerald-600">
+            <div className="p-1.5 rounded-md bg-emerald-50 text-emerald-600">
               <DollarSign className="w-4 h-4" />
             </div>
-            <h3 className="font-extrabold text-base text-[#363636]">
+            <h3 className="font-extrabold text-base text-[#213343]">
               Estado Financiero y Cobranza
             </h3>
           </div>
@@ -38,7 +38,7 @@ export function FinancialBalanceCard({
           </p>
         </div>
 
-        <span className="bg-orange-50 text-[#F7931F] font-bold text-xs px-3 py-1 rounded-full border border-orange-200">
+        <span className="bg-orange-50 text-[#f97316] font-bold text-xs px-3 py-1 rounded-full border border-orange-200">
           {totalOps} contratos activos
         </span>
       </div>
@@ -46,11 +46,11 @@ export function FinancialBalanceCard({
       {/* Tarjeta Destacada Cuánto Falta por Pagar */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
         {/* 1. Facturación Total Comprometida */}
-        <div className="p-4 rounded-2xl bg-gray-50 border border-gray-200 space-y-1">
+        <div className="p-4 rounded-lg bg-gray-50 border border-gray-200 space-y-1">
           <span className="text-gray-500 font-bold block">
             Valor total facturado
           </span>
-          <span className="text-xl font-black text-[#363636] block">
+          <span className="text-xl font-black text-[#213343] block">
             ${totalVendido.toLocaleString('es-CL')} CLP
           </span>
           <span className="text-[11px] text-gray-400 font-medium block">
@@ -59,7 +59,7 @@ export function FinancialBalanceCard({
         </div>
 
         {/* 2. Total Abonado / Recaudado */}
-        <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-1">
+        <div className="p-4 rounded-lg bg-emerald-50/70 border border-emerald-200 space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-emerald-800 font-bold block">
               Recaudado / Abonado
@@ -75,7 +75,7 @@ export function FinancialBalanceCard({
         </div>
 
         {/* 3. Cuánto Falta por Pagar (Saldo Pendiente) */}
-        <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-300 space-y-1 relative overflow-hidden">
+        <div className="p-4 rounded-lg bg-amber-50/70 border border-amber-300 space-y-1 relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-amber-900 font-black block">
               Falta por pagar (saldo)

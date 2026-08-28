@@ -293,9 +293,9 @@ export default function VisitasTerrenoPage() {
 
   const getTecnicoColor = () => ({
     bg: 'bg-orange-50',
-    text: 'text-[#F7931F]',
+    text: 'text-[#f97316]',
     border: 'border-orange-200',
-    dot: 'bg-[#F7931F]',
+    dot: 'bg-[#f97316]',
   });
 
   const getResponsableNombre = (op: OportunidadVenta) =>
@@ -313,12 +313,12 @@ export default function VisitasTerrenoPage() {
   };
 
   return (
-    <div className="space-y-5 text-[#363636] animate-fadeIn">
+    <div className="space-y-5 text-[#213343] ">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-[#363636] flex items-center gap-2.5">
-            <CalendarIcon className="w-6 h-6 text-[#F7931F]" />
+          <h1 className="text-2xl font-extrabold text-[#213343] flex items-center gap-2.5">
+            <CalendarIcon className="w-6 h-6 text-[#f97316]" />
             <span>Calendario de visitas a terreno</span>
           </h1>
           <p className="text-xs text-gray-500 mt-0.5">
@@ -329,7 +329,7 @@ export default function VisitasTerrenoPage() {
         <div className="flex items-center gap-2.5">
           <Link
             href="/ventas"
-            className="bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold text-xs px-4 py-2 rounded-xl transition flex items-center gap-2 shadow-sm"
+            className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold text-xs px-4 py-2 rounded-md transition flex items-center gap-2 shadow-sm"
           >
             <Plus className="w-4 h-4" />
             <span>Programar visita desde pipeline</span>
@@ -338,10 +338,10 @@ export default function VisitasTerrenoPage() {
       </div>
 
       {/* Control Bar: Mes + Filtros */}
-      <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-4 text-xs">
+      <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-4 text-xs">
         {/* Navegación de Mes */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center bg-gray-100 rounded-xl p-1 border border-gray-200">
+          <div className="flex items-center bg-gray-100 rounded-md p-1 border border-gray-200">
             <button
               onClick={prevMonth}
               className="p-1.5 hover:bg-white text-gray-700 rounded-lg transition"
@@ -349,7 +349,7 @@ export default function VisitasTerrenoPage() {
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="font-extrabold text-[#363636] px-3 font-mono text-sm">
+            <span className="font-extrabold text-[#213343] px-3 font-mono text-sm">
               {monthNames[month]} {year}
             </span>
             <button
@@ -363,7 +363,7 @@ export default function VisitasTerrenoPage() {
 
           <button
             onClick={goToToday}
-            className="px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-[#F7931F] font-bold rounded-xl border border-orange-200 transition"
+            className="px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-[#f97316] font-bold rounded-md border border-orange-200 transition"
           >
             Hoy
           </button>
@@ -378,7 +378,7 @@ export default function VisitasTerrenoPage() {
               <button
                 type="button"
                 onClick={() => setShowTecnicoMenu(!showTecnicoMenu)}
-                className="bg-gray-50 hover:bg-gray-100 border border-gray-300 rounded-xl px-3 py-1.5 text-[#363636] font-bold text-xs flex items-center justify-between gap-2 min-w-[170px] cursor-pointer"
+                className="bg-gray-50 hover:bg-gray-100 border border-gray-300 rounded-md px-3 py-1.5 text-[#213343] font-bold text-xs flex items-center justify-between gap-2 min-w-[170px] cursor-pointer"
               >
                 <span className="truncate">
                   {selectedTecnicos.length === 0
@@ -392,16 +392,16 @@ export default function VisitasTerrenoPage() {
             </div>
 
             {showTecnicoMenu && (
-              <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-2xl shadow-xl p-3 z-30 space-y-2 text-xs">
+              <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-sm p-3 z-30 space-y-2 text-xs">
                 <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
-                  <span className="font-extrabold text-[#363636] text-[11px] uppercase tracking-wider">
+                  <span className="font-extrabold text-[#213343] text-[11px] uppercase tracking-normal">
                     Filtrar técnicos
                   </span>
                   {selectedTecnicos.length > 0 && (
                     <button
                       type="button"
                       onClick={() => setSelectedTecnicos([])}
-                      className="text-[10px] text-[#F7931F] font-bold hover:underline"
+                      className="text-[10px] text-[#f97316] font-bold hover:underline"
                     >
                       Limpiar filtro
                     </button>
@@ -409,12 +409,12 @@ export default function VisitasTerrenoPage() {
                 </div>
 
                 <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
-                  <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-bold text-[#363636]">
+                  <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-bold text-[#213343]">
                     <input
                       type="checkbox"
                       checked={selectedTecnicos.length === 0}
                       onChange={() => setSelectedTecnicos([])}
-                      className="rounded text-[#F7931F] focus:ring-[#F7931F]"
+                      className="rounded text-[#f97316] focus:ring-[#F7931F]"
                     />
                     <span>Todos los técnicos</span>
                   </label>
@@ -438,7 +438,7 @@ export default function VisitasTerrenoPage() {
                                 setSelectedTecnicos([...selectedTecnicos, p.id]);
                               }
                             }}
-                            className="rounded text-[#F7931F] focus:ring-[#F7931F]"
+                            className="rounded text-[#f97316] focus:ring-[#F7931F]"
                           />
                           <span className="truncate">{p.nombre}</span>
                         </div>
@@ -459,7 +459,7 @@ export default function VisitasTerrenoPage() {
             <select
               value={selectedEstado}
               onChange={(e) => setSelectedEstado(e.target.value)}
-              className="bg-gray-50 border border-gray-300 rounded-xl px-2.5 py-1.5 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F]"
+              className="bg-gray-50 border border-gray-300 rounded-md px-2.5 py-1.5 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
             >
               <option value="todos">Todos los estados</option>
               <option value="programada">Programadas</option>
@@ -471,7 +471,7 @@ export default function VisitasTerrenoPage() {
       </div>
 
       {/* Grid del Calendario Mensual */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
         {/* Días de la semana */}
         <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-xs font-bold text-gray-600">
           {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((d) => (
@@ -511,13 +511,13 @@ export default function VisitasTerrenoPage() {
                 <div className="flex items-center justify-between mb-1">
                   <span
                     className={`text-xs font-mono font-bold w-6 h-6 rounded-full flex items-center justify-center ${
-                      isToday ? 'bg-[#F7931F] text-white font-extrabold shadow-2xs' : 'text-gray-700'
+                      isToday ? 'bg-[#f97316] text-white font-extrabold shadow-2xs' : 'text-gray-700'
                     }`}
                   >
                     {dayNum}
                   </span>
                   {dayVisitas.length > 0 && (
-                    <span className="text-[10px] font-extrabold text-[#F7931F] bg-orange-100 px-1.5 py-0.5 rounded-full">
+                    <span className="text-[10px] font-extrabold text-[#f97316] bg-orange-100 px-1.5 py-0.5 rounded-full">
                       {dayVisitas.length} {dayVisitas.length === 1 ? 'visita' : 'visitas'}
                     </span>
                   )}
@@ -534,10 +534,10 @@ export default function VisitasTerrenoPage() {
                       <div
                         key={op.id}
                         onClick={() => setSelectedVisitaOp(op)}
-                        className={`p-2 rounded-xl border text-[11px] cursor-pointer transition shadow-2xs hover:scale-[1.02] ${color.bg} ${color.border}`}
+                        className={`p-2 rounded-md border text-[11px] cursor-pointer transition shadow-2xs hover:scale-[1.02] ${color.bg} ${color.border}`}
                       >
                         <div className="flex items-center justify-between gap-1 mb-1">
-                          <span className={`font-black uppercase tracking-wider text-[9px] px-1.5 py-0.5 rounded-md ${color.text} bg-white/80 border`}>
+                          <span className={`font-black uppercase tracking-normal text-[9px] px-1.5 py-0.5 rounded-md ${color.text} bg-white/80 border`}>
                             {responsableNombre}
                           </span>
                           <div className="flex items-center gap-1">
@@ -559,7 +559,7 @@ export default function VisitasTerrenoPage() {
                           </div>
                         </div>
 
-                        <div className="font-bold text-[#363636] truncate leading-tight" title={op.titulo}>
+                        <div className="font-bold text-[#213343] truncate leading-tight" title={op.titulo}>
                           {op.codigo} — {op.titulo}
                         </div>
 
@@ -585,31 +585,31 @@ export default function VisitasTerrenoPage() {
 
       {/* Modal de Detalle y Edición Directa de Visita */}
       {selectedVisitaOp && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl text-[#363636]">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-lg w-full p-6 space-y-5 shadow-sm text-[#213343]">
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-orange-50 rounded-xl border border-orange-200 text-[#F7931F]">
+                <div className="p-2 bg-orange-50 rounded-md border border-orange-200 text-[#f97316]">
                   <CalendarIcon className="w-5 h-5" />
                 </div>
                 <div>
                   <span className="text-[10px] font-mono font-bold text-gray-500 uppercase">{selectedVisitaOp.codigo}</span>
-                  <h3 className="text-base font-extrabold text-[#363636] leading-tight">{selectedVisitaOp.titulo}</h3>
+                  <h3 className="text-base font-extrabold text-[#213343] leading-tight">{selectedVisitaOp.titulo}</h3>
                 </div>
               </div>
               <button
                 onClick={() => setSelectedVisitaOp(null)}
-                className="text-gray-400 hover:text-[#363636] text-lg font-bold p-1"
+                className="text-gray-400 hover:text-[#213343] text-lg font-bold p-1"
               >
                 ✕
               </button>
             </div>
 
             {/* Información del Cliente */}
-            <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200 text-xs space-y-1">
+            <div className="bg-gray-50 p-3.5 rounded-lg border border-gray-200 text-xs space-y-1">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-[#F7931F] flex items-center gap-1.5">
-                  <Building className="w-4 h-4 text-[#F7931F]" />
+                <span className="font-bold text-[#f97316] flex items-center gap-1.5">
+                  <Building className="w-4 h-4 text-[#f97316]" />
                   <span>{selectedVisitaOp.cliente?.nombre || 'Cliente General'}</span>
                 </span>
                 <span className="font-mono text-gray-500 font-bold">{selectedVisitaOp.cliente?.rut}</span>
@@ -636,7 +636,7 @@ export default function VisitasTerrenoPage() {
                     onChange={(e) => {
                       updateVisitaResponsable(selectedVisitaOp.id, e.target.value);
                     }}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F] cursor-pointer"
+                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316] cursor-pointer"
                   >
                     <option value="">Selecciona responsable</option>
                     {personalVisitas.map((t) => (
@@ -652,7 +652,7 @@ export default function VisitasTerrenoPage() {
                   <select
                     value={selectedVisitaOp.estado_visita || 'programada'}
                     onChange={(e) => updateVisitaField(selectedVisitaOp.id, 'estado_visita', e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-black uppercase focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-black uppercase focus:outline-none focus:border-[#f97316]"
                   >
                     <option value="programada">Programada</option>
                     <option value="realizada">Realizada</option>
@@ -668,7 +668,7 @@ export default function VisitasTerrenoPage() {
                     type="date"
                     value={selectedVisitaOp.fecha_visita_terreno || ''}
                     onChange={(e) => updateVisitaField(selectedVisitaOp.id, 'fecha_visita_terreno', e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-mono focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-mono focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
 
@@ -678,7 +678,7 @@ export default function VisitasTerrenoPage() {
                     type="time"
                     value={selectedVisitaOp.hora_visita_terreno || '09:00'}
                     onChange={(e) => updateVisitaField(selectedVisitaOp.id, 'hora_visita_terreno', e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-mono focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-mono focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
               </div>
@@ -690,7 +690,7 @@ export default function VisitasTerrenoPage() {
                   placeholder="Instrucciones específicas para el técnico en terreno..."
                   value={selectedVisitaOp.observaciones_visita || ''}
                   onChange={(e) => updateVisitaField(selectedVisitaOp.id, 'observaciones_visita', e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316]"
                 />
               </div>
             </div>
@@ -699,7 +699,7 @@ export default function VisitasTerrenoPage() {
               <div className="flex items-center gap-2">
                 <Link
                   href={`/ventas?oportunidad=${selectedVisitaOp.cotizacion_actual_id || selectedVisitaOp.id}`}
-                  className="px-3.5 py-2 bg-orange-50 hover:bg-orange-100 text-[#F7931F] border border-orange-200 rounded-xl font-extrabold text-xs flex items-center gap-1.5 transition"
+                  className="px-3.5 py-2 bg-orange-50 hover:bg-orange-100 text-[#f97316] border border-orange-200 rounded-md font-extrabold text-xs flex items-center gap-1.5 transition"
                 >
                   <span>Abrir en Pipeline</span>
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -715,7 +715,7 @@ export default function VisitasTerrenoPage() {
                       console.error('Error deleting visita from calendar:', err);
                     }
                   }}
-                  className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl font-extrabold text-xs flex items-center gap-1.5 transition"
+                  className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-md font-extrabold text-xs flex items-center gap-1.5 transition"
                   title="Eliminar esta visita a terreno del sistema"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -726,7 +726,7 @@ export default function VisitasTerrenoPage() {
               <button
                 type="button"
                 onClick={() => setSelectedVisitaOp(null)}
-                className="px-4 py-2 bg-[#363636] hover:bg-black text-white rounded-xl font-bold text-xs transition"
+                className="px-4 py-2 bg-[#213343] hover:bg-black text-white rounded-md font-bold text-xs transition"
               >
                 Cerrar
               </button>

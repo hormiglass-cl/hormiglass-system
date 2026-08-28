@@ -10,7 +10,7 @@ import { Pagination } from '../../components/Pagination';
 import { useAuth } from '../../lib/context/AuthContext';
 import { AlertTriangle, Building, CheckCircle2, Download, Edit3, Eye, FileText, Plus, Search, Trash2 } from 'lucide-react';
 
-const statusStyles = 'bg-white text-[#363636] border-gray-300';
+const statusStyles = 'bg-white text-[#213343] border-gray-300';
 
 export default function OrdenesCompraPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -132,11 +132,11 @@ export default function OrdenesCompraPage() {
   };
 
   return (
-    <div className="space-y-6 text-[#363636]">
+    <div className="space-y-6 text-[#213343]">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
         <div>
           <h1 className="text-2xl font-extrabold flex items-center gap-2">
-            <FileText className="w-6 h-6 text-[#F7931F]" />
+            <FileText className="w-6 h-6 text-[#f97316]" />
             <span>Ordenes de Compra</span>
           </h1>
           <p className="text-xs text-gray-600 mt-1">Emision, seguimiento y formato oficial de OC para proveedores Hormiglass.</p>
@@ -147,12 +147,12 @@ export default function OrdenesCompraPage() {
             type="button"
             onClick={handleExportCsv}
             disabled={filtered.length === 0}
-            className="bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-[#363636] border border-gray-300 font-bold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-2"
+            className="bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-[#213343] border border-gray-300 font-bold text-xs px-4 py-2.5 rounded-md transition flex items-center gap-2"
           >
             <Download className="w-4 h-4" />
             <span>Exportar CSV</span>
           </button>
-          <Link href="/ordenes-compra/nuevo" className="bg-[#F7931F] hover:bg-[#e08316] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition flex items-center gap-2">
+          <Link href="/ordenes-compra/nuevo" className="bg-[#f97316] hover:bg-[#ea580c] text-white font-bold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2">
             <Plus className="w-4 h-4" />
             <span>Nueva OC</span>
           </Link>
@@ -160,20 +160,20 @@ export default function OrdenesCompraPage() {
       </div>
 
       {successMsg && (
-        <div className="bg-white border border-[#F7931F] text-[#363636] p-4 rounded-xl text-xs flex items-center gap-2 font-bold animate-fadeIn">
-          <CheckCircle2 className="w-4 h-4 text-[#F7931F]" />
+        <div className="bg-white border border-[#f97316] text-[#213343] p-4 rounded-md text-xs flex items-center gap-2 font-bold ">
+          <CheckCircle2 className="w-4 h-4 text-[#f97316]" />
           <span>{successMsg}</span>
         </div>
       )}
 
       {errorMsg && (
-        <div className="bg-orange-50 border border-orange-200 text-orange-950 p-4 rounded-xl text-xs flex items-center gap-2 font-bold animate-fadeIn">
-          <AlertTriangle className="w-4 h-4 text-[#F7931F]" />
+        <div className="bg-orange-50 border border-orange-200 text-orange-950 p-4 rounded-md text-xs flex items-center gap-2 font-bold ">
+          <AlertTriangle className="w-4 h-4 text-[#f97316]" />
           <span>{errorMsg}</span>
         </div>
       )}
 
-      <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
         <div className="relative w-full sm:w-96">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
           <input
@@ -184,16 +184,16 @@ export default function OrdenesCompraPage() {
               setSearch(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full bg-white border border-gray-300 rounded-xl pl-9 pr-3 py-2 text-xs placeholder-gray-400 focus:outline-none focus:border-[#F7931F]"
+            className="w-full bg-white border border-gray-300 rounded-md pl-9 pr-3 py-2 text-xs placeholder-gray-400 focus:outline-none focus:border-[#f97316]"
           />
         </div>
         <div className="text-xs text-gray-600 font-semibold">Mostrando {filtered.length} ordenes</div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-visible shadow-sm">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-visible shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs min-w-[980px]">
-            <thead className="bg-[#363636] text-white uppercase text-[10px] tracking-wider">
+            <thead className="bg-[#213343] text-white uppercase text-[10px] tracking-normal">
               <tr>
                 <th className="py-3.5 px-4">OC #</th>
                 <th className="py-3.5 px-4">Versión</th>
@@ -223,7 +223,7 @@ export default function OrdenesCompraPage() {
                     <td className="py-3.5 px-4">
                       <div className="flex flex-col">
                         <div className="flex items-center gap-1.5 font-bold">
-                          <Building className="w-3.5 h-3.5 text-[#F7931F]" />
+                          <Building className="w-3.5 h-3.5 text-[#f97316]" />
                           <span>{orden.proveedor?.nombre || 'Proveedor'}</span>
                         </div>
                         <span className="text-[11px] text-gray-500 font-mono pl-5">RUT: {orden.proveedor?.rut || 'Sin RUT'}</span>
@@ -233,7 +233,7 @@ export default function OrdenesCompraPage() {
                       <select
                         value={orden.estado}
                         onChange={(e) => handleChangeStatus(orden, e.target.value as EstadoOrdenCompra)}
-                        className={`text-[11px] font-extrabold uppercase px-2.5 py-1 rounded-xl border cursor-pointer focus:outline-none focus:border-[#F7931F] ${statusStyles}`}
+                        className={`text-[11px] font-extrabold uppercase px-2.5 py-1 rounded-md border cursor-pointer focus:outline-none focus:border-[#f97316] ${statusStyles}`}
                       >
                         <option value="borrador">Borrador</option>
                         <option value="emitida">Emitida</option>
@@ -246,14 +246,14 @@ export default function OrdenesCompraPage() {
                     <td className="py-3.5 px-4 text-right font-black text-sm">${Number(orden.monto_total || 0).toLocaleString('es-CL')}</td>
                     <td className="py-3.5 px-4">
                       <div className="flex items-center justify-center gap-2">
-                        <button onClick={() => setPreviewOrden(orden)} className="p-1.5 bg-white hover:bg-[#F7931F] text-[#363636] hover:text-white rounded-lg transition border border-gray-300" title="Previsualizar PDF">
+                        <button onClick={() => setPreviewOrden(orden)} className="p-1.5 bg-white hover:bg-[#f97316] text-[#213343] hover:text-white rounded-lg transition border border-gray-300" title="Previsualizar PDF">
                           <Eye className="w-3.5 h-3.5" />
                         </button>
-                        <button onClick={() => setEditingOrden(orden)} className="p-1.5 bg-white hover:bg-[#363636] text-[#363636] hover:text-white rounded-lg transition border border-gray-300" title="Editar OC">
+                        <button onClick={() => setEditingOrden(orden)} className="p-1.5 bg-white hover:bg-[#213343] text-[#213343] hover:text-white rounded-lg transition border border-gray-300" title="Editar OC">
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
                         {currentUser?.rol === 'admin' && (
-                          <button onClick={() => setDeleteOrden(orden)} className="p-1.5 bg-white hover:bg-[#363636] text-[#363636] hover:text-white rounded-lg transition border border-gray-300" title="Eliminar OC">
+                          <button onClick={() => setDeleteOrden(orden)} className="p-1.5 bg-white hover:bg-[#213343] text-[#213343] hover:text-white rounded-lg transition border border-gray-300" title="Eliminar OC">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )}
@@ -277,24 +277,24 @@ export default function OrdenesCompraPage() {
       />
 
       {deleteOrden && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm">
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h3 className="text-base font-extrabold text-[#363636] flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-[#F7931F]" />
+              <h3 className="text-base font-extrabold text-[#213343] flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-[#f97316]" />
                 <span>Eliminar Orden de Compra</span>
               </h3>
-              <button onClick={() => setDeleteOrden(null)} className="text-gray-400 hover:text-[#363636] font-bold">x</button>
+              <button onClick={() => setDeleteOrden(null)} className="text-gray-400 hover:text-[#213343] font-bold">x</button>
             </div>
             <p className="text-xs text-gray-700">Esta accion eliminara permanentemente la OC <strong className="font-mono">{deleteOrden.numero_oc}</strong> y sus items asociados.</p>
             {errorMsg && (
-              <div className="bg-orange-50 border border-orange-200 text-orange-950 p-3 rounded-xl text-xs font-bold">
+              <div className="bg-orange-50 border border-orange-200 text-orange-950 p-3 rounded-md text-xs font-bold">
                 {errorMsg}
               </div>
             )}
             <div className="pt-2 flex items-center justify-end gap-2 text-xs">
-              <button type="button" onClick={() => setDeleteOrden(null)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition">Cancelar</button>
-              <button type="button" onClick={handleDelete} className="px-5 py-2 bg-[#363636] hover:bg-black text-white font-extrabold rounded-xl transition shadow-md flex items-center gap-1.5">
+              <button type="button" onClick={() => setDeleteOrden(null)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition">Cancelar</button>
+              <button type="button" onClick={handleDelete} className="px-5 py-2 bg-[#213343] hover:bg-black text-white font-extrabold rounded-md transition shadow-sm flex items-center gap-1.5">
                 <Trash2 className="w-4 h-4" />
                 <span>Eliminar OC</span>
               </button>

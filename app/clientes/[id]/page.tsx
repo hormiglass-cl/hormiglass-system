@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '../../../lib/supabase/client';
@@ -11,7 +11,6 @@ import {
   Cotizacion,
   TipoNotaActividad,
   OportunidadVenta,
-  PRODUCTOS_HORMIGLASS,
   Usuario,
   EventoProduccionLogistica,
 } from '../../../lib/types';
@@ -19,7 +18,6 @@ import { PdfPreviewModal } from '../../../components/PdfPreviewModal';
 import { CotizacionModal } from '../../../components/CotizacionModal';
 import { SearchableSelect } from '../../../components/SearchableSelect';
 import { REGIONES_CHILE, TODAS_COMUNAS_CHILE } from '../../../lib/chile-data';
-import { logSistema } from '../../../lib/logger';
 
 const NICHOS_CLIENTE_DEFAULT = [
   'Constructora B2B',
@@ -28,6 +26,51 @@ const NICHOS_CLIENTE_DEFAULT = [
   'Particular',
   'Distribuidor',
 ];
+
+const SYSTEM_TIME_ZONE = 'America/Santiago';
+
+function getDateOnly(value?: string | null) {
+  if (!value) return '';
+  return value.includes('T') ? value.slice(0, 10) : value;
+}
+
+function normalizeTime(value?: string | null) {
+  const [hours = '09', minutes = '00', seconds = '00'] = (value || '09:00').split(':');
+  return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}:${seconds.padStart(2, '0')}`;
+}
+
+function formatSantiagoDateTime(value?: string | null, timeValue?: string | null) {
+  if (!value) return 'Sin fecha';
+
+  if (timeValue !== undefined) {
+    const [year, month, day] = getDateOnly(value).split('-');
+    if (!year || !month || !day) return 'Fecha inválida';
+    return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year} ${normalizeTime(timeValue)}`;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Fecha inválida';
+
+  const parts = new Intl.DateTimeFormat('es-CL', {
+    timeZone: SYSTEM_TIME_ZONE,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+
+  const getPart = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || '00';
+
+  return `${getPart('day')}/${getPart('month')}/${getPart('year')} ${getPart('hour')}:${getPart('minute')}:${getPart('second')}`;
+}
+
+function buildReminderDate(fechaRecordatorio: string, horaRecordatorio?: string | null) {
+  return new Date(`${getDateOnly(fechaRecordatorio)}T${normalizeTime(horaRecordatorio)}`);
+}
 
 type ReclamoActividadRow = {
   id: string;
@@ -43,12 +86,12 @@ import {
   FileText,
   MessageSquare,
   Send,
+  User,
   UserCheck,
   Edit,
   Save,
   X,
   CheckCircle,
-  CheckCircle2,
   Bell,
   PhoneCall,
   Calendar,
@@ -57,13 +100,8 @@ import {
   TrendingUp,
   Clock,
   Plus,
-  DollarSign,
-  Package,
   HardHat,
   AlertTriangle,
-  Truck,
-  RotateCcw,
-  MapPin,
   ChevronDown,
   ChevronUp,
   ExternalLink,
@@ -100,7 +138,7 @@ export default function ClienteDetailPage() {
   const params = useParams();
   const { currentUser } = useAuth();
   const clienteId = params.id as string;
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [loading, setLoading] = useState(true);
@@ -348,7 +386,7 @@ export default function ClienteDetailPage() {
       ignore = true;
       supabase.removeChannel(channel);
     };
-  }, [clienteId]);
+  }, [clienteId, supabase]);
 
   // Handle Save Edited Client Information
   const handleSaveClient = async (e: React.FormEvent) => {
@@ -440,9 +478,12 @@ export default function ClienteDetailPage() {
       }
 
       if (tipoActividad === 'recordatorio') {
+        const fechaRecordatorioFormateada = fechaRecordatorio
+          ? formatSantiagoDateTime(fechaRecordatorio, horaRecordatorio)
+          : '';
         const notifPayload = {
           usuario_id: currentUser?.id || 'usr-admin-01',
-          mensaje: `Recordatorio (${cliente.nombre}): ${nuevaNota}${fechaRecordatorio ? ` - Fecha: ${fechaRecordatorio} a las ${horaRecordatorio}` : ''}`,
+          mensaje: `Recordatorio (${cliente.nombre}): ${nuevaNota}${fechaRecordatorioFormateada ? ` - Fecha: ${fechaRecordatorioFormateada}` : ''}`,
           tipo: 'asignacion',
           leido: false,
           entidad_relacionada: 'clientes',
@@ -489,15 +530,7 @@ export default function ClienteDetailPage() {
   ).length;
   const eventosCompletadosCount = eventosList.filter((e) => e.estado === 'completado').length;
 
-  // 4. Última oportunidad
-  const sortedOps = [...oportunidades].sort(
-    (a, b) =>
-      new Date(b.created_at || b.fecha_inicio || '').getTime() -
-      new Date(a.created_at || a.fecha_inicio || '').getTime()
-  );
-  const ultimaOportunidad = sortedOps[0] || null;
-
-  // 5. Monto facturado en obras
+  // 4. Monto facturado en obras
   const montoFacturadoObras = oportunidades
     .filter((op) => op.tipo_venta === 'Instalación' || op.tipo_venta === 'Obra')
     .reduce((sum, op) => {
@@ -559,7 +592,7 @@ export default function ClienteDetailPage() {
 
   notas.forEach((n) => {
     if (n.tipo_actividad === 'recordatorio' && n.fecha_recordatorio) {
-      const d = new Date(`${n.fecha_recordatorio}T${n.hora_recordatorio || '09:00'}:00`);
+      const d = buildReminderDate(n.fecha_recordatorio, n.hora_recordatorio);
       if (!isNaN(d.getTime())) {
         candidateActivities.push({
           titulo: `Recordatorio: ${n.contenido.slice(0, 30)}...`,
@@ -574,13 +607,6 @@ export default function ClienteDetailPage() {
 
   candidateActivities.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
   const proximaActividad = candidateActivities[0] || null;
-
-  // Helper for Client Initials Avatar
-  const getInitials = (name: string) => {
-    const parts = name.trim().split(/\s+/);
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return (parts[0][0] + parts[1][0]).toUpperCase();
-  };
 
   // Helper for filtered activities timeline
   const filteredNotas = notas.filter((n) => {
@@ -600,7 +626,7 @@ export default function ClienteDetailPage() {
     return (
       <div className="p-12 text-center text-red-500 font-bold space-y-4">
         <p>Cliente no encontrado.</p>
-        <Link href="/clientes" className="text-sm underline text-[#F7931F]">
+        <Link href="/clientes" className="text-sm underline text-[#f97316]">
           Volver a la lista de clientes
         </Link>
       </div>
@@ -608,19 +634,19 @@ export default function ClienteDetailPage() {
   }
 
   return (
-    <div className="space-y-5 text-[#363636] animate-fadeIn pb-12">
+    <div className="space-y-5 text-[#213343]  pb-12">
       {/* Botón Volver & Notificación de Éxito */}
       <div className="flex items-center justify-between">
         <Link
           href="/clientes"
-          className="text-xs text-gray-500 hover:text-[#F7931F] font-bold flex items-center gap-1 transition"
+          className="text-xs text-gray-500 hover:text-[#f97316] font-bold flex items-center gap-1 transition"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Volver al directorio de clientes</span>
         </Link>
 
         {saveSuccess && (
-          <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 font-bold animate-fadeIn">
+          <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs px-3.5 py-1.5 rounded-md flex items-center gap-1.5 font-bold ">
             <CheckCircle className="w-4 h-4 text-emerald-600" />
             <span>Información actualizada exitosamente</span>
           </div>
@@ -629,15 +655,15 @@ export default function ClienteDetailPage() {
 
       {/* MODAL DE EDICIÓN COMPLETA */}
       {isEditing && (
-        <div className="bg-orange-50/70 p-6 rounded-3xl border border-orange-200 shadow-md space-y-4 animate-fadeIn">
+        <div className="bg-orange-50/70 p-6 rounded-lg border border-orange-200 shadow-sm space-y-4 ">
           <div className="flex items-center justify-between border-b border-orange-200 pb-3">
-            <h3 className="font-extrabold text-base text-[#363636] flex items-center gap-2">
-              <Edit className="w-5 h-5 text-[#F7931F]" />
+            <h3 className="font-extrabold text-base text-[#213343] flex items-center gap-2">
+              <Edit className="w-5 h-5 text-[#f97316]" />
               <span>Editar información del cliente</span>
             </h3>
             <button
               onClick={() => setIsEditing(false)}
-              className="p-1.5 hover:bg-orange-100 rounded-xl text-gray-500 hover:text-gray-800 transition"
+              className="p-1.5 hover:bg-orange-100 rounded-md text-gray-500 hover:text-gray-800 transition"
             >
               <X className="w-5 h-5" />
             </button>
@@ -652,7 +678,7 @@ export default function ClienteDetailPage() {
                   required
                   value={editNombre}
                   onChange={(e) => setEditNombre(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -663,7 +689,7 @@ export default function ClienteDetailPage() {
                   required
                   value={editRazon}
                   onChange={(e) => setEditRazon(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -676,7 +702,7 @@ export default function ClienteDetailPage() {
                     value={editRutBody}
                     onChange={(e) => setEditRutBody(e.target.value)}
                     placeholder="12345678"
-                    className="flex-1 bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-mono focus:outline-none focus:border-[#F7931F]"
+                    className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-mono focus:outline-none focus:border-[#f97316]"
                   />
                   <span className="font-bold text-gray-400">-</span>
                   <input
@@ -686,7 +712,7 @@ export default function ClienteDetailPage() {
                     value={editRutDv}
                     onChange={(e) => setEditRutDv(e.target.value.toUpperCase())}
                     placeholder="K"
-                    className="w-12 text-center bg-white border border-gray-300 rounded-xl px-2 py-2 text-[#363636] font-mono font-bold focus:outline-none focus:border-[#F7931F]"
+                    className="w-12 text-center bg-white border border-gray-300 rounded-md px-2 py-2 text-[#213343] font-mono font-bold focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
                 {editRutError && <span className="text-[10px] text-red-600 font-bold block mt-1">{editRutError}</span>}
@@ -699,7 +725,7 @@ export default function ClienteDetailPage() {
                 <select
                   value={editNicho}
                   onChange={(e) => setEditNicho(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 >
                   {nichosOptions.map((n) => (
                     <option key={n} value={n}>{n}</option>
@@ -712,7 +738,7 @@ export default function ClienteDetailPage() {
                 <select
                   value={editTipoVenta}
                   onChange={(e) => setEditTipoVenta(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 >
                   <option value="Instalación">Instalación</option>
                   <option value="Suministro">Suministro</option>
@@ -725,7 +751,7 @@ export default function ClienteDetailPage() {
                 <select
                   value={editAsignadoA}
                   onChange={(e) => setEditAsignadoA(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 >
                   <option value="">-- Sin asignar --</option>
                   {usuariosList.map((u) => (
@@ -744,7 +770,7 @@ export default function ClienteDetailPage() {
                   type="text"
                   value={editTelefono}
                   onChange={(e) => setEditTelefono(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -754,7 +780,7 @@ export default function ClienteDetailPage() {
                   type="email"
                   value={editCorreo}
                   onChange={(e) => setEditCorreo(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -764,7 +790,7 @@ export default function ClienteDetailPage() {
                   type="text"
                   value={editDireccion}
                   onChange={(e) => setEditDireccion(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 />
               </div>
             </div>
@@ -802,13 +828,13 @@ export default function ClienteDetailPage() {
               <button
                 type="button"
                 onClick={() => setIsEditing(false)}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl font-bold transition"
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md font-bold transition"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-extrabold transition shadow-md flex items-center gap-2"
+                className="px-5 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-extrabold transition shadow-sm flex items-center gap-2"
               >
                 <Save className="w-4 h-4" />
                 <span>Guardar cambios</span>
@@ -825,16 +851,16 @@ export default function ClienteDetailPage() {
         {/* COLUMNA 1: PERFIL DEL CLIENTE & CONTACTO (~28% width)   */}
         {/* ========================================================= */}
         <div className="lg:col-span-3 space-y-4">
-          <div className="bg-white p-5 rounded-3xl border border-gray-200 shadow-sm space-y-4">
-            {/* Avatar Grande con Iniciales & Nombre */}
+          <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm space-y-4">
+            {/* Avatar Grande con Icono & Nombre */}
             <div className="flex flex-col items-center text-center space-y-2 pt-2">
               <div className="relative">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 text-white font-black text-xl flex items-center justify-center shadow-md">
-                  {getInitials(cliente.nombre)}
+                <div className="w-16 h-16 rounded-full bg-orange-50 text-[#f97316] border border-orange-100 flex items-center justify-center shadow-sm">
+                  <User className="w-8 h-8" />
                 </div>
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="absolute bottom-0 right-0 p-1.5 bg-white hover:bg-gray-100 rounded-full border border-gray-200 shadow-xs text-gray-600 hover:text-[#F7931F] transition"
+                  className="absolute bottom-0 right-0 p-1.5 bg-white hover:bg-gray-100 rounded-full border border-gray-200 shadow-xs text-gray-600 hover:text-[#f97316] transition"
                   title="Editar cliente"
                 >
                   <Edit className="w-3.5 h-3.5" />
@@ -842,7 +868,7 @@ export default function ClienteDetailPage() {
               </div>
 
               <div>
-                <h1 className="text-lg font-black text-[#363636] leading-tight">{cliente.nombre}</h1>
+                <h1 className="text-lg font-black text-[#213343] leading-tight">{cliente.nombre}</h1>
                 <p className="text-xs text-gray-500 mt-0.5">{cliente.apellido_razon_social || cliente.nombre}</p>
                 <p className="text-xs font-mono font-bold text-gray-600 mt-0.5">{cliente.rut}</p>
               </div>
@@ -865,7 +891,7 @@ export default function ClienteDetailPage() {
                       console.error('Error updating nicho:', err);
                     }
                   }}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-orange-50 text-[#F7931F] border border-orange-200 focus:outline-none focus:ring-1 focus:ring-[#F7931F] cursor-pointer min-w-[150px] truncate"
+                  className="text-xs font-semibold px-3 py-1.5 rounded-md bg-orange-50 text-[#f97316] border border-orange-200 focus:outline-none focus:ring-1 focus:ring-[#F7931F] cursor-pointer min-w-[150px] truncate"
                 >
                   {nichosOptions.map((n) => (
                     <option key={n} value={n}>{n}</option>
@@ -888,7 +914,7 @@ export default function ClienteDetailPage() {
                       console.error('Error updating tipo_venta:', err);
                     }
                   }}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-purple-50 text-purple-900 border border-purple-200 focus:outline-none focus:ring-1 focus:ring-purple-400 cursor-pointer min-w-[150px] truncate"
+                  className="text-xs font-semibold px-3 py-1.5 rounded-md bg-purple-50 text-purple-900 border border-purple-200 focus:outline-none focus:ring-1 focus:ring-purple-400 cursor-pointer min-w-[150px] truncate"
                 >
                   <option value="Instalación">Instalación</option>
                   <option value="Suministro">Suministro</option>
@@ -911,7 +937,7 @@ export default function ClienteDetailPage() {
                       console.error('Error updating asignado_a on cliente:', err);
                     }
                   }}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-blue-50 text-blue-900 border border-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer min-w-[150px] truncate"
+                  className="text-xs font-semibold px-3 py-1.5 rounded-md bg-blue-50 text-blue-900 border border-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer min-w-[150px] truncate"
                 >
                   <option value="">-- Sin asignar --</option>
                   {usuariosList.map((u) => (
@@ -929,30 +955,30 @@ export default function ClienteDetailPage() {
                 <button
                   type="button"
                   onClick={() => setActiveTab('notas')}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-gray-50 hover:bg-orange-50 hover:text-[#F7931F] text-gray-700 transition group border border-gray-200 shadow-2xs cursor-pointer"
+                  className="flex flex-col items-center justify-center p-2.5 rounded-lg bg-gray-50 hover:bg-orange-50 hover:text-[#f97316] text-gray-700 transition group border border-gray-200 shadow-2xs cursor-pointer"
                   title="Crear nota o recordatorio"
                 >
-                  <MessageSquare className="w-4 h-4 mb-1 text-[#F7931F] group-hover:scale-110 transition-transform" />
+                  <MessageSquare className="w-4 h-4 mb-1 text-[#f97316] group-hover:scale-110 transition-transform" />
                   <span className="text-xs font-bold">Nota</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setShowCreateOpModal(true)}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-gray-50 hover:bg-orange-50 hover:text-[#F7931F] text-gray-700 transition group border border-gray-200 shadow-2xs cursor-pointer"
+                  className="flex flex-col items-center justify-center p-2.5 rounded-lg bg-gray-50 hover:bg-orange-50 hover:text-[#f97316] text-gray-700 transition group border border-gray-200 shadow-2xs cursor-pointer"
                   title="Crear oportunidad"
                 >
-                  <TrendingUp className="w-4 h-4 mb-1 text-[#F7931F] group-hover:scale-110 transition-transform" />
+                  <TrendingUp className="w-4 h-4 mb-1 text-[#f97316] group-hover:scale-110 transition-transform" />
                   <span className="text-xs font-bold">Oportunidad</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setShowCreateQuoteModal(true)}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-gray-50 hover:bg-orange-50 hover:text-[#F7931F] text-gray-700 transition group border border-gray-200 shadow-2xs cursor-pointer"
+                  className="flex flex-col items-center justify-center p-2.5 rounded-lg bg-gray-50 hover:bg-orange-50 hover:text-[#f97316] text-gray-700 transition group border border-gray-200 shadow-2xs cursor-pointer"
                   title="Crear cotización"
                 >
-                  <FileText className="w-4 h-4 mb-1 text-[#F7931F] group-hover:scale-110 transition-transform" />
+                  <FileText className="w-4 h-4 mb-1 text-[#f97316] group-hover:scale-110 transition-transform" />
                   <span className="text-xs font-bold">Cotización</span>
                 </button>
               </div>
@@ -963,24 +989,24 @@ export default function ClienteDetailPage() {
               <button
                 type="button"
                 onClick={() => setIsContactInfoExpanded(!isContactInfoExpanded)}
-                className="w-full flex items-center justify-between text-xs font-black text-[#363636] hover:text-[#F7931F] transition py-1"
+                className="w-full flex items-center justify-between text-xs font-black text-[#213343] hover:text-[#f97316] transition py-1"
               >
                 <span className="flex items-center gap-1.5">
-                  <Building className="w-4 h-4 text-[#F7931F]" />
+                  <Building className="w-4 h-4 text-[#f97316]" />
                   <span>Información de contacto</span>
                 </span>
                 {isContactInfoExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
 
               {isContactInfoExpanded && (
-                <div className="space-y-3 pt-2 text-xs text-gray-700 animate-fadeIn">
+                <div className="space-y-3 pt-2 text-xs text-gray-700 ">
                   <div>
                     <span className="text-gray-400 text-xs block font-semibold">Teléfono de contacto</span>
-                    <span className="font-bold text-[#363636] text-xs">{cliente.telefono || 'No registrado'}</span>
+                    <span className="font-bold text-[#213343] text-xs">{cliente.telefono || 'No registrado'}</span>
                   </div>
                   <div>
                     <span className="text-gray-400 text-xs block font-semibold">Correo electrónico</span>
-                    <span className="font-bold text-[#363636] text-xs truncate block">{cliente.correo || 'No registrado'}</span>
+                    <span className="font-bold text-[#213343] text-xs truncate block">{cliente.correo || 'No registrado'}</span>
                   </div>
                   {cliente.correos_secundarios && cliente.correos_secundarios.length > 0 && (
                     <div>
@@ -990,18 +1016,18 @@ export default function ClienteDetailPage() {
                   )}
                   <div>
                     <span className="text-gray-400 text-xs block font-semibold">Dirección de despacho</span>
-                    <span className="font-bold text-[#363636] text-xs block">{cliente.direccion || 'No registrada'}</span>
+                    <span className="font-bold text-[#213343] text-xs block">{cliente.direccion || 'No registrada'}</span>
                   </div>
                   <div>
                     <span className="text-gray-400 text-xs block font-semibold">Comuna / Región</span>
-                    <span className="font-bold text-[#363636] text-xs block">
+                    <span className="font-bold text-[#213343] text-xs block">
                       {[cliente.comuna, cliente.region].filter(Boolean).join(', ') || 'No registrada'}
                     </span>
                   </div>
 
                   <button
                     onClick={() => setIsEditing(true)}
-                    className="w-full text-center py-2 bg-gray-50 hover:bg-orange-50 text-[#F7931F] font-bold text-xs rounded-xl border border-orange-200 transition mt-2 cursor-pointer"
+                    className="w-full text-center py-2 bg-gray-50 hover:bg-orange-50 text-[#f97316] font-bold text-xs rounded-md border border-orange-200 transition mt-2 cursor-pointer"
                   >
                     Editar datos de contacto
                   </button>
@@ -1015,7 +1041,7 @@ export default function ClienteDetailPage() {
         {/* COLUMNA 2: PESTAÑAS Y ACTIVIDAD CENTRAL (~44% width)     */}
         {/* ========================================================= */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
             {/* Header de Pestañas estilo Minimalista */}
             <div className="flex items-center border-b border-gray-200 px-4 pt-2 bg-gray-50/50 gap-2 overflow-x-auto text-xs font-bold">
               <button
@@ -1023,7 +1049,7 @@ export default function ClienteDetailPage() {
                 onClick={() => setActiveTab('actividad')}
                 className={`pb-3 px-3 border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                   activeTab === 'actividad'
-                    ? 'border-[#F7931F] text-[#F7931F] font-extrabold'
+                    ? 'border-[#f97316] text-[#f97316] font-extrabold'
                     : 'border-transparent text-gray-500 hover:text-gray-800'
                 }`}
               >
@@ -1039,7 +1065,7 @@ export default function ClienteDetailPage() {
                 onClick={() => setActiveTab('notas')}
                 className={`pb-3 px-3 border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                   activeTab === 'notas'
-                    ? 'border-[#F7931F] text-[#F7931F] font-extrabold'
+                    ? 'border-[#f97316] text-[#f97316] font-extrabold'
                     : 'border-transparent text-gray-500 hover:text-gray-800'
                 }`}
               >
@@ -1070,7 +1096,7 @@ export default function ClienteDetailPage() {
                 onClick={() => setActiveTab('metricas')}
                 className={`pb-3 px-3 border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                   activeTab === 'metricas'
-                    ? 'border-[#F7931F] text-[#F7931F] font-extrabold'
+                    ? 'border-[#f97316] text-[#f97316] font-extrabold'
                     : 'border-transparent text-gray-500 hover:text-gray-800'
                 }`}
               >
@@ -1094,7 +1120,7 @@ export default function ClienteDetailPage() {
                     <select
                       value={filtroActividadTipo}
                       onChange={(e) => setFiltroActividadTipo(e.target.value)}
-                      className="text-xs font-semibold bg-gray-50 border border-gray-300 rounded-xl px-3 py-1.5 text-[#363636] focus:outline-none focus:border-[#F7931F] cursor-pointer"
+                      className="text-xs font-semibold bg-gray-50 border border-gray-300 rounded-md px-3 py-1.5 text-[#213343] focus:outline-none focus:border-[#f97316] cursor-pointer"
                     >
                       <option value="todos">Toda la actividad ({notas.length})</option>
                       <option value="nota">Notas generales</option>
@@ -1116,7 +1142,7 @@ export default function ClienteDetailPage() {
                         return (
                           <div
                             key={n.id}
-                            className={`p-3.5 rounded-2xl border space-y-2 ${
+                            className={`p-3.5 rounded-lg border space-y-2 ${
                               isReminder ? 'bg-amber-50/60 border-amber-200' : 'bg-gray-50 border-gray-200'
                             }`}
                           >
@@ -1129,30 +1155,25 @@ export default function ClienteDetailPage() {
                                 ) : n.tipo_actividad === 'reunion' ? (
                                   <UserCheck className="w-4 h-4 text-emerald-600" />
                                 ) : (
-                                  <FileCheck className="w-4 h-4 text-[#F7931F]" />
+                                  <FileCheck className="w-4 h-4 text-[#f97316]" />
                                 )}
-                                <span className="font-extrabold text-[#363636] text-xs">{n.usuario?.nombre || 'Usuario CRM'}</span>
-                                <span className="text-xs text-[#363636] bg-white font-bold px-2 py-0.5 rounded-full capitalize border border-gray-200">
+                                <span className="font-extrabold text-[#213343] text-xs">{n.usuario?.nombre || 'Usuario CRM'}</span>
+                                <span className="text-xs text-[#213343] bg-white font-bold px-2 py-0.5 rounded-full capitalize border border-gray-200">
                                   {n.tipo_actividad || 'nota'}
                                 </span>
                               </div>
                               <span className="text-xs text-gray-500 font-mono">
-                                {new Date(n.fecha).toLocaleDateString('es-CL', {
-                                  day: '2-digit',
-                                  month: 'short',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}
+                                {formatSantiagoDateTime(n.fecha)}
                               </span>
                             </div>
 
-                            <p className="text-xs text-[#363636] leading-relaxed pl-3 border-l-2 border-[#F7931F]">
+                            <p className="text-xs text-[#213343] leading-relaxed pl-3 border-l-2 border-[#f97316]">
                               {n.contenido}
                             </p>
 
                             {n.fecha_recordatorio && (
                               <p className="text-xs text-amber-800 font-bold pt-0.5">
-                                Recordatorio: {n.fecha_recordatorio} a las {n.hora_recordatorio || '09:00'}
+                                Recordatorio: {formatSantiagoDateTime(n.fecha_recordatorio, n.hora_recordatorio)}
                               </p>
                             )}
                           </div>
@@ -1167,14 +1188,14 @@ export default function ClienteDetailPage() {
               {activeTab === 'notas' && (
                 <div className="space-y-4">
                   {/* Formulario Agregar Nota / Recordatorio */}
-                  <form onSubmit={handleAddNota} className="space-y-3 bg-gray-50 p-4 rounded-2xl border border-gray-200">
+                  <form onSubmit={handleAddNota} className="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       <div>
                         <label className="block font-bold text-gray-700 mb-1">Tipo de actividad</label>
                         <select
                           value={tipoActividad}
                           onChange={(e) => setTipoActividad(e.target.value as TipoNotaActividad)}
-                          className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                          className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                         >
                           <option value="nota">Nota general</option>
                           <option value="reunion">Reunión con cliente</option>
@@ -1195,7 +1216,7 @@ export default function ClienteDetailPage() {
                               required
                               value={fechaRecordatorio}
                               onChange={(e) => setFechaRecordatorio(e.target.value)}
-                              className="w-full bg-white border border-amber-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                              className="w-full bg-white border border-amber-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                             />
                           </div>
                           <div>
@@ -1208,7 +1229,7 @@ export default function ClienteDetailPage() {
                               required
                               value={horaRecordatorio}
                               onChange={(e) => setHoraRecordatorio(e.target.value)}
-                              className="w-full bg-white border border-amber-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                              className="w-full bg-white border border-amber-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                             />
                           </div>
                         </div>
@@ -1226,14 +1247,14 @@ export default function ClienteDetailPage() {
                             ? 'Escribe el detalle del recordatorio...'
                             : 'Escribe el detalle de la reunión o llamada...'
                         }
-                        className="w-full bg-white border border-gray-300 rounded-xl p-3 text-xs text-[#363636] placeholder-gray-400 focus:outline-none focus:border-[#F7931F] font-medium"
+                        className="w-full bg-white border border-gray-300 rounded-md p-3 text-xs text-[#213343] placeholder-gray-400 focus:outline-none focus:border-[#f97316] font-medium"
                       />
                     </div>
 
                     <div className="flex justify-end">
                       <button
                         type="submit"
-                        className="bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold text-xs px-4 py-2 rounded-xl transition flex items-center gap-2 shadow-sm cursor-pointer"
+                        className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold text-xs px-4 py-2 rounded-md transition flex items-center gap-2 shadow-sm cursor-pointer"
                       >
                         <Send className="w-4 h-4" />
                         <span>{tipoActividad === 'recordatorio' ? 'Guardar recordatorio' : 'Guardar nota'}</span>
@@ -1244,9 +1265,9 @@ export default function ClienteDetailPage() {
                   {/* Lista de notas */}
                   <div className="space-y-3">
                     {notas.map((n) => (
-                      <div key={n.id} className="p-3.5 bg-gray-50 rounded-2xl border border-gray-200 text-xs space-y-1.5">
+                      <div key={n.id} className="p-3.5 bg-gray-50 rounded-lg border border-gray-200 text-xs space-y-1.5">
                         <div className="flex justify-between items-center text-gray-500 text-xs">
-                          <span className="font-bold text-[#363636]">{n.usuario?.nombre || 'Usuario CRM'}</span>
+                          <span className="font-bold text-[#213343]">{n.usuario?.nombre || 'Usuario CRM'}</span>
                           <span className="font-mono text-gray-400">{new Date(n.fecha).toLocaleDateString('es-CL')}</span>
                         </div>
                         <p className="text-gray-700 leading-relaxed">{n.contenido}</p>
@@ -1270,12 +1291,12 @@ export default function ClienteDetailPage() {
                   </div>
 
                   {reclamosList.length === 0 ? (
-                    <div className="p-8 text-center text-gray-400 text-xs italic bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                    <div className="p-8 text-center text-gray-400 text-xs italic bg-gray-50 rounded-lg border border-dashed border-gray-200">
                       Sin reclamos ni incidencias abiertas para este cliente.
                     </div>
                   ) : (
                     reclamosList.map((rec) => (
-                      <div key={rec.id} className="p-3.5 bg-red-50/70 rounded-2xl border border-red-200 space-y-1.5 text-xs">
+                      <div key={rec.id} className="p-3.5 bg-red-50/70 rounded-lg border border-red-200 space-y-1.5 text-xs">
                         <div className="flex items-center justify-between text-xs">
                           <div className="flex items-center gap-1.5">
                             <span className="font-bold font-mono text-red-800">{rec.oportunidad_codigo}</span>
@@ -1301,7 +1322,7 @@ export default function ClienteDetailPage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     {/* 1. Ventas Acumuladas 100% */}
-                    <div className="p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-200 space-y-1">
+                    <div className="p-3.5 bg-emerald-50/60 rounded-lg border border-emerald-200 space-y-1">
                       <span className="text-xs font-bold text-emerald-800 block">Ventas acumuladas (100%)</span>
                       <span className="text-base font-black text-emerald-700 block">
                         ${ventasAcumuladas100.toLocaleString('es-CL')} CLP
@@ -1312,7 +1333,7 @@ export default function ClienteDetailPage() {
                     </div>
 
                     {/* 2. Saldo Pendiente */}
-                    <div className="p-3.5 bg-amber-50/60 rounded-2xl border border-amber-200 space-y-1">
+                    <div className="p-3.5 bg-amber-50/60 rounded-lg border border-amber-200 space-y-1">
                       <span className="text-xs font-bold text-amber-800 block">Saldo pendiente</span>
                       <span className="text-base font-black text-amber-700 block">
                         ${saldoPendienteTotal.toLocaleString('es-CL')} CLP
@@ -1321,7 +1342,7 @@ export default function ClienteDetailPage() {
                     </div>
 
                     {/* 3. Obras & Logística Activas */}
-                    <div className="p-3.5 bg-blue-50/60 rounded-2xl border border-blue-200 space-y-1">
+                    <div className="p-3.5 bg-blue-50/60 rounded-lg border border-blue-200 space-y-1">
                       <span className="text-xs font-bold text-blue-800 block">Obras & logística activas</span>
                       <span className="text-base font-black text-blue-700 block">
                         {eventosActivosCount} <span className="text-xs font-normal">eventos en curso</span>
@@ -1330,7 +1351,7 @@ export default function ClienteDetailPage() {
                     </div>
 
                     {/* 4. Facturado en Obras */}
-                    <div className="p-3.5 bg-purple-50/60 rounded-2xl border border-purple-200 space-y-1">
+                    <div className="p-3.5 bg-purple-50/60 rounded-lg border border-purple-200 space-y-1">
                       <span className="text-xs font-bold text-purple-800 block">Facturado en obras</span>
                       <span className="text-base font-black text-purple-700 block">
                         ${montoFacturadoObras.toLocaleString('es-CL')} CLP
@@ -1339,7 +1360,7 @@ export default function ClienteDetailPage() {
                     </div>
 
                     {/* 5. Días Promedio de Pago */}
-                    <div className="p-3.5 bg-indigo-50/60 rounded-2xl border border-indigo-200 space-y-1">
+                    <div className="p-3.5 bg-indigo-50/60 rounded-lg border border-indigo-200 space-y-1">
                       <span className="text-xs font-bold text-indigo-800 block">Días promedio de pago</span>
                       <span className="text-base font-black text-indigo-700 block">
                         {diasPromedioPago !== null ? `${diasPromedioPago} días` : '—'}
@@ -1348,7 +1369,7 @@ export default function ClienteDetailPage() {
                     </div>
 
                     {/* 6. Próxima Actividad */}
-                    <div className="p-3.5 bg-gray-50 rounded-2xl border border-gray-200 space-y-1">
+                    <div className="p-3.5 bg-gray-50 rounded-lg border border-gray-200 space-y-1">
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-bold text-gray-600 block">Próxima actividad</span>
                         {proximaActividad?.esVencida && (
@@ -1359,7 +1380,7 @@ export default function ClienteDetailPage() {
                       </div>
                       {proximaActividad ? (
                         <>
-                          <span className="text-xs font-black text-[#363636] block truncate">{proximaActividad.titulo}</span>
+                          <span className="text-xs font-black text-[#213343] block truncate">{proximaActividad.titulo}</span>
                           <span className="text-xs font-mono text-gray-400 block">{proximaActividad.fecha}</span>
                         </>
                       ) : (
@@ -1379,16 +1400,16 @@ export default function ClienteDetailPage() {
         <div className="lg:col-span-4 space-y-4">
           
           {/* SECCIÓN 1: OPORTUNIDADES DE VENTA (DEALS) */}
-          <div className="bg-white p-5 rounded-3xl border border-gray-200 shadow-sm space-y-3">
+          <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm space-y-3">
             <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
-              <h3 className="font-extrabold text-xs text-[#363636] flex items-center gap-1.5">
-                <TrendingUp className="w-4 h-4 text-[#F7931F]" />
+              <h3 className="font-extrabold text-xs text-[#213343] flex items-center gap-1.5">
+                <TrendingUp className="w-4 h-4 text-[#f97316]" />
                 <span>Oportunidades ({oportunidades.length})</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowCreateOpModal(true)}
-                className="text-xs font-extrabold text-[#F7931F] hover:underline flex items-center gap-1 cursor-pointer"
+                className="text-xs font-extrabold text-[#f97316] hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Agregar</span>
@@ -1411,11 +1432,11 @@ export default function ClienteDetailPage() {
                   return (
                     <div
                       key={op.id}
-                      className="p-3.5 bg-gray-50 hover:bg-orange-50/50 rounded-2xl border border-gray-200 text-xs space-y-2 transition group"
+                      className="p-3.5 bg-gray-50 hover:bg-orange-50/50 rounded-lg border border-gray-200 text-xs space-y-2 transition group"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <span className="font-black text-sm text-[#363636] group-hover:text-[#F7931F] transition block">
+                          <span className="font-black text-sm text-[#213343] group-hover:text-[#f97316] transition block">
                             ${montoDisplay.toLocaleString('es-CL')} CLP
                           </span>
                           <span className="font-mono text-xs text-gray-500 font-bold block mt-0.5">{op.codigo}</span>
@@ -1437,7 +1458,7 @@ export default function ClienteDetailPage() {
                               Origen: {op.origen}
                             </span>
                           )}
-                          <span className="px-2 py-0.5 rounded-lg bg-white border border-orange-200 text-[#F7931F]">
+                          <span className="px-2 py-0.5 rounded-lg bg-white border border-orange-200 text-[#f97316]">
                             {op.modalidad_requerimiento === 'solo_material' ? 'Sólo material' : 'Instalación'}
                           </span>
                         </div>
@@ -1452,7 +1473,7 @@ export default function ClienteDetailPage() {
                           <div
                             key={idx}
                             className={`h-1.5 rounded-full transition ${
-                              idx < stageInfo.step ? 'bg-[#F7931F]' : 'bg-gray-200'
+                              idx < stageInfo.step ? 'bg-[#f97316]' : 'bg-gray-200'
                             }`}
                           />
                         ))}
@@ -1465,7 +1486,7 @@ export default function ClienteDetailPage() {
                         </span>
                         <Link
                           href={`/ventas?oportunidad=${op.id}`}
-                          className="text-[#F7931F] font-bold hover:underline flex items-center gap-0.5"
+                          className="text-[#f97316] font-bold hover:underline flex items-center gap-0.5"
                         >
                           <span>Ver en pipeline</span>
                           <ExternalLink className="w-3.5 h-3.5" />
@@ -1479,16 +1500,16 @@ export default function ClienteDetailPage() {
           </div>
 
           {/* SECCIÓN 2: COTIZACIONES DEL CLIENTE */}
-          <div className="bg-white p-5 rounded-3xl border border-gray-200 shadow-sm space-y-3">
+          <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm space-y-3">
             <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
-              <h3 className="font-extrabold text-xs text-[#363636] flex items-center gap-1.5">
-                <FileText className="w-4 h-4 text-[#F7931F]" />
+              <h3 className="font-extrabold text-xs text-[#213343] flex items-center gap-1.5">
+                <FileText className="w-4 h-4 text-[#f97316]" />
                 <span>Cotizaciones ({cotizaciones.length})</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowCreateQuoteModal(true)}
-                className="text-xs font-extrabold text-[#F7931F] hover:underline flex items-center gap-1 cursor-pointer"
+                className="text-xs font-extrabold text-[#f97316] hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Crear</span>
@@ -1502,13 +1523,13 @@ export default function ClienteDetailPage() {
                 {cotizaciones.map((cot) => (
                   <div
                     key={cot.id}
-                    className="p-3 bg-gray-50 hover:bg-orange-50/40 rounded-2xl border border-gray-200 text-xs space-y-1.5 transition"
+                    className="p-3 bg-gray-50 hover:bg-orange-50/40 rounded-lg border border-gray-200 text-xs space-y-1.5 transition"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-[#363636] font-mono text-xs">
+                      <span className="font-bold text-[#213343] font-mono text-xs">
                         {cot.numero_cotizacion} (v{cot.version || 1})
                       </span>
-                      <span className="text-[#F7931F] font-black text-xs">${cot.monto_total?.toLocaleString('es-CL')}</span>
+                      <span className="text-[#f97316] font-black text-xs">${cot.monto_total?.toLocaleString('es-CL')}</span>
                     </div>
 
                     <div className="flex items-center justify-between text-xs pt-1">
@@ -1518,7 +1539,7 @@ export default function ClienteDetailPage() {
                       <button
                         type="button"
                         onClick={() => setPreviewCotizacion(cot)}
-                        className="text-[#F7931F] hover:underline font-bold flex items-center gap-1 text-xs cursor-pointer"
+                        className="text-[#f97316] hover:underline font-bold flex items-center gap-1 text-xs cursor-pointer"
                       >
                         <Eye className="w-4 h-4" />
                         <span>Previsualizar PDF</span>
@@ -1531,10 +1552,10 @@ export default function ClienteDetailPage() {
           </div>
 
           {/* SECCIÓN 3: EVENTOS & OBRAS PROGRAMADAS */}
-          <div className="bg-white p-5 rounded-3xl border border-gray-200 shadow-sm space-y-3">
+          <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm space-y-3">
             <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
-              <h3 className="font-extrabold text-xs text-[#363636] flex items-center gap-1.5">
-                <HardHat className="w-4 h-4 text-[#F7931F]" />
+              <h3 className="font-extrabold text-xs text-[#213343] flex items-center gap-1.5">
+                <HardHat className="w-4 h-4 text-[#f97316]" />
                 <span>Obras & despachos ({eventosList.length})</span>
               </h3>
             </div>
@@ -1544,9 +1565,9 @@ export default function ClienteDetailPage() {
             ) : (
               <div className="space-y-2">
                 {eventosList.slice(0, 4).map((ev) => (
-                  <div key={ev.id} className="p-3 bg-gray-50 rounded-2xl border border-gray-200 text-xs space-y-1">
+                  <div key={ev.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs space-y-1">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-extrabold text-[#363636] truncate max-w-[160px]">{ev.titulo}</span>
+                      <span className="font-extrabold text-[#213343] truncate max-w-[160px]">{ev.titulo}</span>
                       <span className="capitalize text-xs font-bold text-gray-600 px-2 py-0.5 rounded bg-white border">
                         {ev.estado.replace(/_/g, ' ')}
                       </span>
@@ -1586,17 +1607,17 @@ export default function ClienteDetailPage() {
 
       {/* MODAL PARA CREAR OPORTUNIDAD */}
       {showCreateOpModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl text-[#363636]">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-[#213343]">
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h3 className="text-base font-black text-[#363636] flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-[#F7931F]" />
+              <h3 className="text-base font-black text-[#213343] flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-[#f97316]" />
                 <span>Nueva oportunidad de venta</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowCreateOpModal(false)}
-                className="p-1 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-gray-700 transition"
+                className="p-1 hover:bg-gray-100 rounded-md text-gray-400 hover:text-gray-700 transition"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1655,7 +1676,7 @@ export default function ClienteDetailPage() {
                   placeholder="Ej: Suministro de Bloques de Vidrio Edificio Central"
                   value={opTitulo}
                   onChange={(e) => setOpTitulo(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -1666,7 +1687,7 @@ export default function ClienteDetailPage() {
                   min={0}
                   value={opMonto}
                   onChange={(e) => setOpMonto(Number(e.target.value))}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -1678,7 +1699,7 @@ export default function ClienteDetailPage() {
                     placeholder="Ej: WhatsApp, referido, web..."
                     value={opOrigen}
                     onChange={(e) => setOpOrigen(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
 
@@ -1687,7 +1708,7 @@ export default function ClienteDetailPage() {
                   <select
                     value={opModalidadRequerimiento}
                     onChange={(e) => setOpModalidadRequerimiento(e.target.value as 'solo_material' | 'instalacion')}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
                   >
                     <option value="solo_material">Sólo material</option>
                     <option value="instalacion">Instalación</option>
@@ -1701,7 +1722,7 @@ export default function ClienteDetailPage() {
                   type="date"
                   value={opFechaLimite}
                   onChange={(e) => setOpFechaLimite(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -1709,13 +1730,13 @@ export default function ClienteDetailPage() {
                 <button
                   type="button"
                   onClick={() => setShowCreateOpModal(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold rounded-xl transition shadow-md flex items-center gap-1.5 cursor-pointer"
+                  className="px-5 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold rounded-md transition shadow-sm flex items-center gap-1.5 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Crear oportunidad</span>

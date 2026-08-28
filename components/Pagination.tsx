@@ -30,7 +30,7 @@ export function Pagination({
             onItemsPerPageChange(Number(e.target.value));
             onPageChange(1);
           }}
-          className="border border-gray-300 rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-[#F7931F]"
+          className="border border-gray-300 rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-[#f97316]"
         >
           <option value={10}>10</option>
           <option value={20}>20</option>
@@ -66,7 +66,7 @@ export function Pagination({
                     onClick={() => onPageChange(page)}
                     className={`w-7 h-7 rounded-lg font-bold transition flex items-center justify-center ${
                       currentPage === page
-                        ? 'bg-[#F7931F] text-white'
+                        ? 'bg-[#f97316] text-white'
                         : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >

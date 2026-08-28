@@ -12,6 +12,8 @@ interface LogSistemaParams {
     | 'actividades'
     | 'notificaciones'
     | 'eventos_produccion_logistica'
+    | 'administracion_documentos'
+    | 'recordatorios'
     | 'usuarios'
     | 'trabajadores'
     | 'sistema';

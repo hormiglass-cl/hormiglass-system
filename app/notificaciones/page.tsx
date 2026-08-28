@@ -159,13 +159,13 @@ export default function NotificacionesPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto text-[#363636] relative">
+    <div className="space-y-6 max-w-5xl mx-auto text-[#213343] relative">
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
         <div>
-          <h1 className="text-2xl font-extrabold text-[#363636] flex items-center gap-2">
-            <Bell className="w-6 h-6 text-[#F7931F]" />
+          <h1 className="text-2xl font-extrabold text-[#213343] flex items-center gap-2">
+            <Bell className="w-6 h-6 text-[#f97316]" />
             <span>Centro de Notificaciones & Recordatorios</span>
           </h1>
           <p className="text-xs text-gray-600 mt-1">
@@ -177,7 +177,7 @@ export default function NotificacionesPage() {
           <button
             type="button"
             onClick={handleMarkAllAsRead}
-            className="text-xs text-[#F7931F] hover:text-[#e08316] font-extrabold flex items-center gap-1.5 bg-orange-50 px-3.5 py-2 rounded-xl border border-orange-200 transition"
+            className="text-xs text-[#f97316] hover:text-[#e08316] font-extrabold flex items-center gap-1.5 bg-orange-50 px-3.5 py-2 rounded-md border border-orange-200 transition"
           >
             <CheckCircle2 className="w-4 h-4" />
             <span>Marcar Todas Leídas</span>
@@ -186,7 +186,7 @@ export default function NotificacionesPage() {
           {notificaciones.length > 0 && (
             <button
               onClick={handleClearAll}
-              className="text-xs text-red-600 hover:text-red-800 font-bold flex items-center gap-1 bg-red-50 px-3 py-2 rounded-xl border border-red-200 transition"
+              className="text-xs text-red-600 hover:text-red-800 font-bold flex items-center gap-1 bg-red-50 px-3 py-2 rounded-md border border-red-200 transition"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Limpiar</span>
@@ -198,13 +198,13 @@ export default function NotificacionesPage() {
       {/* Bar de Acciones Masivas y Filtros */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         {/* Tabs de Filtrado */}
-        <div className="flex flex-wrap items-center gap-2 bg-gray-100 p-1.5 rounded-2xl border border-gray-200 text-xs">
+        <div className="flex flex-wrap items-center gap-2 bg-gray-100 p-1.5 rounded-lg border border-gray-200 text-xs">
           <button
             onClick={() => setFilterType('todas')}
-            className={`px-3.5 py-1.5 rounded-xl font-extrabold transition flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-md font-extrabold transition flex items-center gap-1.5 ${
               filterType === 'todas'
-                ? 'bg-[#F7931F] text-white shadow-xs'
-                : 'text-gray-600 hover:text-[#363636]'
+                ? 'bg-[#f97316] text-white shadow-xs'
+                : 'text-gray-600 hover:text-[#213343]'
             }`}
           >
             <Filter className="w-3.5 h-3.5" />
@@ -213,10 +213,10 @@ export default function NotificacionesPage() {
 
           <button
             onClick={() => setFilterType('no_leidas')}
-            className={`px-3.5 py-1.5 rounded-xl font-extrabold transition flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-md font-extrabold transition flex items-center gap-1.5 ${
               filterType === 'no_leidas'
-                ? 'bg-[#F7931F] text-white shadow-xs'
-                : 'text-gray-600 hover:text-[#363636]'
+                ? 'bg-[#f97316] text-white shadow-xs'
+                : 'text-gray-600 hover:text-[#213343]'
             }`}
           >
             <Bell className="w-3.5 h-3.5 text-amber-500" />
@@ -225,10 +225,10 @@ export default function NotificacionesPage() {
 
           <button
             onClick={() => setFilterType('leidas')}
-            className={`px-3.5 py-1.5 rounded-xl font-extrabold transition flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-md font-extrabold transition flex items-center gap-1.5 ${
               filterType === 'leidas'
-                ? 'bg-[#F7931F] text-white shadow-xs'
-                : 'text-gray-600 hover:text-[#363636]'
+                ? 'bg-[#f97316] text-white shadow-xs'
+                : 'text-gray-600 hover:text-[#213343]'
             }`}
           >
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
@@ -237,10 +237,10 @@ export default function NotificacionesPage() {
 
           <button
             onClick={() => setFilterType('menciones')}
-            className={`px-3.5 py-1.5 rounded-xl font-extrabold transition flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-md font-extrabold transition flex items-center gap-1.5 ${
               filterType === 'menciones'
-                ? 'bg-[#F7931F] text-white shadow-xs'
-                : 'text-gray-600 hover:text-[#363636]'
+                ? 'bg-[#f97316] text-white shadow-xs'
+                : 'text-gray-600 hover:text-[#213343]'
             }`}
           >
             <AtSign className="w-3.5 h-3.5" />
@@ -249,10 +249,10 @@ export default function NotificacionesPage() {
 
           <button
             onClick={() => setFilterType('sistema')}
-            className={`px-3.5 py-1.5 rounded-xl font-extrabold transition flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-md font-extrabold transition flex items-center gap-1.5 ${
               filterType === 'sistema'
-                ? 'bg-[#F7931F] text-white shadow-xs'
-                : 'text-gray-600 hover:text-[#363636]'
+                ? 'bg-[#f97316] text-white shadow-xs'
+                : 'text-gray-600 hover:text-[#213343]'
             }`}
           >
             <Info className="w-3.5 h-3.5" />
@@ -262,14 +262,14 @@ export default function NotificacionesPage() {
 
         {/* Acciones Masivas cuando hay ítems seleccionados */}
         {selectedIds.length > 0 && (
-          <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 p-2 rounded-2xl animate-fadeIn text-xs">
-            <span className="font-extrabold text-[#F7931F] px-1">
+          <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 p-2 rounded-lg  text-xs">
+            <span className="font-extrabold text-[#f97316] px-1">
               {selectedIds.length} seleccionada(s)
             </span>
 
             <button
               onClick={handleBulkMarkAsRead}
-              className="bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1 shadow-sm"
+              className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold text-xs px-3 py-1.5 rounded-md transition flex items-center gap-1 shadow-sm"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>Marcar Leídas</span>
@@ -277,7 +277,7 @@ export default function NotificacionesPage() {
 
             <button
               onClick={handleBulkDelete}
-              className="bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1 shadow-sm"
+              className="bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-md transition flex items-center gap-1 shadow-sm"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Eliminar</span>
@@ -287,9 +287,9 @@ export default function NotificacionesPage() {
       </div>
 
       {/* Tabla de Notificaciones estructurada por Seleccionar, Tipo, Cliente, Descripción */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden text-xs">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden text-xs">
         <table className="w-full text-left border-collapse">
-          <thead className="bg-[#363636] text-white uppercase text-[10px] tracking-wider">
+          <thead className="bg-[#213343] text-white uppercase text-[10px] tracking-normal">
             <tr>
               <th className="py-3.5 px-4 w-10 text-center">
                 <input
@@ -299,7 +299,7 @@ export default function NotificacionesPage() {
                     filteredNotifications.every((n) => selectedIds.includes(n.id))
                   }
                   onChange={toggleSelectAll}
-                  className="w-4 h-4 rounded text-[#F7931F] focus:ring-[#F7931F] accent-[#F7931F] cursor-pointer"
+                  className="w-4 h-4 rounded text-[#f97316] focus:ring-[#F7931F] accent-[#F7931F] cursor-pointer"
                 />
               </th>
               <th className="py-3.5 px-4 w-32">Tipo</th>
@@ -308,7 +308,7 @@ export default function NotificacionesPage() {
               <th className="py-3.5 px-4 w-36 text-right">Fecha & Hora</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200 text-[#363636]">
+          <tbody className="divide-y divide-gray-200 text-[#213343]">
             {loading ? (
               <tr>
                 <td colSpan={5} className="py-8 text-center text-gray-400 font-medium">
@@ -353,7 +353,7 @@ export default function NotificacionesPage() {
                       isSelected
                         ? 'bg-orange-200/60 font-bold'
                         : !n.leido
-                        ? 'bg-orange-50/90 border-l-4 border-l-[#F7931F] font-extrabold text-[#363636] shadow-xs'
+                        ? 'bg-orange-50/90 border-l-4 border-l-[#F7931F] font-extrabold text-[#213343] shadow-xs'
                         : 'bg-white text-gray-600 opacity-75'
                     }`}
                   >
@@ -363,7 +363,7 @@ export default function NotificacionesPage() {
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleSelectOne(n.id)}
-                        className="w-4 h-4 rounded text-[#F7931F] focus:ring-[#F7931F] accent-[#F7931F] cursor-pointer"
+                        className="w-4 h-4 rounded text-[#f97316] focus:ring-[#F7931F] accent-[#F7931F] cursor-pointer"
                       />
                     </td>
 
@@ -373,7 +373,7 @@ export default function NotificacionesPage() {
                         <span
                           className={`inline-flex items-center gap-1 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
                             isMention
-                              ? 'bg-orange-100 text-[#F7931F] border-orange-300'
+                              ? 'bg-orange-100 text-[#f97316] border-orange-300'
                               : isReminder
                               ? 'bg-amber-100 text-amber-800 border-amber-300'
                               : 'bg-blue-100 text-blue-800 border-blue-300'
@@ -383,7 +383,7 @@ export default function NotificacionesPage() {
                           <span>{isMention ? 'Mención' : isReminder ? 'Recordatorio' : 'Sistema'}</span>
                         </span>
                         {!n.leido && (
-                          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase bg-[#F7931F] text-white px-2 py-0.5 rounded-full shadow-xs">
+                          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase bg-[#f97316] text-white px-2 py-0.5 rounded-full shadow-xs">
                             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                             <span>No Leída</span>
                           </span>
@@ -392,7 +392,7 @@ export default function NotificacionesPage() {
                     </td>
 
                     {/* Column 2: Ubicación / Ficha de Origen */}
-                    <td className="py-3.5 px-4 font-extrabold text-[#363636] cursor-pointer" onClick={() => handleMarkAsReadAndNavigate(n)}>
+                    <td className="py-3.5 px-4 font-extrabold text-[#213343] cursor-pointer" onClick={() => handleMarkAsReadAndNavigate(n)}>
                       <span className="bg-gray-100 px-2.5 py-1 rounded-lg border border-gray-200 inline-block text-xs">
                         {ubicacionNombre}
                       </span>
@@ -400,9 +400,9 @@ export default function NotificacionesPage() {
 
                     {/* Column 3: Descripción o Detalle del Recordatorio */}
                     <td className="py-3.5 px-4 cursor-pointer" onClick={() => handleMarkAsReadAndNavigate(n)}>
-                      <p className="text-xs text-[#363636] font-medium leading-relaxed flex items-center gap-1.5">
+                      <p className="text-xs text-[#213343] font-medium leading-relaxed flex items-center gap-1.5">
                         <span>{n.mensaje}</span>
-                        {n.link_url && <ExternalLink className="w-3 h-3 text-[#F7931F] shrink-0" />}
+                        {n.link_url && <ExternalLink className="w-3 h-3 text-[#f97316] shrink-0" />}
                       </p>
                     </td>
 

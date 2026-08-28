@@ -185,6 +185,90 @@ export interface AntecedenteDocumento {
   updated_at?: string;
 }
 
+export type EmpresaHormiglass = 'comercial' | 'transportes' | 'inmobiliaria';
+export type CategoriaDocumentoAdministracion = 'general' | 'prevencion_riesgo' | 'legal';
+export type SeccionAdministracionEmpresa =
+  | 'cuentas_por_cobrar'
+  | 'sueldos_administrativos'
+  | 'pendientes_generales'
+  | 'contabilidad_impuestos'
+  | 'finiquitos'
+  | 'legal'
+  | 'prevencion_riesgos'
+  | 'documentos'
+  | 'obras_faenas';
+
+export interface AdministracionDocumento {
+  id: string;
+  empresa: EmpresaHormiglass;
+  seccion: SeccionAdministracionEmpresa;
+  categoria: CategoriaDocumentoAdministracion;
+  nombre: string;
+  descripcion?: string | null;
+  bucket_id: string;
+  storage_path: string;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+  subido_por_id?: string | null;
+  subido_por_nombre?: string | null;
+  eliminado: boolean;
+  eliminado_en?: string | null;
+  eliminado_por?: string | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+export type RecurrenciaRecordatorio = 'ninguna' | 'diaria' | 'semanal' | 'mensual';
+export type EstadoRecordatorio = 'por_hacer' | 'en_curso' | 'requiere_actualizacion' | 'completada';
+export type UrgenciaRecordatorio = 'baja' | 'media' | 'alta' | 'critica';
+export type TipoRecordatorioActividad =
+  | 'comentario'
+  | 'creacion'
+  | 'estado_cambiado'
+  | 'urgencia_cambiada'
+  | 'actualizacion'
+  | 'archivo';
+
+export interface Recordatorio {
+  id: string;
+  empresa: EmpresaHormiglass;
+  seccion: SeccionAdministracionEmpresa;
+  estado: EstadoRecordatorio;
+  urgencia: UrgenciaRecordatorio;
+  titulo: string;
+  descripcion?: string | null;
+  asignado_a_id: string;
+  creado_por_id?: string | null;
+  fecha_vencimiento: string;
+  recurrencia: RecurrenciaRecordatorio;
+  recurrencia_dia_mes?: number | null;
+  recurrencia_dia_semana?: number | null;
+  completado: boolean;
+  completado_en?: string | null;
+  ultimo_completado_en?: string | null;
+  veces_completado: number;
+  activo: boolean;
+  created_at: string;
+  updated_at?: string;
+  asignado_a?: Usuario;
+  creado_por?: Usuario;
+}
+
+export interface RecordatorioActividad {
+  id: string;
+  recordatorio_id: string;
+  tipo: TipoRecordatorioActividad;
+  contenido: string;
+  usuario_id?: string | null;
+  usuario_nombre?: string | null;
+  archivo_bucket?: string | null;
+  archivo_path?: string | null;
+  archivo_nombre?: string | null;
+  archivo_mime_type?: string | null;
+  archivo_size_bytes?: number | null;
+  created_at: string;
+}
+
 export interface VisitaTerreno {
   id: string;
   oportunidad_id: string;
@@ -656,4 +740,3 @@ export interface TrabajadorNota {
   usuario?: Usuario;
   created_at?: string;
 }
-

@@ -35,13 +35,13 @@ export function RankingBarChart({
   const maxMonto = Math.max(...displayItems.map((i) => i.monto), 1);
 
   return (
-    <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm space-y-4 flex flex-col justify-between">
+    <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-4 flex flex-col justify-between">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-gray-100 pb-3">
         <div>
-          <h3 className="font-extrabold text-base text-[#363636] flex items-center gap-2">
+          <h3 className="font-extrabold text-base text-[#213343] flex items-center gap-2">
             {IconComponent && (
-              <div className="p-1.5 rounded-xl bg-orange-50 text-[#F7931F]">
+              <div className="p-1.5 rounded-md bg-orange-50 text-[#f97316]">
                 <IconComponent className="w-4 h-4" />
               </div>
             )}
@@ -83,13 +83,13 @@ export function RankingBarChart({
                     </span>
 
                     {item.avatarText && (
-                      <span className="w-6 h-6 rounded-full bg-gradient-to-br from-[#F7931F] to-amber-500 text-white font-black text-[10px] flex items-center justify-center shrink-0 shadow-xs">
+                      <span className="w-6 h-6 rounded-full bg-orange-500 text-white font-black text-[10px] flex items-center justify-center shrink-0 shadow-xs">
                         {item.avatarText}
                       </span>
                     )}
 
                     <div className="truncate">
-                      <span className="font-bold text-[#363636] block truncate group-hover:text-[#F7931F] transition">
+                      <span className="font-bold text-[#213343] block truncate group-hover:text-[#f97316] transition">
                         {item.title}
                       </span>
                       {item.subtitle && (
@@ -102,7 +102,7 @@ export function RankingBarChart({
 
                   {/* Derecha: Conteo + Monto */}
                   <div className="text-right shrink-0">
-                    <span className="font-black text-[#363636] block">
+                    <span className="font-black text-[#213343] block">
                       ${item.monto.toLocaleString('es-CL')}
                     </span>
                     <span className="text-[10px] text-gray-400 font-semibold block">
@@ -114,7 +114,7 @@ export function RankingBarChart({
                 {/* Barra de Progreso Porcentual */}
                 <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden flex items-center">
                   <div
-                    className="bg-gradient-to-r from-amber-500 to-[#F7931F] h-full rounded-full transition-all duration-500 group-hover:from-orange-500 group-hover:to-orange-600"
+                    className="bg-orange-500 h-full rounded-full transition-all duration-500 group-hover:from-orange-500 group-hover:to-orange-600"
                     style={{ width: `${Math.max(4, percent)}%` }}
                   />
                 </div>

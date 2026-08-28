@@ -509,17 +509,17 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 z-50 animate-fadeIn">
-      <div className="bg-[#1e293b] border border-gray-700 rounded-2xl max-w-4xl w-full p-4 sm:p-6 space-y-4 shadow-2xl text-white max-h-[95vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 z-50 ">
+      <div className="bg-[#1e293b] border border-gray-700 rounded-lg max-w-4xl w-full p-4 sm:p-6 space-y-4 shadow-sm text-white max-h-[95vh] flex flex-col">
         {/* Header Modal Bar */}
         <div className="flex items-center justify-between border-b border-gray-700 pb-3 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-[#F7931F]/10 text-[#F7931F] rounded-xl flex items-center justify-center border border-[#F7931F]/20">
+            <div className="w-9 h-9 bg-[#f97316]/10 text-[#f97316] rounded-md flex items-center justify-center border border-[#f97316]/20">
               <FileText className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold text-[#F7931F] uppercase font-mono">
+                <span className="text-[11px] font-bold text-[#f97316] uppercase font-mono">
                   PLANTILLA OFICIAL HORMIGLASS
                 </span>
                 <span className="text-[10px] font-extrabold uppercase bg-gray-700 text-gray-200 px-2 py-0.5 rounded-md">
@@ -540,14 +540,14 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrint}
-              className="bg-[#F7931F] hover:bg-[#e08316] text-white font-bold text-xs px-4 py-2 rounded-xl transition flex items-center gap-2 shadow-sm"
+              className="bg-[#f97316] hover:bg-[#ea580c] text-white font-bold text-xs px-4 py-2 rounded-md transition flex items-center gap-2 shadow-sm"
             >
               <Printer className="w-4 h-4" />
               <span>Imprimir / Guardar PDF</span>
             </button>
             <button
               onClick={onClose}
-              className="p-2 text-gray-400 hover:text-white rounded-xl hover:bg-gray-700/60 transition"
+              className="p-2 text-gray-400 hover:text-white rounded-md hover:bg-gray-700/60 transition"
               title="Cerrar Previsualización"
             >
               <X className="w-5 h-5" />
@@ -556,9 +556,9 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
         </div>
 
         {/* Paper Sheet Preview container */}
-        <div className="flex-1 overflow-y-auto pr-1 bg-gray-900/60 p-3 sm:p-6 rounded-xl border border-gray-800 flex justify-center">
+        <div className="flex-1 overflow-y-auto pr-1 bg-gray-900/60 p-3 sm:p-6 rounded-md border border-gray-800 flex justify-center">
           {/* Exact Paper Sheet */}
-          <div className="w-full max-w-[760px] bg-white text-gray-900 shadow-2xl p-6 sm:p-8 rounded-sm font-sans text-[11px] leading-relaxed select-text">
+          <div className="w-full max-w-[760px] bg-white text-gray-900 shadow-sm p-6 sm:p-8 rounded-sm font-sans text-[11px] leading-relaxed select-text">
             {/* Top Header */}
             <div className="flex justify-between items-start mb-4">
               <div className="w-1/2">
@@ -745,7 +745,7 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
           </span>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-xl transition text-xs"
+            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-md transition text-xs"
           >
             Cerrar
           </button>

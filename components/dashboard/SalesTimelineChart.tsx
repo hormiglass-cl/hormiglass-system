@@ -88,15 +88,15 @@ export function SalesTimelineChart({
   };
 
   return (
-    <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm space-y-4">
+    <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-4">
       {/* Header con controles */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
         <div>
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-xl bg-orange-50 text-[#F7931F]">
+            <div className="p-1.5 rounded-md bg-orange-50 text-[#f97316]">
               <TrendingUp className="w-4 h-4" />
             </div>
-            <h3 className="font-extrabold text-base text-[#363636]">
+            <h3 className="font-extrabold text-base text-[#213343]">
               Evolución de ventas
             </h3>
           </div>
@@ -108,14 +108,14 @@ export function SalesTimelineChart({
         {/* Botones de alternar vista */}
         <div className="flex items-center gap-2">
           {/* Selector Diario / Mensual */}
-          <div className="inline-flex bg-gray-100 p-1 rounded-xl text-xs font-bold text-gray-600">
+          <div className="inline-flex bg-gray-100 p-1 rounded-md text-xs font-bold text-gray-600">
             <button
               type="button"
               onClick={() => setViewMode('daily')}
               className={`px-3 py-1 rounded-lg transition cursor-pointer ${
                 viewMode === 'daily'
-                  ? 'bg-white text-[#F7931F] shadow-xs font-black'
-                  : 'hover:text-[#363636]'
+                  ? 'bg-white text-[#f97316] shadow-xs font-black'
+                  : 'hover:text-[#213343]'
               }`}
             >
               Diarias
@@ -125,8 +125,8 @@ export function SalesTimelineChart({
               onClick={() => setViewMode('monthly')}
               className={`px-3 py-1 rounded-lg transition cursor-pointer ${
                 viewMode === 'monthly'
-                  ? 'bg-white text-[#F7931F] shadow-xs font-black'
-                  : 'hover:text-[#363636]'
+                  ? 'bg-white text-[#f97316] shadow-xs font-black'
+                  : 'hover:text-[#213343]'
               }`}
             >
               Mensuales
@@ -134,14 +134,14 @@ export function SalesTimelineChart({
           </div>
 
           {/* Selector Tipo Gráfico (Curva / Barras) */}
-          <div className="inline-flex bg-gray-100 p-1 rounded-xl text-xs font-bold text-gray-600">
+          <div className="inline-flex bg-gray-100 p-1 rounded-md text-xs font-bold text-gray-600">
             <button
               type="button"
               onClick={() => setChartType('area')}
               className={`p-1.5 rounded-lg transition cursor-pointer ${
                 chartType === 'area'
-                  ? 'bg-white text-[#F7931F] shadow-xs'
-                  : 'hover:text-[#363636]'
+                  ? 'bg-white text-[#f97316] shadow-xs'
+                  : 'hover:text-[#213343]'
               }`}
               title="Gráfico de área"
             >
@@ -152,8 +152,8 @@ export function SalesTimelineChart({
               onClick={() => setChartType('bar')}
               className={`p-1.5 rounded-lg transition cursor-pointer ${
                 chartType === 'bar'
-                  ? 'bg-white text-[#F7931F] shadow-xs'
-                  : 'hover:text-[#363636]'
+                  ? 'bg-white text-[#f97316] shadow-xs'
+                  : 'hover:text-[#213343]'
               }`}
               title="Gráfico de columnas"
             >
@@ -312,12 +312,12 @@ export function SalesTimelineChart({
             {/* Tooltip interactivo flotante */}
             {hoveredPoint && (
               <div
-                className="absolute top-2 left-1/2 -translate-x-1/2 bg-[#363636] text-white px-3.5 py-2 rounded-2xl shadow-xl text-xs space-y-0.5 pointer-events-none z-30 animate-fadeIn"
+                className="absolute top-2 left-1/2 -translate-x-1/2 bg-[#213343] text-white px-3.5 py-2 rounded-lg shadow-sm text-xs space-y-0.5 pointer-events-none z-30 "
               >
                 <p className="font-semibold text-gray-300 text-[10px]">
                   {hoveredPoint.fullDateLabel}
                 </p>
-                <p className="text-sm font-black text-[#F7931F]">
+                <p className="text-sm font-black text-[#f97316]">
                   ${hoveredPoint.monto.toLocaleString('es-CL')} CLP
                 </p>
                 <p className="text-[10px] text-gray-300 font-medium">
@@ -334,7 +334,7 @@ export function SalesTimelineChart({
         <span className="text-gray-500 font-semibold">
           Total acumulado en el período:
         </span>
-        <span className="font-black text-[#363636] text-sm">
+        <span className="font-black text-[#213343] text-sm">
           ${totalPeriodSales.toLocaleString('es-CL')} CLP
         </span>
       </div>

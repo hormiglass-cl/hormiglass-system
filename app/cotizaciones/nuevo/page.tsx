@@ -253,19 +253,19 @@ function NuevaCotizacionForm() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto text-[#363636]">
+    <div className="space-y-6 max-w-5xl mx-auto text-[#213343]">
       {/* Volver */}
       <div>
         <Link
           href="/cotizaciones"
-          className="text-xs text-gray-500 hover:text-[#F7931F] font-bold flex items-center gap-1 mb-2 transition"
+          className="text-xs text-gray-500 hover:text-[#f97316] font-bold flex items-center gap-1 mb-2 transition"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Volver a la Lista de Cotizaciones</span>
         </Link>
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-extrabold text-[#363636] flex items-center gap-2">
-            <FileText className="w-6 h-6 text-[#F7931F]" />
+          <h1 className="text-2xl font-extrabold text-[#213343] flex items-center gap-2">
+            <FileText className="w-6 h-6 text-[#f97316]" />
             <span>
               {version > 1 ? `Nueva Versión de Cotización (v${version})` : 'Generar Nueva Cotización'}
             </span>
@@ -282,9 +282,9 @@ function NuevaCotizacionForm() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Datos del Cliente y Condiciones */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
-          <h2 className="text-sm font-extrabold text-[#363636] border-b border-gray-200 pb-2 flex items-center gap-2">
-            <Building className="w-4 h-4 text-[#F7931F]" />
+        <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-4">
+          <h2 className="text-sm font-extrabold text-[#213343] border-b border-gray-200 pb-2 flex items-center gap-2">
+            <Building className="w-4 h-4 text-[#f97316]" />
             <span>Antecedentes del Cliente y Venta</span>
           </h2>
 
@@ -297,11 +297,11 @@ function NuevaCotizacionForm() {
 
               <div
                 onClick={() => setIsClientDropdownOpen(!isClientDropdownOpen)}
-                className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium flex items-center justify-between cursor-pointer hover:border-[#F7931F] transition"
+                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium flex items-center justify-between cursor-pointer hover:border-[#f97316] transition"
               >
                 {selectedClient ? (
                   <div className="truncate">
-                    <span className="font-extrabold text-[#363636]">{selectedClient.nombre}</span>
+                    <span className="font-extrabold text-[#213343]">{selectedClient.nombre}</span>
                     <span className="text-gray-500 font-mono text-[11px] ml-2">RUT: {selectedClient.rut}</span>
                   </div>
                 ) : (
@@ -311,7 +311,7 @@ function NuevaCotizacionForm() {
               </div>
 
               {isClientDropdownOpen && (
-                <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 p-3 space-y-2 max-h-72 overflow-y-auto">
+                <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-sm z-50 p-3 space-y-2 max-h-72 overflow-y-auto">
                   <div className="relative">
                     <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5" />
                     <input
@@ -320,7 +320,7 @@ function NuevaCotizacionForm() {
                       placeholder="Escribe RUT, Nombre, Razón Social o Correo..."
                       value={clientSearchQuery}
                       onChange={(e) => setClientSearchQuery(e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-xl pl-9 pr-3 py-1.5 text-xs text-[#363636] placeholder-gray-400 focus:outline-none focus:border-[#F7931F]"
+                      className="w-full bg-gray-50 border border-gray-300 rounded-md pl-9 pr-3 py-1.5 text-xs text-[#213343] placeholder-gray-400 focus:outline-none focus:border-[#f97316]"
                     />
                   </div>
 
@@ -334,19 +334,19 @@ function NuevaCotizacionForm() {
                             setClienteId(cli.id);
                             setIsClientDropdownOpen(false);
                           }}
-                          className={`p-2.5 rounded-xl transition cursor-pointer flex items-start justify-between text-xs ${
-                            isSelected ? 'bg-orange-50 border border-orange-200 text-[#F7931F] font-bold' : 'hover:bg-gray-50'
+                          className={`p-2.5 rounded-md transition cursor-pointer flex items-start justify-between text-xs ${
+                            isSelected ? 'bg-orange-50 border border-orange-200 text-[#f97316] font-bold' : 'hover:bg-gray-50'
                           }`}
                         >
                           <div>
-                            <p className="font-bold text-[#363636]">{cli.nombre}</p>
+                            <p className="font-bold text-[#213343]">{cli.nombre}</p>
                             <p className="text-[11px] text-gray-500">
                               RUT: <span className="font-mono font-semibold">{cli.rut}</span>
                               {cli.apellido_razon_social && ` · ${cli.apellido_razon_social}`}
                               {cli.correo && ` · ${cli.correo}`}
                             </p>
                           </div>
-                          {isSelected && <Check className="w-4 h-4 text-[#F7931F] shrink-0" />}
+                          {isSelected && <Check className="w-4 h-4 text-[#f97316] shrink-0" />}
                         </div>
                       );
                     })}
@@ -365,7 +365,7 @@ function NuevaCotizacionForm() {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block font-bold text-gray-700 mb-1 flex items-center gap-1">
-                  <Tag className="w-3.5 h-3.5 text-[#F7931F]" />
+                  <Tag className="w-3.5 h-3.5 text-[#f97316]" />
                   <span>Ref. Cliente</span>
                 </label>
                 <input
@@ -373,20 +373,20 @@ function NuevaCotizacionForm() {
                   value={referenciaCliente}
                   onChange={(e) => setReferenciaCliente(e.target.value)}
                   placeholder="Ej: NEMICEPS"
-                  className="w-full bg-white border border-gray-300 rounded-xl px-2.5 py-1.5 text-[#363636] font-medium text-xs focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-2.5 py-1.5 text-[#213343] font-medium text-xs focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
               <div>
                 <label className="block font-bold text-gray-700 mb-1 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-[#F7931F]" />
+                  <Calendar className="w-3.5 h-3.5 text-[#f97316]" />
                   <span>Fecha Validez</span>
                 </label>
                 <input
                   type="date"
                   value={fechaValidez}
                   onChange={(e) => setFechaValidez(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-2.5 py-1.5 text-[#363636] font-medium text-xs focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-2.5 py-1.5 text-[#213343] font-medium text-xs focus:outline-none focus:border-[#f97316]"
                 />
               </div>
             </div>
@@ -398,7 +398,7 @@ function NuevaCotizacionForm() {
                 value={plazoEntrega}
                 onChange={(e) => setPlazoEntrega(e.target.value)}
                 placeholder="Inmediato / 5 días hábiles"
-                className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
               />
             </div>
 
@@ -409,7 +409,7 @@ function NuevaCotizacionForm() {
                 value={condicionesPago}
                 onChange={(e) => setCondicionesPago(e.target.value)}
                 placeholder="Acuse de recibo / 50% abono"
-                className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
               />
             </div>
 
@@ -419,24 +419,24 @@ function NuevaCotizacionForm() {
                 type="text"
                 value={observaciones}
                 onChange={(e) => setObservaciones(e.target.value)}
-                className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
               />
             </div>
           </div>
         </div>
 
         {/* Tabla de Ítems */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+        <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-            <h2 className="text-sm font-extrabold text-[#363636] flex items-center gap-2">
-              <Calculator className="w-4 h-4 text-[#F7931F]" />
+            <h2 className="text-sm font-extrabold text-[#213343] flex items-center gap-2">
+              <Calculator className="w-4 h-4 text-[#f97316]" />
               <span>Partidas y Productos (Monto en Chile Peso)</span>
             </h2>
 
             <button
               type="button"
               onClick={handleAddItem}
-              className="bg-orange-50 hover:bg-orange-100 text-[#F7931F] text-xs font-bold px-3 py-1.5 rounded-xl border border-orange-200 transition flex items-center gap-1"
+              className="bg-orange-50 hover:bg-orange-100 text-[#f97316] text-xs font-bold px-3 py-1.5 rounded-md border border-orange-200 transition flex items-center gap-1"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Agregar Producto / Ítem</span>
@@ -447,7 +447,7 @@ function NuevaCotizacionForm() {
             {items.map((item, idx) => (
               <div
                 key={idx}
-                className="grid grid-cols-12 gap-3 items-center bg-gray-50 p-3 rounded-xl border border-gray-200 text-xs"
+                className="grid grid-cols-12 gap-3 items-center bg-gray-50 p-3 rounded-md border border-gray-200 text-xs"
               >
                 <div className="col-span-5">
                   <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Descripción del Producto</label>
@@ -457,7 +457,7 @@ function NuevaCotizacionForm() {
                     placeholder="Descripción de la partida..."
                     value={item.producto}
                     onChange={(e) => handleItemChange(idx, 'producto', e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-[#213343] focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
 
@@ -469,7 +469,7 @@ function NuevaCotizacionForm() {
                     required
                     value={item.cantidad}
                     onChange={(e) => handleItemChange(idx, 'cantidad', Number(e.target.value))}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-[#363636] text-center focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-[#213343] text-center focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
 
@@ -481,7 +481,7 @@ function NuevaCotizacionForm() {
                     required
                     value={item.precio_unitario}
                     onChange={(e) => handleItemChange(idx, 'precio_unitario', Number(e.target.value))}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-[#363636] text-right font-mono focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-[#213343] text-right font-mono focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
 
@@ -493,13 +493,13 @@ function NuevaCotizacionForm() {
                     max="100"
                     value={item.descuento_porcentaje || 0}
                     onChange={(e) => handleItemChange(idx, 'descuento_porcentaje', Number(e.target.value))}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-[#363636] text-center focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-[#213343] text-center focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
 
                 <div className="col-span-1 text-right">
                   <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Base Imp.</label>
-                  <span className="font-extrabold text-[#363636] block py-1.5 font-mono text-[11px]">
+                  <span className="font-extrabold text-[#213343] block py-1.5 font-mono text-[11px]">
                     ${(item.total_item || 0).toLocaleString('es-CL')}
                   </span>
                 </div>
@@ -523,7 +523,7 @@ function NuevaCotizacionForm() {
           <div className="pt-4 border-t border-gray-200 flex flex-col items-end space-y-1.5 text-xs">
             <div className="w-full sm:w-80 flex justify-between text-gray-600">
               <span>Total neto antes del descuento:</span>
-              <span className="font-mono font-bold text-[#363636]">${totalNetoAntesDescuento.toLocaleString('es-CL')}</span>
+              <span className="font-mono font-bold text-[#213343]">${totalNetoAntesDescuento.toLocaleString('es-CL')}</span>
             </div>
             <div className="w-full sm:w-80 flex justify-between text-gray-600">
               <span>Descuento total:</span>
@@ -535,9 +535,9 @@ function NuevaCotizacionForm() {
             </div>
             <div className="w-full sm:w-80 flex justify-between text-gray-600">
               <span>Total impuestos 19%:</span>
-              <span className="font-mono font-bold text-[#363636]">${ivaCalculado.toLocaleString('es-CL')}</span>
+              <span className="font-mono font-bold text-[#213343]">${ivaCalculado.toLocaleString('es-CL')}</span>
             </div>
-            <div className="w-full sm:w-80 flex justify-between text-sm font-black text-[#F7931F] pt-2 border-t border-gray-200 bg-orange-50/50 p-1.5 rounded-lg">
+            <div className="w-full sm:w-80 flex justify-between text-sm font-black text-[#f97316] pt-2 border-t border-gray-200 bg-orange-50/50 p-1.5 rounded-lg">
               <span>Total (impuesto inc.):</span>
               <span className="font-mono">${totalFinal.toLocaleString('es-CL')}</span>
             </div>
@@ -548,14 +548,14 @@ function NuevaCotizacionForm() {
         <div className="flex items-center justify-end gap-3">
           <Link
             href="/cotizaciones"
-            className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition"
+            className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md text-xs font-bold transition"
           >
             Cancelar
           </Link>
           <button
             type="submit"
             disabled={loading}
-            className="px-6 py-2.5 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl text-xs font-extrabold transition shadow-md flex items-center gap-2 disabled:opacity-50"
+            className="px-6 py-2.5 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md text-xs font-extrabold transition shadow-sm flex items-center gap-2 disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
             <span>{loading ? 'Guardando...' : version > 1 ? `Emitir Versión ${version}` : 'Emitir Cotización'}</span>

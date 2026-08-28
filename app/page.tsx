@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useAuth } from '../lib/context/AuthContext';
 import { createClient } from '../lib/supabase/client';
@@ -10,20 +10,13 @@ import {
   OportunidadVenta,
   Usuario,
   EventoProduccionLogistica,
+  Recordatorio,
 } from '../lib/types';
+import { completeRecordatorio } from '../lib/recordatorios';
 import {
-  Users,
-  FileText,
   DollarSign,
-  ArrowUpRight,
   Calendar,
   ChevronRight,
-  PieChart,
-  BarChart3,
-  TrendingUp,
-  Filter,
-  Wrench,
-  Truck,
   Factory,
   MapPin,
   Building2,
@@ -32,9 +25,11 @@ import {
   CreditCard,
   Target,
   Clock,
-  CheckCircle2,
+  CheckSquare,
   HardHat,
+  ListChecks,
   RotateCcw,
+  Square,
 } from 'lucide-react';
 
 import { SalesTimelineChart, TimelineDataPoint } from '../components/dashboard/SalesTimelineChart';
@@ -43,9 +38,18 @@ import { RankingBarChart, RankingItem } from '../components/dashboard/RankingBar
 import { FinancialBalanceCard } from '../components/dashboard/FinancialBalanceCard';
 import { PipelineFunnelChart, FunnelStageData } from '../components/dashboard/PipelineFunnelChart';
 
+type QuickFilterPreset = 'all' | 'today' | 'week' | 'month' | 'year';
+type ProductoDashboard = string | {
+  nombre?: string;
+  cantidad?: number | string;
+  precio?: number | string;
+  total?: number | string;
+};
+
 export default function Dashboard() {
   const { currentUser } = useAuth();
-  const supabase = createClient();
+  const currentUserId = currentUser?.id;
+  const supabase = useMemo(() => createClient(), []);
 
   const [loading, setLoading] = useState(true);
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
@@ -53,21 +57,33 @@ export default function Dashboard() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [eventos, setEventos] = useState<EventoProduccionLogistica[]>([]);
+  const [recordatorios, setRecordatorios] = useState<Recordatorio[]>([]);
 
   // Filtros de fecha rápidos y personalizados
-  const [quickFilter, setQuickFilter] = useState<'all' | 'today' | 'week' | 'month' | 'year' | 'custom'>('all');
+  const [quickFilter, setQuickFilter] = useState<QuickFilterPreset | 'custom'>('all');
   const [fechaDesde, setFechaDesde] = useState<string>('');
   const [fechaHasta, setFechaHasta] = useState<string>('');
 
   // Carga de datos 100% en vivo desde Supabase
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     try {
-      const [cotRes, opRes, cliRes, userRes, evRes] = await Promise.all([
+      const recordatoriosQuery = currentUserId
+        ? supabase
+            .from('recordatorios')
+            .select('*')
+            .eq('asignado_a_id', currentUserId)
+            .eq('activo', true)
+            .order('completado', { ascending: true })
+            .order('fecha_vencimiento', { ascending: true })
+        : Promise.resolve({ data: [], error: null });
+
+      const [cotRes, opRes, cliRes, userRes, evRes, recRes] = await Promise.all([
         supabase.from('cotizaciones').select('*, items:cotizacion_items(*), cliente:clientes(*)'),
         supabase.from('oportunidades').select('*, cliente:clientes(*), cotizaciones(*)'),
         supabase.from('clientes').select('*'),
         supabase.from('usuarios').select('*').eq('activo', true),
         supabase.from('eventos_produccion_logistica').select('*, responsable:usuarios!responsable_id(*)'),
+        recordatoriosQuery,
       ]);
 
       if (cotRes.data) setCotizaciones(cotRes.data as Cotizacion[]);
@@ -85,15 +101,20 @@ export default function Dashboard() {
       if (evRes.data) setEventos(evRes.data as EventoProduccionLogistica[]);
       else setEventos([]);
 
+      if (recRes.data) setRecordatorios(recRes.data as Recordatorio[]);
+      else setRecordatorios([]);
+
       setLoading(false);
     } catch (err) {
       console.error('Error loading live dashboard data from Supabase:', err);
       setLoading(false);
     }
-  };
+  }, [currentUserId, supabase]);
 
   useEffect(() => {
-    loadDashboardData();
+    const loadTimeout = window.setTimeout(() => {
+      loadDashboardData();
+    }, 0);
 
     // Supabase Realtime multi-table sync
     const channel = supabase
@@ -104,12 +125,14 @@ export default function Dashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, () => loadDashboardData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'usuarios' }, () => loadDashboardData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos_produccion_logistica' }, () => loadDashboardData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'recordatorios' }, () => loadDashboardData())
       .subscribe();
 
     return () => {
+      window.clearTimeout(loadTimeout);
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [loadDashboardData, supabase]);
 
   // Helper para obtener el valor monetario real de una oportunidad
   const getOportunidadTrueValue = (op: OportunidadVenta): number => {
@@ -123,7 +146,7 @@ export default function Dashboard() {
   };
 
   // Manejador de filtros rápidos de tiempo
-  const applyQuickFilter = (type: 'all' | 'today' | 'week' | 'month' | 'year') => {
+  const applyQuickFilter = (type: QuickFilterPreset) => {
     setQuickFilter(type);
     const now = new Date();
 
@@ -386,7 +409,7 @@ export default function Dashboard() {
     });
 
     return Object.entries(methodCounts)
-      .filter(([_, data]) => data.count > 0)
+      .filter(([, data]) => data.count > 0)
       .map(([id, data]) => ({
         id,
         label: data.label,
@@ -450,10 +473,11 @@ export default function Dashboard() {
     if (Object.keys(prodMap).length === 0) {
       filteredOportunidades.forEach((op) => {
         if (op.productos && Array.isArray(op.productos)) {
-          op.productos.forEach((p: any) => {
-            const name = typeof p === 'string' ? p : p.nombre || 'Bloques de vidrio estándar';
-            const qty = Number(p.cantidad || 1);
-            const val = Number(p.precio || p.total || 0);
+          op.productos.forEach((p) => {
+            const producto = p as ProductoDashboard;
+            const name = typeof producto === 'string' ? producto : producto.nombre || 'Bloques de vidrio estándar';
+            const qty = typeof producto === 'string' ? 1 : Number(producto.cantidad || 1);
+            const val = typeof producto === 'string' ? 0 : Number(producto.precio || producto.total || 0);
             if (!prodMap[name]) {
               prodMap[name] = { count: 0, monto: 0 };
             }
@@ -501,7 +525,7 @@ export default function Dashboard() {
     });
 
     return Object.entries(userMap)
-      .filter(([_, data]) => data.count > 0 || data.monto > 0)
+      .filter(([, data]) => data.count > 0 || data.monto > 0)
       .map(([id, data]) => {
         const parts = data.nombre.split(' ');
         const initials = parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : data.nombre.slice(0, 2).toUpperCase();
@@ -569,6 +593,44 @@ export default function Dashboard() {
     return eventos.filter((e) => ['por_hacer', 'en_curso', 'reprogramado'].includes(e.estado));
   }, [eventos]);
 
+  const recordatoriosStats = useMemo(() => {
+    const completados = recordatorios.filter((item) => item.completado || item.estado === 'completada').length;
+    const pendientes = recordatorios.filter((item) => !item.completado && item.estado !== 'completada').length;
+    const total = completados + pendientes;
+    const cumplimiento = total > 0 ? Math.round((completados / total) * 100) : 100;
+    return { completados, pendientes, cumplimiento };
+  }, [recordatorios]);
+
+  const topRecordatoriosPendientes = useMemo(() => {
+    return recordatorios
+      .filter((item) => !item.completado && item.estado !== 'completada')
+      .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento))
+      .slice(0, 5);
+  }, [recordatorios]);
+
+  const handleCompleteRecordatorio = async (recordatorio: Recordatorio) => {
+    setRecordatorios((prev) =>
+      prev.map((item) => (item.id === recordatorio.id ? { ...item, completado: true, estado: 'completada' } : item))
+    );
+
+    try {
+      const { error } = await completeRecordatorio(supabase, recordatorio);
+      if (error) throw error;
+      await loadDashboardData();
+    } catch (err) {
+      console.error('Error completando recordatorio desde dashboard:', err);
+      await loadDashboardData();
+    }
+  };
+
+  const quickFilterOptions: { id: QuickFilterPreset; label: string }[] = [
+    { id: 'all', label: 'Todo' },
+    { id: 'today', label: 'Hoy' },
+    { id: 'week', label: 'Semana' },
+    { id: 'month', label: 'Mes' },
+    { id: 'year', label: 'Año' },
+  ];
+
   if (loading) {
     return (
       <div className="p-12 text-center text-gray-500 font-medium animate-pulse">
@@ -578,40 +640,34 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-7 text-[#363636] animate-fadeIn pb-12">
+    <div className="space-y-5 text-[#213343] pb-8">
       {/* ========================================================= */}
       {/* 1. CABECERA, SALUDO & FILTROS TEMPORALES RÁPIDOS          */}
       {/* ========================================================= */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-gray-200 shadow-xs">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 rounded-lg border border-gray-200 shadow-xs">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-[#363636] flex items-center gap-2 tracking-tight">
-            <span>¡Hola, {currentUser?.nombre?.split(' ')[0] || 'Equipo Hormiglass'}!</span>
-            <span className="animate-bounce">👋</span>
+          <p className="text-[11px] font-extrabold uppercase text-gray-400">Workspace</p>
+          <h1 className="text-xl font-black text-[#213343] flex items-center gap-2 tracking-normal">
+            <span>Panel operativo</span>
           </h1>
           <p className="text-xs text-gray-500 font-medium mt-1">
-            Centro de control ejecutivo y rendimiento comercial 100% en vivo desde Supabase.
+            Prioridades comerciales, pipeline y operación activa para {currentUser?.nombre?.split(' ')[0] || 'Hormiglass'}.
           </p>
         </div>
 
         {/* Barra de Filtros Rápidos */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Píldoras de rango rápido */}
-          <div className="inline-flex bg-gray-100 p-1 rounded-2xl text-xs font-bold text-gray-600">
-            {[
-              { id: 'all', label: 'Todo' },
-              { id: 'today', label: 'Hoy' },
-              { id: 'week', label: 'Semana' },
-              { id: 'month', label: 'Mes' },
-              { id: 'year', label: 'Año' },
-            ].map((f) => (
+          <div className="inline-flex bg-gray-100 p-1 rounded-md text-xs font-bold text-gray-600">
+            {quickFilterOptions.map((f) => (
               <button
                 key={f.id}
                 type="button"
-                onClick={() => applyQuickFilter(f.id as any)}
-                className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                onClick={() => applyQuickFilter(f.id)}
+                className={`px-3 py-1.5 rounded-md transition cursor-pointer ${
                   quickFilter === f.id
-                    ? 'bg-white text-[#F7931F] shadow-xs font-black'
-                    : 'hover:text-[#363636]'
+                    ? 'bg-white text-[#f97316] shadow-xs font-black'
+                    : 'hover:text-[#213343]'
                 }`}
               >
                 {f.label}
@@ -620,8 +676,8 @@ export default function Dashboard() {
           </div>
 
           {/* Datepicker Rango Manual */}
-          <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-2xl text-xs">
-            <Calendar className="w-3.5 h-3.5 text-[#F7931F]" />
+          <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-md text-xs">
+            <Calendar className="w-3.5 h-3.5 text-[#f97316]" />
             <input
               type="date"
               value={fechaDesde}
@@ -629,7 +685,7 @@ export default function Dashboard() {
                 setQuickFilter('custom');
                 setFechaDesde(e.target.value);
               }}
-              className="bg-transparent text-[#363636] font-bold text-xs focus:outline-none"
+              className="bg-transparent text-[#213343] font-bold text-xs focus:outline-none"
               title="Fecha inicial"
             />
             <span className="text-gray-400 font-bold">-</span>
@@ -640,7 +696,7 @@ export default function Dashboard() {
                 setQuickFilter('custom');
                 setFechaHasta(e.target.value);
               }}
-              className="bg-transparent text-[#363636] font-bold text-xs focus:outline-none"
+              className="bg-transparent text-[#213343] font-bold text-xs focus:outline-none"
               title="Fecha final"
             />
             {(fechaDesde || fechaHasta) && (
@@ -660,36 +716,35 @@ export default function Dashboard() {
       {/* ========================================================= */}
       {/* 2. FILA DE 4 KPIS EJECUTIVOS DESTACADOS                  */}
       {/* ========================================================= */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* KPI 1: Facturación Total */}
-        <div className="bg-[#F7931F] text-white p-5 rounded-3xl shadow-md flex flex-col justify-between relative overflow-hidden">
+        <div className="bg-white text-[#213343] p-4 rounded-lg border border-orange-200 shadow-xs flex flex-col justify-between relative overflow-hidden">
           <div className="flex items-center justify-between z-10">
-            <span className="text-xs font-bold opacity-90">Ventas totales</span>
-            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-              <DollarSign className="w-4 h-4 text-white" />
+            <span className="text-xs font-bold text-gray-500">Ventas totales</span>
+            <div className="w-8 h-8 rounded-md bg-orange-50 text-[#f97316] flex items-center justify-center">
+              <DollarSign className="w-4 h-4" />
             </div>
           </div>
           <div className="my-2 z-10">
-            <span className="text-2xl font-black block tracking-tight">
+            <span className="text-xl font-black block tracking-normal">
               ${totalFacturado.toLocaleString('es-CL')} CLP
             </span>
-            <span className="text-[11px] opacity-90 block mt-0.5">
+            <span className="text-[11px] text-gray-500 block mt-0.5">
               {filteredOportunidades.length} {filteredOportunidades.length === 1 ? 'oportunidad' : 'oportunidades'} en el período
             </span>
           </div>
-          <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-white/10 rounded-full blur-lg pointer-events-none" />
         </div>
 
         {/* KPI 2: Cuánto Falta por Pagar */}
-        <div className="bg-white p-5 rounded-3xl border border-gray-200 shadow-sm flex flex-col justify-between">
+        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-gray-500">Falta por pagar</span>
-            <div className="w-8 h-8 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+            <div className="w-8 h-8 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
               <Clock className="w-4 h-4" />
             </div>
           </div>
           <div className="my-2">
-            <span className="text-2xl font-black text-amber-900 block tracking-tight">
+            <span className="text-xl font-black text-amber-900 block tracking-normal">
               ${totalPendientePorPagar.toLocaleString('es-CL')} CLP
             </span>
             <span className="text-[11px] text-amber-700 font-semibold block mt-0.5">
@@ -699,15 +754,15 @@ export default function Dashboard() {
         </div>
 
         {/* KPI 3: Proyección del Pipeline */}
-        <div className="bg-white p-5 rounded-3xl border border-gray-200 shadow-sm flex flex-col justify-between">
+        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-gray-500">Proyección pipeline</span>
-            <div className="w-8 h-8 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+            <div className="w-8 h-8 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
               <Target className="w-4 h-4" />
             </div>
           </div>
           <div className="my-2">
-            <span className="text-2xl font-black text-blue-900 block tracking-tight">
+            <span className="text-xl font-black text-blue-900 block tracking-normal">
               ${totalPipelineWeighted.toLocaleString('es-CL')} CLP
             </span>
             <span className="text-[11px] text-gray-400 font-medium block mt-0.5">
@@ -717,16 +772,16 @@ export default function Dashboard() {
         </div>
 
         {/* KPI 4: Clientes & Obras Activas */}
-        <div className="bg-white p-5 rounded-3xl border border-gray-200 shadow-sm flex flex-col justify-between">
+        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-gray-500">Operación activa</span>
-            <div className="w-8 h-8 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+            <div className="w-8 h-8 rounded-md bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
               <HardHat className="w-4 h-4" />
             </div>
           </div>
           <div className="my-2">
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-[#363636]">
+              <span className="text-xl font-black text-[#213343]">
                 {eventosActivos.length}
               </span>
               <span className="text-xs font-bold text-purple-700">obras & despachos</span>
@@ -836,55 +891,126 @@ export default function Dashboard() {
         </div>
 
         {/* Obras y Despachos Activos de Producción & Logística (5 cols) */}
-        <div className="lg:col-span-5 bg-white p-6 rounded-3xl border border-gray-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <div>
-              <h3 className="font-extrabold text-base text-[#363636] flex items-center gap-2">
-                <div className="p-1.5 rounded-xl bg-purple-50 text-purple-600">
-                  <Factory className="w-4 h-4" />
-                </div>
-                <span>Obras y programación en planta</span>
-              </h3>
-              <p className="text-xs text-gray-500 font-medium mt-0.5">
-                Eventos activos de fabricación, instalación y despacho
-              </p>
+        <div className="lg:col-span-5 space-y-6">
+          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-[#213343] flex items-center gap-2">
+                  <div className="p-1.5 rounded-md bg-purple-50 text-purple-600">
+                    <Factory className="w-4 h-4" />
+                  </div>
+                  <span>Obras y programación en planta</span>
+                </h3>
+                <p className="text-xs text-gray-500 font-medium mt-0.5">
+                  Eventos activos de fabricación, instalación y despacho
+                </p>
+              </div>
+              <Link
+                href="/planificacion/calendario"
+                className="text-xs text-[#f97316] font-bold hover:underline flex items-center gap-0.5"
+              >
+                <span>Calendario</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
-            <Link
-              href="/planificacion/calendario"
-              className="text-xs text-[#F7931F] font-bold hover:underline flex items-center gap-0.5"
-            >
-              <span>Calendario</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </Link>
+
+            {eventosActivos.length === 0 ? (
+              <div className="p-8 text-center text-gray-400 text-xs italic">
+                ✓ Sin eventos ni obras pendientes para este período.
+              </div>
+            ) : (
+              <div className="space-y-2.5 text-xs">
+                {eventosActivos.slice(0, 4).map((ev) => (
+                  <div
+                    key={ev.id}
+                    className="p-3 bg-gray-50 hover:bg-orange-50/40 rounded-lg border border-gray-200 transition space-y-1"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-[#213343] truncate max-w-[200px]">
+                        {ev.titulo}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white border border-gray-200 capitalize text-gray-600">
+                        {ev.tipo_evento}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-gray-500 font-mono text-[11px]">
+                      <span>{ev.fecha_inicio?.split('T')[0] || ev.fecha_evento}</span>
+                      <span>{ev.responsable?.nombre || 'Sin responsable'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {eventosActivos.length === 0 ? (
-            <div className="p-8 text-center text-gray-400 text-xs italic">
-              ✓ Sin eventos ni obras pendientes para este período.
-            </div>
-          ) : (
-            <div className="space-y-2.5 text-xs">
-              {eventosActivos.slice(0, 4).map((ev) => (
-                <div
-                  key={ev.id}
-                  className="p-3 bg-gray-50 hover:bg-orange-50/40 rounded-2xl border border-gray-200 transition space-y-1"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-extrabold text-[#363636] truncate max-w-[200px]">
-                      {ev.titulo}
-                    </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white border border-gray-200 capitalize text-gray-600">
-                      {ev.tipo_evento}
-                    </span>
+          <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-[#213343] flex items-center gap-2">
+                  <div className="p-1.5 rounded-md bg-orange-50 text-[#f97316]">
+                    <ListChecks className="w-4 h-4" />
                   </div>
-                  <div className="flex items-center justify-between text-gray-500 font-mono text-[11px]">
-                    <span>{ev.fecha_inicio?.split('T')[0] || ev.fecha_evento}</span>
-                    <span>{ev.responsable?.nombre || 'Sin responsable'}</span>
-                  </div>
-                </div>
-              ))}
+                  <span>Recordatorios pendientes</span>
+                </h3>
+                <p className="text-xs text-gray-500 font-medium mt-0.5">
+                  {recordatoriosStats.pendientes} pendientes · {recordatoriosStats.cumplimiento}% cumplimiento
+                </p>
+              </div>
+              <Link
+                href="/administracion?empresa=inmobiliaria&seccion=pendientes_generales"
+                className="text-xs text-[#f97316] font-bold hover:underline flex items-center gap-0.5"
+              >
+                <span>Ver todos</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
-          )}
+
+            {topRecordatoriosPendientes.length === 0 ? (
+              <div className="p-8 text-center text-gray-400 text-xs italic">
+                ✓ Sin recordatorios pendientes.
+              </div>
+            ) : (
+              <div className="space-y-2.5 text-xs">
+                {topRecordatoriosPendientes.map((recordatorio) => {
+                  const vencido = recordatorio.fecha_vencimiento < new Date().toISOString().split('T')[0];
+
+                  return (
+                    <div
+                      key={recordatorio.id}
+                      className={`p-3 rounded-lg border transition flex items-start gap-3 ${
+                        vencido ? 'bg-red-50 border-red-200' : 'bg-gray-50 hover:bg-orange-50/40 border-gray-200'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleCompleteRecordatorio(recordatorio)}
+                        className="mt-0.5 text-[#f97316] hover:text-emerald-600 transition"
+                        title="Completar recordatorio"
+                      >
+                        {recordatorio.completado ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-extrabold text-[#213343] truncate">
+                            {recordatorio.titulo}
+                          </span>
+                          {vencido && (
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-600 text-white">
+                              Vencido
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between text-gray-500 font-mono text-[11px] mt-1">
+                          <span>{recordatorio.fecha_vencimiento}</span>
+                          <span className="capitalize">{recordatorio.recurrencia}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

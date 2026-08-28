@@ -17,15 +17,15 @@ function NuevaOrdenCompraContent() {
   };
 
   return (
-    <div className="space-y-6 text-[#363636]">
+    <div className="space-y-6 text-[#213343]">
       <div className="flex items-center justify-between border-b border-gray-200 pb-5">
         <div>
-          <Link href="/ordenes-compra" className="inline-flex items-center gap-2 text-xs font-bold text-gray-500 hover:text-[#F7931F] mb-3">
+          <Link href="/ordenes-compra" className="inline-flex items-center gap-2 text-xs font-bold text-gray-500 hover:text-[#f97316] mb-3">
             <ArrowLeft className="w-4 h-4" />
             <span>Volver a Ordenes de Compra</span>
           </Link>
           <h1 className="text-2xl font-extrabold flex items-center gap-2">
-            <FileText className="w-6 h-6 text-[#F7931F]" />
+            <FileText className="w-6 h-6 text-[#f97316]" />
             <span>Nueva Orden de Compra</span>
           </h1>
         </div>

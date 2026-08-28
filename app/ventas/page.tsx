@@ -81,6 +81,10 @@ import {
   HardHat,
   ShoppingCart,
   ShieldAlert,
+  Flag,
+  Tag,
+  Compass,
+  Disc,
 } from 'lucide-react';
 
 import { useSearchParams } from 'next/navigation';
@@ -139,7 +143,7 @@ export default function PipelineVentasPage() {
     reventaEventos: boolean;
     reventaOc: boolean;
   }>({
-    contacto: false,
+    contacto: true,
     productos: false,
     finanzas: false,
     antecedentes: false,
@@ -218,6 +222,8 @@ export default function PipelineVentasPage() {
 
   // Internal Chat / Actividades Input State
   const [chatInput, setChatInput] = useState('');
+  const [stagedChatFiles, setStagedChatFiles] = useState<File[]>([]);
+  const [isUploadingChatFiles, setIsUploadingChatFiles] = useState(false);
   const [mentionMenuOpen, setMentionMenuOpen] = useState(false);
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
   const mentionRef = React.useRef<HTMLDivElement | null>(null);
@@ -301,23 +307,57 @@ export default function PipelineVentasPage() {
     );
   };
 
-  // Helper to render message content with @mentions highlighted in vibrant orange
+  // Helper to render message content with @mentions and interactive attachment badges
   const renderMessageContentWithMentions = (content?: string) => {
     if (!content) return null;
-    const parts = content.split(/(@[a-zA-Z0-9_áéíóúÁÉÍÓÚñÑ]+)/g);
-    return parts.map((part, idx) => {
-      if (part.startsWith('@')) {
-        return (
-          <span
-            key={idx}
-            className="text-[#F7931F] font-extrabold bg-[#F7931F]/15 px-1.5 py-0.5 rounded-md border border-[#F7931F]/30 inline-block mx-0.5"
-          >
-            {part}
-          </span>
-        );
-      }
-      return part;
-    });
+
+    const lines = content.split('\n');
+    return (
+      <div className="space-y-1.5">
+        {lines.map((line, lineIdx) => {
+          // Check if line is an attachment link: 📎 [FileName](URL)
+          const attachmentMatch = line.match(/^📎\s*\[(.*?)\]\((https?:\/\/[^\s)]+)\)$/);
+          if (attachmentMatch) {
+            const [, fileName, fileUrl] = attachmentMatch;
+            return (
+              <a
+                key={lineIdx}
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#27272a] hover:bg-[#323236] border border-gray-700 hover:border-[#f97316]/50 rounded-lg text-xs text-white transition my-1 group shadow-sm"
+              >
+                <Paperclip className="w-3.5 h-3.5 text-[#f97316] group-hover:scale-110 transition-transform shrink-0" />
+                <span className="font-semibold underline decoration-gray-600 group-hover:decoration-white truncate max-w-xs">{fileName}</span>
+                <span className="text-[10px] text-gray-400 font-mono flex items-center gap-0.5 shrink-0">
+                  Descargar <Download className="w-3 h-3 ml-0.5" />
+                </span>
+              </a>
+            );
+          }
+
+          // Otherwise split by mentions
+          const parts = line.split(/(@[a-zA-Z0-9_áéíóúÁÉÍÓÚñÑ]+)/g);
+          return (
+            <p key={lineIdx} className="leading-relaxed">
+              {parts.map((part, idx) => {
+                if (part.startsWith('@')) {
+                  return (
+                    <span
+                      key={idx}
+                      className="text-[#f97316] font-extrabold bg-[#f97316]/15 px-1.5 py-0.5 rounded-md border border-[#f97316]/30 inline-block mx-0.5"
+                    >
+                      {part}
+                    </span>
+                  );
+                }
+                return part;
+              })}
+            </p>
+          );
+        })}
+      </div>
+    );
   };
 
   // Helper to load latest activities directly from Supabase for an opportunity
@@ -1450,7 +1490,7 @@ export default function PipelineVentasPage() {
             setSortDirection('asc');
           }
         }}
-        className={`py-2.5 px-3 cursor-pointer hover:text-[#F7931F] transition select-none text-${align} text-xs font-extrabold uppercase tracking-wider text-gray-500 relative group border-r border-gray-200/50`}
+        className={`py-2.5 px-3 cursor-pointer hover:text-[#f97316] transition select-none text-${align} text-xs font-extrabold uppercase tracking-normal text-gray-500 relative group border-r border-gray-200/50`}
       >
         <div
           className={`flex items-center gap-1.5 ${
@@ -1460,9 +1500,9 @@ export default function PipelineVentasPage() {
           <span className="truncate">{label}</span>
           {isActive ? (
             sortDirection === 'asc' ? (
-              <ArrowUp className="w-3.5 h-3.5 text-[#F7931F] shrink-0" />
+              <ArrowUp className="w-3.5 h-3.5 text-[#f97316] shrink-0" />
             ) : (
-              <ArrowDown className="w-3.5 h-3.5 text-[#F7931F] shrink-0" />
+              <ArrowDown className="w-3.5 h-3.5 text-[#f97316] shrink-0" />
             )
           ) : (
             <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-40 hover:opacity-100 shrink-0" />
@@ -1473,7 +1513,7 @@ export default function PipelineVentasPage() {
         <div
           onMouseDown={(e) => handleMouseDownResize(colKey, e)}
           onClick={(e) => e.stopPropagation()}
-          className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#F7931F] active:bg-[#F7931F] z-10 transition opacity-0 group-hover:opacity-100"
+          className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#f97316] active:bg-[#f97316] z-10 transition opacity-0 group-hover:opacity-100"
           title="Arrastrar para cambiar ancho de columna"
         />
       </th>
@@ -1919,40 +1959,114 @@ export default function PipelineVentasPage() {
     setDragOverColumn(null);
   };
 
-  // Chat message & @ Mentions Handling
+  // Chat message & @ Mentions Handling with File Attachments
   const handleSendChatMessage = async () => {
-    if (!selectedOp || !chatInput.trim()) return;
+    if (!selectedOp || (!chatInput.trim() && stagedChatFiles.length === 0)) return;
 
-    const msgContent = chatInput;
+    setIsUploadingChatFiles(true);
+    let uploadedAttachmentsText = '';
+    const newAntecedentesUploaded: AntecedenteDocumento[] = [];
+
+    if (stagedChatFiles.length > 0 && isUUID(selectedOp.id)) {
+      for (const file of stagedChatFiles) {
+        try {
+          const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const storagePath = `antecedentes/${selectedOp.id}/${Date.now()}_${cleanFileName}`;
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('documentos')
+            .upload(storagePath, file, {
+              contentType: file.type || undefined,
+              upsert: false,
+            });
+
+          if (uploadError || !uploadData) {
+            console.error('Error uploading chat attachment to Supabase:', uploadError);
+            continue;
+          }
+
+          const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(storagePath);
+          const publicUrl = urlData?.publicUrl || '#';
+
+          const userName = currentUser?.nombre || 'Vendedor';
+          const userId = currentUser?.id && isUUID(currentUser.id) ? currentUser.id : null;
+
+          const { data: insertedDoc, error: insertError } = await supabase
+            .from('oportunidad_antecedentes')
+            .insert([
+              {
+                oportunidad_id: selectedOp.id,
+                nombre: file.name,
+                tipo: 'otro',
+                bucket_id: 'documentos',
+                storage_path: storagePath,
+                public_url: publicUrl,
+                mime_type: file.type || null,
+                size_bytes: file.size,
+                subido_por_id: userId,
+                subido_por_nombre: userName,
+              },
+            ])
+            .select()
+            .single();
+
+          if (!insertError && insertedDoc) {
+            const mappedDoc = mapAntecedenteRecord(insertedDoc);
+            newAntecedentesUploaded.push(mappedDoc);
+          }
+
+          uploadedAttachmentsText += `\n📎 [${file.name}](${publicUrl})`;
+        } catch (err) {
+          console.error('Error uploading chat attachment:', err);
+        }
+      }
+
+      if (newAntecedentesUploaded.length > 0) {
+        const existingDocs = antecedentesCacheRef.current[selectedOp.id] || opAntecedentesList;
+        const updatedDocs = [...newAntecedentesUploaded, ...existingDocs];
+        antecedentesCacheRef.current[selectedOp.id] = updatedDocs;
+        setOpAntecedentesList(updatedDocs);
+        updateOportunidadField(selectedOp.id, 'antecedentes', updatedDocs);
+      }
+    }
+
+    const rawText = chatInput.trim();
+    let msgContent = rawText;
+    if (uploadedAttachmentsText) {
+      msgContent = rawText ? `${rawText}\n${uploadedAttachmentsText}` : uploadedAttachmentsText.trim();
+    }
+
     const msgTipo = isReclamoMode ? 'reclamo' : 'comentario';
     setChatInput('');
+    setStagedChatFiles([]);
+    setIsUploadingChatFiles(false);
     setIsReclamoMode(false);
     setMentionMenuOpen(false);
 
-    // Add activity (saves to actividades_op table and logs_sistema)
-    await addOportunidadActividad(selectedOp.id, msgContent, msgTipo);
+    if (msgContent) {
+      await addOportunidadActividad(selectedOp.id, msgContent, msgTipo);
 
-    // Detect @ mentions in text
-    const mentionsFound = usuariosApp.filter((u) =>
-      msgContent.toLowerCase().includes(`@${u.nombre.toLowerCase()}`)
-    );
+      // Detect @ mentions in text
+      const mentionsFound = usuariosApp.filter((u) =>
+        msgContent.toLowerCase().includes(`@${u.nombre.toLowerCase()}`)
+      );
 
-    if (mentionsFound.length > 0) {
-      const mentionedNames = mentionsFound.map((m) => m.nombre).join(', ');
-
-      for (const u of mentionsFound) {
-        if (isUUID(u.id)) {
-          try {
-            await supabase.from('notificaciones').insert([{
-              usuario_id: u.id,
-              tipo: 'mencion',
-              mensaje: `@${currentUser?.nombre || 'Usuario'} te mencionó en la oportunidad ${selectedOp.codigo}: "${msgContent}"`,
-              link_url: `/ventas?oportunidad=${selectedOp.id}`,
-              leido: false,
-              fecha: new Date().toISOString(),
-            }]);
-          } catch (err) {
-            console.error('Error inserting notification in Supabase:', err);
+      if (mentionsFound.length > 0) {
+        for (const u of mentionsFound) {
+          if (isUUID(u.id)) {
+            try {
+              await supabase.from('notificaciones').insert([
+                {
+                  usuario_id: u.id,
+                  tipo: 'mencion',
+                  mensaje: `@${currentUser?.nombre || 'Usuario'} te mencionó en la oportunidad ${selectedOp.codigo}: "${msgContent}"`,
+                  link_url: `/ventas?oportunidad=${selectedOp.id}`,
+                  leido: false,
+                  fecha: new Date().toISOString(),
+                },
+              ]);
+            } catch (err) {
+              console.error('Error inserting notification in Supabase:', err);
+            }
           }
         }
       }
@@ -1993,40 +2107,6 @@ export default function PipelineVentasPage() {
       setChatInput((prev) => `${prev}@${userName} `);
     }
     setMentionMenuOpen(false);
-  };
-
-  // Real File Upload Handler for Financial Documents
-  const handleRealFileUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedOp) return;
-
-    try {
-      const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const fileName = `comprobantes/${selectedOp.id}/${Date.now()}_${cleanFileName}`;
-      const { data, error } = await supabase.storage.from('documentos').upload(fileName, file, {
-        contentType: file.type || undefined,
-        upsert: false,
-      });
-      if (error || !data) {
-        throw new Error(error?.message || 'Supabase Storage no confirmó la subida.');
-      }
-
-      const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(fileName);
-      const publicUrl = urlData?.publicUrl || '#';
-      const fileObj = { name: file.name, url: publicUrl };
-      const updated = [...pagoFiles, fileObj];
-      setPagoFiles(updated);
-      updateOportunidadField(
-        selectedOp.id,
-        'comprobantes_pago',
-        updated.map((f) => ({ comprobante_nombre: f.name, comprobante_url: f.url }))
-      );
-    } catch (err: any) {
-      console.error('Error uploading payment document:', err);
-      setAbonoErrorMsg(`Error al subir comprobante a Supabase: ${err?.message || 'Error al subir.'}`);
-    }
   };
 
   // Upload Antecedente Document
@@ -2249,15 +2329,15 @@ export default function PipelineVentasPage() {
   );
 
   return (
-    <div className="space-y-6 text-[#363636] relative">
+    <div className="space-y-6 text-[#213343] relative">
       {/* Toast Alert Flotante Superior Derecho */}
       {toastAlert && (
-        <div className="fixed top-20 right-6 z-50 bg-[#363636] text-white p-4 rounded-2xl shadow-2xl border border-[#F7931F] flex items-center gap-3 animate-slideDown max-w-sm">
-          <div className="bg-[#F7931F] p-2 rounded-xl text-white shrink-0">
+        <div className="fixed top-20 right-6 z-50 bg-[#213343] text-white p-4 rounded-lg shadow-sm border border-[#f97316] flex items-center gap-3 animate-slideDown max-w-sm">
+          <div className="bg-[#f97316] p-2 rounded-md text-white shrink-0">
             <AtSign className="w-5 h-5" />
           </div>
           <div className="space-y-0.5 text-xs">
-            <span className="font-extrabold text-[#F7931F] block">{toastAlert.user}</span>
+            <span className="font-extrabold text-[#f97316] block">{toastAlert.user}</span>
             <p className="font-medium text-gray-200">{toastAlert.message}</p>
           </div>
           <button onClick={() => setToastAlert(null)} className="text-gray-400 hover:text-white p-1 ml-auto">
@@ -2269,8 +2349,8 @@ export default function PipelineVentasPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
         <div>
-          <h1 className="text-2xl font-extrabold text-[#363636] flex items-center gap-2">
-            <TrendingUp className="w-6 h-6 text-[#F7931F]" />
+          <h1 className="text-2xl font-extrabold text-[#213343] flex items-center gap-2">
+            <TrendingUp className="w-6 h-6 text-[#f97316]" />
             <span>Pipeline de Oportunidades de Venta</span>
           </h1>
           <p className="text-xs text-gray-600 mt-1">
@@ -2281,17 +2361,17 @@ export default function PipelineVentasPage() {
         <div className="flex items-center gap-3 self-start md:self-auto">
           <button
             onClick={() => setShowNewOpModal(true)}
-            className="bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer"
+            className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-1.5 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Nueva Oportunidad</span>
           </button>
 
-          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl border border-gray-200">
+          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-md border border-gray-200">
             <button
               onClick={() => setActiveTab('lista')}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'lista' ? 'bg-[#F7931F] text-white shadow-xs' : 'text-gray-600 hover:text-[#363636]'
+                activeTab === 'lista' ? 'bg-[#f97316] text-white shadow-xs' : 'text-gray-600 hover:text-[#213343]'
               }`}
             >
               <List className="w-3.5 h-3.5" />
@@ -2300,7 +2380,7 @@ export default function PipelineVentasPage() {
             <button
               onClick={() => setActiveTab('tablero')}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'tablero' ? 'bg-[#F7931F] text-white shadow-xs' : 'text-gray-600 hover:text-[#363636]'
+                activeTab === 'tablero' ? 'bg-[#f97316] text-white shadow-xs' : 'text-gray-600 hover:text-[#213343]'
               }`}
             >
               <Kanban className="w-3.5 h-3.5" />
@@ -2311,7 +2391,7 @@ export default function PipelineVentasPage() {
       </div>
 
       {/* Barra de Filtros Avanzados (Ajustes 11 - Req 5) */}
-      <div className="bg-white p-4 rounded-3xl border border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
           {/* Búsqueda por Texto */}
           <div className="relative flex-1 min-w-[180px] max-w-sm">
@@ -2321,7 +2401,7 @@ export default function PipelineVentasPage() {
               placeholder="Buscar por código, cliente, título, RUT..."
               value={filterSearch}
               onChange={(e) => setFilterSearch(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-8 py-2 text-[#363636] font-medium placeholder-gray-400 focus:outline-none focus:border-[#F7931F]"
+              className="w-full bg-gray-50 border border-gray-200 rounded-md pl-9 pr-8 py-2 text-[#213343] font-medium placeholder-gray-400 focus:outline-none focus:border-[#f97316]"
             />
             {filterSearch && (
               <button
@@ -2337,7 +2417,7 @@ export default function PipelineVentasPage() {
           <select
             value={filterEstado}
             onChange={(e) => setFilterEstado(e.target.value)}
-            className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold text-[#363636] focus:outline-none focus:border-[#F7931F] cursor-pointer"
+            className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 font-bold text-[#213343] focus:outline-none focus:border-[#f97316] cursor-pointer"
           >
             <option value="todos">Todos los Estados</option>
             <optgroup label="Comercial">
@@ -2367,7 +2447,7 @@ export default function PipelineVentasPage() {
           <select
             value={filterTipoVenta}
             onChange={(e) => setFilterTipoVenta(e.target.value)}
-            className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold text-[#363636] focus:outline-none focus:border-[#F7931F] cursor-pointer"
+            className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 font-bold text-[#213343] focus:outline-none focus:border-[#f97316] cursor-pointer"
           >
             <option value="todos">Todos los Tipos de Venta</option>
             <option value="Instalación">Instalación</option>
@@ -2379,7 +2459,7 @@ export default function PipelineVentasPage() {
           <select
             value={filterPrioridad}
             onChange={(e) => setFilterPrioridad(e.target.value)}
-            className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold text-[#363636] focus:outline-none focus:border-[#F7931F] cursor-pointer"
+            className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 font-bold text-[#213343] focus:outline-none focus:border-[#f97316] cursor-pointer"
           >
             <option value="todos">Todas las Prioridades</option>
             <option value="Normal / Baja">Normal / Baja</option>
@@ -2391,7 +2471,7 @@ export default function PipelineVentasPage() {
           <select
             value={filterAsignado}
             onChange={(e) => setFilterAsignado(e.target.value)}
-            className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold text-[#363636] focus:outline-none focus:border-[#F7931F] cursor-pointer"
+            className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 font-bold text-[#213343] focus:outline-none focus:border-[#f97316] cursor-pointer"
           >
             <option value="todos">Todos los Asignados</option>
             {currentUser && <option value="me">👤 Asignados a mí</option>}
@@ -2421,8 +2501,8 @@ export default function PipelineVentasPage() {
             </button>
           )}
 
-          <span className="font-extrabold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-xl border border-gray-200">
-            Mostrando <strong className="text-[#F7931F]">{filteredOportunidades.length}</strong> de {oportunidades.length}
+          <span className="font-extrabold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-md border border-gray-200">
+            Mostrando <strong className="text-[#f97316]">{filteredOportunidades.length}</strong> de {oportunidades.length}
           </span>
         </div>
       </div>
@@ -2432,7 +2512,7 @@ export default function PipelineVentasPage() {
           Cargando oportunidades de venta...
         </div>
       ) : activeTab === 'tablero' ? (
-        <div className="space-y-4 animate-fadeIn">
+        <div className="space-y-4 ">
           <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
             <div className="flex min-w-max divide-x divide-gray-200">
               {SECCIONES_PIPELINE.map((sec) => {
@@ -2448,8 +2528,8 @@ export default function PipelineVentasPage() {
                     onClick={() => setActiveBoardSection(sec.id)}
                     className={`px-5 py-3 text-left min-w-[220px] transition border-b-2 ${
                       isActiveSection
-                        ? 'bg-[#363636] text-white border-[#F7931F]'
-                        : 'bg-white text-[#363636] border-transparent hover:bg-gray-50'
+                        ? 'bg-[#213343] text-white border-[#f97316]'
+                        : 'bg-white text-[#213343] border-transparent hover:bg-gray-50'
                     }`}
                   >
                     <span className="block text-xs font-extrabold uppercase">{sec.nombre}</span>
@@ -2468,7 +2548,7 @@ export default function PipelineVentasPage() {
             return (
               <div className="p-4 rounded-lg border border-gray-200 bg-gray-50 space-y-4 min-h-[560px]">
                 <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-                  <h3 className="text-base font-extrabold text-[#363636]">{activeSection.nombre}</h3>
+                  <h3 className="text-base font-extrabold text-[#213343]">{activeSection.nombre}</h3>
                   <span className="text-xs font-mono font-bold text-gray-500">
                     {activeSection.etapas.length} etapas
                   </span>
@@ -2489,14 +2569,14 @@ export default function PipelineVentasPage() {
                         onDrop={(e) => handleDrop(e, stage.id)}
                         className={`rounded-lg border p-3 min-h-[470px] transition ${
                           isTargetColumn
-                            ? 'bg-orange-50 border-[#F7931F] ring-2 ring-[#F7931F]/20'
+                            ? 'bg-orange-50 border-[#f97316] ring-2 ring-[#F7931F]/20'
                             : 'bg-white border-gray-200'
                         }`}
                       >
                         <div className="flex items-center justify-between border-b border-gray-200 pb-2 mb-3">
                           <div className="flex items-center gap-2">
                             <span className={`w-2.5 h-2.5 rounded-full border ${stage.color}`} />
-                            <h4 className="text-xs font-black uppercase text-[#363636]">{stage.label}</h4>
+                            <h4 className="text-xs font-black uppercase text-[#213343]">{stage.label}</h4>
                           </div>
                           <span className="text-[11px] font-mono font-bold text-gray-500">{colOps.length}</span>
                         </div>
@@ -2516,14 +2596,14 @@ export default function PipelineVentasPage() {
                                 onDragStart={(e) => handleDragStart(e, op.id)}
                                 onDragEnd={handleDragEnd}
                                 onClick={() => handleOpenOportunidad(op)}
-                                className={`bg-white p-3 rounded-lg border border-gray-200 space-y-3 shadow-sm hover:shadow-md hover:border-[#F7931F] transition cursor-pointer active:cursor-grabbing relative group ${
-                                  isBeingDragged ? 'opacity-40 border-dashed border-[#F7931F]' : ''
+                                className={`bg-white p-3 rounded-lg border border-gray-200 space-y-3 shadow-sm hover:shadow-sm hover:border-[#f97316] transition cursor-pointer active:cursor-grabbing relative group ${
+                                  isBeingDragged ? 'opacity-40 border-dashed border-[#f97316]' : ''
                                 }`}
                               >
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="flex items-center gap-1.5">
                                     <GripVertical className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                                    <span className="font-mono font-bold text-[#363636] text-xs">{op.codigo}</span>
+                                    <span className="font-mono font-bold text-[#213343] text-xs">{op.codigo}</span>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     {latestQuote && (
@@ -2545,10 +2625,10 @@ export default function PipelineVentasPage() {
                                 </div>
 
                                 <div>
-                                  <p className="text-sm font-extrabold text-[#363636] leading-snug group-hover:text-[#F7931F] transition">
+                                  <p className="text-sm font-extrabold text-[#213343] leading-snug group-hover:text-[#f97316] transition">
                                     {op.titulo}
                                   </p>
-                                  <div className="mt-1 flex items-center gap-1 text-xs text-[#F7931F] font-bold hover:underline" onClick={(e) => e.stopPropagation()}>
+                                  <div className="mt-1 flex items-center gap-1 text-xs text-[#f97316] font-bold hover:underline" onClick={(e) => e.stopPropagation()}>
                                     <Building className="w-3.5 h-3.5 shrink-0" />
                                     <Link href={`/clientes/${op.cliente_id}`}>
                                       {op.cliente?.nombre || 'Ver Ficha Cliente'}
@@ -2579,7 +2659,7 @@ export default function PipelineVentasPage() {
                                     <span>${montoAbonado.toLocaleString('es-CL')}</span>
                                   </div>
                                   {saldoPendiente > 0 && (
-                                    <div className="flex justify-between text-[#F7931F] font-black">
+                                    <div className="flex justify-between text-[#f97316] font-black">
                                       <span>Saldo</span>
                                       <span>${saldoPendiente.toLocaleString('es-CL')}</span>
                                     </div>
@@ -2605,7 +2685,7 @@ export default function PipelineVentasPage() {
         </div>
       ) : (
         /* Vista Lista Agrupada por Secciones del Pipeline */
-        <div className="space-y-8 animate-fadeIn">
+        <div className="space-y-8 ">
           {SECCIONES_PIPELINE.map((sec) => {
             const isSecCollapsed = !!collapsedParentSections[sec.id];
             const secOps = filteredOportunidades.filter((o) =>
@@ -2622,14 +2702,14 @@ export default function PipelineVentasPage() {
                       [sec.id]: !prev[sec.id],
                     }))
                   }
-                  className="p-4 rounded-lg border border-gray-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs cursor-pointer hover:border-[#F7931F]/60 transition select-none"
+                  className="p-4 rounded-lg border border-gray-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs cursor-pointer hover:border-[#f97316]/60 transition select-none"
                 >
                   <div className="flex items-center gap-3">
-                    <button type="button" className="text-[#363636] cursor-pointer">
+                    <button type="button" className="text-[#213343] cursor-pointer">
                       {isSecCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
                     </button>
-                    <h3 className="text-base font-extrabold text-[#363636]">{sec.nombre}</h3>
-                    <span className="text-xs font-mono font-bold px-2 py-0.5 border border-gray-200 bg-gray-50 text-[#363636]">
+                    <h3 className="text-base font-extrabold text-[#213343]">{sec.nombre}</h3>
+                    <span className="text-xs font-mono font-bold px-2 py-0.5 border border-gray-200 bg-gray-50 text-[#213343]">
                       {secOps.length} {secOps.length === 1 ? 'oportunidad' : 'oportunidades'}
                     </span>
                   </div>
@@ -2651,7 +2731,7 @@ export default function PipelineVentasPage() {
                           onDrop={(e) => handleDrop(e, col.id)}
                           className={`space-y-2 mb-4 p-2 rounded-lg transition-all duration-200 ${
                             isTargetColumn
-                              ? 'bg-orange-100/60 border-2 border-[#F7931F] ring-2 ring-[#F7931F]/30 scale-[1.005]'
+                              ? 'bg-orange-100/60 border-2 border-[#f97316] ring-2 ring-[#F7931F]/30 scale-[1.005]'
                               : 'border border-transparent'
                           }`}
                         >
@@ -2665,11 +2745,11 @@ export default function PipelineVentasPage() {
                             className="flex items-center justify-between py-2 px-1 border-b border-gray-200/80 cursor-pointer select-none transition group"
                           >
                             <div className="flex items-center gap-2.5">
-                              <button type="button" className="text-gray-400 group-hover:text-[#363636] transition cursor-pointer">
+                              <button type="button" className="text-gray-400 group-hover:text-[#213343] transition cursor-pointer">
                                 {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                               </button>
 
-                              <span className={`px-2.5 py-1 text-xs font-black uppercase tracking-wider flex items-center gap-2 ${col.bg} ${col.color} border border-transparent shadow-2xs`}>
+                              <span className={`px-2.5 py-1 text-xs font-black uppercase tracking-normal flex items-center gap-2 ${col.bg} ${col.color} border border-transparent shadow-2xs`}>
                                 <div className="w-2 h-2 rounded-full border border-current shadow-xs" />
                                 <span>{col.label}</span>
                               </span>
@@ -2685,7 +2765,7 @@ export default function PipelineVentasPage() {
                                 e.stopPropagation();
                                 setShowNewOpModal(true);
                               }}
-                              className="text-xs font-bold text-gray-500 hover:text-[#F7931F] transition flex items-center gap-1 cursor-pointer"
+                              className="text-xs font-bold text-gray-500 hover:text-[#f97316] transition flex items-center gap-1 cursor-pointer"
                             >
                               <Plus className="w-3.5 h-3.5" />
                               <span>Agregar Oportunidad</span>
@@ -2706,13 +2786,13 @@ export default function PipelineVentasPage() {
                                         <th className="py-3 px-2 w-10 text-center align-middle"></th>
                                         <th
                                           style={{ width: `${columnWidths.codigo}px` }}
-                                          className="py-3 px-3 text-left text-xs font-extrabold uppercase tracking-wider align-middle relative group border-r border-gray-200/50"
+                                          className="py-3 px-3 text-left text-xs font-extrabold uppercase tracking-normal align-middle relative group border-r border-gray-200/50"
                                         >
                                           <span>Código</span>
                                           <div
                                             onMouseDown={(e) => handleMouseDownResize('codigo', e)}
                                             onClick={(e) => e.stopPropagation()}
-                                            className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#F7931F] active:bg-[#F7931F] z-10 transition opacity-0 group-hover:opacity-100"
+                                            className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#f97316] active:bg-[#f97316] z-10 transition opacity-0 group-hover:opacity-100"
                                             title="Arrastrar para cambiar ancho de columna"
                                           />
                                         </th>
@@ -2725,7 +2805,7 @@ export default function PipelineVentasPage() {
                                         {renderSortHeader('Monto Total', 'monto', 'monto', 'right')}
                                       </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-100 font-semibold text-[#363636]">
+                                    <tbody className="divide-y divide-gray-100 font-semibold text-[#213343]">
                                       {colOps.map((op) => {
                                         const montoTotal = getOportunidadTotalValue(op);
                                         const isBeingDragged = draggedOpId === op.id;
@@ -2738,7 +2818,7 @@ export default function PipelineVentasPage() {
                                             onDragEnd={handleDragEnd}
                                             onClick={() => handleOpenOportunidad(op)}
                                             className={`hover:bg-orange-50/40 transition group cursor-grab active:cursor-grabbing text-xs ${
-                                              isBeingDragged ? 'opacity-40 bg-amber-50 border-dashed border-[#F7931F]' : ''
+                                              isBeingDragged ? 'opacity-40 bg-amber-50 border-dashed border-[#f97316]' : ''
                                             }`}
                                           >
                                             <td className="py-3 px-2 w-10 text-center align-middle" onClick={(e) => e.stopPropagation()}>
@@ -2765,17 +2845,17 @@ export default function PipelineVentasPage() {
                                           {op.codigo}
                                         </td>
 
-                                        <td style={{ width: `${columnWidths.titulo}px` }} className="py-3 px-3 font-bold text-[#363636] group-hover:text-[#F7931F] transition text-xs truncate align-middle" title={op.titulo}>
+                                        <td style={{ width: `${columnWidths.titulo}px` }} className="py-3 px-3 font-bold text-[#213343] group-hover:text-[#f97316] transition text-xs truncate align-middle" title={op.titulo}>
                                           {op.titulo}
                                         </td>
 
                                         <td style={{ width: `${columnWidths.cliente}px` }} className="py-3 px-3 text-xs align-middle truncate" onClick={(e) => e.stopPropagation()}>
                                           <Link
                                             href={`/clientes/${op.cliente_id}`}
-                                            className="font-bold text-[#F7931F] hover:underline flex items-center gap-1.5 truncate"
+                                            className="font-bold text-[#f97316] hover:underline flex items-center gap-1.5 truncate"
                                             title={op.cliente?.nombre || 'Ver Cliente'}
                                           >
-                                            <Building className="w-3.5 h-3.5 text-[#F7931F] shrink-0" />
+                                            <Building className="w-3.5 h-3.5 text-[#f97316] shrink-0" />
                                             <span className="truncate">{op.cliente?.nombre || 'Ver Cliente'}</span>
                                           </Link>
                                         </td>
@@ -2788,7 +2868,7 @@ export default function PipelineVentasPage() {
                                               updateOportunidadField(op.id, 'tipo_venta', newTipo);
                                               await addOportunidadActividad(op.id, `Tipo de venta cambiado a "${newTipo}" desde la lista.`);
                                             }}
-                                            className="text-xs font-bold px-2 py-1 rounded-xl border bg-purple-50 text-purple-900 border-purple-200 cursor-pointer focus:outline-none w-full"
+                                            className="text-xs font-bold px-2 py-1 rounded-md border bg-purple-50 text-purple-900 border-purple-200 cursor-pointer focus:outline-none w-full"
                                           >
                                             <option value="Instalación">Instalación</option>
                                             <option value="Suministro">Suministro</option>
@@ -2804,7 +2884,7 @@ export default function PipelineVentasPage() {
                                               updateOportunidadField(op.id, 'prioridad', newPrio);
                                               await addOportunidadActividad(op.id, `Prioridad cambiada a "${newPrio.toUpperCase()}" desde la lista.`);
                                             }}
-                                            className={`text-xs font-bold px-2 py-1 rounded-xl border cursor-pointer focus:outline-none w-full ${
+                                            className={`text-xs font-bold px-2 py-1 rounded-md border cursor-pointer focus:outline-none w-full ${
                                               op.prioridad === 'urgente'
                                                 ? 'bg-red-50 text-red-700 border-red-200'
                                                 : op.prioridad === 'alta'
@@ -2827,7 +2907,7 @@ export default function PipelineVentasPage() {
                                               updateOportunidadField(op.id, 'fecha_inicio', newDate);
                                               await addOportunidadActividad(op.id, `Fecha de inicio actualizada a ${newDate} desde la lista.`);
                                             }}
-                                            className="bg-transparent hover:bg-gray-100 border border-transparent hover:border-gray-300 rounded-lg px-1.5 py-1 font-mono text-xs text-gray-700 cursor-pointer focus:outline-none focus:border-[#F7931F] w-full"
+                                            className="bg-transparent hover:bg-gray-100 border border-transparent hover:border-gray-300 rounded-lg px-1.5 py-1 font-mono text-xs text-gray-700 cursor-pointer focus:outline-none focus:border-[#f97316] w-full"
                                           />
                                         </td>
 
@@ -2840,11 +2920,11 @@ export default function PipelineVentasPage() {
                                               updateOportunidadField(op.id, 'fecha_limite', newDate);
                                               await addOportunidadActividad(op.id, `Fecha límite actualizada a ${newDate} desde la lista.`);
                                             }}
-                                            className="bg-transparent hover:bg-amber-50 border border-transparent hover:border-amber-300 rounded-lg px-1.5 py-1 font-mono font-bold text-amber-800 cursor-pointer focus:outline-none focus:border-[#F7931F] w-full"
+                                            className="bg-transparent hover:bg-amber-50 border border-transparent hover:border-amber-300 rounded-lg px-1.5 py-1 font-mono font-bold text-amber-800 cursor-pointer focus:outline-none focus:border-[#f97316] w-full"
                                           />
                                         </td>
 
-                                        <td style={{ width: `${columnWidths.monto}px` }} className="py-3 px-3 text-right font-bold text-[#363636] text-xs align-middle">
+                                        <td style={{ width: `${columnWidths.monto}px` }} className="py-3 px-3 text-right font-bold text-[#213343] text-xs align-middle">
                                           ${montoTotal.toLocaleString('es-CL')}
                                         </td>
                                       </tr>
@@ -2867,17 +2947,17 @@ export default function PipelineVentasPage() {
         </div>
       )}
 
-      {/* Pop Up / Modal Enriquecido Oportunidad de Venta (Diseño ClickUp 2 Columnas - Rediseño & Fonts Ampliados) */}
+      {/* Pop Up / Modal Enriquecido Oportunidad de Venta (Estilo Workspace Minimalista Homologado con Tasks) */}
       {selectedOp && (
         <div
-          className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 z-50 animate-fadeIn"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-50"
           onClick={(e) => {
             if (e.target === e.currentTarget) handleCloseOportunidad();
           }}
         >
           <div
             ref={modalContainerRef}
-            className="bg-[#18181b] text-gray-100 border border-gray-800 rounded-3xl max-w-[84vw] w-full p-4 sm:p-6 shadow-2xl h-[95vh] overflow-hidden flex flex-col lg:flex-row gap-0 relative"
+            className="bg-white text-[#213343] border border-gray-200 rounded-lg max-w-[86vw] w-full p-4 sm:p-6 shadow-2xl h-[95vh] overflow-hidden flex flex-col lg:flex-row gap-0 relative"
           >
             {/* Columna Izquierda: Breadcrumb + Título + Accordions (Ancho Resizable) */}
             <div
@@ -2885,20 +2965,29 @@ export default function PipelineVentasPage() {
               className="flex flex-col h-full overflow-hidden pr-3 shrink-0"
             >
               {/* Header Superior con Breadcrumb y Botón Eliminar Oportunidad */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 pb-3 text-sm shrink-0">
-                <div className="flex items-center gap-2.5 text-gray-300 font-medium">
-                  <Building className="w-4 h-4 text-[#F7931F]" />
-                  <Link href={`/clientes/${selectedOp.cliente_id}`} className="hover:text-[#F7931F] transition underline font-bold text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3 text-sm shrink-0">
+                <div className="flex items-center gap-2.5 text-gray-500 font-medium">
+                  <Building className="w-4 h-4 text-[#f97316]" />
+                  <Link href={`/clientes/${selectedOp.cliente_id}`} className="hover:text-[#f97316] text-[#213343] transition underline font-bold text-sm">
                     {selectedOp.cliente?.nombre || 'Cliente'}
                   </Link>
-                  <span className="text-gray-600">/</span>
-                  <span className="text-gray-200 font-bold font-mono text-sm">{selectedOp.codigo}</span>
+                  <span className="text-gray-400">/</span>
+                  <span className="text-gray-500 font-bold font-mono text-sm">{selectedOp.codigo}</span>
+                  <button
+                    type="button"
+                    onClick={() => setOpenSections((prev) => ({ ...prev, antecedentes: true }))}
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-gray-100 hover:bg-orange-50 text-gray-700 hover:text-[#f97316] border border-gray-200 hover:border-orange-200 font-mono transition"
+                    title={`${opAntecedentesList.length} archivo(s) adjunto(s) - Clic para ver`}
+                  >
+                    <Paperclip className="w-3 h-3 text-[#f97316]" />
+                    <span>{opAntecedentesList.length}</span>
+                  </button>
                 </div>
 
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => setOpToDelete(selectedOp)}
-                    className="px-3 py-1.5 bg-red-500/20 hover:bg-red-600 text-red-300 hover:text-white rounded-xl transition border border-red-500/30 font-bold text-xs flex items-center gap-1.5"
+                    className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-md transition border border-red-200 font-bold text-xs flex items-center gap-1.5"
                     title="Eliminar esta oportunidad de Supabase"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -2908,19 +2997,19 @@ export default function PipelineVentasPage() {
               </div>
 
               {/* Título Principal Editable Inline */}
-              <div className="py-3 border-b border-gray-800 flex items-center justify-between shrink-0 mb-4">
+              <div className="py-3 border-b border-gray-100 flex items-center justify-between shrink-0 mb-4">
                 {isEditingTitle ? (
                   <div className="flex items-center gap-2.5 w-full">
                     <input
                       type="text"
                       value={editTitleValue}
                       onChange={(e) => setEditTitleValue(e.target.value)}
-                      className="bg-[#27272a] text-2xl font-black text-white border border-[#F7931F] rounded-xl px-3.5 py-1.5 w-full focus:outline-none"
+                      className="bg-white text-2xl font-black text-[#213343] border border-[#f97316] rounded-md px-3.5 py-1.5 w-full focus:outline-none"
                       autoFocus
                     />
                     <button
                       onClick={handleSaveTitleEdit}
-                      className="bg-[#F7931F] hover:bg-[#e08316] text-white p-2.5 rounded-xl transition font-bold"
+                      className="bg-[#f97316] hover:bg-[#ea580c] text-white p-2.5 rounded-md transition font-bold"
                     >
                       <Check className="w-5 h-5" />
                     </button>
@@ -2933,169 +3022,230 @@ export default function PipelineVentasPage() {
                     }}
                     className="flex items-center gap-3 cursor-pointer group"
                   >
-                    <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight group-hover:text-[#F7931F] transition">
+                    <h2 className="text-2xl sm:text-3xl font-black text-[#213343] leading-tight group-hover:text-[#f97316] transition">
                       {selectedOp.titulo}
                     </h2>
-                    <Edit className="w-5 h-5 text-gray-500 group-hover:text-[#F7931F] transition opacity-0 group-hover:opacity-100" />
+                    <Edit className="w-5 h-5 text-gray-400 group-hover:text-[#f97316] transition opacity-0 group-hover:opacity-100" />
                   </div>
                 )}
               </div>
 
               <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-2 text-sm">
-              {/* Strip de Datos Clave Editables Directamente: Etapa, Tipo de Venta, Prioridad, Vendedor, Fechas */}
-              <div className="p-3.5 bg-[#222226] rounded-2xl border border-gray-800 text-xs text-gray-300 mb-4 shadow-sm space-y-2.5">
-                <div className="grid gap-3 items-start [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
-                  {/* 1. Etapa del Pipeline */}
-                  <div className="flex flex-col gap-1">
-                    <span className="font-bold text-gray-400 text-xs">Etapa del pipeline:</span>
-                    <select
-                      value={selectedOp.estado_pipeline}
-                      onChange={async (e) => {
-                        const newStage = e.target.value as EstadoPipeline;
-                        await moveOportunidadToState(selectedOp.id, newStage);
-                      }}
-                      className="bg-[#27272a] text-[#F7931F] border border-[#F7931F]/70 rounded-xl px-2.5 py-1.5 text-xs font-black cursor-pointer focus:outline-none shadow-xs truncate"
-                    >
-                      {SECCIONES_PIPELINE.map((sec) => (
-                        <optgroup key={sec.id} label={sec.nombre}>
-                          {sec.etapas.map((st) => (
-                            <option key={st.id} value={st.id}>
-                              {st.label}
+              {/* Strip de Datos Clave Estilo ClickUp / Tasks (2 Columnas con Celdas Uniformes) */}
+              <div className="py-2.5 px-1 border-b border-gray-200 mb-4 text-xs">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2.5">
+                  {/* Columna Izquierda */}
+                  <div className="space-y-2">
+                    {/* 1. Status */}
+                    <div className="flex items-center gap-3 min-h-[36px]">
+                      <div className="w-32 sm:w-36 flex items-center gap-2 text-gray-500 font-medium shrink-0">
+                        <Disc className="w-4 h-4 text-gray-400 shrink-0" />
+                        <span>Status</span>
+                      </div>
+                      <div className="relative w-56 sm:w-64 max-w-full h-8">
+                        <select
+                          value={selectedOp.estado_pipeline}
+                          onChange={async (e) => {
+                            const newStage = e.target.value as EstadoPipeline;
+                            await moveOportunidadToState(selectedOp.id, newStage);
+                          }}
+                          className="w-full h-full appearance-none bg-gray-100 hover:bg-gray-200 text-[#213343] font-bold text-xs pl-3 pr-8 rounded-md border border-gray-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316] transition shadow-xs"
+                        >
+                          {SECCIONES_PIPELINE.map((sec) => (
+                            <optgroup key={sec.id} label={sec.nombre}>
+                              {sec.etapas.map((st) => (
+                                <option key={st.id} value={st.id}>
+                                  {st.label}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                    </div>
+
+                    {/* 2. Dates */}
+                    <div className="flex items-center gap-3 min-h-[36px]">
+                      <div className="w-32 sm:w-36 flex items-center gap-2 text-gray-500 font-medium shrink-0">
+                        <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
+                        <span>Dates</span>
+                      </div>
+                      <div className="w-56 sm:w-64 max-w-full h-8 bg-white border border-gray-200 hover:border-gray-300 rounded-md px-2.5 flex items-center justify-between text-xs text-[#213343] shadow-xs">
+                        <input
+                          type="date"
+                          value={selectedOp.fecha_inicio || ''}
+                          onChange={async (e) => {
+                            const newDate = e.target.value;
+                            updateOportunidadField(selectedOp.id, 'fecha_inicio', newDate);
+                            await addOportunidadActividad(selectedOp.id, `Fecha de inicio actualizada a ${newDate} desde el detalle.`);
+                          }}
+                          className="bg-transparent text-[#213343] font-mono text-xs w-[100px] sm:w-[105px] focus:outline-none cursor-pointer [color-scheme:light]"
+                          title="Fecha de inicio"
+                        />
+                        <span className="text-gray-400 font-bold">→</span>
+                        <input
+                          type="date"
+                          value={selectedOp.fecha_limite || ''}
+                          onChange={async (e) => {
+                            const newDate = e.target.value;
+                            updateOportunidadField(selectedOp.id, 'fecha_limite', newDate);
+                            await addOportunidadActividad(selectedOp.id, `Fecha límite actualizada a ${newDate} desde el detalle.`);
+                          }}
+                          className="bg-transparent text-amber-800 font-mono text-xs w-[100px] sm:w-[105px] focus:outline-none cursor-pointer [color-scheme:light]"
+                          title="Fecha límite"
+                        />
+                      </div>
+                    </div>
+
+                    {/* 3. Origen */}
+                    <div className="flex items-center gap-3 min-h-[36px]">
+                      <div className="w-32 sm:w-36 flex items-center gap-2 text-gray-500 font-medium shrink-0">
+                        <Compass className="w-4 h-4 text-gray-400 shrink-0" />
+                        <span>Origen</span>
+                      </div>
+                      <div className="relative w-56 sm:w-64 max-w-full h-8">
+                        <select
+                          value={selectedOp.origen || ''}
+                          onChange={async (e) => {
+                            const origen = e.target.value;
+                            updateOportunidadField(selectedOp.id, 'origen', origen || null);
+                            await addOportunidadActividad(
+                              selectedOp.id,
+                              origen ? `Origen actualizado a "${origen}".` : 'Origen de la oportunidad eliminado.'
+                            );
+                          }}
+                          className={`w-full h-full appearance-none bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 rounded-md pl-3 pr-8 text-xs font-bold focus:outline-none focus:border-[#f97316] transition shadow-xs cursor-pointer ${
+                            selectedOp.origen ? 'text-[#213343]' : 'text-gray-400 font-normal'
+                          }`}
+                        >
+                          <option value="">Empty</option>
+                          <option value="WhatsApp">WhatsApp</option>
+                          <option value="Web">Web</option>
+                          <option value="Correo">Correo</option>
+                          <option value="Referido">Referido</option>
+                          {selectedOp.origen && !['WhatsApp', 'Web', 'Correo', 'Referido', 'whatsapp', 'web', 'correo', 'referido'].includes(selectedOp.origen) && (
+                            <option value={selectedOp.origen}>{selectedOp.origen}</option>
+                          )}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                    </div>
+
+                    {/* 4. Tipo de Venta / Tags */}
+                    <div className="flex items-center gap-3 min-h-[36px]">
+                      <div className="w-32 sm:w-36 flex items-center gap-2 text-gray-500 font-medium shrink-0">
+                        <Tag className="w-4 h-4 text-gray-400 shrink-0" />
+                        <span>Tipo de venta</span>
+                      </div>
+                      <div className="relative w-56 sm:w-64 max-w-full h-8">
+                        <select
+                          value={selectedOp.tipo_venta || 'Instalación'}
+                          onChange={async (e) => {
+                            const newTipo = e.target.value;
+                            updateOportunidadField(selectedOp.id, 'tipo_venta', newTipo);
+                            await addOportunidadActividad(selectedOp.id, `Tipo de venta cambiado a "${newTipo}" desde el detalle.`);
+                          }}
+                          className="w-full h-full appearance-none bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 rounded-md pl-3 pr-8 text-xs font-bold text-[#213343] focus:outline-none focus:border-[#f97316] transition shadow-xs cursor-pointer"
+                        >
+                          <option value="Instalación">Instalación</option>
+                          <option value="Suministro">Suministro</option>
+                          <option value="Reventa de Material">Reventa de Material</option>
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                    </div>
+
+                    {/* 5. Requerimiento (debajo de Tipo de venta) */}
+                    <div className="flex items-center gap-3 min-h-[36px]">
+                      <div className="w-32 sm:w-36 flex items-center gap-2 text-gray-500 font-medium shrink-0">
+                        <Layers className="w-4 h-4 text-gray-400 shrink-0" />
+                        <span>Requerimiento</span>
+                      </div>
+                      <div className="relative w-56 sm:w-64 max-w-full h-8">
+                        <select
+                          value={selectedOp.modalidad_requerimiento || 'instalacion'}
+                          onChange={async (e) => {
+                            const value = e.target.value as 'solo_material' | 'instalacion';
+                            updateOportunidadField(selectedOp.id, 'modalidad_requerimiento', value);
+                            await addOportunidadActividad(
+                              selectedOp.id,
+                              `Requerimiento actualizado a "${value === 'solo_material' ? 'Sólo material' : 'Instalación'}".`
+                            );
+                          }}
+                          className="w-full h-full appearance-none bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 rounded-md pl-3 pr-8 text-xs font-bold text-[#213343] focus:outline-none focus:border-[#f97316] transition shadow-xs cursor-pointer"
+                        >
+                          <option value="instalacion">Instalación</option>
+                          <option value="solo_material">Sólo material</option>
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Columna Derecha */}
+                  <div className="space-y-2">
+                    {/* 1. Vendedor (anteriormente Assignees) */}
+                    <div className="flex items-center gap-3 min-h-[36px]">
+                      <div className="w-32 sm:w-36 flex items-center gap-2 text-gray-500 font-medium shrink-0">
+                        <User className="w-4 h-4 text-gray-400 shrink-0" />
+                        <span>Vendedor</span>
+                      </div>
+                      <div className="relative w-56 sm:w-64 max-w-full h-8">
+                        <select
+                          value={selectedOp.asignado_a || ''}
+                          onChange={async (e) => {
+                            const newUserId = e.target.value || null;
+                            updateOportunidadField(selectedOp.id, 'asignado_a', newUserId);
+                            const userObj = usuariosApp.find((u) => u.id === newUserId);
+                            await addOportunidadActividad(selectedOp.id, `Vendedor asignado actualizado a "${userObj?.nombre || 'Sin asignar'}".`);
+                          }}
+                          className={`w-full h-full appearance-none bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 rounded-md pl-3 pr-8 text-xs font-bold truncate focus:outline-none focus:border-[#f97316] transition shadow-xs cursor-pointer ${
+                            selectedOp.asignado_a ? 'text-[#213343]' : 'text-gray-400 font-normal'
+                          }`}
+                        >
+                          <option value="">Empty</option>
+                          {usuariosApp.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.nombre}
                             </option>
                           ))}
-                        </optgroup>
-                      ))}
-                    </select>
-                  </div>
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                    </div>
 
-                  {/* 2. Tipo de Venta */}
-                  <div className="flex flex-col gap-1">
-                    <span className="font-bold text-gray-400 text-xs">Tipo de venta:</span>
-                    <select
-                      value={selectedOp.tipo_venta || 'Instalación'}
-                      onChange={async (e) => {
-                        const newTipo = e.target.value;
-                        updateOportunidadField(selectedOp.id, 'tipo_venta', newTipo);
-                        await addOportunidadActividad(selectedOp.id, `Tipo de venta cambiado a "${newTipo}" desde el detalle.`);
-                      }}
-                      className="bg-[#27272a] text-[#F7931F] border border-gray-700 rounded-xl px-2.5 py-1.5 font-extrabold focus:outline-none cursor-pointer text-xs truncate"
-                    >
-                      <option value="Instalación">Instalación</option>
-                      <option value="Suministro">Suministro</option>
-                      <option value="Reventa de Material">Reventa de Material</option>
-                    </select>
-                  </div>
-
-                  {/* 3. Origen */}
-                  <div className="flex flex-col gap-1">
-                    <span className="font-bold text-gray-400 text-xs">Origen:</span>
-                    <input
-                      type="text"
-                      defaultValue={selectedOp.origen || ''}
-                      onBlur={async (e) => {
-                        const origen = e.target.value.trim();
-                        if ((selectedOp.origen || '') === origen) return;
-                        updateOportunidadField(selectedOp.id, 'origen', origen || null);
-                        await addOportunidadActividad(
-                          selectedOp.id,
-                          origen ? `Origen actualizado a "${origen}".` : 'Origen de la oportunidad eliminado.'
-                        );
-                      }}
-                      placeholder="Ej: WhatsApp, referido, web..."
-                      className="bg-[#27272a] text-gray-200 border border-gray-700 rounded-xl px-2.5 py-1.5 font-semibold focus:outline-none focus:border-[#F7931F] text-xs"
-                    />
-                  </div>
-
-                  {/* 4. Sólo material o instalación */}
-                  <div className="flex flex-col gap-1">
-                    <span className="font-bold text-gray-400 text-xs">Requerimiento:</span>
-                    <select
-                      value={selectedOp.modalidad_requerimiento || 'instalacion'}
-                      onChange={async (e) => {
-                        const value = e.target.value as 'solo_material' | 'instalacion';
-                        updateOportunidadField(selectedOp.id, 'modalidad_requerimiento', value);
-                        await addOportunidadActividad(
-                          selectedOp.id,
-                          `Requerimiento actualizado a "${value === 'solo_material' ? 'Sólo material' : 'Instalación'}".`
-                        );
-                      }}
-                      className="bg-[#27272a] text-[#F7931F] border border-gray-700 rounded-xl px-2.5 py-1.5 font-extrabold focus:outline-none cursor-pointer text-xs"
-                    >
-                      <option value="solo_material">Sólo material</option>
-                      <option value="instalacion">Instalación</option>
-                    </select>
-                  </div>
-
-                  {/* 5. Prioridad */}
-                  <div className="flex flex-col gap-1">
-                    <span className="font-bold text-gray-400 text-xs">Prioridad:</span>
-                    <select
-                      value={selectedOp.prioridad || 'normal'}
-                      onChange={async (e) => {
-                        const newPrio = e.target.value as 'normal' | 'alta' | 'urgente';
-                        updateOportunidadField(selectedOp.id, 'prioridad', newPrio);
-                        await addOportunidadActividad(selectedOp.id, `Prioridad cambiada a "${newPrio}" desde el detalle.`);
-                      }}
-                      className="bg-[#27272a] text-gray-200 border border-gray-700 rounded-xl px-2.5 py-1.5 font-extrabold focus:outline-none cursor-pointer text-xs"
-                    >
-                      <option value="normal">Normal</option>
-                      <option value="alta">Alta</option>
-                      <option value="urgente">Urgente</option>
-                    </select>
-                  </div>
-
-                  {/* 6. Vendedor Asignado */}
-                  <div className="flex flex-col gap-1">
-                    <span className="font-bold text-gray-400 text-xs">Vendedor:</span>
-                    <select
-                      value={selectedOp.asignado_a || ''}
-                      onChange={async (e) => {
-                        const newUserId = e.target.value || null;
-                        updateOportunidadField(selectedOp.id, 'asignado_a', newUserId);
-                        const userObj = usuariosApp.find((u) => u.id === newUserId);
-                        await addOportunidadActividad(selectedOp.id, `Vendedor asignado actualizado a "${userObj?.nombre || 'Sin asignar'}".`);
-                      }}
-                      className="bg-[#27272a] text-[#F7931F] border border-gray-700 rounded-xl px-2.5 py-1.5 font-bold focus:outline-none cursor-pointer text-xs truncate"
-                    >
-                      <option value="">-- Sin asignar --</option>
-                      {usuariosApp.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* 7. Fecha de Inicio */}
-                  <div className="flex flex-col gap-1">
-                    <span className="font-bold text-gray-400 text-xs">Fecha de inicio:</span>
-                    <input
-                      type="date"
-                      value={selectedOp.fecha_inicio || ''}
-                      onChange={async (e) => {
-                        const newDate = e.target.value;
-                        updateOportunidadField(selectedOp.id, 'fecha_inicio', newDate);
-                        await addOportunidadActividad(selectedOp.id, `Fecha de inicio actualizada a ${newDate} desde el detalle.`);
-                      }}
-                      className="bg-[#27272a] text-gray-200 border border-gray-700 rounded-xl px-2 py-1.5 font-mono font-semibold focus:outline-none cursor-pointer text-xs"
-                    >
-                    </input>
-                  </div>
-
-                  {/* 8. Fecha Límite */}
-                  <div className="flex flex-col gap-1">
-                    <span className="font-bold text-gray-400 text-xs">Fecha límite:</span>
-                    <input
-                      type="date"
-                      value={selectedOp.fecha_limite || ''}
-                      onChange={async (e) => {
-                        const newDate = e.target.value;
-                        updateOportunidadField(selectedOp.id, 'fecha_limite', newDate);
-                        await addOportunidadActividad(selectedOp.id, `Fecha límite actualizada a ${newDate} desde el detalle.`);
-                      }}
-                      className="bg-[#27272a] text-amber-400 border border-amber-500/40 rounded-xl px-2 py-1.5 font-mono font-bold focus:outline-none cursor-pointer text-xs"
-                    >
-                    </input>
+                    {/* 2. Priority */}
+                    <div className="flex items-center gap-3 min-h-[36px]">
+                      <div className="w-32 sm:w-36 flex items-center gap-2 text-gray-500 font-medium shrink-0">
+                        <Flag className="w-4 h-4 text-gray-400 shrink-0" />
+                        <span>Priority</span>
+                      </div>
+                      <div className="relative w-56 sm:w-64 max-w-full h-8">
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center">
+                          <Flag className={`w-3.5 h-3.5 ${
+                            selectedOp.prioridad === 'urgente' ? 'text-red-500' : selectedOp.prioridad === 'alta' ? 'text-amber-500' : selectedOp.prioridad === 'normal' ? 'text-blue-500' : 'text-gray-400'
+                          }`} />
+                        </div>
+                        <select
+                          value={selectedOp.prioridad || ''}
+                          onChange={async (e) => {
+                            const newPrio = e.target.value as 'normal' | 'alta' | 'urgente';
+                            updateOportunidadField(selectedOp.id, 'prioridad', newPrio || null);
+                            await addOportunidadActividad(selectedOp.id, `Prioridad cambiada a "${newPrio || 'normal'}" desde el detalle.`);
+                          }}
+                          className={`w-full h-full appearance-none bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 rounded-md pl-8 pr-8 text-xs font-bold focus:outline-none focus:border-[#f97316] transition shadow-xs cursor-pointer ${
+                            selectedOp.prioridad ? 'text-[#213343]' : 'text-gray-400 font-normal'
+                          }`}
+                        >
+                          <option value="">Empty</option>
+                          <option value="normal">Normal</option>
+                          <option value="alta">Alta</option>
+                          <option value="urgente">Urgente</option>
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3103,109 +3253,75 @@ export default function PipelineVentasPage() {
               {(() => {
                 const activeClient = clientes.find((c) => c.id === selectedOp.cliente_id) || selectedOp.cliente;
                 const ejecutivoCliente = usuariosApp.find((u) => u.id === (activeClient?.usuario_id || selectedOp.asignado_a));
-                const currentPipelineSection = SECCIONES_PIPELINE.find((sec) =>
-                  sec.etapas.some((stage) => stage.id === selectedOp.estado_pipeline)
-                );
-                const currentPipelineStage = currentPipelineSection?.etapas.find(
-                  (stage) => stage.id === selectedOp.estado_pipeline
-                );
 
                 return (
-                  <div className="mb-4 bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
-                    <div className="w-full p-3.5 bg-[#27272a] text-[#F7931F] font-extrabold text-sm uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
-                      <span className="flex items-center gap-2.5">
-                        <User className="w-4 h-4 text-[#F7931F]" />
+                  <div className="mb-4 bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
+                    <div className="w-full p-3 bg-white hover:bg-gray-50 text-[#213343] font-semibold text-sm flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 transition">
+                      <button
+                        type="button"
+                        onClick={() => setOpenSections((prev) => ({ ...prev, contacto: !prev.contacto }))}
+                        className="flex items-center gap-2.5 hover:text-[#ea580c] transition cursor-pointer text-left font-semibold text-sm text-[#213343]"
+                      >
+                        <User className="w-4 h-4 text-[#f97316]" />
                         <span>Información del cliente</span>
-                      </span>
+                        {openSections.contacto ? (
+                          <ChevronUp className="w-4 h-4 text-gray-500" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-gray-500" />
+                        )}
+                      </button>
                       {selectedOp.cliente_id && (
                         <Link
                           href={`/clientes/${selectedOp.cliente_id}`}
-                          className="text-xs font-bold bg-[#F7931F]/20 hover:bg-[#F7931F] text-[#F7931F] hover:text-white px-3 py-1.5 rounded-xl transition normal-case"
+                          className="text-xs font-semibold bg-orange-50 hover:bg-[#f97316] text-[#f97316] hover:text-white border border-orange-200 px-3 py-1.5 rounded-md transition flex items-center gap-1.5"
                         >
                           Editar ficha del cliente
                         </Link>
                       )}
                     </div>
 
-                    <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-300 text-sm">
-                      <div className="md:col-span-2 bg-[#18181b] border border-gray-800 rounded-2xl p-3.5 grid grid-cols-1 sm:grid-cols-[1fr_1fr_2fr] gap-3 items-end">
-                        <div>
-                          <span className="text-gray-400 font-semibold text-xs block mb-1">Área actual</span>
-                          <span className="text-white text-sm font-black block">
-                            {currentPipelineSection?.nombre || 'Sin área definida'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-400 font-semibold text-xs block mb-1">Etapa actual</span>
-                          <span className="text-[#F7931F] text-sm font-black block">
-                            {currentPipelineStage?.label || selectedOp.estado_pipeline}
-                          </span>
-                        </div>
-                        <div>
-                          <label className="text-gray-400 font-semibold text-xs block mb-1">
-                            Cambiar etapa de la oportunidad
-                          </label>
-                          <select
-                            value={selectedOp.estado_pipeline}
-                            onChange={async (e) => {
-                              const newStage = e.target.value as EstadoPipeline;
-                              await moveOportunidadToState(selectedOp.id, newStage);
-                            }}
-                            className="w-full bg-[#27272a] text-white border border-[#F7931F]/60 rounded-xl px-3 py-2 text-xs font-extrabold focus:outline-none focus:border-[#F7931F] cursor-pointer"
-                          >
-                            {SECCIONES_PIPELINE.map((sec) => (
-                              <optgroup key={sec.id} label={sec.nombre}>
-                                {sec.etapas.map((st) => (
-                                  <option key={st.id} value={st.id}>
-                                    {st.label}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-
+                    {openSections.contacto && (
+                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3.5 text-[#213343] text-xs">
                       <div>
-                        <span className="text-gray-400 font-semibold text-xs block mb-1">Razón social / Nombre</span>
-                        <strong className="text-white text-base block font-bold">{activeClient?.nombre || 'Hormiglass Cliente'}</strong>
+                        <span className="text-gray-500 font-medium text-xs block mb-0.5">Razón social / Nombre</span>
+                        <strong className="text-[#213343] text-xs font-bold block">{activeClient?.nombre || 'Hormiglass Cliente'}</strong>
                       </div>
                       <div>
-                        <span className="text-gray-400 font-semibold text-xs block mb-1">Encargado del cliente</span>
-                        <span className="text-white text-base block font-bold">{ejecutivoCliente?.nombre || 'Sin encargado asignado'}</span>
+                        <span className="text-gray-500 font-medium text-xs block mb-0.5">Encargado del cliente</span>
+                        <span className="text-[#213343] text-xs font-bold block">{ejecutivoCliente?.nombre || 'Sin encargado asignado'}</span>
                       </div>
                       <div>
-                        <span className="text-gray-400 font-semibold text-xs block mb-1">RUT registrado</span>
-                        <span className="font-mono text-amber-400 font-bold text-sm block">{activeClient?.rut || 'Sin RUT'}</span>
+                        <span className="text-gray-500 font-medium text-xs block mb-0.5">RUT registrado</span>
+                        <span className="font-mono text-amber-700 font-bold text-xs block">{activeClient?.rut || 'Sin RUT'}</span>
                       </div>
                       <div>
-                        <span className="text-gray-400 font-semibold text-xs block mb-1">Teléfono</span>
-                        <span className="flex items-center gap-1.5 font-bold text-white text-sm">
-                          <Phone className="w-4 h-4 text-[#F7931F]" />
+                        <span className="text-gray-500 font-medium text-xs block mb-0.5">Teléfono</span>
+                        <span className="flex items-center gap-1.5 font-bold text-[#213343] text-xs">
+                          <Phone className="w-3.5 h-3.5 text-[#f97316]" />
                           {activeClient?.telefono || 'No indicado'}
                         </span>
                       </div>
                       <div>
-                        <span className="text-gray-400 font-semibold text-xs block mb-1">Dirección de despacho / Obra</span>
-                        <span className="text-white text-sm font-bold block" title={activeClient?.direccion || selectedOp.direccion || 'Sin dirección'}>
+                        <span className="text-gray-500 font-medium text-xs block mb-0.5">Dirección de despacho / Obra</span>
+                        <span className="text-[#213343] text-xs font-bold block" title={activeClient?.direccion || selectedOp.direccion || 'Sin dirección'}>
                           {activeClient?.direccion || selectedOp.direccion || 'Sin dirección'}
                         </span>
                       </div>
                       <div>
-                        <span className="text-gray-400 font-semibold text-xs block mb-1">Comuna / Región</span>
-                        <span className="text-white text-sm font-bold block">
+                        <span className="text-gray-500 font-medium text-xs block mb-0.5">Comuna / Región</span>
+                        <span className="text-[#213343] text-xs font-bold block">
                           {[activeClient?.comuna || selectedOp.comuna, activeClient?.region || selectedOp.region || 'Región Metropolitana'].filter(Boolean).join(', ')}
                         </span>
                       </div>
                       <div className="md:col-span-2">
-                        <span className="text-gray-400 font-semibold text-xs block mb-1">Correos electrónicos</span>
-                        <div className="flex flex-wrap items-center gap-2 mt-1">
-                          <span className="bg-[#18181b] px-3 py-1.5 rounded-xl border border-gray-700 text-white font-mono text-xs flex items-center gap-1.5">
-                            <Mail className="w-3.5 h-3.5 text-[#F7931F]" />
+                        <span className="text-gray-500 font-medium text-xs block mb-1">Correos electrónicos</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="bg-gray-50 px-2.5 py-1 rounded-md border border-gray-200 text-[#213343] font-mono text-xs flex items-center gap-1.5 font-semibold">
+                            <Mail className="w-3.5 h-3.5 text-[#f97316]" />
                             {activeClient?.correo || 'Sin correo principal'}
                           </span>
                           {activeClient?.correos_secundarios?.map((sec, idx) => (
-                            <span key={idx} className="bg-[#18181b] px-3 py-1.5 rounded-xl border border-gray-700 text-gray-300 font-mono text-xs flex items-center gap-1.5">
+                            <span key={idx} className="bg-gray-50 px-2.5 py-1 rounded-md border border-gray-200 text-gray-600 font-mono text-xs flex items-center gap-1.5">
                               <Mail className="w-3.5 h-3.5 text-gray-400" />
                               {sec}
                             </span>
@@ -3213,55 +3329,56 @@ export default function PipelineVentasPage() {
                         </div>
                       </div>
                     </div>
+                    )}
                   </div>
                 );
               })()}
 
               {/* Listas Desplegables (Accordions) */}
-                {/* Banner Header: SECCIÓN 1: ÁREA COMERCIAL & VENTAS (Contraíble con Jerarquía) */}
+                {/* Banner Header: SECCIÓN 1: Área Comercial & Ventas (Contraíble con Jerarquía) */}
                 <button
                   type="button"
                   onClick={() => setAreaExpanded((prev) => ({ ...prev, comercial: !prev.comercial }))}
-                  className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] border border-amber-500/40 rounded-2xl flex items-center justify-between font-black text-sm sm:text-base uppercase tracking-wide text-amber-400 transition shadow-md cursor-pointer group"
+                  className="w-full p-3 bg-white hover:bg-gray-50 border border-gray-200 hover:border-amber-300 rounded-lg flex items-center justify-between font-semibold text-sm text-[#213343] transition shadow-xs cursor-pointer group"
                 >
-                  <div className="flex items-center gap-3">
-                    <TrendingUp className="w-5 h-5 text-[#F7931F] group-hover:scale-110 transition-transform" />
+                  <div className="flex items-center gap-2.5">
+                    <TrendingUp className="w-4 h-4 text-[#f97316] group-hover:scale-110 transition-transform" />
                     <span>Área Comercial & Ventas</span>
                   </div>
                   <div className="flex items-center gap-2">
                     {areaExpanded.comercial ? (
-                      <ChevronUp className="w-5 h-5 text-amber-400" />
+                      <ChevronUp className="w-4 h-4 text-gray-500" />
                     ) : (
-                      <ChevronDown className="w-5 h-5 text-amber-400" />
+                      <ChevronDown className="w-4 h-4 text-gray-500" />
                     )}
                   </div>
                 </button>
 
                 {areaExpanded.comercial && (
-                  <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-amber-500/40 space-y-3.5 my-2.5 animate-fadeIn relative">
+                  <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-amber-300 space-y-3.5 my-2.5 relative">
 
                 {/* Accordion 1: Cotizaciones de la Oportunidad */}
-                <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
                   <button
                     onClick={() => setOpenSections({ ...openSections, productos: !openSections.productos })}
-                    className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] text-[#F7931F] font-extrabold text-xs uppercase tracking-wider flex items-center justify-between border-b border-gray-800 transition"
+                    className="w-full p-3 bg-gray-50 hover:bg-gray-100/80 text-[#213343] font-semibold text-xs flex items-center justify-between border-b border-gray-200 transition"
                   >
                     <span className="flex items-center gap-2.5">
-                      <FileText className="w-4 h-4 text-[#F7931F]" />
+                      <FileText className="w-4 h-4 text-[#f97316]" />
                       <span>Cotizaciones de la Oportunidad</span>
                     </span>
-                    {openSections.productos ? <ChevronUp className="w-4 h-4 text-[#F7931F]" /> : <ChevronDown className="w-4 h-4 text-[#F7931F]" />}
+                    {openSections.productos ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
                   </button>
 
                   {openSections.productos && (
-                    <div className="p-5 space-y-4 animate-fadeIn">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-800 pb-3">
+                    <div className="p-5 space-y-4 bg-white text-[#213343]">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
                         <div>
-                          <h4 className="text-white font-extrabold text-sm flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-[#F7931F]" />
+                          <h4 className="text-[#213343] font-extrabold text-sm flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-[#f97316]" />
                             <span>Cotizaciones del Cliente:</span>
                           </h4>
-                          <p className="text-xs text-gray-400 mt-1">
+                          <p className="text-xs text-gray-500 mt-1">
                             Marca la casilla para considerar la cotización en esta oportunidad. Las cotizaciones en estado <strong>Enviada</strong> o <strong>Aprobada</strong> se sumarán al valor total.
                           </p>
                         </div>
@@ -3269,7 +3386,7 @@ export default function PipelineVentasPage() {
                         <button
                           type="button"
                           onClick={() => setShowUnifiedCotModal(true)}
-                          className="bg-[#F7931F] hover:bg-[#e08316] text-white text-xs font-extrabold px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 self-start sm:self-auto shrink-0 shadow-sm"
+                          className="bg-[#f97316] hover:bg-[#ea580c] text-white text-xs font-extrabold px-3.5 py-2 rounded-md transition flex items-center gap-1.5 self-start sm:self-auto shrink-0 shadow-xs"
                         >
                           <FilePlus className="w-4 h-4" />
                           <span>Crear Nueva Cotización</span>
@@ -3292,9 +3409,9 @@ export default function PipelineVentasPage() {
                           <div className="space-y-4">
                             {/* Desplegable de Selección y Previsualización de Cotizaciones Disponibles */}
                             {unassignedQuotes.length > 0 && (
-                              <div className="bg-[#18181b] p-4 rounded-2xl border border-gray-800 space-y-3 shadow-inner">
-                                <label className="text-gray-300 font-extrabold text-xs flex items-center gap-2 uppercase tracking-wider">
-                                  <FileText className="w-4 h-4 text-[#F7931F]" />
+                              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-3">
+                                <label className="text-[#213343] font-extrabold text-xs flex items-center gap-2 uppercase tracking-normal">
+                                  <FileText className="w-4 h-4 text-[#f97316]" />
                                   <span>Seleccionar Cotización Disponible para Agregar:</span>
                                 </label>
 
@@ -3302,7 +3419,7 @@ export default function PipelineVentasPage() {
                                   <select
                                     value={selectedCandidateCotId}
                                     onChange={(e) => setSelectedCandidateCotId(e.target.value)}
-                                    className="w-full bg-[#27272a] text-white border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#F7931F]"
+                                    className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#f97316]"
                                   >
                                     <option value="">-- Escoger Cotización Disponible ({unassignedQuotes.length}) --</option>
                                     {unassignedQuotes.map((cot) => (
@@ -3319,10 +3436,10 @@ export default function PipelineVentasPage() {
                                         const found = unassignedQuotes.find((c) => c.id === selectedCandidateCotId);
                                         if (found) setPreviewCotizacion(found);
                                       }}
-                                      className="w-full sm:w-auto bg-gray-800 hover:bg-gray-700 text-white text-xs font-extrabold px-3.5 py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 shrink-0 border border-gray-600 shadow-sm"
+                                      className="w-full sm:w-auto bg-white hover:bg-gray-100 text-[#213343] text-xs font-extrabold px-3.5 py-2.5 rounded-md transition flex items-center justify-center gap-1.5 shrink-0 border border-gray-200 shadow-xs"
                                       title="Previsualizar PDF antes de vincular"
                                     >
-                                      <Eye className="w-4 h-4 text-[#F7931F]" />
+                                      <Eye className="w-4 h-4 text-[#f97316]" />
                                       <span>Previsualizar</span>
                                     </button>
                                   )}
@@ -3356,7 +3473,7 @@ export default function PipelineVentasPage() {
                                         `Cotización ${targetCot.numero_cotizacion} agregada y vinculada a la oportunidad.`
                                       );
                                     }}
-                                    className="w-full sm:w-auto bg-[#F7931F] hover:bg-[#e08316] disabled:opacity-50 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 shrink-0 shadow-md"
+                                    className="w-full sm:w-auto bg-[#f97316] hover:bg-[#ea580c] disabled:opacity-50 text-white text-xs font-extrabold px-4 py-2.5 rounded-md transition flex items-center justify-center gap-1.5 shrink-0 shadow-xs"
                                   >
                                     <Plus className="w-4 h-4" />
                                     <span>Agregar</span>
@@ -3367,7 +3484,7 @@ export default function PipelineVentasPage() {
 
                             {/* Lista de Cotizaciones Agregadas a la Oportunidad */}
                             {linkedQuotes.length === 0 ? (
-                              <div className="p-5 bg-[#18181b] rounded-2xl border border-dashed border-gray-800 text-gray-400 text-center text-xs">
+                              <div className="p-5 bg-gray-50 rounded-lg border border-dashed border-gray-200 text-gray-500 text-center text-xs">
                                 No hay cotizaciones agregadas a esta oportunidad. {unassignedQuotes.length > 0 ? 'Selecciona una del desplegable de arriba o haz' : 'Haz'} clic en "Crear Nueva Cotización".
                               </div>
                             ) : (
@@ -3379,10 +3496,10 @@ export default function PipelineVentasPage() {
                                   return (
                                     <div
                                       key={cot.id}
-                                      className={`p-4 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                                      className={`p-4 rounded-lg border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                                         isLinked
-                                          ? 'bg-[#18181b] border-[#F7931F]/60 shadow-md'
-                                          : 'bg-[#18181b] border-gray-800 opacity-80 hover:opacity-100'
+                                          ? 'bg-white border-orange-300 shadow-xs'
+                                          : 'bg-white border-gray-200 opacity-80 hover:opacity-100'
                                       }`}
                                     >
                                       <div className="flex items-center gap-3.5">
@@ -3414,23 +3531,23 @@ export default function PipelineVentasPage() {
                                               `Cotización ${cot.numero_cotizacion} ${checked ? 'vinculada a' : 'desvinculada de'} la oportunidad.`
                                             );
                                           }}
-                                          className="w-4 h-4 rounded text-[#F7931F] focus:ring-[#F7931F] accent-[#F7931F] cursor-pointer shrink-0"
+                                          className="w-4 h-4 rounded text-[#f97316] focus:ring-[#f97316] accent-[#f97316] cursor-pointer shrink-0"
                                         />
 
                                         <div className="space-y-1">
                                           <div className="flex flex-wrap items-center gap-2">
-                                            <span className="font-mono font-black text-white text-sm">
+                                            <span className="font-mono font-black text-[#213343] text-sm">
                                               {cot.numero_cotizacion}
                                             </span>
-                                            <span className="text-xs font-extrabold uppercase bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">
+                                            <span className="text-xs font-extrabold uppercase bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
                                               v{cot.version || 1}
                                             </span>
                                             {isSummed ? (
-                                              <span className="text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                                              <span className="text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full border border-emerald-200">
                                                 Sumando a Oportunidad
                                               </span>
                                             ) : isLinked ? (
-                                              <span className="text-[10px] font-black uppercase bg-amber-500/20 text-amber-300 px-2.5 py-0.5 rounded-full border border-amber-500/30">
+                                              <span className="text-[10px] font-black uppercase bg-amber-50 text-amber-700 px-2.5 py-0.5 rounded-full border border-amber-200">
                                                 Agregada ({cot.estado})
                                               </span>
                                             ) : (
@@ -3439,7 +3556,7 @@ export default function PipelineVentasPage() {
                                               </span>
                                             )}
                                           </div>
-                                          <span className="font-black text-[#F7931F] text-sm block">
+                                          <span className="font-black text-[#f97316] text-sm block">
                                             ${(cot.monto_total || 0).toLocaleString('es-CL')} CLP
                                           </span>
                                         </div>
@@ -3472,26 +3589,26 @@ export default function PipelineVentasPage() {
                                               `Estado de cotización ${cot.numero_cotizacion} cambiado a "${newStatus.toUpperCase()}"`
                                             );
                                           }}
-                                          className={`text-xs font-extrabold uppercase px-3 py-1.5 rounded-xl border cursor-pointer focus:outline-none ${
+                                          className={`text-xs font-extrabold uppercase px-3 py-1.5 rounded-md border cursor-pointer focus:outline-none ${
                                             cot.estado === 'aprobada'
-                                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                               : cot.estado === 'enviada'
-                                              ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                                              ? 'bg-blue-50 text-blue-700 border-blue-200'
                                               : cot.estado === 'declinada' || cot.estado === 'rechazada'
-                                              ? 'bg-red-500/20 text-red-300 border-red-500/40'
-                                              : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                              ? 'bg-red-50 text-red-700 border-red-200'
+                                              : 'bg-amber-50 text-amber-700 border-amber-200'
                                           }`}
                                         >
-                                          <option value="borrador" className="bg-[#18181b] text-white">Borrador</option>
-                                          <option value="enviada" className="bg-[#18181b] text-white">Enviada</option>
-                                          <option value="aprobada" className="bg-[#18181b] text-white">Aprobada</option>
-                                          <option value="declinada" className="bg-[#18181b] text-white">Declinada</option>
+                                          <option value="borrador">Borrador</option>
+                                          <option value="enviada">Enviada</option>
+                                          <option value="aprobada">Aprobada</option>
+                                          <option value="declinada">Declinada</option>
                                         </select>
 
                                         <button
                                           type="button"
                                           onClick={() => setPreviewCotizacion(cot)}
-                                          className="p-2 bg-white/10 hover:bg-[#F7931F] text-white rounded-xl font-bold transition text-xs flex items-center gap-1.5"
+                                          className="p-2 bg-white hover:bg-orange-50 text-gray-700 hover:text-[#f97316] rounded-md font-bold transition text-xs flex items-center gap-1.5 border border-gray-200"
                                           title="Previsualizar PDF"
                                         >
                                           <Eye className="w-4 h-4" />
@@ -3522,7 +3639,7 @@ export default function PipelineVentasPage() {
                                               `Cotización ${cot.numero_cotizacion} desvinculada de esta oportunidad.`
                                             );
                                           }}
-                                          className="p-2 bg-[#27272a] hover:bg-amber-500/20 text-gray-400 hover:text-amber-300 rounded-xl transition border border-gray-700"
+                                          className="p-2 bg-white hover:bg-red-50 text-gray-400 hover:text-red-600 rounded-md transition border border-gray-200"
                                           title="Desvincular cotización de la oportunidad"
                                         >
                                           <Trash2 className="w-4 h-4" />
@@ -3535,16 +3652,16 @@ export default function PipelineVentasPage() {
                             )}
 
                             {/* Resumen Total Sumado de Oportunidad */}
-                            <div className="p-4 bg-[#18181b] border border-gray-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm shadow-inner">
+                            <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
                               <div>
-                                <span className="text-gray-200 font-extrabold text-sm block">Valor Total de la Oportunidad:</span>
-                                <span className="text-xs text-gray-400">
+                                <span className="text-[#213343] font-extrabold text-sm block">Valor Total de la Oportunidad:</span>
+                                <span className="text-xs text-gray-500">
                                   Suma de cotizaciones marcadas en estado <strong>Enviada</strong> o <strong>Aprobada</strong>.
                                 </span>
                               </div>
 
                               <div className="text-right">
-                                <span className="text-2xl font-black text-[#F7931F] block">
+                                <span className="text-2xl font-black text-[#f97316] block">
                                   ${totalValorOportunidad.toLocaleString('es-CL')} CLP
                                 </span>
                               </div>
@@ -3557,20 +3674,20 @@ export default function PipelineVentasPage() {
                 </div>
 
                 {/* Accordion 3: Finanzas & Documentos Adjuntos (Comprobantes de Pago) */}
-                <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
                   <button
                     onClick={() => setOpenSections({ ...openSections, finanzas: !openSections.finanzas })}
-                    className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] text-[#F7931F] font-extrabold text-xs uppercase tracking-wider flex items-center justify-between border-b border-gray-800 transition"
+                    className="w-full p-3 bg-gray-50 hover:bg-gray-100/80 text-[#213343] font-semibold text-xs flex items-center justify-between border-b border-gray-200 transition"
                   >
                     <span className="flex items-center gap-2.5">
-                      <DollarSign className="w-4 h-4 text-[#F7931F]" />
+                      <DollarSign className="w-4 h-4 text-[#f97316]" />
                       <span>Finanzas & Comprobantes de Pago</span>
                     </span>
-                    {openSections.finanzas ? <ChevronUp className="w-4 h-4 text-[#F7931F]" /> : <ChevronDown className="w-4 h-4 text-[#F7931F]" />}
+                    {openSections.finanzas ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
                   </button>
 
                   {openSections.finanzas && (
-                    <div className="p-5 space-y-5 animate-fadeIn">
+                    <div className="p-5 space-y-5 bg-white text-[#213343]">
                       {/* Resumen de Saldo */}
                       {(() => {
                         const totalCot = getOportunidadTotalValue(selectedOp);
@@ -3580,37 +3697,37 @@ export default function PipelineVentasPage() {
                         return (
                           <div className="space-y-4">
                             {/* Resumen Financiero Calculado */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-[#18181b] p-4 rounded-2xl border border-gray-800 text-center shadow-inner">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200 text-center">
                               <div>
-                                <span className="text-gray-400 block text-xs font-semibold mb-1">Valor Total Cotizado:</span>
-                                <strong className="text-white text-lg font-black">${totalCot.toLocaleString('es-CL')}</strong>
+                                <span className="text-gray-500 block text-xs font-semibold mb-1">Valor Total Cotizado:</span>
+                                <strong className="text-[#213343] text-lg font-black">${totalCot.toLocaleString('es-CL')}</strong>
                               </div>
                               <div>
-                                <span className="text-gray-400 block text-xs font-semibold mb-1">Monto Abonado Acumulado:</span>
-                                <strong className="text-emerald-400 text-lg font-black">${abonado.toLocaleString('es-CL')}</strong>
+                                <span className="text-gray-500 block text-xs font-semibold mb-1">Monto Abonado Acumulado:</span>
+                                <strong className="text-emerald-600 text-lg font-black">${abonado.toLocaleString('es-CL')}</strong>
                               </div>
                               <div>
-                                <span className="text-gray-400 block text-xs font-semibold mb-1">Saldo Pendiente:</span>
-                                <strong className="text-amber-400 text-lg font-black">${saldo.toLocaleString('es-CL')}</strong>
+                                <span className="text-gray-500 block text-xs font-semibold mb-1">Saldo Pendiente:</span>
+                                <strong className="text-amber-700 text-lg font-black">${saldo.toLocaleString('es-CL')}</strong>
                               </div>
                             </div>
 
                             {/* Registro de Abonos e Historial Acumulativo */}
-                            <div className="bg-[#18181b] p-4 rounded-2xl border border-gray-800 space-y-4 shadow-inner">
-                              <h4 className="text-white font-extrabold text-sm flex items-center gap-2">
-                                <DollarSign className="w-4 h-4 text-[#F7931F]" />
+                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4">
+                              <h4 className="text-[#213343] font-extrabold text-sm flex items-center gap-2">
+                                <DollarSign className="w-4 h-4 text-[#f97316]" />
                                 <span>Ingresar Nuevo Abono o Pago (Comprobante Obligatorio)</span>
                               </h4>
 
                               {abonoErrorMsg && (
-                                <div className="p-3 bg-red-500/20 border border-red-500/40 text-red-300 rounded-xl text-xs font-bold animate-fadeIn">
+                                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-xs font-bold">
                                   {abonoErrorMsg}
                                 </div>
                               )}
 
                               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                                 <div>
-                                  <label className="text-xs text-gray-300 font-bold block mb-1">Monto Abono ($ CLP) *</label>
+                                  <label className="text-xs text-gray-600 font-bold block mb-1">Monto Abono ($ CLP) *</label>
                                   <div className="relative">
                                     <span className="absolute left-3 top-2.5 text-gray-400 font-bold text-xs">$</span>
                                     <input
@@ -3622,16 +3739,16 @@ export default function PipelineVentasPage() {
                                         setNuevoAbonoMonto(digits);
                                         setAbonoErrorMsg('');
                                       }}
-                                      className="w-full bg-[#27272a] text-white border border-gray-700 rounded-xl pl-7 pr-3 py-2 text-xs font-bold focus:outline-none focus:border-[#F7931F]"
+                                      className="w-full bg-white text-[#213343] border border-gray-200 rounded-md pl-7 pr-3 py-2 text-xs font-bold focus:outline-none focus:border-[#f97316]"
                                     />
                                   </div>
                                 </div>
 
                                 <div>
-                                  <label className="text-xs text-gray-300 font-bold block mb-1">Comprobante de Pago *</label>
-                                  <label className="w-full bg-[#27272a] hover:bg-[#323236] text-gray-200 border border-gray-700 rounded-xl px-3 py-2 text-xs font-bold cursor-pointer flex items-center justify-between transition truncate">
+                                  <label className="text-xs text-gray-600 font-bold block mb-1">Comprobante de Pago *</label>
+                                  <label className="w-full bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 rounded-md px-3 py-2 text-xs font-bold cursor-pointer flex items-center justify-between transition truncate">
                                     <span className="truncate">{nuevoAbonoFileName || 'Subir Comprobante'}</span>
-                                    <Paperclip className="w-4 h-4 text-[#F7931F] shrink-0 ml-1" />
+                                    <Paperclip className="w-4 h-4 text-[#f97316] shrink-0 ml-1" />
                                     <input
                                       type="file"
                                       required
@@ -3654,13 +3771,13 @@ export default function PipelineVentasPage() {
                                 </div>
 
                                 <div>
-                                  <label className="text-xs text-gray-300 font-bold block mb-1">Nota / Referencia</label>
+                                  <label className="text-xs text-gray-600 font-bold block mb-1">Nota / Referencia</label>
                                   <input
                                     type="text"
                                     placeholder="Ej. Transferencia #9842"
                                     value={nuevoAbonoNota}
                                     onChange={(e) => setNuevoAbonoNota(e.target.value)}
-                                    className="w-full bg-[#27272a] text-white border border-gray-700 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F7931F]"
+                                    className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
                                   />
                                 </div>
 
@@ -3744,7 +3861,7 @@ export default function PipelineVentasPage() {
                                         'abono'
                                       );
                                     }}
-                                    className="w-full bg-[#F7931F] hover:bg-[#e08316] text-white text-xs font-extrabold px-3.5 py-2 rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm"
+                                    className="w-full bg-[#f97316] hover:bg-[#ea580c] text-white text-xs font-extrabold px-3.5 py-2 rounded-md transition flex items-center justify-center gap-1.5 shadow-xs"
                                   >
                                     <Plus className="w-4 h-4" />
                                     <span>Agregar Abono</span>
@@ -3753,8 +3870,8 @@ export default function PipelineVentasPage() {
                               </div>
 
                               {/* Historial de Abonos Registrados */}
-                              <div className="pt-4 border-t border-gray-800 space-y-3">
-                                <span className="text-gray-300 text-xs font-extrabold uppercase tracking-wider block">Historial de Abonos Registrados:</span>
+                              <div className="pt-4 border-t border-gray-200 space-y-3">
+                                <span className="text-[#213343] text-xs font-extrabold uppercase tracking-normal block">Historial de Abonos Registrados:</span>
                                 {(() => {
                                   const abonosList = (selectedOp.comprobantes_pago || []).filter(
                                     (item: any) => typeof item === 'object' && item !== null && 'monto' in item
@@ -3773,20 +3890,20 @@ export default function PipelineVentasPage() {
 
                                         if (isEditingThis) {
                                           return (
-                                            <div key={ab.id || idx} className="bg-[#27272a] p-3.5 rounded-xl border border-[#F7931F] space-y-2 text-xs">
-                                              <span className="font-bold text-[#F7931F] text-xs">Editar Abono:</span>
+                                            <div key={ab.id || idx} className="bg-white p-3.5 rounded-md border border-[#f97316] space-y-2 text-xs">
+                                              <span className="font-bold text-[#f97316] text-xs">Editar Abono:</span>
                                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                                 <input
                                                   type="text"
                                                   value={editAbonoMonto ? Number(editAbonoMonto).toLocaleString('es-CL') : ''}
                                                   onChange={(e) => setEditAbonoMonto(e.target.value.replace(/\D/g, ''))}
-                                                  className="bg-[#18181b] text-white border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs font-bold"
+                                                  className="bg-white text-[#213343] border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-bold"
                                                 />
                                                 <input
                                                   type="text"
                                                   value={editAbonoNota}
                                                   onChange={(e) => setEditAbonoNota(e.target.value)}
-                                                  className="bg-[#18181b] text-white border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs"
+                                                  className="bg-white text-[#213343] border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs"
                                                 />
                                                 <div className="flex items-center gap-1.5">
                                                   <button
@@ -3833,7 +3950,7 @@ export default function PipelineVentasPage() {
                                                   <button
                                                     type="button"
                                                     onClick={() => setEditingAbonoId(null)}
-                                                    className="bg-gray-700 hover:bg-gray-600 text-white font-bold text-xs px-3 py-1.5 rounded-lg"
+                                                    className="bg-gray-200 hover:bg-gray-300 text-[#213343] font-bold text-xs px-3 py-1.5 rounded-lg"
                                                   >
                                                     Cancelar
                                                   </button>
@@ -3844,13 +3961,13 @@ export default function PipelineVentasPage() {
                                         }
 
                                         return (
-                                          <div key={ab.id || idx} className="bg-[#27272a] p-3 rounded-xl border border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                                          <div key={ab.id || idx} className="bg-white p-3 rounded-md border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs shadow-xs">
                                             <div className="space-y-1">
                                               <div className="flex items-center gap-2">
-                                                <span className="font-bold text-emerald-400 text-sm">
+                                                <span className="font-bold text-emerald-700 text-sm">
                                                   ${Number(ab.monto || 0).toLocaleString('es-CL')} CLP
                                                 </span>
-                                                <span className="text-gray-200 text-xs font-semibold">
+                                                <span className="text-gray-700 text-xs font-semibold">
                                                   — {ab.nota || 'Abono'}
                                                 </span>
                                               </div>
@@ -3860,18 +3977,18 @@ export default function PipelineVentasPage() {
                                                   href={ab.comprobante_url}
                                                   target="_blank"
                                                   rel="noopener noreferrer"
-                                                  className="text-amber-400 hover:underline text-xs font-mono flex items-center gap-1.5 mt-0.5"
+                                                  className="text-[#f97316] hover:underline text-xs font-mono flex items-center gap-1.5 mt-0.5"
                                                 >
-                                                  <FileCheck className="w-3.5 h-3.5 text-[#F7931F]" />
+                                                  <FileCheck className="w-3.5 h-3.5 text-[#f97316]" />
                                                   <span>Comprobante: {ab.comprobante_nombre || 'Ver archivo'}</span>
                                                 </a>
                                               )}
                                             </div>
 
                                             <div className="flex items-center gap-2 self-end sm:self-auto">
-                                              <div className="text-right text-xs text-gray-400 mr-2">
+                                              <div className="text-right text-xs text-gray-500 mr-2">
                                                 <span>{ab.fecha}</span>
-                                                {ab.creado_por && <span className="block text-gray-500 font-semibold">{ab.creado_por}</span>}
+                                                {ab.creado_por && <span className="block text-gray-400 font-semibold">{ab.creado_por}</span>}
                                               </div>
 
                                               <button
@@ -3881,7 +3998,7 @@ export default function PipelineVentasPage() {
                                                   setEditAbonoMonto(String(ab.monto || ''));
                                                   setEditAbonoNota(ab.nota || '');
                                                 }}
-                                                className="p-1.5 bg-[#18181b] hover:bg-blue-600/30 text-blue-400 rounded-lg transition border border-gray-700"
+                                                className="p-1.5 bg-white hover:bg-blue-50 text-blue-600 rounded-lg transition border border-gray-200"
                                                 title="Editar Abono"
                                               >
                                                 <Edit className="w-4 h-4" />
@@ -3920,7 +4037,7 @@ export default function PipelineVentasPage() {
                                                     `Abono de $${Number(ab.monto || 0).toLocaleString('es-CL')} eliminado del historial. Total acumulado: $${updatedAbonado.toLocaleString('es-CL')}`
                                                   );
                                                 }}
-                                                className="p-1.5 bg-[#18181b] hover:bg-red-600/30 text-red-400 rounded-lg transition border border-gray-700"
+                                                className="p-1.5 bg-white hover:bg-red-50 text-red-600 rounded-lg transition border border-gray-200"
                                                 title="Eliminar Abono"
                                               >
                                                 <Trash2 className="w-4 h-4" />
@@ -3941,230 +4058,24 @@ export default function PipelineVentasPage() {
                   )}
                 </div>
 
-                {/* Accordion 3.5: Antecedentes & Documentación Exigida */}
-                <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
-                  <div className="w-full p-3.5 bg-[#27272a] text-[#F7931F] font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
-                    <button
-                      type="button"
-                      onClick={() => setOpenSections({ ...openSections, antecedentes: !openSections.antecedentes })}
-                      className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-xs uppercase tracking-wider text-[#F7931F]"
-                    >
-                      <FileCheck className="w-4 h-4 text-[#F7931F]" />
-                      <span>Antecedentes & Documentación</span>
-                      {opAntecedentesList.length > 0 && (
-                        <span className="text-xs bg-[#F7931F] text-white font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
-                          {opAntecedentesList.length}
-                        </span>
-                      )}
-                      {openSections.antecedentes ? <ChevronUp className="w-4 h-4 text-[#F7931F]" /> : <ChevronDown className="w-4 h-4 text-[#F7931F]" />}
-                    </button>
 
-                    <div className="flex items-center gap-3">
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedOp.requiere_antecedentes ?? false}
-                          onChange={async (e) => {
-                            const checked = e.target.checked;
-                            updateOportunidadField(selectedOp.id, 'requiere_antecedentes', checked);
-                            if (checked) {
-                              setOpenSections((prev) => ({ ...prev, antecedentes: true }));
-                            }
-                            if (isUUID(selectedOp.id)) {
-                              await supabase
-                                .from('oportunidades')
-                                .update({ requiere_antecedentes: checked })
-                                .eq('id', selectedOp.id);
-                            }
-                            await addOportunidadActividad(
-                              selectedOp.id,
-                              checked
-                                ? 'Se marcó la oportunidad como: Requiere enviar antecedentes (contratos, anexos, docs empresa/trabajador).'
-                                : 'Se desmarcó el requerimiento de antecedentes.'
-                            );
-                          }}
-                          className="sr-only peer"
-                        />
-                        <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#F7931F]"></div>
-                        <span className="ml-2 text-xs font-bold text-gray-300 capitalize">
-                          {selectedOp.requiere_antecedentes ? 'Requiere Antecedentes' : 'Sin Antecedentes'}
-                        </span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {openSections.antecedentes && (
-                    <div className="p-5 space-y-4 animate-fadeIn text-xs">
-                      {selectedOp.requiere_antecedentes ? (
-                        <div className="space-y-4">
-                          {/* Formulario de Carga */}
-                          <div className="bg-[#1c1c1f] p-4 rounded-2xl border border-gray-800 space-y-3">
-                            <h5 className="font-extrabold text-white flex items-center gap-2">
-                              <Plus className="w-4 h-4 text-[#F7931F]" />
-                              <span>Adjuntar Nuevo Antecedente</span>
-                            </h5>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                              <div>
-                                <label className="block text-gray-400 font-bold text-[11px] mb-1">
-                                  Tipo de Documento *
-                                </label>
-                                <select
-                                  value={nuevoAntecedenteTipo}
-                                  onChange={(e) => setNuevoAntecedenteTipo(e.target.value as TipoAntecedenteDocumento)}
-                                  className="w-full bg-[#27272a] border border-gray-700 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-[#F7931F]"
-                                >
-                                  <option value="contrato">Contrato de Prestación</option>
-                                  <option value="anexo">Anexo de Contrato</option>
-                                  <option value="documento_empresa">Documento Empresa (RUT, Certificados)</option>
-                                  <option value="documento_trabajador">Documento Trabajador (EPP, Mutual, Cédula)</option>
-                                  <option value="otro">Otro Documento</option>
-                                </select>
-                              </div>
-
-                              <div>
-                                <label className="block text-gray-400 font-bold text-[11px] mb-1">
-                                  Nombre / Descripción Documento
-                                </label>
-                                <input
-                                  type="text"
-                                  placeholder="Ej: Contrato Marco 2026 / Nómina Cuadrilla"
-                                  value={nuevoAntecedenteNombre}
-                                  onChange={(e) => setNuevoAntecedenteNombre(e.target.value)}
-                                  className="w-full bg-[#27272a] border border-gray-700 rounded-xl px-3 py-2 text-white font-medium focus:outline-none focus:border-[#F7931F]"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-gray-400 font-bold text-[11px] mb-1">
-                                  Archivo (PDF, Imagen, Doc) *
-                                </label>
-                                <input
-                                  type="file"
-                                  onChange={(e) => {
-                                    const f = e.target.files?.[0] || null;
-                                    setNuevoAntecedenteFile(f);
-                                    if (f && !nuevoAntecedenteNombre) {
-                                      setNuevoAntecedenteNombre(f.name);
-                                    }
-                                  }}
-                                  className="w-full text-xs text-gray-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-gray-800 file:text-[#F7931F] hover:file:bg-gray-700 cursor-pointer"
-                                />
-                              </div>
-                            </div>
-
-                            {antecedenteErrorMsg && (
-                              <p className="text-red-400 font-bold text-xs">{antecedenteErrorMsg}</p>
-                            )}
-
-                            <div className="flex justify-end pt-1">
-                              <button
-                                type="button"
-                                disabled={antecedenteUploading || !nuevoAntecedenteFile}
-                                onClick={handleUploadAntecedente}
-                                className="bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-                              >
-                                <Paperclip className="w-3.5 h-3.5" />
-                                <span>{antecedenteUploading ? 'Subiendo Documento...' : 'Adjuntar Documento'}</span>
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Listado de Antecedentes */}
-                          <div className="space-y-2">
-                            <h5 className="font-extrabold text-white text-xs">Documentos Adjuntos ({opAntecedentesList.length}):</h5>
-                            {opAntecedentesList.length === 0 ? (
-                              <div className="p-4 text-center text-gray-500 bg-[#1c1c1f] rounded-xl border border-gray-800">
-                                No se han adjuntado documentos de antecedentes todavía.
-                              </div>
-                            ) : (
-                              <div className="space-y-2">
-                                {opAntecedentesList.map((doc) => {
-                                  const tipoLabels: Record<TipoAntecedenteDocumento, { label: string; color: string }> = {
-                                    contrato: { label: 'Contrato', color: 'bg-blue-500/10 text-blue-400 border-blue-500/30' },
-                                    anexo: { label: 'Anexo', color: 'bg-purple-500/10 text-purple-400 border-purple-500/30' },
-                                    documento_empresa: { label: 'Doc. Empresa', color: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
-                                    documento_trabajador: { label: 'Doc. Trabajador', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
-                                    otro: { label: 'Otro', color: 'bg-gray-500/10 text-gray-400 border-gray-500/30' },
-                                  };
-                                  const tipoConfig = tipoLabels[doc.tipo] || tipoLabels.otro;
-
-                                  return (
-                                    <div
-                                      key={doc.id}
-                                      className="bg-[#27272a] p-3 rounded-xl border border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                                    >
-                                      <div className="flex items-center gap-3">
-                                        <FileCheck className="w-5 h-5 text-[#F7931F] shrink-0" />
-                                        <div>
-                                          <div className="flex items-center gap-2">
-                                            <span className="font-extrabold text-white text-xs">{doc.nombre}</span>
-                                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border uppercase ${tipoConfig.color}`}>
-                                              {tipoConfig.label}
-                                            </span>
-                                          </div>
-                                          <div className="text-[11px] text-gray-400 mt-0.5">
-                                            <span>Subido por: {doc.subido_por || 'Usuario'}</span>
-                                            {doc.fecha_iso && (
-                                              <span className="ml-2 text-gray-500 font-mono">
-                                                {new Date(doc.fecha_iso).toLocaleDateString('es-CL')}
-                                              </span>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      <div className="flex items-center gap-2 self-end sm:self-auto">
-                                        <a
-                                          href={doc.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="px-3 py-1.5 bg-[#18181b] hover:bg-orange-500/20 text-[#F7931F] rounded-xl font-bold border border-gray-700 transition text-xs flex items-center gap-1"
-                                        >
-                                          <Eye className="w-3.5 h-3.5" />
-                                          <span>Ver / Descargar</span>
-                                        </a>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleDeleteAntecedente(doc.id)}
-                                          className="p-1.5 bg-[#18181b] hover:bg-red-500/20 text-red-400 rounded-xl border border-gray-700 transition"
-                                          title="Eliminar Antecedente"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="p-4 text-center text-gray-400 bg-[#1c1c1f] rounded-2xl border border-gray-800">
-                          Esta oportunidad está marcada como <strong>Sin Antecedentes exigidos</strong>. Activa la casilla arriba si el cliente solicita envío de contratos, anexos o documentación técnica de trabajadores.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
 
                 {/* Accordion 4: Visita a Terreno */}
-                <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
-                  <div className="w-full p-3.5 bg-[#27272a] text-[#F7931F] font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
+                  <div className="w-full p-3 bg-gray-50 text-[#213343] font-semibold text-xs flex flex-wrap items-center justify-between gap-3 border-b border-gray-200">
                     <button
                       type="button"
                       onClick={() => setOpenSections({ ...openSections, visita: !openSections.visita })}
-                      className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-xs uppercase tracking-wider text-[#F7931F]"
+                      className="flex items-center gap-2.5 hover:text-[#f97316] transition cursor-pointer text-left font-semibold text-xs text-[#213343]"
                     >
-                      <Calendar className="w-4 h-4 text-[#F7931F]" />
+                      <Calendar className="w-4 h-4 text-[#f97316]" />
                       <span>Visita a Terreno</span>
                       {opVisitasList.length > 0 && (
-                        <span className="text-xs bg-[#F7931F] text-white font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
+                        <span className="text-xs bg-[#f97316] text-white font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
                           {opVisitasList.length}
                         </span>
                       )}
-                      {openSections.visita ? <ChevronUp className="w-4 h-4 text-[#F7931F]" /> : <ChevronDown className="w-4 h-4 text-[#F7931F]" />}
+                      {openSections.visita ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
                     </button>
 
                     <div className="flex items-center gap-3">
@@ -4187,15 +4098,15 @@ export default function PipelineVentasPage() {
                           }}
                           className="sr-only peer"
                         />
-                        <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#F7931F]"></div>
-                        <span className="ml-2 text-xs font-bold text-gray-200 capitalize tracking-normal">
+                        <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#f97316]"></div>
+                        <span className="ml-2 text-xs font-bold text-gray-700 capitalize tracking-normal">
                           {selectedOp.requiere_visita_terreno ? 'Habilitado' : 'No Requiere'}
                         </span>
                       </label>
                       {selectedOp.requiere_visita_terreno && (
                         <Link
                           href={`/visitas?opId=${selectedOp.id}`}
-                          className="text-[11px] bg-[#F7931F] hover:bg-[#e08316] text-white px-2.5 py-1 rounded-xl font-bold flex items-center gap-1 transition lowercase tracking-normal"
+                          className="text-[11px] bg-[#f97316] hover:bg-[#ea580c] text-white px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition lowercase tracking-normal"
                         >
                           <span>Ver en Calendario</span>
                         </Link>
@@ -4204,10 +4115,10 @@ export default function PipelineVentasPage() {
                   </div>
 
                   {openSections.visita && selectedOp.requiere_visita_terreno && (
-                    <div className="p-4 space-y-4 text-xs text-gray-300 bg-[#1e1e22]">
+                    <div className="p-4 space-y-4 text-xs text-gray-700 bg-white">
                       {/* Botón para agregar una nueva visita */}
-                      <div className="flex items-center justify-between border-b border-gray-800 pb-3">
-                        <span className="font-bold text-white text-xs">Visitas Programadas para este Proyecto:</span>
+                      <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                        <span className="font-bold text-[#213343] text-xs">Visitas Programadas para este Proyecto:</span>
                         <button
                           type="button"
                           onClick={() => {
@@ -4216,7 +4127,7 @@ export default function PipelineVentasPage() {
                               setNewVisitaFecha(new Date().toISOString().split('T')[0]);
                             }
                           }}
-                          className="bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                          className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold text-xs px-3 py-1.5 rounded-md transition flex items-center gap-1.5 shadow-xs"
                         >
                           <Plus className="w-4 h-4" />
                           <span>Agregar Visita a Terreno</span>
@@ -4225,19 +4136,19 @@ export default function PipelineVentasPage() {
 
                       {/* Formulario Inline para Registrar Nueva Visita */}
                       {showAddVisitaForm && (
-                        <div className="bg-[#27272a] p-4 rounded-2xl border border-[#F7931F]/40 space-y-3 animate-fadeIn">
-                          <h4 className="font-extrabold text-white text-xs uppercase text-[#F7931F] flex items-center gap-1.5">
+                        <div className="bg-gray-50 p-4 rounded-lg border border-orange-300 space-y-3">
+                          <h4 className="font-extrabold text-[#f97316] text-xs uppercase flex items-center gap-1.5">
                             <Plus className="w-4 h-4" />
                             <span>Registrar Nueva Visita</span>
                           </h4>
 
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
-                              <label className="block font-bold text-gray-400 mb-1">Responsable *</label>
+                              <label className="block font-bold text-gray-600 mb-1">Responsable *</label>
                               <select
                                 value={newVisitaTecnico}
                                 onChange={(e) => setNewVisitaTecnico(e.target.value)}
-                                className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-[#F7931F]"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-[#f97316]"
                               >
                                 <option value="">Selecciona responsable</option>
                                 {responsablesVisitas.map((p) => (
@@ -4249,34 +4160,34 @@ export default function PipelineVentasPage() {
                             </div>
 
                             <div>
-                              <label className="block font-bold text-gray-400 mb-1">Fecha de Visita *</label>
+                              <label className="block font-bold text-gray-600 mb-1">Fecha de Visita *</label>
                               <input
                                 type="date"
                                 required
                                 value={newVisitaFecha}
                                 onChange={(e) => setNewVisitaFecha(e.target.value)}
-                                className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-[#F7931F]"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-[#f97316]"
                               />
                             </div>
 
                             <div>
-                              <label className="block font-bold text-gray-400 mb-1">Hora de Visita</label>
+                              <label className="block font-bold text-gray-600 mb-1">Hora de Visita</label>
                               <input
                                 type="time"
                                 value={newVisitaHora}
                                 onChange={(e) => setNewVisitaHora(e.target.value)}
-                                className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-[#F7931F]"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-[#f97316]"
                               />
                             </div>
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                              <label className="block font-bold text-gray-400 mb-1">Estado Inicial</label>
+                              <label className="block font-bold text-gray-600 mb-1">Estado Inicial</label>
                               <select
                                 value={newVisitaEstado}
                                 onChange={(e) => setNewVisitaEstado(e.target.value)}
-                                className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-extrabold uppercase focus:outline-none focus:border-[#F7931F]"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-extrabold uppercase focus:outline-none focus:border-[#f97316]"
                               >
                                 <option value="programada">Programada</option>
                                 <option value="realizada">Realizada</option>
@@ -4285,22 +4196,22 @@ export default function PipelineVentasPage() {
                             </div>
 
                             <div>
-                              <label className="block font-bold text-gray-400 mb-1">Notas / Instrucciones</label>
+                              <label className="block font-bold text-gray-600 mb-1">Notas / Instrucciones</label>
                               <input
                                 type="text"
                                 placeholder="Ej: Medir acceso y toma de plantilla..."
                                 value={newVisitaNotas}
                                 onChange={(e) => setNewVisitaNotas(e.target.value)}
-                                className="w-full bg-[#1e1e22] text-gray-200 border border-gray-700 rounded-xl px-3 py-1.5 focus:outline-none focus:border-[#F7931F]"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-[#f97316]"
                               />
                             </div>
                           </div>
 
-                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-800">
+                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-200">
                             <button
                               type="button"
                               onClick={() => setShowAddVisitaForm(false)}
-                              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-xl font-bold transition"
+                              className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-[#213343] rounded-md font-bold transition"
                             >
                               Cancelar
                             </button>
@@ -4361,7 +4272,7 @@ export default function PipelineVentasPage() {
                                   console.error('Error inserting visita:', err);
                                 }
                               }}
-                              className="px-4 py-1.5 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-extrabold transition shadow-sm"
+                              className="px-4 py-1.5 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-extrabold transition shadow-xs"
                             >
                               Guardar Visita
                             </button>
@@ -4371,7 +4282,7 @@ export default function PipelineVentasPage() {
 
                       {/* Lista de Visitas Registradas */}
                       {opVisitasList.length === 0 ? (
-                        <div className="py-4 text-center text-gray-500 italic text-xs bg-[#27272a]/50 rounded-2xl border border-gray-800">
+                        <div className="py-4 text-center text-gray-500 italic text-xs bg-gray-50 rounded-lg border border-dashed border-gray-200">
                           No hay visitas a terreno registradas en este momento. Haz clic en <strong>&quot;+ Agregar Visita a Terreno&quot;</strong> para programar una.
                         </div>
                       ) : (
@@ -4384,20 +4295,20 @@ export default function PipelineVentasPage() {
                               return (
                                 <div
                                   key={vis.id || vIdx}
-                                  className="bg-[#27272a] p-4 rounded-2xl border border-[#F7931F]/50 space-y-3 animate-fadeIn"
+                                  className="bg-white p-4 rounded-lg border border-[#f97316] space-y-3 shadow-xs"
                                 >
-                                  <h4 className="font-extrabold text-white text-xs uppercase text-[#F7931F] flex items-center gap-1.5">
+                                  <h4 className="font-extrabold text-[#f97316] text-xs uppercase flex items-center gap-1.5">
                                     <Edit className="w-4 h-4" />
                                     <span>Editar Visita a Terreno</span>
                                   </h4>
 
                                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <div>
-                                      <label className="block font-bold text-gray-400 mb-1">Responsable</label>
+                                      <label className="block font-bold text-gray-600 mb-1">Responsable</label>
                                       <select
                                         value={editVisitaTecnico}
                                         onChange={(e) => setEditVisitaTecnico(e.target.value)}
-                                        className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-[#F7931F]"
+                                        className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-[#f97316]"
                                       >
                                         <option value="">Selecciona responsable</option>
                                         {responsablesVisitas.map((p) => (
@@ -4409,33 +4320,33 @@ export default function PipelineVentasPage() {
                                     </div>
 
                                     <div>
-                                      <label className="block font-bold text-gray-400 mb-1">Fecha</label>
+                                      <label className="block font-bold text-gray-600 mb-1">Fecha</label>
                                       <input
                                         type="date"
                                         value={editVisitaFecha}
                                         onChange={(e) => setEditVisitaFecha(e.target.value)}
-                                        className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-[#F7931F]"
+                                        className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-[#f97316]"
                                       />
                                     </div>
 
                                     <div>
-                                      <label className="block font-bold text-gray-400 mb-1">Hora</label>
+                                      <label className="block font-bold text-gray-600 mb-1">Hora</label>
                                       <input
                                         type="time"
                                         value={editVisitaHora}
                                         onChange={(e) => setEditVisitaHora(e.target.value)}
-                                        className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-[#F7931F]"
+                                        className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-[#f97316]"
                                       />
                                     </div>
                                   </div>
 
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div>
-                                      <label className="block font-bold text-gray-400 mb-1">Estado</label>
+                                      <label className="block font-bold text-gray-600 mb-1">Estado</label>
                                       <select
                                         value={editVisitaEstado}
                                         onChange={(e) => setEditVisitaEstado(e.target.value)}
-                                        className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-extrabold uppercase focus:outline-none focus:border-[#F7931F]"
+                                        className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-extrabold uppercase focus:outline-none focus:border-[#f97316]"
                                       >
                                         <option value="programada">Programada</option>
                                         <option value="realizada">Realizada</option>
@@ -4444,21 +4355,21 @@ export default function PipelineVentasPage() {
                                     </div>
 
                                     <div>
-                                      <label className="block font-bold text-gray-400 mb-1">Notas / Observaciones</label>
+                                      <label className="block font-bold text-gray-600 mb-1">Notas / Observaciones</label>
                                       <input
                                         type="text"
                                         value={editVisitaNotas}
                                         onChange={(e) => setEditVisitaNotas(e.target.value)}
-                                        className="w-full bg-[#1e1e22] text-gray-200 border border-gray-700 rounded-xl px-3 py-1.5 focus:outline-none focus:border-[#F7931F]"
+                                        className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-[#f97316]"
                                       />
                                     </div>
                                   </div>
 
-                                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-800">
+                                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-200">
                                     <button
                                       type="button"
                                       onClick={() => setEditingVisitaId(null)}
-                                      className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-xl font-bold transition text-xs"
+                                      className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-[#213343] rounded-md font-bold transition text-xs"
                                     >
                                       Cancelar
                                     </button>
@@ -4518,7 +4429,7 @@ export default function PipelineVentasPage() {
                                           console.error('Error updating visita:', err);
                                         }
                                       }}
-                                      className="px-4 py-1.5 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-extrabold transition shadow-sm text-xs"
+                                      className="px-4 py-1.5 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-extrabold transition shadow-xs text-xs"
                                     >
                                       Guardar Cambios
                                     </button>
@@ -4530,25 +4441,25 @@ export default function PipelineVentasPage() {
                             return (
                               <div
                                 key={vis.id || vIdx}
-                                className="bg-[#27272a] p-3.5 rounded-2xl border border-gray-800 flex flex-col gap-3 hover:border-gray-700 transition"
+                                className="bg-white p-3.5 rounded-lg border border-gray-200 flex flex-col gap-3 hover:border-gray-300 transition shadow-xs"
                               >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <div className="flex flex-wrap items-center gap-2">
-                                    <span className="text-[11px] font-black uppercase tracking-wider px-2 py-1 rounded-md bg-orange-950 text-orange-300 border border-orange-800">
+                                    <span className="text-[11px] font-black uppercase tracking-normal px-2 py-1 rounded-md bg-orange-50 text-orange-700 border border-orange-200">
                                       {responsableNombre}
                                     </span>
 
-                                    <span className="text-[11px] font-black px-2 py-1 rounded-md border bg-[#18181b] text-gray-300 border-gray-700">
+                                    <span className="text-[11px] font-black px-2 py-1 rounded-md border bg-gray-50 text-gray-700 border-gray-200">
                                       Visitas a terreno
                                     </span>
 
                                     <span
                                       className={`text-[11px] font-extrabold px-2 py-1 rounded-md border ${
                                         vis.estado_visita === 'realizada'
-                                          ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                           : vis.estado_visita === 'cancelada'
-                                          ? 'bg-red-950 text-red-300 border-red-800'
-                                          : 'bg-amber-950 text-amber-300 border-amber-800'
+                                          ? 'bg-red-50 text-red-700 border-red-200'
+                                          : 'bg-amber-50 text-amber-700 border-amber-200'
                                       }`}
                                     >
                                       {vis.estado_visita || 'programada'}
@@ -4570,7 +4481,7 @@ export default function PipelineVentasPage() {
                                         setEditVisitaEstado(vis.estado_visita || 'programada');
                                         setEditVisitaNotas(vis.observaciones_visita || '');
                                       }}
-                                      className="p-1.5 bg-[#18181b] hover:bg-blue-600/30 text-blue-400 rounded-lg transition border border-gray-700"
+                                      className="p-1.5 bg-white hover:bg-blue-50 text-blue-600 rounded-lg transition border border-gray-200"
                                       title="Editar Visita"
                                     >
                                       <Edit className="w-4 h-4" />
@@ -4616,7 +4527,7 @@ export default function PipelineVentasPage() {
                                           console.error('Error deleting visita:', err);
                                         }
                                       }}
-                                      className="p-1.5 bg-[#18181b] hover:bg-red-600/30 text-red-400 rounded-lg transition border border-gray-700"
+                                      className="p-1.5 bg-white hover:bg-red-50 text-red-600 rounded-lg transition border border-gray-200"
                                       title="Eliminar Visita"
                                     >
                                       <Trash2 className="w-4 h-4" />
@@ -4625,24 +4536,24 @@ export default function PipelineVentasPage() {
                                 </div>
 
                                 <div className="space-y-1">
-                                  <strong className="text-white text-sm block">Visita a terreno</strong>
-                                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-300 font-bold">
-                                    <span className="font-mono flex items-center gap-1">
-                                      <Calendar className="w-3.5 h-3.5 text-[#F7931F]" />
+                                  <strong className="text-[#213343] text-sm block">Visita a terreno</strong>
+                                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 font-bold">
+                                    <span className="font-mono flex items-center gap-1 text-[#213343]">
+                                      <Calendar className="w-3.5 h-3.5 text-[#f97316]" />
                                       {vis.fecha_visita_terreno}
                                     </span>
 
-                                    <span className="font-mono flex items-center gap-1">
-                                      <Clock className="w-3.5 h-3.5 text-gray-500" />
+                                    <span className="font-mono flex items-center gap-1 text-gray-500">
+                                      <Clock className="w-3.5 h-3.5 text-gray-400" />
                                       {vis.hora_visita_terreno || '09:00'} hrs
                                     </span>
                                   </div>
-                                  <div className="text-xs text-gray-400 font-semibold">
+                                  <div className="text-xs text-gray-500 font-semibold">
                                     {[selectedOp.codigo, selectedOp.cliente?.nombre].filter(Boolean).join(' · ')}
                                   </div>
 
                                   {vis.observaciones_visita && (
-                                    <p className="text-gray-400 text-xs pt-1">
+                                    <p className="text-gray-600 text-xs pt-1">
                                       {vis.observaciones_visita}
                                     </p>
                                   )}
@@ -4663,38 +4574,38 @@ export default function PipelineVentasPage() {
               <button
                 type="button"
                 onClick={() => setAreaExpanded((prev) => ({ ...prev, produccion: !prev.produccion }))}
-                className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] border border-purple-500/40 rounded-2xl flex items-center justify-between font-black text-sm sm:text-base uppercase tracking-wide text-purple-400 transition shadow-md cursor-pointer group"
+                className="w-full p-3 bg-white hover:bg-gray-50 border border-gray-200 hover:border-purple-300 rounded-lg flex items-center justify-between font-semibold text-sm text-[#213343] transition shadow-xs cursor-pointer group"
               >
-                <div className="flex items-center gap-3">
-                  <Factory className="w-5 h-5 text-purple-400 group-hover:scale-110 transition-transform" />
+                <div className="flex items-center gap-2.5">
+                  <Factory className="w-4 h-4 text-purple-600 group-hover:scale-110 transition-transform" />
                   <span>Producción y Logística</span>
                 </div>
                 <div className="flex items-center gap-2">
                   {areaExpanded.produccion ? (
-                    <ChevronUp className="w-5 h-5 text-purple-400" />
+                    <ChevronUp className="w-4 h-4 text-gray-500" />
                   ) : (
-                    <ChevronDown className="w-5 h-5 text-purple-400" />
+                    <ChevronDown className="w-4 h-4 text-gray-500" />
                   )}
                 </div>
               </button>
 
               {areaExpanded.produccion && (
-                <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-purple-500/40 space-y-3.5 my-2.5 animate-fadeIn relative">
-                  <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
-                    <div className="w-full p-3.5 bg-[#27272a] text-purple-400 font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
+                <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-purple-300 space-y-3.5 my-2.5 relative">
+                  <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
+                    <div className="w-full p-3 bg-gray-50 text-[#213343] font-semibold text-xs flex flex-wrap items-center justify-between gap-3 border-b border-gray-200">
                       <button
                         type="button"
                         onClick={() => setOpenSections({ ...openSections, produccionEventos: !openSections.produccionEventos })}
-                        className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-xs uppercase tracking-wider text-purple-400"
+                        className="flex items-center gap-2.5 hover:text-purple-900 transition cursor-pointer text-left font-semibold text-xs text-[#213343]"
                       >
-                        <Calendar className="w-4 h-4 text-purple-400" />
+                        <Calendar className="w-4 h-4 text-purple-600" />
                         <span>Eventos de Producción y Logística</span>
                         {produccionEventos.length > 0 && (
                           <span className="text-xs bg-purple-600 text-white font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
                             {produccionEventos.length}
                           </span>
                         )}
-                        {openSections.produccionEventos ? <ChevronUp className="w-4 h-4 text-purple-400" /> : <ChevronDown className="w-4 h-4 text-purple-400" />}
+                        {openSections.produccionEventos ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
                       </button>
 
                       <div className="flex items-center gap-3">
@@ -4705,15 +4616,15 @@ export default function PipelineVentasPage() {
                             onChange={(e) => setProduccionEventosEnabled(e.target.checked)}
                             className="sr-only peer"
                           />
-                          <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-500"></div>
-                          <span className="ml-2 text-xs font-bold text-gray-200 capitalize tracking-normal">
+                          <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                          <span className="ml-2 text-xs font-bold text-gray-700 capitalize tracking-normal">
                             {produccionEventosEnabled ? 'Habilitado' : 'No Requiere'}
                           </span>
                         </label>
                         {produccionEventosEnabled && (
                           <Link
                             href={`/planificacion/calendario?opId=${selectedOp.id}`}
-                            className="text-[11px] bg-purple-600 hover:bg-purple-700 text-white px-2.5 py-1 rounded-xl font-bold flex items-center gap-1 transition lowercase tracking-normal"
+                            className="text-[11px] bg-purple-600 hover:bg-purple-700 text-white px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition lowercase tracking-normal"
                           >
                             <span>Ver Calendario</span>
                           </Link>
@@ -4723,16 +4634,16 @@ export default function PipelineVentasPage() {
                     </div>
 
                     {openSections.produccionEventos && produccionEventosEnabled && (
-                    <div className="p-4 space-y-4 text-xs text-gray-300 bg-[#1e1e22]">
-                      <div className="flex items-center justify-between border-b border-gray-800 pb-3">
-                        <span className="font-bold text-white text-xs">Eventos registrados para esta oportunidad:</span>
+                    <div className="p-4 space-y-4 text-xs text-gray-700 bg-white">
+                      <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                        <span className="font-bold text-[#213343] text-xs">Eventos registrados para esta oportunidad:</span>
                         <button
                           type="button"
                           onClick={() => {
                             resetProdLogForm('produccion_logistica', 'produccion');
                             setShowAddProdLogEventForm(!showAddProdLogEventForm || newProdLogContexto !== 'produccion_logistica');
                           }}
-                          className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                          className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-md transition flex items-center gap-1.5 shadow-xs"
                         >
                           <Plus className="w-4 h-4" />
                           <span>Agregar Evento</span>
@@ -4740,22 +4651,22 @@ export default function PipelineVentasPage() {
                       </div>
 
                       {showAddProdLogEventForm && newProdLogContexto === 'produccion_logistica' && (
-                        <div className="bg-[#27272a] p-4 rounded-2xl border border-purple-500/40 space-y-3 animate-fadeIn">
-                          <h4 className="font-extrabold text-white text-xs uppercase text-purple-400 flex items-center gap-1.5">
+                        <div className="bg-gray-50 p-4 rounded-lg border border-purple-300 space-y-3">
+                          <h4 className="font-extrabold text-purple-700 text-xs uppercase flex items-center gap-1.5">
                             <Plus className="w-4 h-4" />
                             <span>Registrar Evento</span>
                           </h4>
 
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
-                              <label className="block font-bold text-gray-400 mb-1">Tipo de evento *</label>
+                              <label className="block font-bold text-gray-600 mb-1">Tipo de evento *</label>
                               <select
                                 value={newProdLogTipo}
                                 onChange={(e) => {
                                   const nextTipo = e.target.value as TipoEventoProduccionLogistica;
                                   setNewProdLogTipo(nextTipo);
                                 }}
-                                className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-purple-400"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-purple-500"
                               >
                                 <option value="obra">Obra</option>
                                 <option value="logistica">Logística</option>
@@ -4764,44 +4675,44 @@ export default function PipelineVentasPage() {
                             </div>
 
                             <div>
-                              <label className="block font-bold text-gray-400 mb-1">Fecha *</label>
+                              <label className="block font-bold text-gray-600 mb-1">Fecha *</label>
                               <input
                                 type="date"
                                 required
                                 value={newProdLogFecha}
                                 onChange={(e) => setNewProdLogFecha(e.target.value)}
-                                className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-purple-400"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-purple-500"
                               />
                             </div>
 
                             <div>
-                              <label className="block font-bold text-gray-400 mb-1">Hora</label>
+                              <label className="block font-bold text-gray-600 mb-1">Hora</label>
                               <input
                                 type="time"
                                 value={newProdLogHora}
                                 onChange={(e) => setNewProdLogHora(e.target.value)}
-                                className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-purple-400"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-purple-500"
                               />
                             </div>
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
-                              <label className="block font-bold text-gray-400 mb-1">Título *</label>
+                              <label className="block font-bold text-gray-600 mb-1">Título *</label>
                               <input
                                 type="text"
                                 value={newProdLogTitulo}
                                 onChange={(e) => setNewProdLogTitulo(e.target.value)}
-                                className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-3 py-1.5 font-bold focus:outline-none focus:border-purple-400"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3 py-1.5 font-bold focus:outline-none focus:border-purple-500"
                               />
                             </div>
 
                             <div>
-                              <label className="block font-bold text-gray-400 mb-1">Responsable</label>
+                              <label className="block font-bold text-gray-600 mb-1">Responsable</label>
                               <select
                                 value={newProdLogResponsableId}
                                 onChange={(e) => setNewProdLogResponsableId(e.target.value)}
-                                className="w-full bg-[#1e1e22] text-gray-200 border border-gray-700 rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-purple-400"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-purple-500"
                               >
                                 <option value="">-- Sin asignar --</option>
                                 {responsablesProduccionLogistica.map((p) => (
@@ -4813,11 +4724,11 @@ export default function PipelineVentasPage() {
                             </div>
 
                             <div>
-                              <label className="block font-bold text-gray-400 mb-1">Estado Inicial</label>
+                              <label className="block font-bold text-gray-600 mb-1">Estado Inicial</label>
                               <select
                                 value={newProdLogEstado}
                                 onChange={(e) => setNewProdLogEstado(e.target.value as EstadoEventoProduccionLogistica)}
-                                className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-extrabold uppercase focus:outline-none focus:border-purple-400"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-extrabold uppercase focus:outline-none focus:border-purple-500"
                               >
                                 {prodLogEstadoOptions.map((option) => (
                                   <option key={option.value} value={option.value}>
@@ -4829,28 +4740,28 @@ export default function PipelineVentasPage() {
                           </div>
 
                           <div>
-                            <label className="block font-bold text-gray-400 mb-1">Notas / Instrucciones</label>
+                            <label className="block font-bold text-gray-600 mb-1">Notas / Instrucciones</label>
                             <input
                               type="text"
                               placeholder="Ej: coordinar retiro, despacho, fabricación o instalación..."
                               value={newProdLogNotas}
                               onChange={(e) => setNewProdLogNotas(e.target.value)}
-                              className="w-full bg-[#1e1e22] text-gray-200 border border-gray-700 rounded-xl px-3 py-1.5 focus:outline-none focus:border-purple-400"
+                              className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-purple-500"
                             />
                           </div>
 
-                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-800">
+                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-200">
                             <button
                               type="button"
                               onClick={() => setShowAddProdLogEventForm(false)}
-                              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-xl font-bold transition"
+                              className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-[#213343] rounded-md font-bold transition"
                             >
                               Cancelar
                             </button>
                             <button
                               type="button"
                               onClick={() => saveProdLogEvent('produccion_logistica')}
-                              className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-extrabold transition shadow-sm"
+                              className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-md font-extrabold transition shadow-xs"
                             >
                               {editingProdLogEventId ? 'Guardar cambios' : 'Guardar evento'}
                             </button>
@@ -4859,7 +4770,7 @@ export default function PipelineVentasPage() {
                       )}
 
                       {produccionEventos.length === 0 ? (
-                        <div className="py-4 text-center text-gray-500 italic text-xs bg-[#27272a]/50 rounded-2xl border border-gray-800">
+                        <div className="py-4 text-center text-gray-500 italic text-xs bg-gray-50 rounded-lg border border-dashed border-gray-200">
                           No hay eventos registrados. Haz clic en <strong>&quot;+ Agregar Evento&quot;</strong> para programar obra, logística o producción.
                         </div>
                       ) : (
@@ -4870,11 +4781,11 @@ export default function PipelineVentasPage() {
                             return (
                               <div
                                 key={event.id}
-                                className="bg-[#27272a] p-3.5 rounded-2xl border border-gray-800 flex flex-col gap-3 text-gray-200 hover:border-gray-700 transition shadow-sm"
+                                className="bg-white p-3.5 rounded-lg border border-gray-200 flex flex-col gap-3 text-[#213343] hover:border-gray-300 transition shadow-xs"
                               >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <div className="flex flex-wrap items-center gap-2">
-                                    <span className="font-black uppercase tracking-wider text-[11px] px-2 py-1 rounded-md text-orange-300 bg-orange-950 border border-orange-800">
+                                    <span className="font-black uppercase tracking-normal text-[11px] px-2 py-1 rounded-md text-orange-700 bg-orange-50 border border-orange-200">
                                       {getResponsableEventoNombre(event)}
                                     </span>
                                     <span className={`text-[11px] font-black px-2 py-1 rounded-md border ${getProdLogTipoClasses(event.tipo_evento)}`}>
@@ -4888,7 +4799,7 @@ export default function PipelineVentasPage() {
                                     <button
                                       type="button"
                                       onClick={() => startEditProdLogEvent(event)}
-                                      className="p-1.5 bg-[#18181b] hover:bg-purple-600/30 text-purple-400 border border-gray-700 rounded-lg transition"
+                                      className="p-1.5 bg-white hover:bg-purple-50 text-purple-600 border border-gray-200 rounded-lg transition"
                                       title="Editar evento"
                                     >
                                       <Edit className="w-4 h-4" />
@@ -4896,7 +4807,7 @@ export default function PipelineVentasPage() {
                                     <button
                                       type="button"
                                       onClick={() => deleteProdLogEvent(event)}
-                                      className="p-1.5 bg-[#18181b] hover:bg-red-600/30 text-red-400 border border-gray-700 rounded-lg transition"
+                                      className="p-1.5 bg-white hover:bg-red-50 text-red-600 border border-gray-200 rounded-lg transition"
                                       title="Eliminar evento"
                                     >
                                       <Trash2 className="w-4 h-4" />
@@ -4904,19 +4815,19 @@ export default function PipelineVentasPage() {
                                   </div>
                                 </div>
                                 <div className="space-y-1">
-                                  <strong className="text-white text-sm block">{event.titulo}</strong>
-                                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-300 font-bold">
-                                    <span className="font-mono flex items-center gap-1">
-                                      <Calendar className="w-3.5 h-3.5 text-purple-400" />
+                                  <strong className="text-[#213343] text-sm block">{event.titulo}</strong>
+                                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 font-bold">
+                                    <span className="font-mono flex items-center gap-1 text-[#213343]">
+                                      <Calendar className="w-3.5 h-3.5 text-purple-600" />
                                       {fecha}
                                     </span>
-                                    <span className="font-mono flex items-center gap-1">
-                                      <Clock className="w-3.5 h-3.5 text-gray-500" />
+                                    <span className="font-mono flex items-center gap-1 text-gray-500">
+                                      <Clock className="w-3.5 h-3.5 text-gray-400" />
                                       {hora}
                                     </span>
                                   </div>
                                   {event.observaciones && (
-                                    <span className="block text-xs text-gray-400">{event.observaciones}</span>
+                                    <span className="block text-xs text-gray-500">{event.observaciones}</span>
                                   )}
                                 </div>
                               </div>
@@ -4927,254 +4838,33 @@ export default function PipelineVentasPage() {
                     </div>
                     )}
                     {openSections.produccionEventos && !produccionEventosEnabled && (
-                      <div className="p-4 text-xs text-gray-400 bg-[#1e1e22]">
+                      <div className="p-4 text-xs text-gray-500 bg-white">
                         Habilita eventos para registrar obra, logística o producción.
                       </div>
                     )}
                   </div>
 
-                  {/* Accordion 2.2: Bitácora de Producción Diaria & Control de Stock de Obra (Ajustes 11 - Req 2) */}
-                  <div className="hidden">
-                    <button
-                      type="button"
-                      onClick={() => setOpenSections({ ...openSections, produccionBitacora: !openSections.produccionBitacora })}
-                      className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] text-purple-400 font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 transition cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2.5 text-left">
-                        <HardHat className="w-4 h-4 text-purple-400" />
-                        <span>Bitácora de Producción Diaria & Stock de Obra</span>
-                        <span className="text-xs text-purple-300 font-mono font-bold">
-                          {opProduccionDiaria.length} {opProduccionDiaria.length === 1 ? 'registro' : 'registros'}
-                        </span>
-                      </div>
-                      {openSections.produccionBitacora ? <ChevronUp className="w-4 h-4 text-purple-400" /> : <ChevronDown className="w-4 h-4 text-purple-400" />}
-                    </button>
-
-                    {openSections.produccionBitacora && (
-                    <div className="p-4 space-y-4 text-xs text-gray-300 bg-[#1e1e22]">
-                      {/* Tabla de Comparación contra Ítems Cotizados */}
-                      <div>
-                        <h5 className="font-extrabold text-gray-200 text-xs uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                          <Layers className="w-3.5 h-3.5 text-purple-400" />
-                          <span>Control de Avance vs Cotización</span>
-                        </h5>
-
-                        {cotizacionItemsOp.length === 0 ? (
-                          <div className="p-3 bg-[#18181b] rounded-lg text-gray-400 text-center italic border border-gray-800">
-                            No hay ítems de cotización registrados para contrastar el avance.
-                          </div>
-                        ) : (
-                          <div className="overflow-x-auto rounded-lg border border-gray-800">
-                            <table className="w-full text-left text-xs bg-[#18181b]">
-                              <thead className="bg-[#27272a] text-gray-400 font-bold uppercase text-[10px] border-b border-gray-800">
-                                <tr>
-                                  <th className="py-2.5 px-3">Producto / Ítem</th>
-                                  <th className="py-2.5 px-3 text-center">Cant. Cotizada</th>
-                                  <th className="py-2.5 px-3 text-center">Fabricado</th>
-                                  <th className="py-2.5 px-3 text-center">Saldo Pendiente</th>
-                                  <th className="py-2.5 px-3 text-center">Avance</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-800">
-                                {cotizacionItemsOp.map((item, idx) => {
-                                  const cotizada = Number(item.cantidad) || 0;
-                                  const fabricado = opProduccionDiaria
-                                    .filter((p) => p.producto?.toLowerCase().trim() === item.producto?.toLowerCase().trim())
-                                    .reduce((sum, p) => sum + Number(p.cantidad_producida || 0), 0);
-                                  const saldo = Math.max(0, cotizada - fabricado);
-                                  const pct = cotizada > 0 ? Math.min(100, Math.round((fabricado / cotizada) * 100)) : 100;
-
-                                  return (
-                                    <tr key={item.id || idx} className="hover:bg-white/5">
-                                      <td className="py-2.5 px-3 font-bold text-white">
-                                        {item.producto}
-                                        {item.descripcion && (
-                                          <span className="block text-[10px] text-gray-400 font-normal">{item.descripcion}</span>
-                                        )}
-                                      </td>
-                                      <td className="py-2.5 px-3 text-center font-mono font-bold text-gray-300">
-                                        {cotizada}
-                                      </td>
-                                      <td className="py-2.5 px-3 text-center font-mono font-bold text-purple-400">
-                                        {fabricado}
-                                      </td>
-                                      <td className="py-2.5 px-3 text-center font-mono font-bold text-purple-300">
-                                        {saldo}
-                                      </td>
-                                      <td className="py-2.5 px-3 text-center">
-                                        <div className="flex items-center justify-center gap-2">
-                                          <div className="w-16 bg-gray-800 h-2 overflow-hidden border border-gray-700">
-                                            <div
-                                              className={`h-full ${pct >= 100 ? 'bg-emerald-500' : 'bg-purple-500'}`}
-                                              style={{ width: `${pct}%` }}
-                                            />
-                                          </div>
-                                          <span className="font-mono text-[10px] font-bold text-gray-300">{pct}%</span>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Formulario para Registrar Producción Diaria */}
-                      <form onSubmit={handleRegisterProduccionDiaria} className="p-3.5 bg-[#18181b] rounded-lg border border-gray-800 space-y-3">
-                        <h5 className="font-extrabold text-white text-xs uppercase text-purple-400 flex items-center gap-1.5">
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Registrar Tanda de Fabricación Diaria</span>
-                        </h5>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div>
-                            <label className="block font-bold text-gray-400 mb-1">Producto Fabricado *</label>
-                            {cotizacionItemsOp.length > 0 ? (
-                              <select
-                                required
-                                value={newProdProducto}
-                                onChange={(e) => setNewProdProducto(e.target.value)}
-                                className="w-full bg-[#27272a] text-white border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-purple-400"
-                              >
-                                <option value="">-- Seleccionar Producto --</option>
-                                {cotizacionItemsOp.map((it, idx) => (
-                                  <option key={it.id || idx} value={it.producto}>
-                                    {it.producto} ({it.cantidad} cotizados)
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <input
-                                type="text"
-                                required
-                                placeholder="Ej. Pastelón 50x50 Gris"
-                                value={newProdProducto}
-                                onChange={(e) => setNewProdProducto(e.target.value)}
-                                className="w-full bg-[#27272a] text-white border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-purple-400"
-                              />
-                            )}
-                          </div>
-
-                          <div>
-                            <label className="block font-bold text-gray-400 mb-1">Cantidad Producida *</label>
-                            <input
-                              type="number"
-                              required
-                              min={1}
-                              step={1}
-                              value={newProdCantidad || ''}
-                              onChange={(e) => setNewProdCantidad(Number(e.target.value))}
-                              placeholder="Ej. 25"
-                              className="w-full bg-[#27272a] text-white font-mono border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-purple-400"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block font-bold text-gray-400 mb-1">Fecha de Fabricación</label>
-                            <input
-                              type="date"
-                              value={newProdFecha}
-                              onChange={(e) => setNewProdFecha(e.target.value)}
-                              className="w-full bg-[#27272a] text-white font-mono border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-purple-400"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div>
-                            <label className="block font-bold text-gray-400 mb-1">Encargado / Responsable</label>
-                            <select
-                              value={newProdResponsableId}
-                              onChange={(e) => setNewProdResponsableId(e.target.value)}
-                              className="w-full bg-[#27272a] text-gray-200 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-purple-400"
-                            >
-                              <option value="">-- Sin asignar --</option>
-                              {responsablesProduccionLogistica.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.nombre}{p.rut ? ` - ${p.rut}` : ''}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block font-bold text-gray-400 mb-1">Observaciones / Lote</label>
-                            <input
-                              type="text"
-                              placeholder="Lote #, detalle de mezcla, fraguado..."
-                              value={newProdObservaciones}
-                              onChange={(e) => setNewProdObservaciones(e.target.value)}
-                              className="w-full bg-[#27272a] text-white border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-purple-400"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex justify-end pt-1">
-                          <button
-                            type="submit"
-                            className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold px-4 py-1.5 rounded-lg transition text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>Registrar Tanda</span>
-                          </button>
-                        </div>
-                      </form>
-
-                      {/* Historial de Fabricación Diaria */}
-                      {opProduccionDiaria.length > 0 && (
-                        <div className="space-y-2 pt-2">
-                          <h6 className="font-extrabold text-gray-400 text-[11px] uppercase tracking-wider">Historial de Tandas Registradas</h6>
-                          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                            {opProduccionDiaria.map((prod) => (
-                              <div
-                                key={prod.id}
-                                className="p-2.5 bg-[#18181b] rounded-lg border border-gray-800 flex items-center justify-between gap-3 text-xs"
-                              >
-                                <div className="flex items-center gap-2.5">
-                                  <span className="font-mono text-purple-400 font-bold bg-purple-950/60 px-2 py-0.5 border border-purple-800/40">
-                                    +{prod.cantidad_producida} un.
-                                  </span>
-                                  <div>
-                                    <strong className="text-white">{prod.producto}</strong>
-                                    {prod.observaciones && <span className="text-gray-400 block text-[10px]">{prod.observaciones}</span>}
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-3 text-gray-400 font-mono text-[11px]">
-                                  {prod.responsable && <span>👤 {prod.responsable.nombre}</span>}
-                                  <span>{prod.fecha_produccion}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    )}
-                  </div>
-
                   {/* Accordion 2.3: Órdenes de Compra (OC) en Producción (Ajustes 11 - Req 7) */}
                   {selectedOp.estado_pipeline?.startsWith('prod_') && (
-                  <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
-                    <div className="w-full p-3.5 bg-[#27272a] text-purple-400 font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
+                  <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
+                    <div className="w-full p-3 bg-gray-50 text-[#213343] font-semibold text-xs flex flex-wrap items-center justify-between gap-3 border-b border-gray-200">
                       <button
                         type="button"
                         onClick={() => setOpenSections({ ...openSections, produccionOc: !openSections.produccionOc })}
-                        className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-xs uppercase tracking-wider text-purple-400"
+                        className="flex items-center gap-2.5 hover:text-purple-900 transition cursor-pointer text-left font-semibold text-xs text-[#213343]"
                       >
-                        <ShoppingCart className="w-4 h-4 text-purple-400" />
+                        <ShoppingCart className="w-4 h-4 text-purple-600" />
                         <span>Órdenes de Compra (OC) — Insumos de Fabricación</span>
-                        <span className="text-xs text-purple-300 font-mono font-bold">
+                        <span className="text-xs text-purple-700 font-mono font-bold">
                           {opOrdenesCompra.length} {opOrdenesCompra.length === 1 ? 'OC' : 'OCs'}
                         </span>
-                        {openSections.produccionOc ? <ChevronUp className="w-4 h-4 text-purple-400" /> : <ChevronDown className="w-4 h-4 text-purple-400" />}
+                        {openSections.produccionOc ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
                       </button>
 
                       <button
                         type="button"
                         onClick={() => setShowCreateOcModal(true)}
-                        className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Crear Orden de Compra</span>
@@ -5182,17 +4872,17 @@ export default function PipelineVentasPage() {
                     </div>
 
                     {openSections.produccionOc && (
-                    <div className="p-4 space-y-3 text-xs bg-[#1e1e22]">
+                    <div className="p-4 space-y-3 text-xs bg-white text-[#213343]">
                       {loadingOpOrdenes ? (
-                        <div className="text-center py-4 text-gray-400">Cargando órdenes de compra...</div>
+                        <div className="text-center py-4 text-gray-500">Cargando órdenes de compra...</div>
                       ) : opOrdenesCompra.length === 0 ? (
-                        <div className="p-4 bg-[#18181b] rounded-lg text-gray-400 text-center italic border border-gray-800">
+                        <div className="p-4 bg-gray-50 rounded-lg text-gray-500 text-center italic border border-gray-200">
                           No hay órdenes de compra emitidas para esta oportunidad.
                         </div>
                       ) : (
-                        <div className="overflow-x-auto rounded-lg border border-gray-800">
-                          <table className="w-full text-left text-xs bg-[#18181b]">
-                            <thead className="bg-[#27272a] text-gray-400 font-bold uppercase text-[10px] border-b border-gray-800">
+                        <div className="overflow-x-auto rounded-lg border border-gray-200">
+                          <table className="w-full text-left text-xs bg-white">
+                            <thead className="bg-gray-50 text-gray-500 font-bold uppercase text-[10px] border-b border-gray-200">
                               <tr>
 	                                <th className="py-2.5 px-3">Folio OC</th>
 	                                <th className="py-2.5 px-3 text-center">Version</th>
@@ -5203,26 +4893,26 @@ export default function PipelineVentasPage() {
                                 <th className="py-2.5 px-3 text-center">Acciones</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-800">
+                            <tbody className="divide-y divide-gray-100">
                               {opOrdenesCompra.map((oc) => (
-                                <tr key={oc.id} className="hover:bg-white/5">
-	                                  <td className="py-2.5 px-3 font-mono font-bold text-purple-300">
+                                <tr key={oc.id} className="hover:bg-gray-50">
+	                                  <td className="py-2.5 px-3 font-mono font-bold text-purple-700">
 	                                    {oc.numero_oc}
 	                                  </td>
-	                                  <td className="py-2.5 px-3 text-center font-mono text-gray-300">
+	                                  <td className="py-2.5 px-3 text-center font-mono text-gray-500">
 	                                    v{oc.version || 1}
 	                                  </td>
-	                                  <td className="py-2.5 px-3 font-bold text-white">
+	                                  <td className="py-2.5 px-3 font-bold text-[#213343]">
                                     {oc.proveedor?.nombre || 'Proveedor'}
                                   </td>
-                                  <td className="py-2.5 px-3 text-center font-mono text-gray-300">
+                                  <td className="py-2.5 px-3 text-center font-mono text-gray-500">
                                     {oc.fecha_emision}
                                   </td>
-                                  <td className="py-2.5 px-3 text-right font-mono font-bold text-white">
+                                  <td className="py-2.5 px-3 text-right font-mono font-bold text-[#213343]">
                                     ${(oc.monto_total || 0).toLocaleString('es-CL')}
                                   </td>
                                   <td className="py-2.5 px-3 text-center">
-                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-[#27272a] text-purple-300 border border-gray-700">
+                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded">
                                       {oc.estado}
                                     </span>
                                   </td>
@@ -5230,7 +4920,7 @@ export default function PipelineVentasPage() {
                                     <button
                                       type="button"
                                       onClick={() => setPdfPreviewOc(oc)}
-                                      className="px-2.5 py-1 bg-[#27272a] hover:bg-purple-600 text-white rounded-lg transition border border-gray-700 font-bold text-[11px] flex items-center gap-1 mx-auto cursor-pointer"
+                                      className="px-2.5 py-1 bg-white hover:bg-purple-50 text-purple-700 rounded-lg transition border border-gray-200 font-bold text-[11px] flex items-center gap-1 mx-auto cursor-pointer"
                                     >
                                       <FileText className="w-3 h-3" />
                                       <span>Ver / Imprimir OC</span>
@@ -5255,38 +4945,38 @@ export default function PipelineVentasPage() {
               <button
                 type="button"
                 onClick={() => setAreaExpanded((prev) => ({ ...prev, reventa: !prev.reventa }))}
-                className="w-full p-3.5 bg-[#27272a] hover:bg-[#323236] border border-indigo-500/40 rounded-2xl flex items-center justify-between font-black text-sm sm:text-base uppercase tracking-wide text-indigo-400 transition shadow-md cursor-pointer group"
+                className="w-full p-3 bg-white hover:bg-gray-50 border border-gray-200 hover:border-indigo-300 rounded-lg flex items-center justify-between font-semibold text-sm text-[#213343] transition shadow-xs cursor-pointer group"
               >
-                <div className="flex items-center gap-3">
-                  <Truck className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
+                <div className="flex items-center gap-2.5">
+                  <Truck className="w-4 h-4 text-indigo-600 group-hover:scale-110 transition-transform" />
                   <span>Reventa y Logística</span>
                 </div>
                 <div className="flex items-center gap-2">
                   {areaExpanded.reventa ? (
-                    <ChevronUp className="w-5 h-5 text-indigo-400" />
+                    <ChevronUp className="w-4 h-4 text-gray-500" />
                   ) : (
-                    <ChevronDown className="w-5 h-5 text-indigo-400" />
+                    <ChevronDown className="w-4 h-4 text-gray-500" />
                   )}
                 </div>
               </button>
 
               {areaExpanded.reventa && (
-                <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-indigo-500/40 space-y-3.5 my-2.5 animate-fadeIn relative">
-                  <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
-                    <div className="w-full p-3.5 bg-[#27272a] text-indigo-400 font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
+                <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-indigo-300 space-y-3.5 my-2.5 relative">
+                  <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
+                    <div className="w-full p-3 bg-gray-50 text-[#213343] font-semibold text-xs flex flex-wrap items-center justify-between gap-3 border-b border-gray-200">
                       <button
                         type="button"
                         onClick={() => setOpenSections({ ...openSections, reventaEventos: !openSections.reventaEventos })}
-                        className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-xs uppercase tracking-wider text-indigo-400"
+                        className="flex items-center gap-2.5 hover:text-indigo-900 transition cursor-pointer text-left font-semibold text-xs text-[#213343]"
                       >
-                        <Calendar className="w-4 h-4 text-indigo-400" />
+                        <Calendar className="w-4 h-4 text-indigo-600" />
                         <span>Eventos de Reventa y Logística</span>
                         {reventaEventos.length > 0 && (
                           <span className="text-xs bg-indigo-600 text-white font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
                             {reventaEventos.length}
                           </span>
                         )}
-                        {openSections.reventaEventos ? <ChevronUp className="w-4 h-4 text-indigo-400" /> : <ChevronDown className="w-4 h-4 text-indigo-400" />}
+                        {openSections.reventaEventos ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
                       </button>
 
                       <div className="flex items-center gap-3">
@@ -5297,15 +4987,15 @@ export default function PipelineVentasPage() {
                             onChange={(e) => setReventaEventosEnabled(e.target.checked)}
                             className="sr-only peer"
                           />
-                          <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
-                          <span className="ml-2 text-xs font-bold text-gray-200 capitalize tracking-normal">
+                          <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                          <span className="ml-2 text-xs font-bold text-gray-700 capitalize tracking-normal">
                             {reventaEventosEnabled ? 'Habilitado' : 'No Requiere'}
                           </span>
                         </label>
                         {reventaEventosEnabled && (
                           <Link
                             href={`/reventa/calendario?opId=${selectedOp.id}`}
-                            className="text-[11px] bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-xl font-bold flex items-center gap-1 transition lowercase tracking-normal"
+                            className="text-[11px] bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition lowercase tracking-normal"
                           >
                             <span>Ver Calendario</span>
                           </Link>
@@ -5314,16 +5004,16 @@ export default function PipelineVentasPage() {
                     </div>
 
                     {openSections.reventaEventos && reventaEventosEnabled && (
-                      <div className="p-4 space-y-4 text-xs text-gray-300 bg-[#1e1e22]">
-                        <div className="flex items-center justify-between border-b border-gray-800 pb-3">
-                          <span className="font-bold text-white text-xs">Eventos registrados para esta oportunidad:</span>
+                      <div className="p-4 space-y-4 text-xs text-gray-700 bg-white">
+                        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                          <span className="font-bold text-[#213343] text-xs">Eventos registrados para esta oportunidad:</span>
                           <button
                             type="button"
                             onClick={() => {
                               resetProdLogForm('reventa_logistica', 'reventa');
                               setShowAddProdLogEventForm(!showAddProdLogEventForm || newProdLogContexto !== 'reventa_logistica');
                             }}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-sm"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-md transition flex items-center gap-1.5 shadow-xs"
                           >
                             <Plus className="w-4 h-4" />
                             <span>Agregar Evento</span>
@@ -5331,22 +5021,22 @@ export default function PipelineVentasPage() {
                         </div>
 
                         {showAddProdLogEventForm && newProdLogContexto === 'reventa_logistica' && (
-                          <div className="bg-[#27272a] p-4 rounded-2xl border border-indigo-500/40 space-y-3 animate-fadeIn">
-                            <h4 className="font-extrabold text-white text-xs uppercase text-indigo-400 flex items-center gap-1.5">
+                          <div className="bg-gray-50 p-4 rounded-lg border border-indigo-300 space-y-3">
+                            <h4 className="font-extrabold text-indigo-700 text-xs uppercase flex items-center gap-1.5">
                               <Plus className="w-4 h-4" />
                               <span>Registrar Evento</span>
                             </h4>
 
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               <div>
-                                <label className="block font-bold text-gray-400 mb-1">Tipo de evento *</label>
+                                <label className="block font-bold text-gray-600 mb-1">Tipo de evento *</label>
                                 <select
                                   value={newProdLogTipo}
                                   onChange={(e) => {
                                     const nextTipo = e.target.value as TipoEventoProduccionLogistica;
                                     setNewProdLogTipo(nextTipo);
                                   }}
-                                  className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-indigo-400"
+                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-indigo-500"
                                 >
                                   <option value="logistica">Logística</option>
                                   <option value="reventa">Reventa</option>
@@ -5354,44 +5044,44 @@ export default function PipelineVentasPage() {
                               </div>
 
                               <div>
-                                <label className="block font-bold text-gray-400 mb-1">Fecha *</label>
+                                <label className="block font-bold text-gray-600 mb-1">Fecha *</label>
                                 <input
                                   type="date"
                                   required
                                   value={newProdLogFecha}
                                   onChange={(e) => setNewProdLogFecha(e.target.value)}
-                                  className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-indigo-400"
+                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-indigo-500"
                                 />
                               </div>
 
                               <div>
-                                <label className="block font-bold text-gray-400 mb-1">Hora</label>
+                                <label className="block font-bold text-gray-600 mb-1">Hora</label>
                                 <input
                                   type="time"
                                   value={newProdLogHora}
                                   onChange={(e) => setNewProdLogHora(e.target.value)}
-                                  className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-indigo-400"
+                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-indigo-500"
                                 />
                               </div>
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               <div>
-                                <label className="block font-bold text-gray-400 mb-1">Título *</label>
+                                <label className="block font-bold text-gray-600 mb-1">Título *</label>
                                 <input
                                   type="text"
                                   value={newProdLogTitulo}
                                   onChange={(e) => setNewProdLogTitulo(e.target.value)}
-                                  className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-3 py-1.5 font-bold focus:outline-none focus:border-indigo-400"
+                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3 py-1.5 font-bold focus:outline-none focus:border-indigo-500"
                                 />
                               </div>
 
                               <div>
-                                <label className="block font-bold text-gray-400 mb-1">Responsable</label>
+                                <label className="block font-bold text-gray-600 mb-1">Responsable</label>
                                 <select
                                   value={newProdLogResponsableId}
                                   onChange={(e) => setNewProdLogResponsableId(e.target.value)}
-                                  className="w-full bg-[#1e1e22] text-gray-200 border border-gray-700 rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-indigo-400"
+                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-indigo-500"
                                 >
                                   <option value="">-- Sin asignar --</option>
                                   {(responsablesReventaLogistica.length > 0 ? responsablesReventaLogistica : personalTerrenoList).map((p) => (
@@ -5403,11 +5093,11 @@ export default function PipelineVentasPage() {
                               </div>
 
                               <div>
-                                <label className="block font-bold text-gray-400 mb-1">Estado Inicial</label>
+                                <label className="block font-bold text-gray-600 mb-1">Estado Inicial</label>
                                 <select
                                   value={newProdLogEstado}
                                   onChange={(e) => setNewProdLogEstado(e.target.value as EstadoEventoProduccionLogistica)}
-                                  className="w-full bg-[#1e1e22] text-white border border-gray-700 rounded-xl px-2.5 py-1.5 font-extrabold uppercase focus:outline-none focus:border-indigo-400"
+                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-extrabold uppercase focus:outline-none focus:border-indigo-500"
                                 >
                                   {prodLogEstadoOptions.map((option) => (
                                     <option key={option.value} value={option.value}>
@@ -5419,28 +5109,28 @@ export default function PipelineVentasPage() {
                             </div>
 
                             <div>
-                              <label className="block font-bold text-gray-400 mb-1">Notas / Instrucciones</label>
+                              <label className="block font-bold text-gray-600 mb-1">Notas / Instrucciones</label>
                               <input
                                 type="text"
                                 placeholder="Ej: coordinar proveedor, retiro, despacho o entrega..."
                                 value={newProdLogNotas}
                                 onChange={(e) => setNewProdLogNotas(e.target.value)}
-                                className="w-full bg-[#1e1e22] text-gray-200 border border-gray-700 rounded-xl px-3 py-1.5 focus:outline-none focus:border-indigo-400"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-indigo-500"
                               />
                             </div>
 
-                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-800">
+                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-200">
                               <button
                                 type="button"
                                 onClick={() => setShowAddProdLogEventForm(false)}
-                                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-xl font-bold transition"
+                                className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-[#213343] rounded-md font-bold transition"
                               >
                                 Cancelar
                               </button>
                               <button
                                 type="button"
                                 onClick={() => saveProdLogEvent('reventa_logistica')}
-                                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-extrabold transition shadow-sm"
+                                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-extrabold transition shadow-xs"
                               >
                                 {editingProdLogEventId ? 'Guardar cambios' : 'Guardar evento'}
                               </button>
@@ -5449,7 +5139,7 @@ export default function PipelineVentasPage() {
                         )}
 
                         {reventaEventos.length === 0 ? (
-                          <div className="py-4 text-center text-gray-500 italic text-xs bg-[#27272a]/50 rounded-2xl border border-gray-800">
+                          <div className="py-4 text-center text-gray-500 italic text-xs bg-gray-50 rounded-lg border border-dashed border-gray-200">
                             No hay eventos registrados. Haz clic en <strong>&quot;+ Agregar Evento&quot;</strong> para programar obra, logística o producción.
                           </div>
                         ) : (
@@ -5460,11 +5150,11 @@ export default function PipelineVentasPage() {
                               return (
                                 <div
                                   key={event.id}
-                                  className="bg-[#27272a] p-3.5 rounded-2xl border border-gray-800 flex flex-col gap-3 text-gray-200 hover:border-gray-700 transition shadow-sm"
+                                  className="bg-white p-3.5 rounded-lg border border-gray-200 flex flex-col gap-3 text-[#213343] hover:border-gray-300 transition shadow-xs"
                                 >
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="flex flex-wrap items-center gap-2">
-                                      <span className="font-black uppercase tracking-wider text-[11px] px-2 py-1 rounded-md text-orange-300 bg-orange-950 border border-orange-800">
+                                      <span className="font-black uppercase tracking-normal text-[11px] px-2 py-1 rounded-md text-orange-700 bg-orange-50 border border-orange-200">
                                         {getResponsableEventoNombre(event)}
                                       </span>
                                       <span className={`text-[11px] font-black px-2 py-1 rounded-md border ${getProdLogTipoClasses(event.tipo_evento)}`}>
@@ -5478,7 +5168,7 @@ export default function PipelineVentasPage() {
                                       <button
                                         type="button"
                                         onClick={() => startEditProdLogEvent(event)}
-                                        className="p-1.5 bg-[#18181b] hover:bg-indigo-600/30 text-indigo-400 border border-gray-700 rounded-lg transition"
+                                        className="p-1.5 bg-white hover:bg-indigo-50 text-indigo-600 border border-gray-200 rounded-lg transition"
                                         title="Editar evento"
                                       >
                                         <Edit className="w-4 h-4" />
@@ -5486,7 +5176,7 @@ export default function PipelineVentasPage() {
                                       <button
                                         type="button"
                                         onClick={() => deleteProdLogEvent(event)}
-                                        className="p-1.5 bg-[#18181b] hover:bg-red-600/30 text-red-400 border border-gray-700 rounded-lg transition"
+                                        className="p-1.5 bg-white hover:bg-red-50 text-red-600 border border-gray-200 rounded-lg transition"
                                         title="Eliminar evento"
                                       >
                                         <Trash2 className="w-4 h-4" />
@@ -5494,19 +5184,19 @@ export default function PipelineVentasPage() {
                                     </div>
                                   </div>
                                   <div className="space-y-1">
-                                    <strong className="text-white text-sm block">{event.titulo}</strong>
-                                    <div className="flex flex-wrap items-center gap-3 text-xs text-gray-300 font-bold">
-                                      <span className="font-mono flex items-center gap-1">
-                                        <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                                    <strong className="text-[#213343] text-sm block">{event.titulo}</strong>
+                                    <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 font-bold">
+                                      <span className="font-mono flex items-center gap-1 text-[#213343]">
+                                        <Calendar className="w-3.5 h-3.5 text-indigo-600" />
                                         {fecha}
                                       </span>
-                                      <span className="font-mono flex items-center gap-1">
-                                        <Clock className="w-3.5 h-3.5 text-gray-500" />
+                                      <span className="font-mono flex items-center gap-1 text-gray-500">
+                                        <Clock className="w-3.5 h-3.5 text-gray-400" />
                                         {hora}
                                       </span>
                                     </div>
                                     {event.observaciones && (
-                                      <span className="block text-xs text-gray-400">{event.observaciones}</span>
+                                      <span className="block text-xs text-gray-500">{event.observaciones}</span>
                                     )}
                                   </div>
                                 </div>
@@ -5517,7 +5207,7 @@ export default function PipelineVentasPage() {
                       </div>
                     )}
                     {openSections.reventaEventos && !reventaEventosEnabled && (
-                      <div className="p-4 text-xs text-gray-400 bg-[#1e1e22]">
+                      <div className="p-4 text-xs text-gray-500 bg-white">
                         Habilita eventos para registrar obra, logística o producción.
                       </div>
                     )}
@@ -5525,25 +5215,25 @@ export default function PipelineVentasPage() {
 
                   {/* Accordion 3.2: Órdenes de Compra (OC) en Reventa (Ajustes 11 - Req 7) */}
                   {selectedOp.estado_pipeline?.startsWith('rev_') && (
-                  <div className="bg-[#222226] rounded-2xl border border-gray-800 overflow-hidden shadow-sm">
-                    <div className="w-full p-3.5 bg-[#27272a] text-indigo-400 font-extrabold text-xs uppercase tracking-wider flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
+                  <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
+                    <div className="w-full p-3 bg-gray-50 text-[#213343] font-semibold text-xs flex flex-wrap items-center justify-between gap-3 border-b border-gray-200">
                       <button
                         type="button"
                         onClick={() => setOpenSections({ ...openSections, reventaOc: !openSections.reventaOc })}
-                        className="flex items-center gap-2.5 hover:text-white transition cursor-pointer text-left font-extrabold text-xs uppercase tracking-wider text-indigo-400"
+                        className="flex items-center gap-2.5 hover:text-indigo-900 transition cursor-pointer text-left font-semibold text-xs text-[#213343]"
                       >
-                        <ShoppingCart className="w-4 h-4 text-indigo-400" />
+                        <ShoppingCart className="w-4 h-4 text-indigo-600" />
                         <span>Órdenes de Compra a Proveedores / Distribución</span>
-                        <span className="text-xs text-indigo-300 font-mono font-bold">
+                        <span className="text-xs text-indigo-700 font-mono font-bold">
                           {opOrdenesCompra.length} {opOrdenesCompra.length === 1 ? 'OC' : 'OCs'}
                         </span>
-                        {openSections.reventaOc ? <ChevronUp className="w-4 h-4 text-indigo-400" /> : <ChevronDown className="w-4 h-4 text-indigo-400" />}
+                        {openSections.reventaOc ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
                       </button>
 
                       <button
                         type="button"
                         onClick={() => setShowCreateOcModal(true)}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Crear Orden de Compra</span>
@@ -5551,17 +5241,17 @@ export default function PipelineVentasPage() {
                     </div>
 
                     {openSections.reventaOc && (
-                    <div className="p-4 space-y-3 text-xs bg-[#1e1e22]">
+                    <div className="p-4 space-y-3 text-xs bg-white text-[#213343]">
                       {loadingOpOrdenes ? (
-                        <div className="text-center py-4 text-gray-400">Cargando órdenes de compra...</div>
+                        <div className="text-center py-4 text-gray-500">Cargando órdenes de compra...</div>
                       ) : opOrdenesCompra.length === 0 ? (
-                        <div className="p-4 bg-[#18181b] rounded-lg text-gray-400 text-center italic border border-gray-800">
+                        <div className="p-4 bg-gray-50 rounded-lg text-gray-500 text-center italic border border-gray-200">
                           No hay órdenes de compra emitidas para esta oportunidad.
                         </div>
                       ) : (
-                        <div className="overflow-x-auto rounded-lg border border-gray-800">
-                          <table className="w-full text-left text-xs bg-[#18181b]">
-                            <thead className="bg-[#27272a] text-gray-400 font-bold uppercase text-[10px] border-b border-gray-800">
+                        <div className="overflow-x-auto rounded-lg border border-gray-200">
+                          <table className="w-full text-left text-xs bg-white">
+                            <thead className="bg-gray-50 text-gray-500 font-bold uppercase text-[10px] border-b border-gray-200">
                               <tr>
 	                                <th className="py-2.5 px-3">Folio OC</th>
 	                                <th className="py-2.5 px-3 text-center">Version</th>
@@ -5572,26 +5262,26 @@ export default function PipelineVentasPage() {
                                 <th className="py-2.5 px-3 text-center">Acciones</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-800">
+                            <tbody className="divide-y divide-gray-100">
                               {opOrdenesCompra.map((oc) => (
-                                <tr key={oc.id} className="hover:bg-white/5">
-	                                  <td className="py-2.5 px-3 font-mono font-bold text-indigo-300">
+                                <tr key={oc.id} className="hover:bg-gray-50">
+	                                  <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">
 	                                    {oc.numero_oc}
 	                                  </td>
-	                                  <td className="py-2.5 px-3 text-center font-mono text-gray-300">
+	                                  <td className="py-2.5 px-3 text-center font-mono text-gray-500">
 	                                    v{oc.version || 1}
 	                                  </td>
-	                                  <td className="py-2.5 px-3 font-bold text-white">
+	                                  <td className="py-2.5 px-3 font-bold text-[#213343]">
                                     {oc.proveedor?.nombre || 'Proveedor'}
                                   </td>
-                                  <td className="py-2.5 px-3 text-center font-mono text-gray-300">
+                                  <td className="py-2.5 px-3 text-center font-mono text-gray-500">
                                     {oc.fecha_emision}
                                   </td>
-                                  <td className="py-2.5 px-3 text-right font-mono font-bold text-white">
+                                  <td className="py-2.5 px-3 text-right font-mono font-bold text-[#213343]">
                                     ${(oc.monto_total || 0).toLocaleString('es-CL')}
                                   </td>
                                   <td className="py-2.5 px-3 text-center">
-                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-[#27272a] text-indigo-300 border border-gray-700">
+                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">
                                       {oc.estado}
                                     </span>
                                   </td>
@@ -5599,7 +5289,7 @@ export default function PipelineVentasPage() {
                                     <button
                                       type="button"
                                       onClick={() => setPdfPreviewOc(oc)}
-                                      className="px-2.5 py-1 bg-[#27272a] hover:bg-indigo-600 text-white rounded-lg transition border border-gray-700 font-bold text-[11px] flex items-center gap-1 mx-auto cursor-pointer"
+                                      className="px-2.5 py-1 bg-white hover:bg-indigo-50 text-indigo-700 rounded-lg transition border border-gray-200 font-bold text-[11px] flex items-center gap-1 mx-auto cursor-pointer"
                                     >
                                       <FileText className="w-3 h-3" />
                                       <span>Ver / Imprimir OC</span>
@@ -5617,6 +5307,172 @@ export default function PipelineVentasPage() {
                   )}
                 </div>
               )}
+
+                {/* Accordion: Archivos Adjuntos (Ubicado debajo de Reventa y Logística) */}
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
+                  <div className="w-full p-3 bg-white hover:bg-gray-50 text-[#213343] font-semibold text-sm flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 transition">
+                    <button
+                      type="button"
+                      onClick={() => setOpenSections({ ...openSections, antecedentes: !openSections.antecedentes })}
+                      className="flex items-center gap-2.5 hover:text-[#ea580c] transition cursor-pointer text-left font-semibold text-sm text-[#213343]"
+                    >
+                      <Paperclip className="w-4 h-4 text-[#f97316]" />
+                      <span>Archivos adjuntos</span>
+                      {opAntecedentesList.length > 0 && (
+                        <span className="text-xs bg-[#f97316] text-white font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
+                          {opAntecedentesList.length}
+                        </span>
+                      )}
+                      {openSections.antecedentes ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
+                    </button>
+
+                    <label className="text-xs font-semibold bg-orange-50 hover:bg-[#f97316] text-[#f97316] hover:text-white border border-orange-200 px-3 py-1.5 rounded-md transition flex items-center gap-1.5 cursor-pointer">
+                      <Paperclip className="w-3.5 h-3.5" />
+                      <span>{antecedenteUploading ? 'Subiendo...' : 'Adjuntar archivo'}</span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        disabled={antecedenteUploading}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file || !selectedOp) return;
+                          try {
+                            setAntecedenteUploading(true);
+                            const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                            const storagePath = `antecedentes/${selectedOp.id}/${Date.now()}_${cleanFileName}`;
+                            const { error: uploadError } = await supabase.storage
+                              .from('documentos')
+                              .upload(storagePath, file, { contentType: file.type || undefined, upsert: false });
+                            if (uploadError) throw uploadError;
+
+                            const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(storagePath);
+                            const publicUrl = urlData?.publicUrl || '#';
+                            const userName = currentUser?.nombre || 'Usuario';
+                            const userId = currentUser?.id && isUUID(currentUser.id) ? currentUser.id : null;
+
+                            const { data: inserted, error: insertError } = await supabase
+                              .from('oportunidad_antecedentes')
+                              .insert({
+                                oportunidad_id: selectedOp.id,
+                                nombre: file.name,
+                                tipo: 'otro',
+                                bucket_id: 'documentos',
+                                storage_path: storagePath,
+                                public_url: publicUrl,
+                                mime_type: file.type || null,
+                                size_bytes: file.size,
+                                subido_por_id: userId,
+                                subido_por_nombre: userName,
+                              })
+                              .select()
+                              .single();
+
+                            if (!insertError && inserted) {
+                              const newDoc = mapAntecedenteRecord(inserted);
+                              const existingDocs = antecedentesCacheRef.current[selectedOp.id] || opAntecedentesList;
+                              const updatedDocs = [newDoc, ...existingDocs];
+                              antecedentesCacheRef.current[selectedOp.id] = updatedDocs;
+                              setOpAntecedentesList(updatedDocs);
+                              updateOportunidadField(selectedOp.id, 'antecedentes', updatedDocs);
+
+                              await addOportunidadActividad(
+                                selectedOp.id,
+                                `Archivo adjuntado: "${file.name}" por ${userName}.`,
+                                'actualizacion'
+                              );
+                            }
+                          } catch (err: any) {
+                            console.error('Error uploading file:', err);
+                            alert(`Error al subir archivo: ${err?.message || 'Error desconocido'}`);
+                          } finally {
+                            setAntecedenteUploading(false);
+                            e.target.value = '';
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  {openSections.antecedentes && (
+                    <div className="p-4 space-y-3 text-xs bg-white text-[#213343]">
+                      {opAntecedentesList.length === 0 ? (
+                        <div className="p-6 text-center text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-200 space-y-2">
+                          <Paperclip className="w-8 h-8 text-gray-400 mx-auto opacity-50" />
+                          <p className="font-semibold text-gray-700">No hay archivos adjuntos en esta oportunidad.</p>
+                          <p className="text-[11px] text-gray-500">
+                            Puedes adjuntar archivos desde el botón superior o enviándolos directamente en el chat de actividad.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-gray-100 bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
+                          {opAntecedentesList.map((doc) => {
+                            const isImg = doc.mime_type?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(doc.nombre);
+                            const isPdf = doc.mime_type?.includes('pdf') || /\.pdf$/i.test(doc.nombre);
+
+                            return (
+                              <div
+                                key={doc.id}
+                                className="p-3 hover:bg-gray-50 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="w-8 h-8 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center shrink-0">
+                                    {isPdf ? (
+                                      <FileText className="w-4 h-4 text-red-500" />
+                                    ) : isImg ? (
+                                      <Paperclip className="w-4 h-4 text-blue-500" />
+                                    ) : (
+                                      <FileCheck className="w-4 h-4 text-[#f97316]" />
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-extrabold text-[#213343] text-xs truncate max-w-xs sm:max-w-md block" title={doc.nombre}>
+                                        {doc.nombre}
+                                      </span>
+                                    </div>
+                                    <div className="text-[11px] text-gray-500 flex items-center gap-2 mt-0.5 font-mono">
+                                      {doc.size_bytes ? (
+                                        <span>{Math.round(doc.size_bytes / 1024)} KB</span>
+                                      ) : null}
+                                      <span>•</span>
+                                      <span>Subido por: {doc.subido_por || 'Usuario'}</span>
+                                      {doc.fecha_iso && (
+                                        <>
+                                          <span>•</span>
+                                          <span>{new Date(doc.fecha_iso).toLocaleDateString('es-CL')}</span>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                                  <a
+                                    href={doc.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-3 py-1.5 bg-white hover:bg-orange-50 text-gray-700 hover:text-[#f97316] rounded-md font-bold border border-gray-200 transition text-xs flex items-center gap-1.5"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>Ver / Descargar</span>
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteAntecedente(doc.id)}
+                                    className="p-1.5 bg-white hover:bg-red-50 text-gray-400 hover:text-red-600 rounded-md border border-gray-200 transition"
+                                    title="Eliminar archivo adjunto"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
             </div>
               </div>
             </div>
@@ -5627,23 +5483,23 @@ export default function PipelineVentasPage() {
               className="hidden lg:flex w-4 hover:w-4 bg-transparent hover:bg-amber-500/20 active:bg-amber-500/30 cursor-col-resize select-none items-center justify-center group z-20 relative mx-1 transition-all rounded-full shrink-0"
               title="Arrastrar para ajustar el ancho entre Información y Actividad (Tu configuración se guardará automáticamente)"
             >
-              <div className="w-1.5 h-14 rounded-full bg-gray-700 group-hover:bg-[#F7931F] group-active:bg-[#F7931F] transition-colors shadow-sm" />
+              <div className="w-1.5 h-14 rounded-full bg-gray-300 group-hover:bg-[#f97316] group-active:bg-[#f97316] transition-colors shadow-xs" />
             </div>
 
             {/* Columna Derecha: Feed de Actividades (Ancho Resizable) */}
             <div
               style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${100 - modalLeftColRatio}%` : '100%' }}
-              className="flex-1 bg-[#222226] rounded-2xl border border-gray-800 p-4 sm:p-5 flex flex-col justify-between h-full overflow-hidden shadow-xl shrink-0"
+              className="flex-1 bg-gray-50 rounded-lg border border-gray-200 p-4 sm:p-5 flex flex-col justify-between h-full overflow-hidden shadow-xs shrink-0"
             >
               <div className="space-y-3.5 flex-1 flex flex-col overflow-hidden">
                 {/* Header de Actividad con Título e Íconos ClickUp */}
-                <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+                <div className="flex items-center justify-between border-b border-gray-200 pb-3">
                   <div className="flex items-center gap-2.5">
-                    <h3 className="font-black text-base sm:text-lg text-white uppercase tracking-wider flex items-center gap-2">
-                      <MessageSquare className="w-5 h-5 text-[#F7931F]" />
+                    <h3 className="font-black text-base sm:text-lg text-[#213343] uppercase tracking-normal flex items-center gap-2">
+                      <MessageSquare className="w-5 h-5 text-[#f97316]" />
                       <span>Actividad</span>
                     </h3>
-                    <span className="text-xs bg-[#18181b] text-gray-300 font-bold px-2.5 py-0.5 rounded-full border border-gray-700 font-mono">
+                    <span className="text-xs bg-white text-gray-700 font-bold px-2.5 py-0.5 rounded-full border border-gray-200 font-mono">
                       {(selectedOp.chat_interno || []).length}
                     </span>
                   </div>
@@ -5652,7 +5508,7 @@ export default function PipelineVentasPage() {
                     {/* Botón Cerrar Modal */}
                     <button
                       onClick={handleCloseOportunidad}
-                      className="p-1 text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition font-bold text-lg leading-none ml-1"
+                      className="p-1 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-200 transition font-bold text-lg leading-none ml-1"
                       title="Cerrar Modal"
                     >
                       ✕
@@ -5661,14 +5517,14 @@ export default function PipelineVentasPage() {
                 </div>
 
                 {/* Barra de Filtros de Actividad (Todos / Comentarios / Acciones / Reclamos) */}
-                <div className="flex items-center gap-1.5 p-1 bg-[#18181b] rounded-xl border border-gray-800 text-xs">
+                <div className="flex items-center gap-1.5 p-1 bg-white rounded-md border border-gray-200 text-xs">
                   <button
                     type="button"
                     onClick={() => setActivityFilter('all')}
                     className={`flex-1 py-1 px-1.5 rounded-lg font-extrabold transition flex items-center justify-center gap-1 ${
                       activityFilter === 'all'
-                        ? 'bg-[#F7931F] text-white shadow-sm'
-                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                        ? 'bg-[#f97316] text-white shadow-xs'
+                        : 'text-gray-500 hover:text-[#213343] hover:bg-gray-100'
                     }`}
                   >
                     <span>Todos</span>
@@ -5678,8 +5534,8 @@ export default function PipelineVentasPage() {
                     onClick={() => setActivityFilter('comentarios')}
                     className={`flex-1 py-1 px-1.5 rounded-lg font-extrabold transition flex items-center justify-center gap-1 ${
                       activityFilter === 'comentarios'
-                        ? 'bg-[#F7931F] text-white shadow-sm'
-                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                        ? 'bg-[#f97316] text-white shadow-xs'
+                        : 'text-gray-500 hover:text-[#213343] hover:bg-gray-100'
                     }`}
                   >
                     <span>Comentarios</span>
@@ -5689,8 +5545,8 @@ export default function PipelineVentasPage() {
                     onClick={() => setActivityFilter('sistema')}
                     className={`flex-1 py-1 px-1.5 rounded-lg font-extrabold transition flex items-center justify-center gap-1 ${
                       activityFilter === 'sistema'
-                        ? 'bg-[#F7931F] text-white shadow-sm'
-                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                        ? 'bg-[#f97316] text-white shadow-xs'
+                        : 'text-gray-500 hover:text-[#213343] hover:bg-gray-100'
                     }`}
                   >
                     <span>Acciones</span>
@@ -5700,8 +5556,8 @@ export default function PipelineVentasPage() {
                     onClick={() => setActivityFilter('reclamos')}
                     className={`flex-1 py-1 px-1.5 rounded-lg font-extrabold transition flex items-center justify-center gap-1 ${
                       activityFilter === 'reclamos'
-                        ? 'bg-red-500 text-white shadow-sm'
-                        : 'text-red-400 hover:text-white hover:bg-red-500/10'
+                        ? 'bg-red-500 text-white shadow-xs'
+                        : 'text-red-500 hover:text-red-700 hover:bg-red-50'
                     }`}
                   >
                     <span>Reclamos</span>
@@ -5710,13 +5566,13 @@ export default function PipelineVentasPage() {
 
                 {/* Input de Búsqueda Flotante de Actividad */}
                 {showActivitySearch && (
-                  <div className="animate-fadeIn">
+                  <div className="">
                     <input
                       type="text"
                       placeholder="Filtrar mensajes o cambios..."
                       value={activitySearchQuery}
                       onChange={(e) => setActivitySearchQuery(e.target.value)}
-                      className="w-full bg-[#18181b] text-white border border-gray-700 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F7931F]"
+                      className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3 py-1.5 text-xs focus:outline-none focus:border-[#f97316]"
                       autoFocus
                     />
                   </div>
@@ -5763,9 +5619,9 @@ export default function PipelineVentasPage() {
 
                     if (sortedList.length === 0) {
                       return (
-                        <div className="text-center py-14 text-gray-400 italic text-xs space-y-2">
-                          <MessageSquare className="w-10 h-10 text-gray-600 mx-auto opacity-40" />
-                          <p className="font-semibold text-gray-300">No hay actividades registradas.</p>
+                        <div className="text-center py-14 text-gray-500 italic text-xs space-y-2">
+                          <MessageSquare className="w-10 h-10 text-gray-300 mx-auto opacity-60" />
+                          <p className="font-semibold text-gray-700">No hay actividades registradas.</p>
                           <p className="text-[11px] text-gray-500">
                             Escribe un comentario abajo usando @ para mencionar a un integrante. El historial se guarda automáticamente.
                           </p>
@@ -5791,14 +5647,14 @@ export default function PipelineVentasPage() {
                       });
 
                       if (isUserComment) {
-                        // Tarjeta de Comentario de Usuario (Estilo ClickUp de tus Imágenes)
+                        // Tarjeta de Comentario de Usuario (Estilo ClickUp / HubSpot Minimalista)
                         return (
                           <div
                             key={msg.id}
-                            className={`p-4 rounded-2xl border shadow-md space-y-3 transition ${
+                            className={`p-4 rounded-lg border shadow-xs space-y-3 transition ${
                               isReclamoMsg
-                                ? 'bg-red-950/25 border-red-500/50 hover:border-red-400'
-                                : 'bg-[#1c1c1f] border-gray-800/80 hover:border-gray-700'
+                                ? 'bg-red-50/70 border-red-200 hover:border-red-300'
+                                : 'bg-white border-gray-200 hover:border-gray-300'
                             }`}
                           >
                             <div className="flex items-center justify-between">
@@ -5806,23 +5662,23 @@ export default function PipelineVentasPage() {
                                 <div
                                   className={`w-8 h-8 rounded-full font-black text-xs flex items-center justify-center border shrink-0 ${
                                     isReclamoMsg
-                                      ? 'bg-red-500/20 text-red-400 border-red-500/40'
-                                      : 'bg-[#F7931F]/20 text-[#F7931F] border-[#F7931F]/40'
+                                      ? 'bg-red-100 text-red-600 border-red-200'
+                                      : 'bg-orange-50 text-[#f97316] border-orange-200'
                                   }`}
                                 >
                                   {isReclamoMsg ? (
-                                    <AlertTriangle className="w-4 h-4 text-red-400" />
+                                    <AlertTriangle className="w-4 h-4 text-red-600" />
                                   ) : (
-                                    <User className="w-4 h-4 text-[#F7931F]" />
+                                    <User className="w-4 h-4 text-[#f97316]" />
                                   )}
                                 </div>
                                 <div>
                                   <div className="flex items-center gap-2">
-                                    <span className="font-extrabold text-white text-sm block leading-none">
+                                    <span className="font-extrabold text-[#213343] text-sm block leading-none">
                                       {msg.usuario_nombre}
                                     </span>
                                     {isReclamoMsg && (
-                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-red-500/20 text-red-400 border border-red-500/40">
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-red-100 text-red-700 border border-red-200">
                                         Reclamo / Postventa
                                       </span>
                                     )}
@@ -5835,15 +5691,15 @@ export default function PipelineVentasPage() {
                               </span>
                             </div>
 
-                            <p className="text-gray-200 text-sm whitespace-pre-wrap leading-relaxed">
+                            <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">
                               {renderMessageContentWithMentions(msg.contenido)}
                             </p>
 
-                            <div className="flex items-center justify-end pt-2 border-t border-gray-800 text-xs">
+                            <div className="flex items-center justify-end pt-2 border-t border-gray-100 text-xs">
                               <button
                                 type="button"
                                 onClick={() => setChatInput(`@${msg.usuario_nombre} `)}
-                                className="font-bold text-gray-300 hover:text-[#F7931F] transition flex items-center gap-1"
+                                className="font-bold text-gray-500 hover:text-[#f97316] transition flex items-center gap-1"
                               >
                                 <Reply className="w-3.5 h-3.5" />
                                 <span>Respuesta</span>
@@ -5853,19 +5709,19 @@ export default function PipelineVentasPage() {
                         );
                       }
 
-                      // Evento / Actualización de Sistema (Estilo Viñetas Limpias de tus Imágenes)
+                      // Evento / Actualización de Sistema (Viñetas Limpias)
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-start gap-2.5 py-2 px-3 rounded-xl hover:bg-white/5 transition text-xs sm:text-sm"
+                          className="flex items-start gap-2.5 py-2 px-3 rounded-md hover:bg-gray-100 transition text-xs sm:text-sm"
                         >
-                          <span className="text-[#F7931F] font-bold text-base select-none shrink-0">•</span>
+                          <span className="text-[#f97316] font-bold text-base select-none shrink-0">•</span>
                           <div className="flex-1 flex flex-wrap items-center justify-between gap-1.5">
-                            <span className="text-gray-300">
-                              <strong className="text-white font-bold">{msg.usuario_nombre}</strong>{' '}
-                              <span className="text-gray-300 ml-1">{msg.contenido}</span>
+                            <span className="text-gray-600">
+                              <strong className="text-[#213343] font-bold">{msg.usuario_nombre}</strong>{' '}
+                              <span className="text-gray-600 ml-1">{msg.contenido}</span>
                             </span>
-                            <span className="text-gray-500 text-xs font-mono shrink-0 ml-auto">
+                            <span className="text-gray-400 text-xs font-mono shrink-0 ml-auto">
                               {formattedDate} {formattedTime}
                             </span>
                           </div>
@@ -5877,11 +5733,11 @@ export default function PipelineVentasPage() {
 
                 {/* Botón flotante para ir rápidamente a la última actividad (sólo se muestra si se ha hecho scroll hacia arriba) */}
                 {showScrollBottomBtn && (
-                  <div className="flex justify-end -mt-8 mb-2 mr-2 relative z-10 pointer-events-auto animate-fadeIn">
+                  <div className="flex justify-end -mt-8 mb-2 mr-2 relative z-10 pointer-events-auto">
                     <button
                       type="button"
                       onClick={scrollToBottomActivity}
-                      className="bg-[#F7931F] hover:bg-[#e08316] text-white px-3 py-1.5 rounded-full shadow-lg transition flex items-center gap-1.5 text-xs font-black border border-white/20 active:scale-95"
+                      className="bg-[#f97316] hover:bg-[#ea580c] text-white px-3 py-1.5 rounded-full shadow-md transition flex items-center gap-1.5 text-xs font-black border border-white/20 active:scale-95"
                       title="Ir a la actividad más reciente"
                     >
                       <span>Ir a la más reciente</span>
@@ -5892,27 +5748,27 @@ export default function PipelineVentasPage() {
               </div>
 
               {/* Input de Comentarios en el Fondo del Panel Lateral (Estilo ClickUp con Barra de Botones) */}
-              <div className="pt-3 border-t border-gray-800 relative text-sm" ref={mentionRef}>
+              <div className="pt-3 border-t border-gray-200 relative text-sm" ref={mentionRef}>
                 {mentionMenuOpen && filteredMentionUsers.length > 0 && (
-                  <div className="absolute bottom-full mb-3 left-0 right-0 bg-[#27272a] border border-gray-700 rounded-2xl shadow-2xl z-50 overflow-hidden animate-fadeIn">
-                    <div className="p-2.5 bg-[#18181b] text-gray-400 font-bold text-xs uppercase tracking-wider border-b border-gray-700 flex justify-between items-center">
+                  <div className="absolute bottom-full mb-3 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                    <div className="p-2.5 bg-gray-50 text-gray-600 font-bold text-xs uppercase tracking-normal border-b border-gray-200 flex justify-between items-center">
                       <span>Mencionar integrante:</span>
                       <button
                         type="button"
                         onClick={() => setMentionMenuOpen(false)}
-                        className="text-gray-400 hover:text-white font-bold text-xs"
+                        className="text-gray-400 hover:text-gray-700 font-bold text-xs"
                       >
                         ✕
                       </button>
                     </div>
-                    <div className="max-h-48 overflow-y-auto divide-y divide-gray-700/50">
+                    <div className="max-h-48 overflow-y-auto divide-y divide-gray-100">
                       {filteredMentionUsers.map((usr, idx) => (
                         <button
                           key={usr.id}
                           type="button"
                           onClick={() => handleInsertMention(usr.nombre)}
                           className={`w-full text-left px-3.5 py-2.5 text-xs transition flex items-center justify-between ${
-                            idx === selectedMentionIndex ? 'bg-[#F7931F] text-white' : 'text-gray-200 hover:bg-[#F7931F]/30'
+                            idx === selectedMentionIndex ? 'bg-[#f97316] text-white' : 'text-gray-700 hover:bg-orange-50 hover:text-[#f97316]'
                           }`}
                         >
                           <span className="font-bold">{usr.nombre}</span>
@@ -5923,7 +5779,7 @@ export default function PipelineVentasPage() {
                   </div>
                 )}
 
-                <div className="bg-[#18181b] border border-gray-700/80 focus-within:border-[#F7931F] rounded-2xl p-3 shadow-inner space-y-2 transition">
+                <div className="bg-white border border-gray-200 focus-within:border-[#f97316] rounded-lg p-3 shadow-xs space-y-2 transition">
                   <textarea
                     rows={2}
                     placeholder="Escribe un comentario... Usa @ para mencionar"
@@ -5988,26 +5844,57 @@ export default function PipelineVentasPage() {
                         handleSendChatMessage();
                       }
                     }}
-                    className="w-full bg-transparent text-white font-medium text-sm focus:outline-none placeholder-gray-500 min-h-[50px] resize-none"
+                    className="w-full bg-transparent text-[#213343] font-medium text-sm focus:outline-none placeholder-gray-400 min-h-[50px] resize-none"
                   />
 
-                  {/* Barra Inferior de Herramientas del Comentario (Barra de Íconos de tus Imágenes) */}
-                  <div className="flex items-center justify-between border-t border-gray-800/80 pt-2">
-                    <div className="flex items-center gap-2 text-gray-400">
-                      <label className="p-1.5 hover:text-[#F7931F] hover:bg-white/5 rounded-lg transition cursor-pointer" title="Adjuntar archivo">
-                        <Plus className="w-4 h-4" />
-                        <input type="file" className="hidden" onChange={(e) => handleRealFileUpload(e)} />
-                      </label>
+                  {/* Fichas de archivos encolados para enviar con este comentario */}
+                  {stagedChatFiles.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1 pb-1">
+                      {stagedChatFiles.map((f, idx) => (
+                        <div
+                          key={idx}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 border border-gray-200 rounded-md text-xs text-gray-700 shadow-xs"
+                        >
+                          <Paperclip className="w-3.5 h-3.5 text-[#f97316] shrink-0" />
+                          <span className="font-medium truncate max-w-[160px]">{f.name}</span>
+                          <span className="text-[10px] text-gray-400 font-mono">({Math.round(f.size / 1024)} KB)</span>
+                          <button
+                            type="button"
+                            onClick={() => setStagedChatFiles((prev) => prev.filter((_, i) => i !== idx))}
+                            className="text-gray-400 hover:text-red-500 ml-1 font-bold text-xs"
+                            title="Quitar archivo"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-                      <label className="p-1.5 hover:text-[#F7931F] hover:bg-white/5 rounded-lg transition cursor-pointer" title="Adjuntar documento">
+                  {/* Barra Inferior de Herramientas del Comentario */}
+                  <div className="flex items-center justify-between border-t border-gray-100 pt-2">
+                    <div className="flex items-center gap-2 text-gray-400">
+                      {/* Botón Adjuntar Archivos al mensaje */}
+                      <label className="p-1.5 hover:text-[#f97316] hover:bg-gray-100 rounded-lg transition cursor-pointer" title="Adjuntar archivo(s) al mensaje">
                         <Paperclip className="w-4 h-4" />
-                        <input type="file" className="hidden" onChange={(e) => handleRealFileUpload(e)} />
+                        <input
+                          type="file"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            if (files.length > 0) {
+                              setStagedChatFiles((prev) => [...prev, ...files]);
+                            }
+                            e.target.value = '';
+                          }}
+                        />
                       </label>
 
                       <button
                         type="button"
                         onClick={() => setMentionMenuOpen(!mentionMenuOpen)}
-                        className="p-1.5 hover:text-[#F7931F] hover:bg-white/5 rounded-lg transition"
+                        className="p-1.5 hover:text-[#f97316] hover:bg-gray-100 rounded-lg transition"
                         title="Mencionar a alguien"
                       >
                         <AtSign className="w-4 h-4" />
@@ -6016,10 +5903,10 @@ export default function PipelineVentasPage() {
                       <button
                         type="button"
                         onClick={() => setIsReclamoMode(!isReclamoMode)}
-                        className={`px-2.5 py-1 rounded-xl transition flex items-center gap-1 text-xs font-black ${
+                        className={`px-2.5 py-1 rounded-md transition flex items-center gap-1 text-xs font-black ${
                           isReclamoMode
-                            ? 'bg-red-500 text-white shadow-sm'
-                            : 'text-gray-400 hover:text-red-400 hover:bg-white/5'
+                            ? 'bg-red-500 text-white shadow-xs'
+                            : 'text-gray-500 hover:text-red-500 hover:bg-red-50'
                         }`}
                         title="Marcar este mensaje como Reclamo / Postventa"
                       >
@@ -6030,13 +5917,18 @@ export default function PipelineVentasPage() {
 
                     <button
                       type="button"
+                      disabled={(!chatInput.trim() && stagedChatFiles.length === 0) || isUploadingChatFiles}
                       onClick={handleSendChatMessage}
                       className={`${
-                        isReclamoMode ? 'bg-red-500 hover:bg-red-600' : 'bg-[#F7931F] hover:bg-[#e08316]'
-                      } text-white p-2.5 rounded-xl transition flex items-center justify-center shadow-md shrink-0`}
+                        isReclamoMode ? 'bg-red-500 hover:bg-red-600' : 'bg-[#f97316] hover:bg-[#ea580c]'
+                      } text-white p-2.5 rounded-md transition flex items-center justify-center shadow-xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed`}
                       title={isReclamoMode ? 'Registrar Reclamo' : 'Enviar comentario'}
                     >
-                      <Send className="w-4 h-4" />
+                      {isUploadingChatFiles ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -6093,13 +5985,13 @@ export default function PipelineVentasPage() {
       {/* Modal Crear Nueva Oportunidad */}
       {showNewOpModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl text-[#363636]">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-lg w-full p-6 space-y-5 shadow-sm text-[#213343]">
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h3 className="text-lg font-extrabold text-[#363636] flex items-center gap-2">
-                <Plus className="w-5 h-5 text-[#F7931F]" />
+              <h3 className="text-lg font-extrabold text-[#213343] flex items-center gap-2">
+                <Plus className="w-5 h-5 text-[#f97316]" />
                 <span>Registrar Nueva Oportunidad de Venta</span>
               </h3>
-              <button onClick={() => setShowNewOpModal(false)} className="text-gray-400 hover:text-[#363636] text-lg font-bold">
+              <button onClick={() => setShowNewOpModal(false)} className="text-gray-400 hover:text-[#213343] text-lg font-bold">
                 ✕
               </button>
             </div>
@@ -6113,7 +6005,7 @@ export default function PipelineVentasPage() {
                   placeholder="Ej. Pavimentación Pastelones Obra Apoquindo"
                   value={nuevoTitulo}
                   onChange={(e) => setNuevoTitulo(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] placeholder-gray-400 focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] placeholder-gray-400 focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -6123,7 +6015,7 @@ export default function PipelineVentasPage() {
                   required
                   value={nuevoClienteId}
                   onChange={(e) => setNuevoClienteId(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316]"
                 >
                   <option value="">-- Seleccionar Cliente --</option>
                   {clientes.map((cli) => (
@@ -6139,7 +6031,7 @@ export default function PipelineVentasPage() {
                 <select
                   value={nuevoTipoVenta}
                   onChange={(e) => setNuevoTipoVenta(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
                 >
                   <option value="Instalación">Instalación (Montaje y Trabajo en Obra)</option>
                   <option value="Suministro">Suministro (Producción Directa)</option>
@@ -6149,14 +6041,18 @@ export default function PipelineVentasPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">Origen</label>
-                  <input
-                    type="text"
-                    placeholder="Ej: WhatsApp, referido, web..."
+                  <label className="block font-bold text-gray-700 mb-1">Origen *</label>
+                  <select
                     value={nuevoOrigen}
                     onChange={(e) => setNuevoOrigen(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
-                  />
+                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316] cursor-pointer"
+                  >
+                    <option value="">-- Seleccionar Origen --</option>
+                    <option value="WhatsApp">WhatsApp</option>
+                    <option value="Web">Web</option>
+                    <option value="Correo">Correo</option>
+                    <option value="Referido">Referido</option>
+                  </select>
                 </div>
 
                 <div>
@@ -6164,7 +6060,7 @@ export default function PipelineVentasPage() {
                   <select
                     value={nuevaModalidadRequerimiento}
                     onChange={(e) => setNuevaModalidadRequerimiento(e.target.value as 'solo_material' | 'instalacion')}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-bold focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
                   >
                     <option value="solo_material">Sólo material</option>
                     <option value="instalacion">Instalación</option>
@@ -6178,7 +6074,7 @@ export default function PipelineVentasPage() {
                   type="date"
                   value={nuevaFechaLimite}
                   onChange={(e) => setNuevaFechaLimite(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -6186,13 +6082,13 @@ export default function PipelineVentasPage() {
                 <button
                   type="button"
                   onClick={() => setShowNewOpModal(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition"
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-bold transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-extrabold transition shadow-md"
+                  className="px-5 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-extrabold transition shadow-sm"
                 >
                   Crear Oportunidad
                 </button>
@@ -6203,23 +6099,23 @@ export default function PipelineVentasPage() {
       )}
       {/* Modal Confirmación Eliminación de Oportunidad */}
       {opToDelete && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl text-[#363636]">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-[#213343]">
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
               <h3 className="text-base font-extrabold text-red-700 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
                 <span>Eliminar Oportunidad de Supabase</span>
               </h3>
-              <button onClick={() => setOpToDelete(null)} className="text-gray-400 hover:text-[#363636] font-bold">
+              <button onClick={() => setOpToDelete(null)} className="text-gray-400 hover:text-[#213343] font-bold">
                 ✕
               </button>
             </div>
 
             <div className="space-y-2 text-xs text-gray-700">
               <p>
-                ¿Estás seguro de que deseas eliminar la oportunidad <strong className="font-mono text-[#363636]">{opToDelete.codigo}</strong> (&quot;{opToDelete.titulo}&quot;)?
+                ¿Estás seguro de que deseas eliminar la oportunidad <strong className="font-mono text-[#213343]">{opToDelete.codigo}</strong> (&quot;{opToDelete.titulo}&quot;)?
               </p>
-              <p className="bg-red-50 p-3 rounded-xl border border-red-200 text-red-900 font-medium">
+              <p className="bg-red-50 p-3 rounded-md border border-red-200 text-red-900 font-medium">
                 Esta acción eliminará permanentemente la oportunidad de la base de datos de Supabase.
               </p>
             </div>
@@ -6228,14 +6124,14 @@ export default function PipelineVentasPage() {
               <button
                 type="button"
                 onClick={() => setOpToDelete(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleDeleteOportunidad}
-                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-xl transition shadow-md flex items-center gap-1.5"
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-md transition shadow-sm flex items-center gap-1.5"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Eliminar Oportunidad</span>
@@ -6247,23 +6143,23 @@ export default function PipelineVentasPage() {
 
       {/* Modal Confirmación Eliminación de Cotización desde Modal */}
       {cotToDeleteInModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl text-[#363636]">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-[#213343]">
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
               <h3 className="text-base font-extrabold text-red-700 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
                 <span>Eliminar Cotización de Supabase</span>
               </h3>
-              <button onClick={() => setCotToDeleteInModal(null)} className="text-gray-400 hover:text-[#363636] font-bold">
+              <button onClick={() => setCotToDeleteInModal(null)} className="text-gray-400 hover:text-[#213343] font-bold">
                 ✕
               </button>
             </div>
 
             <div className="space-y-2 text-xs text-gray-700">
               <p>
-                ¿Estás seguro de que deseas eliminar la cotización <strong className="font-mono text-[#363636]">{cotToDeleteInModal.numero_cotizacion}</strong> por <strong className="text-emerald-700">${(cotToDeleteInModal.monto_total || 0).toLocaleString('es-CL')}</strong>?
+                ¿Estás seguro de que deseas eliminar la cotización <strong className="font-mono text-[#213343]">{cotToDeleteInModal.numero_cotizacion}</strong> por <strong className="text-emerald-700">${(cotToDeleteInModal.monto_total || 0).toLocaleString('es-CL')}</strong>?
               </p>
-              <p className="bg-red-50 p-3 rounded-xl border border-red-200 text-red-900 font-medium">
+              <p className="bg-red-50 p-3 rounded-md border border-red-200 text-red-900 font-medium">
                 Esta acción la eliminará de Supabase.
               </p>
             </div>
@@ -6272,14 +6168,14 @@ export default function PipelineVentasPage() {
               <button
                 type="button"
                 onClick={() => setCotToDeleteInModal(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleDeleteCotizacionInModal}
-                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-xl transition shadow-md flex items-center gap-1.5"
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-md transition shadow-sm flex items-center gap-1.5"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Eliminar Cotización</span>
@@ -6292,38 +6188,38 @@ export default function PipelineVentasPage() {
       {/* Modal de Advertencia por Abono Mínimo Requerido (50% o 100%) */}
       {abonoWarningModal && (
         <div
-          className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn"
+          className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50 "
           onClick={() => setAbonoWarningModal(null)}
         >
           <div
-            className="bg-white text-[#363636] border border-gray-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4"
+            className="bg-white text-[#213343] border border-gray-200 rounded-lg max-w-md w-full p-6 shadow-sm space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3 border-b border-gray-100 pb-3">
-              <div className="p-2.5 bg-amber-100 text-amber-800 rounded-2xl shrink-0">
+              <div className="p-2.5 bg-amber-100 text-amber-800 rounded-lg shrink-0">
                 <AlertTriangle className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-[#363636]">Requisito de Abono Mínimo (50%)</h3>
+                <h3 className="text-base font-extrabold text-[#213343]">Requisito de Abono Mínimo (50%)</h3>
                 <p className="text-xs text-gray-500 font-medium">No se puede mover la oportunidad de estado</p>
               </div>
             </div>
 
             <div className="space-y-3 text-xs">
               <p className="text-gray-700 font-medium leading-relaxed">
-                Para cambiar la oportunidad <strong className="font-mono text-[#F7931F]">{abonoWarningModal.op.codigo}</strong> al estado de Venta Cerrada o Producción, se requiere registrar un abono equivalente a al menos el <strong className="text-amber-800 font-bold">50% o 100%</strong> del monto total.
+                Para cambiar la oportunidad <strong className="font-mono text-[#f97316]">{abonoWarningModal.op.codigo}</strong> al estado de Venta Cerrada o Producción, se requiere registrar un abono equivalente a al menos el <strong className="text-amber-800 font-bold">50% o 100%</strong> del monto total.
               </p>
 
-              <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200 space-y-2 font-mono text-xs">
+              <div className="bg-gray-50 p-3.5 rounded-lg border border-gray-200 space-y-2 font-mono text-xs">
                 <div className="flex justify-between text-gray-600">
                   <span>Monto Total Venta:</span>
-                  <span className="font-bold text-[#363636]">${abonoWarningModal.montoTotal.toLocaleString('es-CL')}</span>
+                  <span className="font-bold text-[#213343]">${abonoWarningModal.montoTotal.toLocaleString('es-CL')}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Abonado actualmente:</span>
                   <span className="font-bold text-amber-700">${abonoWarningModal.montoAbonado.toLocaleString('es-CL')} ({abonoWarningModal.porcentajeActual}%)</span>
                 </div>
-                <div className="flex justify-between text-[#F7931F] font-black border-t border-gray-200 pt-2 text-xs">
+                <div className="flex justify-between text-[#f97316] font-black border-t border-gray-200 pt-2 text-xs">
                   <span>Requerido mínimo (50%):</span>
                   <span>${Math.round(abonoWarningModal.montoTotal * 0.5).toLocaleString('es-CL')}</span>
                 </div>
@@ -6334,7 +6230,7 @@ export default function PipelineVentasPage() {
               <button
                 type="button"
                 onClick={() => setAbonoWarningModal(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition"
               >
                 Entendido
               </button>
@@ -6357,7 +6253,7 @@ export default function PipelineVentasPage() {
                     reventaOc: false,
                   });
                 }}
-                className="px-4 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold rounded-xl transition shadow-sm flex items-center gap-1.5"
+                className="px-4 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold rounded-md transition shadow-sm flex items-center gap-1.5"
               >
                 <DollarSign className="w-4 h-4" />
                 <span>Registrar Abono Ahora</span>
@@ -6368,17 +6264,17 @@ export default function PipelineVentasPage() {
       )}
 
       {ramaChangeOcModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[120] animate-fadeIn">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-[#363636]">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[120] ">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-lg w-full p-6 space-y-4 shadow-sm text-[#213343]">
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
               <h3 className="text-base font-extrabold flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-[#F7931F]" />
+                <AlertTriangle className="w-5 h-5 text-[#f97316]" />
                 <span>Resolver OC antes de cambiar de rama</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setRamaChangeOcModal(null)}
-                className="text-gray-400 hover:text-[#363636] font-bold"
+                className="text-gray-400 hover:text-[#213343] font-bold"
               >
                 x
               </button>
@@ -6388,7 +6284,7 @@ export default function PipelineVentasPage() {
               <p>
                 La oportunidad <strong>{ramaChangeOcModal.op.codigo}</strong> tiene <strong>{ramaChangeOcModal.ocCount}</strong> orden(es) de compra vinculada(s).
               </p>
-              <p className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-orange-950 font-medium">
+              <p className="bg-orange-50 border border-orange-200 rounded-md p-3 text-orange-950 font-medium">
                 Para moverla a {ramaChangeOcModal.rama === 'produccion' ? 'Produccion e Instalacion' : 'Reventa y Logistica'}, primero debes desvincular o eliminar esas OCs. No pueden quedar asignadas a ambas ramas.
               </p>
             </div>
@@ -6398,7 +6294,7 @@ export default function PipelineVentasPage() {
                 type="button"
                 onClick={() => setRamaChangeOcModal(null)}
                 disabled={resolvingRamaChangeOc}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition"
               >
                 Cancelar
               </button>
@@ -6406,7 +6302,7 @@ export default function PipelineVentasPage() {
                 type="button"
                 onClick={() => resolveRamaChangeWithOc('desvincular')}
                 disabled={resolvingRamaChangeOc}
-                className="px-4 py-2 bg-white hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed text-[#363636] border border-gray-300 font-extrabold rounded-xl transition"
+                className="px-4 py-2 bg-white hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed text-[#213343] border border-gray-300 font-extrabold rounded-md transition"
               >
                 {resolvingRamaChangeOc ? 'Resolviendo...' : 'Desvincular OC y Cambiar Rama'}
               </button>
@@ -6415,7 +6311,7 @@ export default function PipelineVentasPage() {
                   type="button"
                   onClick={() => resolveRamaChangeWithOc('eliminar')}
                   disabled={resolvingRamaChangeOc}
-                  className="px-4 py-2 bg-[#363636] hover:bg-black disabled:opacity-60 disabled:cursor-not-allowed text-white font-extrabold rounded-xl transition"
+                  className="px-4 py-2 bg-[#213343] hover:bg-black disabled:opacity-60 disabled:cursor-not-allowed text-white font-extrabold rounded-md transition"
                 >
                   Eliminar OC y Cambiar Rama
                 </button>
@@ -6439,13 +6335,13 @@ export default function PipelineVentasPage() {
               top: `${Math.min(stageMenuPos.top, typeof window !== 'undefined' ? window.innerHeight - 420 : stageMenuPos.top)}px`,
               left: `${Math.min(stageMenuPos.left, typeof window !== 'undefined' ? window.innerWidth - 290 : stageMenuPos.left)}px`,
             }}
-            className="fixed z-[101] bg-[#1c1c1f] text-gray-100 border border-gray-800 rounded-2xl shadow-2xl p-3 min-w-[280px] space-y-3 animate-fadeIn"
+            className="fixed z-[101] bg-[#1c1c1f] text-gray-100 border border-gray-800 rounded-lg shadow-sm p-3 min-w-[280px] space-y-3 "
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header del Popover con Buscador ClickUp */}
             <div className="space-y-2">
               <div className="flex items-center justify-between border-b border-gray-800 pb-2 px-1">
-                <span className="text-[11px] font-black uppercase text-gray-300 tracking-wider">Estado del Pipeline</span>
+                <span className="text-[11px] font-black uppercase text-gray-300 tracking-normal">Estado del Pipeline</span>
                 <button
                   onClick={() => {
                     setStageMenuPos(null);
@@ -6465,7 +6361,7 @@ export default function PipelineVentasPage() {
                   placeholder="Buscar..."
                   value={statusSearchQuery}
                   onChange={(e) => setStatusSearchQuery(e.target.value)}
-                  className="w-full bg-[#27272a] text-gray-200 border border-gray-700 focus:border-[#F7931F] text-xs rounded-xl pl-8 pr-3 py-1.5 focus:outline-none transition placeholder-gray-500 font-medium"
+                  className="w-full bg-[#27272a] text-gray-200 border border-gray-700 focus:border-[#f97316] text-xs rounded-md pl-8 pr-3 py-1.5 focus:outline-none transition placeholder-gray-500 font-medium"
                   autoFocus
                 />
               </div>
@@ -6481,7 +6377,7 @@ export default function PipelineVentasPage() {
 
                 return (
                   <div key={sec.id} className="space-y-1">
-                    <span className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider px-2 py-0.5 block">
+                    <span className="text-[10px] font-extrabold uppercase text-gray-400 tracking-normal px-2 py-0.5 block">
                       {sec.nombre}
                     </span>
                     {filteredEtapas.map((st) => {
@@ -6497,9 +6393,9 @@ export default function PipelineVentasPage() {
                             setStatusSearchQuery('');
                             await moveOportunidadToState(opId, st.id as EstadoPipeline);
                           }}
-                          className={`w-full text-left px-3 py-2 text-xs font-bold rounded-xl transition flex items-center justify-between group ${
+                          className={`w-full text-left px-3 py-2 text-xs font-bold rounded-md transition flex items-center justify-between group ${
                             isCurrent
-                              ? 'bg-[#27272a] text-[#F7931F] border border-[#F7931F]/40 shadow-sm'
+                              ? 'bg-[#27272a] text-[#f97316] border border-[#f97316]/40 shadow-sm'
                               : 'hover:bg-white/5 text-gray-200'
                           }`}
                         >
@@ -6517,9 +6413,9 @@ export default function PipelineVentasPage() {
                                   : 'bg-indigo-500 border-indigo-400'
                               }`}
                             />
-                            <span className="text-[11px] font-extrabold uppercase tracking-wider">{st.label}</span>
+                            <span className="text-[11px] font-extrabold uppercase tracking-normal">{st.label}</span>
                           </div>
-                          {isCurrent && <Check className="w-4 h-4 text-[#F7931F]" />}
+                          {isCurrent && <Check className="w-4 h-4 text-[#f97316]" />}
                         </button>
                       );
                     })}

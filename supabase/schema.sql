@@ -7,7 +7,7 @@
 -- supabase/migrations/ son la fuente ejecutable de verdad.
 --
 -- Notas:
---   - El esquema usa roles actuales de la app: `admin` y `user`.
+--   - El esquema usa roles actuales de la app: `admin`, `user` y `mano_obra`.
 --   - Las tablas de órdenes de compra están modeladas con RLS, grants acotados,
 --     versionado y folio único.
 --   - Algunas tablas operativas ajenas a OC conservan políticas históricas con
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS public.usuarios (
     auth_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     nombre TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
-    rol TEXT NOT NULL CHECK (rol IN ('admin', 'user')),
+    rol TEXT NOT NULL CHECK (rol IN ('admin', 'user', 'mano_obra')),
     activo BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -147,6 +147,51 @@ CREATE UNIQUE INDEX IF NOT EXISTS oportunidad_antecedentes_storage_path_key
 CREATE INDEX IF NOT EXISTS idx_oportunidad_antecedentes_oportunidad
   ON public.oportunidad_antecedentes (oportunidad_id, eliminado, created_at DESC);
 CREATE TRIGGER trg_oportunidad_antecedentes_updated_at BEFORE UPDATE ON public.oportunidad_antecedentes
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TABLE IF NOT EXISTS public.administracion_documentos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa TEXT NOT NULL CHECK (empresa IN ('comercial', 'transportes', 'inmobiliaria')),
+    seccion TEXT NOT NULL DEFAULT 'documentos',
+    categoria TEXT NOT NULL CHECK (categoria IN ('general', 'prevencion_riesgo', 'legal')),
+    nombre TEXT NOT NULL,
+    descripcion TEXT,
+    bucket_id TEXT NOT NULL DEFAULT 'administracion',
+    storage_path TEXT NOT NULL,
+    mime_type TEXT,
+    size_bytes BIGINT,
+    subido_por_id UUID REFERENCES public.usuarios(id) ON DELETE SET NULL,
+    subido_por_nombre TEXT,
+    eliminado BOOLEAN NOT NULL DEFAULT false,
+    eliminado_en TIMESTAMPTZ,
+    eliminado_por UUID REFERENCES public.usuarios(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT administracion_documentos_empresa_seccion_check
+      CHECK (
+        empresa IN ('comercial', 'transportes', 'inmobiliaria')
+        AND seccion IN (
+          'cuentas_por_cobrar',
+          'sueldos_administrativos',
+          'pendientes_generales',
+          'contabilidad_impuestos',
+          'finiquitos',
+          'legal',
+          'prevencion_riesgos',
+          'documentos',
+          'obras_faenas'
+        )
+      )
+);
+CREATE UNIQUE INDEX IF NOT EXISTS administracion_documentos_storage_path_key
+  ON public.administracion_documentos (bucket_id, storage_path);
+CREATE INDEX IF NOT EXISTS idx_administracion_documentos_empresa_categoria
+  ON public.administracion_documentos (empresa, categoria, created_at DESC)
+  WHERE eliminado = false;
+CREATE INDEX IF NOT EXISTS idx_administracion_documentos_empresa_seccion_categoria
+  ON public.administracion_documentos (empresa, seccion, categoria, created_at DESC)
+  WHERE eliminado = false;
+CREATE TRIGGER trg_administracion_documentos_updated_at BEFORE UPDATE ON public.administracion_documentos
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 -- 5. Cotizaciones
@@ -273,6 +318,90 @@ CREATE TABLE IF NOT EXISTS public.notificaciones (
     link_url TEXT,
     fecha TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS public.recordatorios (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa TEXT NOT NULL DEFAULT 'inmobiliaria'
+      CHECK (empresa IN ('comercial', 'transportes', 'inmobiliaria')),
+    seccion TEXT NOT NULL DEFAULT 'pendientes_generales',
+    estado TEXT NOT NULL DEFAULT 'por_hacer'
+      CHECK (estado IN ('por_hacer', 'en_curso', 'requiere_actualizacion', 'completada')),
+    urgencia TEXT NOT NULL DEFAULT 'media'
+      CHECK (urgencia IN ('baja', 'media', 'alta', 'critica')),
+    titulo TEXT NOT NULL,
+    descripcion TEXT,
+    asignado_a_id UUID NOT NULL REFERENCES public.usuarios(id) ON DELETE CASCADE,
+    creado_por_id UUID REFERENCES public.usuarios(id) ON DELETE SET NULL,
+    fecha_vencimiento DATE NOT NULL,
+    recurrencia TEXT NOT NULL DEFAULT 'ninguna'
+      CHECK (recurrencia IN ('ninguna', 'diaria', 'semanal', 'mensual')),
+    recurrencia_dia_mes SMALLINT CHECK (recurrencia_dia_mes BETWEEN 1 AND 31),
+    recurrencia_dia_semana SMALLINT CHECK (recurrencia_dia_semana BETWEEN 0 AND 6),
+    completado BOOLEAN NOT NULL DEFAULT false,
+    completado_en TIMESTAMPTZ,
+    ultimo_completado_en TIMESTAMPTZ,
+    veces_completado INTEGER NOT NULL DEFAULT 0 CHECK (veces_completado >= 0),
+    activo BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT recordatorios_empresa_seccion_check
+      CHECK (
+        empresa IN ('comercial', 'transportes', 'inmobiliaria')
+        AND seccion IN (
+          'cuentas_por_cobrar',
+          'sueldos_administrativos',
+          'pendientes_generales',
+          'contabilidad_impuestos',
+          'finiquitos',
+          'legal',
+          'prevencion_riesgos',
+          'documentos',
+          'obras_faenas'
+        )
+      ),
+    CONSTRAINT recordatorios_recurrencia_mensual_dia_check
+      CHECK (recurrencia <> 'mensual' OR recurrencia_dia_mes IS NOT NULL),
+    CONSTRAINT recordatorios_recurrencia_semanal_dia_check
+      CHECK (recurrencia <> 'semanal' OR recurrencia_dia_semana IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_recordatorios_asignado_estado_fecha
+  ON public.recordatorios (asignado_a_id, activo, completado, fecha_vencimiento);
+CREATE INDEX IF NOT EXISTS idx_recordatorios_empresa_asignado_estado_fecha
+  ON public.recordatorios (empresa, asignado_a_id, activo, completado, fecha_vencimiento);
+CREATE INDEX IF NOT EXISTS idx_recordatorios_empresa_estado_fecha
+  ON public.recordatorios (empresa, estado, fecha_vencimiento)
+  WHERE activo = true;
+CREATE INDEX IF NOT EXISTS idx_recordatorios_empresa_urgencia_estado_fecha
+  ON public.recordatorios (empresa, urgencia, estado, fecha_vencimiento)
+  WHERE activo = true;
+CREATE INDEX IF NOT EXISTS idx_recordatorios_empresa_seccion_estado_fecha
+  ON public.recordatorios (empresa, seccion, estado, fecha_vencimiento)
+  WHERE activo = true;
+CREATE INDEX IF NOT EXISTS idx_recordatorios_pendientes_fecha
+  ON public.recordatorios (fecha_vencimiento)
+  WHERE activo = true AND completado = false;
+CREATE INDEX IF NOT EXISTS idx_recordatorios_creado_por
+  ON public.recordatorios (creado_por_id);
+CREATE TRIGGER trg_recordatorios_updated_at BEFORE UPDATE ON public.recordatorios
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TABLE IF NOT EXISTS public.recordatorio_actividades (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    recordatorio_id UUID NOT NULL REFERENCES public.recordatorios(id) ON DELETE CASCADE,
+    tipo TEXT NOT NULL DEFAULT 'comentario'
+      CHECK (tipo IN ('comentario', 'creacion', 'estado_cambiado', 'urgencia_cambiada', 'actualizacion', 'archivo')),
+    contenido TEXT NOT NULL,
+    usuario_id UUID REFERENCES public.usuarios(id) ON DELETE SET NULL,
+    usuario_nombre TEXT,
+    archivo_bucket TEXT,
+    archivo_path TEXT,
+    archivo_nombre TEXT,
+    archivo_mime_type TEXT,
+    archivo_size_bytes BIGINT CHECK (archivo_size_bytes IS NULL OR archivo_size_bytes >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_recordatorio_actividades_recordatorio_fecha
+  ON public.recordatorio_actividades (recordatorio_id, created_at DESC);
 
 -- 12. Campos Personalizados (metadata de configuración del CRM; id es TEXT
 --     porque se siembra con ids fijos como 'sys-cli-1')
@@ -623,6 +752,7 @@ ALTER TABLE public.clientes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notas_actividad ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.oportunidades ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.oportunidad_antecedentes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.administracion_documentos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cotizaciones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cotizacion_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ventas ENABLE ROW LEVEL SECURITY;
@@ -630,6 +760,8 @@ ALTER TABLE public.proveedores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pedidos_proveedor ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.caja_movimientos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notificaciones ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.recordatorios ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.recordatorio_actividades ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.campos_personalizados ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.logs_sistema ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.actividades_op ENABLE ROW LEVEL SECURITY;
@@ -653,6 +785,16 @@ CREATE POLICY "oportunidad_antecedentes_update" ON public.oportunidad_antecedent
   WITH CHECK (has_role('user'));
 CREATE POLICY "oportunidad_antecedentes_delete" ON public.oportunidad_antecedentes
   FOR DELETE TO authenticated USING (has_role('admin'));
+CREATE POLICY "administracion_documentos_select" ON public.administracion_documentos
+  FOR SELECT TO authenticated USING (has_role('admin'));
+CREATE POLICY "administracion_documentos_insert" ON public.administracion_documentos
+  FOR INSERT TO authenticated WITH CHECK (has_role('admin'));
+CREATE POLICY "administracion_documentos_update" ON public.administracion_documentos
+  FOR UPDATE TO authenticated
+  USING (has_role('admin'))
+  WITH CHECK (has_role('admin'));
+CREATE POLICY "administracion_documentos_delete" ON public.administracion_documentos
+  FOR DELETE TO authenticated USING (has_role('admin'));
 CREATE POLICY "Acceso total cotizaciones anon y auth" ON public.cotizaciones FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Acceso total cotizacion_items anon y auth" ON public.cotizacion_items FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Acceso total ventas anon y auth" ON public.ventas FOR ALL USING (true) WITH CHECK (true);
@@ -660,6 +802,40 @@ CREATE POLICY "Acceso total proveedores anon y auth" ON public.proveedores FOR A
 CREATE POLICY "Acceso total pedidos_proveedor anon y auth" ON public.pedidos_proveedor FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Acceso total caja anon y auth" ON public.caja_movimientos FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Acceso total notificaciones anon y auth" ON public.notificaciones FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "recordatorios_select" ON public.recordatorios
+  FOR SELECT TO authenticated
+  USING (asignado_a_id = current_usuario_id() OR has_role('admin'));
+CREATE POLICY "recordatorios_insert" ON public.recordatorios
+  FOR INSERT TO authenticated WITH CHECK (has_role('admin'));
+CREATE POLICY "recordatorios_update" ON public.recordatorios
+  FOR UPDATE TO authenticated
+  USING (asignado_a_id = current_usuario_id() OR has_role('admin'))
+  WITH CHECK (asignado_a_id = current_usuario_id() OR has_role('admin'));
+CREATE POLICY "recordatorios_delete" ON public.recordatorios
+  FOR DELETE TO authenticated USING (has_role('admin'));
+CREATE POLICY "recordatorio_actividades_select" ON public.recordatorio_actividades
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.recordatorios r
+      WHERE r.id = recordatorio_actividades.recordatorio_id
+        AND (r.asignado_a_id = current_usuario_id() OR has_role('admin'))
+    )
+  );
+CREATE POLICY "recordatorio_actividades_insert" ON public.recordatorio_actividades
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    (usuario_id IS NULL OR usuario_id = current_usuario_id() OR has_role('admin'))
+    AND EXISTS (
+      SELECT 1
+      FROM public.recordatorios r
+      WHERE r.id = recordatorio_actividades.recordatorio_id
+        AND (r.asignado_a_id = current_usuario_id() OR has_role('admin'))
+    )
+  );
+CREATE POLICY "recordatorio_actividades_delete" ON public.recordatorio_actividades
+  FOR DELETE TO authenticated USING (has_role('admin'));
 CREATE POLICY "Public access for campos_personalizados" ON public.campos_personalizados FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all on logs_sistema" ON public.logs_sistema FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Permissive Actividades Op Policy" ON public.actividades_op FOR ALL USING (true) WITH CHECK (true);
@@ -699,6 +875,9 @@ CREATE POLICY "orden_compra_items_delete" ON public.orden_compra_items
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.personal_terreno TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.produccion_diaria TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.oportunidad_antecedentes TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.administracion_documentos TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.recordatorios TO authenticated;
+GRANT SELECT, INSERT, DELETE ON public.recordatorio_actividades TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.ordenes_compra TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.orden_compra_items TO authenticated;
 
@@ -707,23 +886,63 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.orden_compra_items TO authenticat
 -- ============================================================
 
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('cotizaciones-pdf', 'cotizaciones-pdf', true)
-ON CONFLICT (id) DO NOTHING;
+VALUES
+  ('cotizaciones-pdf', 'cotizaciones-pdf', true),
+  ('documentos', 'documentos', true),
+  ('administracion', 'administracion', false)
+ON CONFLICT (id) DO UPDATE SET public = EXCLUDED.public;
 
 CREATE POLICY "Public Read Storage PDFs" ON storage.objects FOR SELECT USING (bucket_id = 'cotizaciones-pdf');
 CREATE POLICY "Public Insert Storage PDFs" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'cotizaciones-pdf');
 CREATE POLICY "Public Update Storage PDFs" ON storage.objects FOR UPDATE USING (bucket_id = 'cotizaciones-pdf');
 CREATE POLICY "Public Delete Storage PDFs" ON storage.objects FOR DELETE USING (bucket_id = 'cotizaciones-pdf');
 
--- Bucket `documentos` (comprobantes de pago, referenciado por app/ventas/page.tsx)
--- NO existe en vivo. Se crea en la Fase 3 (supabase/migrations/0005_storage_policies.sql)
--- como bucket privado + URLs firmadas, según decisión del usuario.
+CREATE POLICY "administracion_admin_select" ON storage.objects
+  FOR SELECT TO authenticated USING (bucket_id = 'administracion' AND has_role('admin'));
+CREATE POLICY "administracion_admin_insert" ON storage.objects
+  FOR INSERT TO authenticated WITH CHECK (bucket_id = 'administracion' AND has_role('admin'));
+CREATE POLICY "administracion_admin_update" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (bucket_id = 'administracion' AND has_role('admin'))
+  WITH CHECK (bucket_id = 'administracion' AND has_role('admin'));
+CREATE POLICY "administracion_admin_delete" ON storage.objects
+  FOR DELETE TO authenticated USING (bucket_id = 'administracion' AND has_role('admin'));
+CREATE POLICY "recordatorios_adjuntos_select" ON storage.objects
+  FOR SELECT TO authenticated
+  USING (
+    bucket_id = 'administracion'
+    AND EXISTS (
+      SELECT 1
+      FROM public.recordatorios r
+      WHERE r.id = CASE
+          WHEN storage.objects.name ~ '^recordatorios/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/'
+            THEN split_part(storage.objects.name, '/', 2)::uuid
+          ELSE NULL
+        END
+        AND (r.asignado_a_id = current_usuario_id() OR has_role('admin'))
+    )
+  );
+CREATE POLICY "recordatorios_adjuntos_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'administracion'
+    AND EXISTS (
+      SELECT 1
+      FROM public.recordatorios r
+      WHERE r.id = CASE
+          WHEN storage.objects.name ~ '^recordatorios/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/'
+            THEN split_part(storage.objects.name, '/', 2)::uuid
+          ELSE NULL
+        END
+        AND (r.asignado_a_id = current_usuario_id() OR has_role('admin'))
+    )
+  );
 
 -- ============================================================
 -- Realtime — tablas en la publicación supabase_realtime (confirmado en vivo)
 -- ============================================================
 -- Incluidas: actividades_op, clientes, cotizacion_items, cotizaciones,
 --   notas_actividad, notificaciones, oportunidades, ordenes_reventa,
---   proveedores, proyectos_planificacion, usuarios, visitas_terreno.
+--   proveedores, proyectos_planificacion, recordatorios, usuarios, visitas_terreno.
 -- Faltan (bloquea Fase 5 hasta agregarlas): caja_movimientos,
 --   campos_personalizados, logs_sistema, pedidos_proveedor, ventas.

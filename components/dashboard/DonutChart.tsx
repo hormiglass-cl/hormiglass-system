@@ -45,13 +45,13 @@ export function DonutChart({
   let cumulativePercent = 0;
 
   return (
-    <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm space-y-4 flex flex-col justify-between">
+    <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-4 flex flex-col justify-between">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-gray-100 pb-3">
         <div>
-          <h3 className="font-extrabold text-base text-[#363636] flex items-center gap-2">
+          <h3 className="font-extrabold text-base text-[#213343] flex items-center gap-2">
             {IconComponent && (
-              <div className="p-1.5 rounded-xl bg-orange-50 text-[#F7931F]">
+              <div className="p-1.5 rounded-md bg-orange-50 text-[#f97316]">
                 <IconComponent className="w-4 h-4" />
               </div>
             )}
@@ -113,10 +113,10 @@ export function DonutChart({
 
             {/* Centro Informativo */}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4">
-              <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">
+              <span className="text-xs text-gray-400 font-bold uppercase tracking-normal">
                 {centerLabel || 'Total'}
               </span>
-              <span className="text-xl font-black text-[#363636] leading-tight">
+              <span className="text-xl font-black text-[#213343] leading-tight">
                 {centerValue || totalValue.toLocaleString('es-CL')}
               </span>
             </div>
@@ -133,7 +133,7 @@ export function DonutChart({
                   key={seg.id}
                   onMouseEnter={() => setHoveredId(seg.id)}
                   onMouseLeave={() => setHoveredId(null)}
-                  className={`p-2 rounded-xl transition cursor-pointer border ${
+                  className={`p-2 rounded-md transition cursor-pointer border ${
                     isHovered ? 'bg-gray-50 border-gray-300 shadow-xs' : 'border-transparent'
                   }`}
                 >
@@ -143,7 +143,7 @@ export function DonutChart({
                         className="w-3 h-3 rounded-full shrink-0"
                         style={{ backgroundColor: seg.color }}
                       />
-                      <span className="text-[#363636] truncate">{seg.label}</span>
+                      <span className="text-[#213343] truncate">{seg.label}</span>
                     </div>
                     <span className="text-gray-500 font-mono shrink-0 ml-2">{pct}%</span>
                   </div>
@@ -153,7 +153,7 @@ export function DonutChart({
                       {seg.value} {seg.sublabel || 'registros'}
                     </span>
                     {showAmountInLegend && seg.monto !== undefined && (
-                      <span className="font-bold text-[#F7931F]">
+                      <span className="font-bold text-[#f97316]">
                         ${seg.monto.toLocaleString('es-CL')}
                       </span>
                     )}

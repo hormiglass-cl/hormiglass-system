@@ -400,41 +400,41 @@ export function CotizacionModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 z-50 animate-fadeIn">
-      <div className="bg-white border border-gray-200 rounded-3xl max-w-3xl w-full p-5 sm:p-7 space-y-4 shadow-2xl text-[#363636] max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 z-50 ">
+      <div className="bg-white border border-gray-200 rounded-lg max-w-3xl w-full p-5 sm:p-7 space-y-4 shadow-sm text-[#213343] max-h-[92vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-          <h3 className="text-lg font-extrabold text-[#363636] flex items-center gap-2">
-            <FileText className="w-5 h-5 text-[#F7931F]" />
+          <h3 className="text-lg font-extrabold text-[#213343] flex items-center gap-2">
+            <FileText className="w-5 h-5 text-[#f97316]" />
             <span>
               {initialCotizacion
                 ? `Editar Cotización N° ${initialCotizacion.numero_cotizacion}`
                 : 'Emitir Nueva Cotización Oficial'}
             </span>
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-[#363636] text-xl font-bold">
+          <button onClick={onClose} className="text-gray-400 hover:text-[#213343] text-xl font-bold">
             ✕
           </button>
         </div>
 
         {errorMsg && (
-          <div className="bg-red-50 border border-red-200 text-red-700 p-3.5 rounded-2xl text-xs font-bold">
+          <div className="bg-red-50 border border-red-200 text-red-700 p-3.5 rounded-lg text-xs font-bold">
             ⚠️ {errorMsg}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {/* Cliente & Oportunidad vinculada */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-200">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
             {/* Cliente */}
             <div className="relative">
               <label className="block font-bold text-gray-700 mb-1">Cliente *</label>
               <div
                 onClick={() => setIsClientSearchOpen(!isClientSearchOpen)}
-                className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium flex items-center justify-between cursor-pointer"
+                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium flex items-center justify-between cursor-pointer"
               >
                 {selectedClient ? (
-                  <span className="font-extrabold text-[#363636] truncate">{selectedClient.nombre}</span>
+                  <span className="font-extrabold text-[#213343] truncate">{selectedClient.nombre}</span>
                 ) : (
                   <span className="text-gray-400">Seleccionar Cliente...</span>
                 )}
@@ -442,7 +442,7 @@ export function CotizacionModal({
               </div>
 
               {isClientSearchOpen && (
-                <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 p-2 max-h-52 overflow-y-auto space-y-1">
+                <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-sm z-50 p-2 max-h-52 overflow-y-auto space-y-1">
                   {clientes.map((c) => (
                     <div
                       key={c.id}
@@ -451,13 +451,13 @@ export function CotizacionModal({
                         setOportunidadId('');
                         setIsClientSearchOpen(false);
                       }}
-                      className="p-2 hover:bg-orange-50 rounded-xl cursor-pointer flex items-center justify-between"
+                      className="p-2 hover:bg-orange-50 rounded-md cursor-pointer flex items-center justify-between"
                     >
                       <div>
-                        <p className="font-bold text-[#363636]">{c.nombre}</p>
+                        <p className="font-bold text-[#213343]">{c.nombre}</p>
                         <p className="text-[10px] text-gray-400 font-mono">RUT: {c.rut}</p>
                       </div>
-                      {c.id === clienteId && <Check className="w-4 h-4 text-[#F7931F]" />}
+                      {c.id === clienteId && <Check className="w-4 h-4 text-[#f97316]" />}
                     </div>
                   ))}
                 </div>
@@ -470,7 +470,7 @@ export function CotizacionModal({
               <select
                 value={oportunidadId}
                 onChange={(e) => setOportunidadId(e.target.value)}
-                className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-extrabold focus:outline-none focus:border-[#F7931F]"
+                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-extrabold focus:outline-none focus:border-[#f97316]"
               >
                 <option value="">-- Sin Oportunidad Vinculada --</option>
                 {clientOportunidades.map((op) => (
@@ -483,10 +483,10 @@ export function CotizacionModal({
           </div>
 
           {/* Metadatos de Cabecera: Ref. Cliente & Fecha de Validez */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-200">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
             <div>
               <label className="block font-bold text-gray-700 mb-1 flex items-center gap-1">
-                <Tag className="w-3.5 h-3.5 text-[#F7931F]" />
+                <Tag className="w-3.5 h-3.5 text-[#f97316]" />
                 <span>Ref. Cliente (Ej: Proyecto / Orden / Código)</span>
               </label>
               <input
@@ -494,35 +494,35 @@ export function CotizacionModal({
                 value={referenciaCliente}
                 onChange={(e) => setReferenciaCliente(e.target.value)}
                 placeholder="Ej: NEMICEPS o PROY-2026"
-                className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
               />
             </div>
 
             <div>
               <label className="block font-bold text-gray-700 mb-1 flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-[#F7931F]" />
+                <Calendar className="w-3.5 h-3.5 text-[#f97316]" />
                 <span>Validar Fecha de Término (Validez)</span>
               </label>
               <input
                 type="date"
                 value={fechaValidez}
                 onChange={(e) => setFechaValidez(e.target.value)}
-                className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
               />
             </div>
           </div>
 
           {/* Lista de Ítems / Productos con Dto % */}
-          <div className="space-y-3 bg-white p-4 rounded-2xl border border-gray-200">
+          <div className="space-y-3 bg-white p-4 rounded-lg border border-gray-200">
             <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-              <span className="font-extrabold text-[#363636] flex items-center gap-1.5">
-                <Calculator className="w-4 h-4 text-[#F7931F]" />
+              <span className="font-extrabold text-[#213343] flex items-center gap-1.5">
+                <Calculator className="w-4 h-4 text-[#f97316]" />
                 <span>Partidas y Productos (Monto en Chile Peso)</span>
               </span>
               <button
                 type="button"
                 onClick={handleAddItem}
-                className="bg-orange-50 hover:bg-[#F7931F] text-[#F7931F] hover:text-white px-2.5 py-1 rounded-xl text-[11px] font-bold border border-orange-200 transition flex items-center gap-1"
+                className="bg-orange-50 hover:bg-[#f97316] text-[#f97316] hover:text-white px-2.5 py-1 rounded-md text-[11px] font-bold border border-orange-200 transition flex items-center gap-1"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Agregar Producto</span>
@@ -531,20 +531,20 @@ export function CotizacionModal({
 
             <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
               {items.map((item, idx) => (
-                <div key={idx} className="p-3 bg-gray-50 rounded-2xl border border-gray-200 space-y-2">
+                <div key={idx} className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
                   <div className="flex gap-2 items-center">
                     <input
                       type="text"
                       value={item.producto}
                       onChange={(e) => handleItemChange(idx, 'producto', e.target.value)}
                       placeholder="Descripción del Producto / Servicio"
-                      className="flex-1 bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs font-bold text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                      className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-1.5 text-xs font-bold text-[#213343] focus:outline-none focus:border-[#f97316]"
                     />
                     <button
                       type="button"
                       onClick={() => handleRemoveItem(idx)}
                       disabled={items.length === 1}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition disabled:opacity-30"
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-md transition disabled:opacity-30"
                       title="Eliminar partida"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -559,7 +559,7 @@ export function CotizacionModal({
                         min="1"
                         value={item.cantidad}
                         onChange={(e) => handleItemChange(idx, 'cantidad', Number(e.target.value))}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-2 py-1 text-center font-bold text-[#363636]"
+                        className="w-full bg-white border border-gray-300 rounded-md px-2 py-1 text-center font-bold text-[#213343]"
                       />
                     </div>
                     <div>
@@ -569,7 +569,7 @@ export function CotizacionModal({
                         min="0"
                         value={item.precio_unitario}
                         onChange={(e) => handleItemChange(idx, 'precio_unitario', Number(e.target.value))}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-2 py-1 text-right font-mono font-bold text-[#363636]"
+                        className="w-full bg-white border border-gray-300 rounded-md px-2 py-1 text-right font-mono font-bold text-[#213343]"
                       />
                     </div>
                     <div>
@@ -580,12 +580,12 @@ export function CotizacionModal({
                         max="100"
                         value={item.descuento_porcentaje || 0}
                         onChange={(e) => handleItemChange(idx, 'descuento_porcentaje', Number(e.target.value))}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-2 py-1 text-center font-bold text-[#363636]"
+                        className="w-full bg-white border border-gray-300 rounded-md px-2 py-1 text-center font-bold text-[#213343]"
                       />
                     </div>
                     <div>
                       <label className="block text-[10px] text-gray-500 font-bold mb-0.5">Base Imp. ($)</label>
-                      <div className="bg-gray-200/70 border border-gray-300 rounded-xl px-2 py-1 text-right font-mono font-black text-[#363636]">
+                      <div className="bg-gray-200/70 border border-gray-300 rounded-md px-2 py-1 text-right font-mono font-black text-[#213343]">
                         ${(item.total_item || 0).toLocaleString('es-CL')}
                       </div>
                     </div>
@@ -596,7 +596,7 @@ export function CotizacionModal({
 
             {/* Totales desglosados idénticos a la plantilla */}
             <div className="flex flex-col items-end space-y-1 pt-2 border-t border-gray-100">
-              <div className="w-72 space-y-1 text-xs bg-gray-50 p-3 rounded-xl border border-gray-200">
+              <div className="w-72 space-y-1 text-xs bg-gray-50 p-3 rounded-md border border-gray-200">
                 <div className="flex justify-between text-gray-600">
                   <span>Total neto antes descuento:</span>
                   <span className="font-mono font-bold">${totalNetoAntesDescuento.toLocaleString('es-CL')}</span>
@@ -613,7 +613,7 @@ export function CotizacionModal({
                   <span>Total impuestos 19%:</span>
                   <span className="font-mono font-bold">${ivaCalculado.toLocaleString('es-CL')}</span>
                 </div>
-                <div className="flex justify-between font-black text-sm text-[#F7931F] pt-1.5 border-t border-gray-300 bg-orange-50/50 p-1 rounded">
+                <div className="flex justify-between font-black text-sm text-[#f97316] pt-1.5 border-t border-gray-300 bg-orange-50/50 p-1 rounded">
                   <span>Total (impuesto inc.):</span>
                   <span className="font-mono">${totalFinal.toLocaleString('es-CL')}</span>
                 </div>
@@ -622,7 +622,7 @@ export function CotizacionModal({
           </div>
 
           {/* Condiciones Comerciales & Observaciones */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-200">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
             <div>
               <label className="block font-bold text-gray-700 mb-1">Retraso disponible (Plazo Entrega)</label>
               <input
@@ -630,7 +630,7 @@ export function CotizacionModal({
                 value={plazoEntrega}
                 onChange={(e) => setPlazoEntrega(e.target.value)}
                 placeholder="Inmediato / 5 días hábiles"
-                className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium"
+                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium"
               />
             </div>
             <div>
@@ -640,7 +640,7 @@ export function CotizacionModal({
                 value={condicionesPago}
                 onChange={(e) => setCondicionesPago(e.target.value)}
                 placeholder="Acuse de recibo / 50% abono"
-                className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-medium"
+                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium"
               />
             </div>
             <div className="sm:col-span-2">
@@ -650,7 +650,7 @@ export function CotizacionModal({
                 onChange={(e) => setObservaciones(e.target.value)}
                 rows={2}
                 placeholder="Observaciones visibles en el PDF..."
-                className="w-full bg-white border border-gray-300 rounded-xl p-2.5 text-[#363636] font-medium focus:outline-none focus:border-[#F7931F]"
+                className="w-full bg-white border border-gray-300 rounded-md p-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
               />
             </div>
           </div>
@@ -660,14 +660,14 @@ export function CotizacionModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold px-5 py-2 rounded-xl transition flex items-center gap-2 shadow-sm disabled:opacity-50"
+              className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold px-5 py-2 rounded-md transition flex items-center gap-2 shadow-sm disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
               <span>{loading ? 'Guardando en Supabase...' : initialCotizacion ? 'Guardar Cambios' : 'Emitir Cotización'}</span>
@@ -677,21 +677,21 @@ export function CotizacionModal({
 
         {/* Modal de confirmación de versionado */}
         {showVersionConfirmModal && initialCotizacion && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-60 animate-fadeIn">
-            <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl text-[#363636]">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-60 ">
+            <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-[#213343]">
               <div className="flex items-center gap-3 text-amber-600">
                 <AlertTriangle className="w-6 h-6" />
-                <h4 className="font-extrabold text-base text-[#363636]">Confirmar Modificación de Cotización</h4>
+                <h4 className="font-extrabold text-base text-[#213343]">Confirmar Modificación de Cotización</h4>
               </div>
               <p className="text-xs text-gray-600 leading-relaxed">
-                Estás editando la cotización <strong className="text-[#363636]">{initialCotizacion.numero_cotizacion}</strong>. ¿Deseas crear una <strong>nueva versión (v{(initialCotizacion.version || 1) + 1})</strong> para mantener la trazabilidad histórica o <strong>sobrescribir</strong> la versión actual?
+                Estás editando la cotización <strong className="text-[#213343]">{initialCotizacion.numero_cotizacion}</strong>. ¿Deseas crear una <strong>nueva versión (v{(initialCotizacion.version || 1) + 1})</strong> para mantener la trazabilidad histórica o <strong>sobrescribir</strong> la versión actual?
               </p>
               <div className="flex flex-col gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => saveQuoteToBackend(true)}
                   disabled={loading}
-                  className="w-full bg-[#F7931F] hover:bg-[#e08316] text-white font-extrabold py-2.5 rounded-xl transition text-xs flex items-center justify-center gap-2"
+                  className="w-full bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold py-2.5 rounded-md transition text-xs flex items-center justify-center gap-2"
                 >
                   <TrendingUp className="w-4 h-4" />
                   <span>Crear Nueva Versión (v{(initialCotizacion.version || 1) + 1}) [Recomendado]</span>
@@ -700,7 +700,7 @@ export function CotizacionModal({
                   type="button"
                   onClick={() => saveQuoteToBackend(false)}
                   disabled={loading}
-                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 rounded-xl transition text-xs"
+                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 rounded-md transition text-xs"
                 >
                   Sobrescribir Versión Actual (v{initialCotizacion.version || 1})
                 </button>

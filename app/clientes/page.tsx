@@ -423,12 +423,12 @@ export default function ClientesPage() {
   };
 
   return (
-    <div className="space-y-6 text-[#363636]">
+    <div className="space-y-6 text-[#213343]">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
         <div>
-          <h1 className="text-2xl font-extrabold text-[#363636] flex items-center gap-2">
-            <Users className="w-6 h-6 text-[#F7931F]" />
+          <h1 className="text-2xl font-extrabold text-[#213343] flex items-center gap-2">
+            <Users className="w-6 h-6 text-[#f97316]" />
             <span>Directorio de Clientes</span>
           </h1>
           <p className="text-xs text-gray-600 mt-1">
@@ -443,7 +443,7 @@ export default function ClientesPage() {
                 const toDel = clientes.filter((c) => selectedClientIds.includes(c.id));
                 if (toDel.length > 0) setClientsToDelete(toDel);
               }}
-              className="bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md transition flex items-center gap-2"
+              className="bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2"
             >
               <Trash2 className="w-4 h-4" />
               <span>Eliminar Selección ({selectedClientIds.length})</span>
@@ -462,7 +462,7 @@ export default function ClientesPage() {
               setRutDv('');
               setShowModal(true);
             }}
-            className="bg-[#F7931F] hover:bg-[#e08316] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition flex items-center gap-2"
+            className="bg-[#f97316] hover:bg-[#ea580c] text-white font-bold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2"
           >
             <UserPlus className="w-4 h-4" />
             <span>Nuevo Cliente</span>
@@ -471,14 +471,14 @@ export default function ClientesPage() {
       </div>
 
       {successMsg && (
-        <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs px-4 py-3 rounded-2xl flex items-center gap-2 font-bold animate-fadeIn">
+        <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs px-4 py-3 rounded-lg flex items-center gap-2 font-bold ">
           <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
 
       {/* Barra de Filtros, Búsqueda y Personalización de Columnas */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-200 shadow-sm relative">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200 shadow-sm relative">
         <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
           <input
@@ -486,7 +486,7 @@ export default function ClientesPage() {
             placeholder="Buscar por nombre, razón social o RUT..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-white border border-gray-300 rounded-xl pl-9 pr-3 py-2 text-xs text-[#363636] placeholder-gray-400 focus:outline-none focus:border-[#F7931F]"
+            className="w-full bg-white border border-gray-300 rounded-md pl-9 pr-3 py-2 text-xs text-[#213343] placeholder-gray-400 focus:outline-none focus:border-[#f97316]"
           />
         </div>
 
@@ -496,7 +496,7 @@ export default function ClientesPage() {
             <select
               value={nichoFiltro}
               onChange={(e) => setNichoFiltro(e.target.value)}
-              className="bg-white text-[#363636] border border-gray-300 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-[#F7931F] font-medium"
+              className="bg-white text-[#213343] border border-gray-300 text-xs rounded-md px-3 py-2 focus:outline-none focus:border-[#f97316] font-medium"
             >
               <option value="todos">Todos los nichos ({clientes.length})</option>
               {nichos.map((n) => (
@@ -509,15 +509,15 @@ export default function ClientesPage() {
           <div className="relative">
             <button
               onClick={() => setShowColumnMenu(!showColumnMenu)}
-              className="bg-white hover:bg-gray-100 text-[#363636] border border-gray-300 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-2xs"
+              className="bg-white hover:bg-gray-100 text-[#213343] border border-gray-300 text-xs font-bold px-3 py-2 rounded-md transition flex items-center gap-1.5 shadow-2xs"
             >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-[#F7931F]" />
+              <SlidersHorizontal className="w-3.5 h-3.5 text-[#f97316]" />
               <span>Personalizar Vista</span>
             </button>
 
             {showColumnMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-2xl shadow-xl p-3 z-30 space-y-2 text-xs">
-                <p className="font-extrabold text-[#363636] border-b border-gray-100 pb-1.5 text-xs">
+              <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-sm p-3 z-30 space-y-2 text-xs">
+                <p className="font-extrabold text-[#213343] border-b border-gray-100 pb-1.5 text-xs">
                   Campos visibles en tabla
                 </p>
 
@@ -527,7 +527,7 @@ export default function ClientesPage() {
                       type="checkbox"
                       checked={columns.rut}
                       onChange={() => toggleColumn('rut')}
-                      className="rounded text-[#F7931F] focus:ring-[#F7931F]"
+                      className="rounded text-[#f97316] focus:ring-[#F7931F]"
                     />
                     <span>RUT</span>
                   </label>
@@ -537,7 +537,7 @@ export default function ClientesPage() {
                       type="checkbox"
                       checked={columns.ejecutivo}
                       onChange={() => toggleColumn('ejecutivo')}
-                      className="rounded text-[#F7931F] focus:ring-[#F7931F]"
+                      className="rounded text-[#f97316] focus:ring-[#F7931F]"
                     />
                     <span>Ejecutivo asignado</span>
                   </label>
@@ -547,7 +547,7 @@ export default function ClientesPage() {
                       type="checkbox"
                       checked={columns.nicho}
                       onChange={() => toggleColumn('nicho')}
-                      className="rounded text-[#F7931F] focus:ring-[#F7931F]"
+                      className="rounded text-[#f97316] focus:ring-[#F7931F]"
                     />
                     <span>Nicho de mercado</span>
                   </label>
@@ -557,7 +557,7 @@ export default function ClientesPage() {
                       type="checkbox"
                       checked={columns.cant_oportunidades}
                       onChange={() => toggleColumn('cant_oportunidades')}
-                      className="rounded text-[#F7931F] focus:ring-[#F7931F]"
+                      className="rounded text-[#f97316] focus:ring-[#F7931F]"
                     />
                     <span>Oportunidades de venta</span>
                   </label>
@@ -567,7 +567,7 @@ export default function ClientesPage() {
                       type="checkbox"
                       checked={columns.contacto}
                       onChange={() => toggleColumn('contacto')}
-                      className="rounded text-[#F7931F] focus:ring-[#F7931F]"
+                      className="rounded text-[#f97316] focus:ring-[#F7931F]"
                     />
                     <span>Contacto (tel/emails)</span>
                   </label>
@@ -579,17 +579,17 @@ export default function ClientesPage() {
       </div>
 
       {/* Lista de Clientes (Tabla Incrustada en el Fondo sin Scroll Interno) */}
-      <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-visible">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-visible">
         <div className="overflow-visible">
           <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
-              <tr className="bg-[#363636] text-white text-xs font-bold">
+              <tr className="bg-[#213343] text-white text-xs font-bold">
                 <th className="py-4 px-4 w-12 text-center">
                   <input
                     type="checkbox"
                     checked={isAllSelected}
                     onChange={handleSelectAll}
-                    className="rounded text-[#F7931F] focus:ring-[#F7931F] cursor-pointer accent-[#F7931F]"
+                    className="rounded text-[#f97316] focus:ring-[#F7931F] cursor-pointer accent-[#F7931F]"
                   />
                 </th>
                 <th className="py-4 px-6 min-w-[200px]">Cliente / Razón social</th>
@@ -601,7 +601,7 @@ export default function ClientesPage() {
                 <th className="py-4 px-6 text-right min-w-[120px]">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 text-xs text-[#363636]">
+            <tbody className="divide-y divide-gray-200 text-xs text-[#213343]">
               {loading ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-gray-500 font-medium">
@@ -627,7 +627,7 @@ export default function ClientesPage() {
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggleSelectClient(cli.id)}
-                          className="rounded text-[#F7931F] focus:ring-[#F7931F] cursor-pointer accent-[#F7931F]"
+                          className="rounded text-[#f97316] focus:ring-[#F7931F] cursor-pointer accent-[#F7931F]"
                         />
                       </td>
 
@@ -635,7 +635,7 @@ export default function ClientesPage() {
                       <td className="py-4 px-6 font-bold">
                         <Link
                           href={`/clientes/${cli.id}`}
-                          className="text-[#363636] hover:text-[#F7931F] transition flex flex-col"
+                          className="text-[#213343] hover:text-[#f97316] transition flex flex-col"
                         >
                           <span className="text-sm font-bold leading-tight group-hover:underline">{cli.nombre}</span>
                           {cli.apellido_razon_social && cli.apellido_razon_social !== cli.nombre && (
@@ -668,7 +668,7 @@ export default function ClientesPage() {
                                 console.error('Error updating asignado_a on cliente:', err);
                               }
                             }}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-blue-50 text-blue-900 border border-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer min-w-[150px] truncate"
+                            className="text-xs font-semibold px-3 py-1.5 rounded-md bg-blue-50 text-blue-900 border border-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer min-w-[150px] truncate"
                           >
                             <option value="">-- Sin asignar --</option>
                             {usuariosList.map((u) => (
@@ -686,7 +686,7 @@ export default function ClientesPage() {
                           <select
                             value={cli.nicho || 'Constructora B2B'}
                             onChange={(e) => handleUpdateNicho(cli.id, e.target.value)}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-orange-50 text-[#F7931F] border border-orange-200 focus:outline-none focus:ring-1 focus:ring-[#F7931F] cursor-pointer min-w-[150px]"
+                            className="text-xs font-semibold px-3 py-1.5 rounded-md bg-orange-50 text-[#f97316] border border-orange-200 focus:outline-none focus:ring-1 focus:ring-[#F7931F] cursor-pointer min-w-[150px]"
                           >
                             {nichos.map((n) => (
                               <option key={n} value={n}>{n}</option>
@@ -698,7 +698,7 @@ export default function ClientesPage() {
                       {/* Cantidad de oportunidades de venta asignadas */}
                       {columns.cant_oportunidades && (
                         <td className="py-4 px-6">
-                          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 text-[#F7931F] border border-orange-200 rounded-xl font-bold text-xs">
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 text-[#f97316] border border-orange-200 rounded-md font-bold text-xs">
                             <TrendingUp className="w-3.5 h-3.5" />
                             <span>{oportunidadesCount} {oportunidadesCount === 1 ? 'oportunidad' : 'oportunidades'}</span>
                           </div>
@@ -716,7 +716,7 @@ export default function ClientesPage() {
                           )}
                           {cli.correo && (
                             <p className="flex items-center gap-1.5 text-gray-700 font-medium">
-                              <Mail className="w-3 h-3 text-[#F7931F] shrink-0" />
+                              <Mail className="w-3 h-3 text-[#f97316] shrink-0" />
                               <span className="truncate max-w-[150px]" title={`Correo Primario: ${cli.correo}`}>{cli.correo}</span>
                             </p>
                           )}
@@ -733,7 +733,7 @@ export default function ClientesPage() {
                         <div className="flex items-center justify-end gap-3">
                           <Link
                             href={`/clientes/${cli.id}`}
-                            className="inline-flex items-center gap-1 text-[#F7931F] font-bold hover:underline"
+                            className="inline-flex items-center gap-1 text-[#f97316] font-bold hover:underline"
                           >
                             <span>Ficha</span>
                             <ChevronRight className="w-4 h-4" />
@@ -765,10 +765,10 @@ export default function ClientesPage() {
       {/* Modal para Crear Cliente Nuevo */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl text-[#363636] max-h-[90vh] overflow-y-auto">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-lg w-full p-6 space-y-5 shadow-sm text-[#213343] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h3 className="text-lg font-extrabold text-[#363636] flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-[#F7931F]" />
+              <h3 className="text-lg font-extrabold text-[#213343] flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-[#f97316]" />
                 <span>Registrar Nuevo Cliente</span>
               </h3>
               <button
@@ -779,14 +779,14 @@ export default function ClientesPage() {
                   setApellidoRazon('');
                   setShowModal(false);
                 }}
-                className="text-gray-400 hover:text-[#363636] text-lg font-bold"
+                className="text-gray-400 hover:text-[#213343] text-lg font-bold"
               >
                 ✕
               </button>
             </div>
 
             {duplicateError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-2xl text-xs flex items-center gap-2 font-bold animate-fadeIn">
+              <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-xs flex items-center gap-2 font-bold ">
                 <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
                 <span>{duplicateError}</span>
               </div>
@@ -801,7 +801,7 @@ export default function ClientesPage() {
                       <select
                         value={nichoSeleccionado}
                         onChange={(e) => setNichoSeleccionado(e.target.value)}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F] font-semibold text-xs"
+                        className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316] font-semibold text-xs"
                       >
                         {nichos.map((n) => (
                           <option key={n} value={n}>{n}</option>
@@ -810,7 +810,7 @@ export default function ClientesPage() {
                       <button
                         type="button"
                         onClick={() => setShowAddNichoInput(true)}
-                        className="p-2 bg-orange-50 hover:bg-[#F7931F] text-[#F7931F] hover:text-white rounded-xl border border-orange-200 transition cursor-pointer"
+                        className="p-2 bg-orange-50 hover:bg-[#f97316] text-[#f97316] hover:text-white rounded-md border border-orange-200 transition cursor-pointer"
                         title="Crear nuevo nicho"
                       >
                         <Plus className="w-4 h-4" />
@@ -823,12 +823,12 @@ export default function ClientesPage() {
                         placeholder="Ej. Minería / Obras Viales"
                         value={nuevoNichoInput}
                         onChange={(e) => setNuevoNichoInput(e.target.value)}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-2.5 py-1.5 text-[#363636] text-xs"
+                        className="w-full bg-white border border-gray-300 rounded-md px-2.5 py-1.5 text-[#213343] text-xs"
                       />
                       <button
                         type="button"
                         onClick={handleCreateNicho}
-                        className="px-3 py-1 bg-[#F7931F] text-white font-bold rounded-xl text-xs cursor-pointer"
+                        className="px-3 py-1 bg-[#f97316] text-white font-bold rounded-md text-xs cursor-pointer"
                       >
                         Guardar
                       </button>
@@ -841,7 +841,7 @@ export default function ClientesPage() {
                   <select
                     value={tipoVentaSeleccionado}
                     onChange={(e) => setTipoVentaSeleccionado(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F] font-semibold text-xs"
+                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316] font-semibold text-xs"
                   >
                     <option value="Instalación">Instalación</option>
                     <option value="Suministro">Suministro</option>
@@ -854,7 +854,7 @@ export default function ClientesPage() {
                   <select
                     value={asignadoA}
                     onChange={(e) => setAsignadoA(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F] font-semibold text-xs"
+                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316] font-semibold text-xs"
                   >
                     <option value="">-- Sin asignar --</option>
                     {usuariosList.map((u) => (
@@ -881,7 +881,7 @@ export default function ClientesPage() {
                           const val = e.target.value.replace(/[^0-9]/g, '');
                           setRutBody(val);
                         }}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] font-mono text-xs focus:outline-none focus:border-[#F7931F]"
+                        className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-mono text-xs focus:outline-none focus:border-[#f97316]"
                       />
                     </div>
                     <span className="font-extrabold text-gray-400 text-sm">-</span>
@@ -896,7 +896,7 @@ export default function ClientesPage() {
                           const val = e.target.value.replace(/[^0-9kK]/g, '').toUpperCase();
                           setRutDv(val);
                         }}
-                        className="w-full bg-white border border-gray-300 rounded-xl px-2 py-2 text-center text-[#363636] font-mono font-bold text-xs uppercase focus:outline-none focus:border-[#F7931F]"
+                        className="w-full bg-white border border-gray-300 rounded-md px-2 py-2 text-center text-[#213343] font-mono font-bold text-xs uppercase focus:outline-none focus:border-[#f97316]"
                       />
                     </div>
                   </div>
@@ -923,22 +923,22 @@ export default function ClientesPage() {
                     placeholder="Ej. Constructora Besalco / Juan Pérez"
                     value={nombre}
                     onChange={(e) => setNombre(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="block font-bold text-gray-700 mb-1">Razón social *</label>
-                <div className="space-y-2 bg-gray-50 p-3 rounded-2xl border border-gray-200">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 text-xs font-semibold text-[#363636]">
+                <div className="space-y-2 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 text-xs font-semibold text-[#213343]">
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="radio"
                         name="razonSocialOption"
                         checked={usarMismaRazonSocial}
                         onChange={() => setUsarMismaRazonSocial(true)}
-                        className="text-[#F7931F] focus:ring-[#F7931F]"
+                        className="text-[#f97316] focus:ring-[#F7931F]"
                       />
                       <span>Misma que el nombre comercial</span>
                     </label>
@@ -949,7 +949,7 @@ export default function ClientesPage() {
                         name="razonSocialOption"
                         checked={!usarMismaRazonSocial}
                         onChange={() => setUsarMismaRazonSocial(false)}
-                        className="text-[#F7931F] focus:ring-[#F7931F]"
+                        className="text-[#f97316] focus:ring-[#F7931F]"
                       />
                       <span>Usar una diferente</span>
                     </label>
@@ -962,11 +962,11 @@ export default function ClientesPage() {
                       placeholder="Ej. Constructora Besalco S.A."
                       value={apellidoRazon}
                       onChange={(e) => setApellidoRazon(e.target.value)}
-                      className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F] font-medium"
+                      className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316] font-medium"
                     />
                   ) : (
                     <p className="text-xs text-gray-500 italic">
-                      Se registrará automáticamente como: <strong className="text-[#363636] font-semibold">{nombre || 'Mismo nombre comercial'}</strong>
+                      Se registrará automáticamente como: <strong className="text-[#213343] font-semibold">{nombre || 'Mismo nombre comercial'}</strong>
                     </p>
                   )}
                 </div>
@@ -980,7 +980,7 @@ export default function ClientesPage() {
                     placeholder="+56 9 1234 5678"
                     value={telefono}
                     onChange={(e) => setTelefono(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
 
@@ -991,7 +991,7 @@ export default function ClientesPage() {
                     placeholder="contacto@empresa.cl"
                     value={correo}
                     onChange={(e) => setCorreo(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
               </div>
@@ -1003,7 +1003,7 @@ export default function ClientesPage() {
                   placeholder="ventas@empresa.cl, adquisiciones@empresa.cl"
                   value={correosSecundariosInput}
                   onChange={(e) => setCorreosSecundariosInput(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316]"
                 />
               </div>
 
@@ -1015,7 +1015,7 @@ export default function ClientesPage() {
                     placeholder="Av. Los Pajaritos 1230"
                     value={direccion}
                     onChange={(e) => setDireccion(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-[#363636] text-xs focus:outline-none focus:border-[#F7931F]"
+                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] text-xs focus:outline-none focus:border-[#f97316]"
                   />
                 </div>
 
@@ -1062,13 +1062,13 @@ export default function ClientesPage() {
                     setApellidoRazon('');
                     setShowModal(false);
                   }}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition"
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-bold transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-extrabold transition shadow-md cursor-pointer"
+                  className="px-5 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-extrabold transition shadow-sm cursor-pointer"
                 >
                   Guardar cliente
                 </button>
@@ -1080,8 +1080,8 @@ export default function ClientesPage() {
 
       {/* Modal de Confirmación para Eliminar Cliente(s) en Supabase */}
       {clientsToDelete && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl text-[#363636]">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-[#213343]">
             <div className="flex items-center gap-3 text-red-600">
               <AlertCircle className="w-6 h-6 shrink-0" />
               <h3 className="text-base font-extrabold">¿Eliminar Cliente(s)?</h3>
@@ -1090,18 +1090,18 @@ export default function ClientesPage() {
               {clientsToDelete.length === 1 ? (
                 <>
                   ¿Estás seguro de que deseas eliminar permanentemente a{' '}
-                  <strong className="text-[#363636] font-bold">{clientsToDelete[0].nombre}</strong> de Supabase? Esta acción eliminará el registro de la base de datos y no se podrá deshacer.
+                  <strong className="text-[#213343] font-bold">{clientsToDelete[0].nombre}</strong> de Supabase? Esta acción eliminará el registro de la base de datos y no se podrá deshacer.
                 </>
               ) : (
                 <>
                   ¿Estás seguro de que deseas eliminar permanentemente los{' '}
-                  <strong className="text-[#363636] font-bold">{clientsToDelete.length} clientes seleccionados</strong> de Supabase? Esta acción eliminará los registros de la base de datos y no se podrá deshacer.
+                  <strong className="text-[#213343] font-bold">{clientsToDelete.length} clientes seleccionados</strong> de Supabase? Esta acción eliminará los registros de la base de datos y no se podrá deshacer.
                 </>
               )}
             </p>
 
             {clientsToDelete.length > 1 && (
-              <div className="max-h-32 overflow-y-auto bg-gray-50 p-2.5 rounded-xl border border-gray-200 text-[11px] space-y-1">
+              <div className="max-h-32 overflow-y-auto bg-gray-50 p-2.5 rounded-md border border-gray-200 text-[11px] space-y-1">
                 {clientsToDelete.map((c) => (
                   <div key={c.id} className="flex justify-between text-gray-700 font-medium">
                     <span className="font-bold truncate">{c.nombre}</span>
@@ -1114,13 +1114,13 @@ export default function ClientesPage() {
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 onClick={() => setClientsToDelete(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md text-xs font-bold transition"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleConfirmDeleteClients}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-extrabold shadow-md transition flex items-center gap-1.5"
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-extrabold shadow-sm transition flex items-center gap-1.5"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Eliminar de Supabase</span>

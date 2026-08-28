@@ -513,10 +513,10 @@ export default function TrabajadorDetailPage() {
     return (
       <div className="p-12 text-center space-y-4">
         <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
-        <h2 className="text-xl font-black text-[#363636]">Colaborador no encontrado</h2>
+        <h2 className="text-xl font-black text-[#213343]">Colaborador no encontrado</h2>
         <Link
           href="/rrhh"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#F7931F] text-white rounded-xl font-bold text-xs"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-[#f97316] text-white rounded-md font-bold text-xs"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Volver al directorio de recursos humanos</span>
@@ -537,12 +537,12 @@ export default function TrabajadorDetailPage() {
     .toUpperCase();
 
   return (
-    <div className="space-y-6 text-[#363636] pb-12 animate-fadeIn">
+    <div className="space-y-6 text-[#213343] pb-12 ">
       {/* Botón Volver */}
       <div className="flex items-center justify-between">
         <Link
           href="/rrhh"
-          className="inline-flex items-center gap-2 text-xs font-bold text-gray-500 hover:text-[#F7931F] transition group cursor-pointer"
+          className="inline-flex items-center gap-2 text-xs font-bold text-gray-500 hover:text-[#f97316] transition group cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
           <span>Volver al directorio de recursos humanos</span>
@@ -558,15 +558,15 @@ export default function TrabajadorDetailPage() {
         {/* ========================================================= */}
         <div className="lg:col-span-4 space-y-5">
           {/* Tarjeta Principal de Perfil */}
-          <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-sm space-y-5">
+          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm space-y-5">
             <div className="flex items-start justify-between">
-              <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-[#F7931F] to-amber-500 text-white font-black text-2xl flex items-center justify-center shadow-md">
+              <div className="w-16 h-16 rounded-lg bg-orange-500 text-white font-black text-2xl flex items-center justify-center shadow-sm">
                 {initials}
               </div>
 
               <button
                 onClick={() => setShowEditInfoModal(true)}
-                className="p-2 rounded-xl bg-gray-100 hover:bg-orange-50 text-gray-600 hover:text-[#F7931F] transition cursor-pointer"
+                className="p-2 rounded-md bg-gray-100 hover:bg-orange-50 text-gray-600 hover:text-[#f97316] transition cursor-pointer"
                 title="Editar información del colaborador"
               >
                 <Edit className="w-4 h-4" />
@@ -574,7 +574,7 @@ export default function TrabajadorDetailPage() {
             </div>
 
             <div>
-              <h2 className="text-xl font-black text-[#363636]">{trabajador.nombre}</h2>
+              <h2 className="text-xl font-black text-[#213343]">{trabajador.nombre}</h2>
               <p className="font-mono text-xs text-gray-400 font-semibold mt-0.5">
                 RUT: {trabajador.rut}
               </p>
@@ -584,7 +584,7 @@ export default function TrabajadorDetailPage() {
             <div className="space-y-2 pt-2 border-t border-gray-100 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-gray-400 font-semibold">Cargo:</span>
-                <span className="font-bold text-[#363636] text-right truncate max-w-[180px]">
+                <span className="font-bold text-[#213343] text-right truncate max-w-[180px]">
                   {trabajador.cargo}
                 </span>
               </div>
@@ -594,7 +594,7 @@ export default function TrabajadorDetailPage() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-400 font-semibold">Contrato:</span>
-                <span className="font-bold text-[#F7931F]">{trabajador.tipo_contrato}</span>
+                <span className="font-bold text-[#f97316]">{trabajador.tipo_contrato}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-400 font-semibold">Cuenta Supabase:</span>
@@ -606,7 +606,7 @@ export default function TrabajadorDetailPage() {
 
             {/* Selector Reactivo de Disponibilidad */}
             <div className="pt-2 border-t border-gray-100 space-y-1.5">
-              <label className="text-[11px] font-bold text-gray-400 block uppercase tracking-wider">
+              <label className="text-[11px] font-bold text-gray-400 block uppercase tracking-normal">
                 Estado de Disponibilidad:
               </label>
               <select
@@ -614,7 +614,7 @@ export default function TrabajadorDetailPage() {
                 onChange={(e) =>
                   handleUpdateDisponibilidad(e.target.value as EstadoDisponibilidad)
                 }
-                className={`w-full px-3 py-2 rounded-xl text-xs font-bold border cursor-pointer focus:outline-none transition shadow-2xs ${dispCfg.bg} ${dispCfg.text} ${dispCfg.border}`}
+                className={`w-full px-3 py-2 rounded-md text-xs font-bold border cursor-pointer focus:outline-none transition shadow-2xs ${dispCfg.bg} ${dispCfg.text} ${dispCfg.border}`}
               >
                 <option value="disponible">Disponible</option>
                 <option value="en_terreno">En terreno / obra</option>
@@ -629,7 +629,7 @@ export default function TrabajadorDetailPage() {
             <div className="pt-2 border-t border-gray-100 grid grid-cols-2 gap-2 text-xs">
               <button
                 onClick={() => setShowNewPermisoModal(true)}
-                className="p-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                className="p-2.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <Clock className="w-3.5 h-3.5 text-amber-600" />
                 <span>Permiso</span>
@@ -637,7 +637,7 @@ export default function TrabajadorDetailPage() {
 
               <button
                 onClick={() => setShowNewDocModal(true)}
-                className="p-2.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#F7931F] border border-orange-200 font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                className="p-2.5 rounded-md bg-orange-50 hover:bg-orange-100 text-[#f97316] border border-orange-200 font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <FileText className="w-3.5 h-3.5" />
                 <span>Documento</span>
@@ -645,7 +645,7 @@ export default function TrabajadorDetailPage() {
 
               <button
                 onClick={() => setShowNewLiquidacionModal(true)}
-                className="p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                className="p-2.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Liquidación</span>
@@ -653,7 +653,7 @@ export default function TrabajadorDetailPage() {
 
               <button
                 onClick={() => setActiveTab('bitacora')}
-                className="p-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                className="p-2.5 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
                 <span>Nota</span>
@@ -662,40 +662,40 @@ export default function TrabajadorDetailPage() {
           </div>
 
           {/* Acordeón 1: Información de Contacto & Personal */}
-          <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden text-xs">
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden text-xs">
             <button
               onClick={() => setOpenContactInfo(!openContactInfo)}
-              className="w-full p-4 flex items-center justify-between font-extrabold text-[#363636] hover:bg-gray-50 transition cursor-pointer"
+              className="w-full p-4 flex items-center justify-between font-extrabold text-[#213343] hover:bg-gray-50 transition cursor-pointer"
             >
               <div className="flex items-center gap-2">
-                <Phone className="w-4 h-4 text-[#F7931F]" />
+                <Phone className="w-4 h-4 text-[#f97316]" />
                 <span>Información de Contacto</span>
               </div>
               {openContactInfo ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
             </button>
 
             {openContactInfo && (
-              <div className="p-4 pt-0 space-y-2.5 text-xs border-t border-gray-100 animate-fadeIn">
+              <div className="p-4 pt-0 space-y-2.5 text-xs border-t border-gray-100 ">
                 <div>
                   <span className="text-gray-400 font-semibold block">Teléfono:</span>
-                  <span className="font-bold text-[#363636]">{trabajador.telefono || 'No registrado'}</span>
+                  <span className="font-bold text-[#213343]">{trabajador.telefono || 'No registrado'}</span>
                 </div>
                 <div>
                   <span className="text-gray-400 font-semibold block">Correo electrónico:</span>
-                  <span className="font-bold text-[#363636]">{trabajador.email || 'No registrado'}</span>
+                  <span className="font-bold text-[#213343]">{trabajador.email || 'No registrado'}</span>
                 </div>
                 <div>
                   <span className="text-gray-400 font-semibold block">Dirección:</span>
-                  <span className="font-bold text-[#363636]">{trabajador.direccion || 'No registrada'}</span>
+                  <span className="font-bold text-[#213343]">{trabajador.direccion || 'No registrada'}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <span className="text-gray-400 font-semibold block">Comuna:</span>
-                    <span className="font-bold text-[#363636]">{trabajador.comuna || 'Sin comuna'}</span>
+                    <span className="font-bold text-[#213343]">{trabajador.comuna || 'Sin comuna'}</span>
                   </div>
                   <div>
                     <span className="text-gray-400 font-semibold block">Región:</span>
-                    <span className="font-bold text-[#363636] truncate block">{trabajador.region || 'Metropolitana'}</span>
+                    <span className="font-bold text-[#213343] truncate block">{trabajador.region || 'Metropolitana'}</span>
                   </div>
                 </div>
                 <div className="pt-2 border-t border-gray-100">
@@ -714,10 +714,10 @@ export default function TrabajadorDetailPage() {
           </div>
 
           {/* Acordeón 2: Datos Bancarios & Previsionales */}
-          <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden text-xs">
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden text-xs">
             <button
               onClick={() => setOpenBankInfo(!openBankInfo)}
-              className="w-full p-4 flex items-center justify-between font-extrabold text-[#363636] hover:bg-gray-50 transition cursor-pointer"
+              className="w-full p-4 flex items-center justify-between font-extrabold text-[#213343] hover:bg-gray-50 transition cursor-pointer"
             >
               <div className="flex items-center gap-2">
                 <CreditCard className="w-4 h-4 text-emerald-600" />
@@ -727,30 +727,30 @@ export default function TrabajadorDetailPage() {
             </button>
 
             {openBankInfo && (
-              <div className="p-4 pt-0 space-y-2.5 text-xs border-t border-gray-100 animate-fadeIn">
+              <div className="p-4 pt-0 space-y-2.5 text-xs border-t border-gray-100 ">
                 <div className="flex items-center justify-between">
                   <span className="text-gray-400 font-semibold">Sueldo base pactado:</span>
-                  <span className="font-mono font-black text-[#F7931F]">
+                  <span className="font-mono font-black text-[#f97316]">
                     ${Number(trabajador.sueldo_base || 0).toLocaleString('es-CL')} CLP
                   </span>
                 </div>
                 <div>
                   <span className="text-gray-400 font-semibold block">Banco:</span>
-                  <span className="font-bold text-[#363636]">{trabajador.banco || 'No especificado'}</span>
+                  <span className="font-bold text-[#213343]">{trabajador.banco || 'No especificado'}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <span className="text-gray-400 font-semibold block">Tipo de cuenta:</span>
-                    <span className="font-bold text-[#363636]">{trabajador.tipo_cuenta || 'Cuenta Vista / Rut'}</span>
+                    <span className="font-bold text-[#213343]">{trabajador.tipo_cuenta || 'Cuenta Vista / Rut'}</span>
                   </div>
                   <div>
                     <span className="text-gray-400 font-semibold block">N° de cuenta:</span>
-                    <span className="font-mono font-bold text-[#363636]">{trabajador.numero_cuenta || 'Sin número'}</span>
+                    <span className="font-mono font-bold text-[#213343]">{trabajador.numero_cuenta || 'Sin número'}</span>
                   </div>
                 </div>
                 <div>
                   <span className="text-gray-400 font-semibold block">Fecha de ingreso:</span>
-                  <span className="font-bold text-[#363636]">{trabajador.fecha_ingreso || 'No registrada'}</span>
+                  <span className="font-bold text-[#213343]">{trabajador.fecha_ingreso || 'No registrada'}</span>
                 </div>
               </div>
             )}
@@ -762,13 +762,13 @@ export default function TrabajadorDetailPage() {
         {/* ========================================================= */}
         <div className="lg:col-span-5 space-y-5">
           {/* Barra de Pestañas */}
-          <div className="bg-white p-2 rounded-2xl border border-gray-200 shadow-xs flex items-center gap-1.5 overflow-x-auto text-xs font-bold">
+          <div className="bg-white p-2 rounded-lg border border-gray-200 shadow-xs flex items-center gap-1.5 overflow-x-auto text-xs font-bold">
             <button
               onClick={() => setActiveTab('documentos')}
-              className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              className={`px-3 py-2 rounded-md transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 activeTab === 'documentos'
-                  ? 'bg-[#F7931F] text-white shadow-xs font-black'
-                  : 'text-gray-600 hover:bg-orange-50 hover:text-[#F7931F]'
+                  ? 'bg-[#f97316] text-white shadow-xs font-black'
+                  : 'text-gray-600 hover:bg-orange-50 hover:text-[#f97316]'
               }`}
             >
               <Folder className="w-4 h-4" />
@@ -780,10 +780,10 @@ export default function TrabajadorDetailPage() {
 
             <button
               onClick={() => setActiveTab('permisos')}
-              className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              className={`px-3 py-2 rounded-md transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 activeTab === 'permisos'
-                  ? 'bg-[#F7931F] text-white shadow-xs font-black'
-                  : 'text-gray-600 hover:bg-orange-50 hover:text-[#F7931F]'
+                  ? 'bg-[#f97316] text-white shadow-xs font-black'
+                  : 'text-gray-600 hover:bg-orange-50 hover:text-[#f97316]'
               }`}
             >
               <Clock className="w-4 h-4" />
@@ -795,10 +795,10 @@ export default function TrabajadorDetailPage() {
 
             <button
               onClick={() => setActiveTab('liquidaciones')}
-              className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              className={`px-3 py-2 rounded-md transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 activeTab === 'liquidaciones'
-                  ? 'bg-[#F7931F] text-white shadow-xs font-black'
-                  : 'text-gray-600 hover:bg-orange-50 hover:text-[#F7931F]'
+                  ? 'bg-[#f97316] text-white shadow-xs font-black'
+                  : 'text-gray-600 hover:bg-orange-50 hover:text-[#f97316]'
               }`}
             >
               <DollarSign className="w-4 h-4" />
@@ -810,10 +810,10 @@ export default function TrabajadorDetailPage() {
 
             <button
               onClick={() => setActiveTab('bitacora')}
-              className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              className={`px-3 py-2 rounded-md transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 activeTab === 'bitacora'
-                  ? 'bg-[#F7931F] text-white shadow-xs font-black'
-                  : 'text-gray-600 hover:bg-orange-50 hover:text-[#F7931F]'
+                  ? 'bg-[#f97316] text-white shadow-xs font-black'
+                  : 'text-gray-600 hover:bg-orange-50 hover:text-[#f97316]'
               }`}
             >
               <MessageSquare className="w-4 h-4" />
@@ -826,11 +826,11 @@ export default function TrabajadorDetailPage() {
 
           {/* TAB 1: CARPETAS DE DOCUMENTOS */}
           {activeTab === 'documentos' && (
-            <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-sm space-y-5">
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm space-y-5">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                 <div>
-                  <h3 className="font-extrabold text-base text-[#363636] flex items-center gap-2">
-                    <Folder className="w-4 h-4 text-[#F7931F]" />
+                  <h3 className="font-extrabold text-base text-[#213343] flex items-center gap-2">
+                    <Folder className="w-4 h-4 text-[#f97316]" />
                     <span>Carpetas de Documentos</span>
                   </h3>
                   <p className="text-xs text-gray-500 font-medium">
@@ -840,7 +840,7 @@ export default function TrabajadorDetailPage() {
 
                 <button
                   onClick={() => setShowNewDocModal(true)}
-                  className="px-3 py-1.5 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  className="px-3 py-1.5 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Subir documento</span>
@@ -851,9 +851,9 @@ export default function TrabajadorDetailPage() {
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
                 <button
                   onClick={() => setCategoriaDocFiltro('todas')}
-                  className={`px-3 py-1 rounded-xl transition cursor-pointer font-bold ${
+                  className={`px-3 py-1 rounded-md transition cursor-pointer font-bold ${
                     categoriaDocFiltro === 'todas'
-                      ? 'bg-[#363636] text-white'
+                      ? 'bg-[#213343] text-white'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
@@ -865,9 +865,9 @@ export default function TrabajadorDetailPage() {
                     <button
                       key={cat.id}
                       onClick={() => setCategoriaDocFiltro(cat.id)}
-                      className={`px-3 py-1 rounded-xl transition cursor-pointer font-bold ${
+                      className={`px-3 py-1 rounded-md transition cursor-pointer font-bold ${
                         categoriaDocFiltro === cat.id
-                          ? 'bg-[#F7931F] text-white'
+                          ? 'bg-[#f97316] text-white'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
@@ -879,7 +879,7 @@ export default function TrabajadorDetailPage() {
 
               {/* Lista de Documentos */}
               {filteredDocs.length === 0 ? (
-                <div className="p-8 text-center text-gray-400 text-xs italic border border-dashed border-gray-200 rounded-2xl">
+                <div className="p-8 text-center text-gray-400 text-xs italic border border-dashed border-gray-200 rounded-lg">
                   No hay documentos subidos en esta carpeta.
                 </div>
               ) : (
@@ -887,14 +887,14 @@ export default function TrabajadorDetailPage() {
                   {filteredDocs.map((doc) => (
                     <div
                       key={doc.id}
-                      className="p-3.5 rounded-2xl bg-gray-50 border border-gray-200 hover:border-orange-200 transition flex items-center justify-between gap-3 text-xs"
+                      className="p-3.5 rounded-lg bg-gray-50 border border-gray-200 hover:border-orange-200 transition flex items-center justify-between gap-3 text-xs"
                     >
                       <div className="flex items-center gap-3 truncate">
-                        <div className="w-8 h-8 rounded-xl bg-orange-100 text-[#F7931F] flex items-center justify-center shrink-0">
+                        <div className="w-8 h-8 rounded-md bg-orange-100 text-[#f97316] flex items-center justify-center shrink-0">
                           <FileText className="w-4 h-4" />
                         </div>
                         <div className="truncate">
-                          <span className="font-bold text-[#363636] block truncate">
+                          <span className="font-bold text-[#213343] block truncate">
                             {doc.nombre_archivo}
                           </span>
                           <span className="text-[11px] text-gray-400 font-semibold block capitalize">
@@ -909,7 +909,7 @@ export default function TrabajadorDetailPage() {
                             href={doc.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-600 hover:text-[#F7931F] transition"
+                            className="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-600 hover:text-[#f97316] transition"
                             title="Descargar / Ver archivo"
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
@@ -932,10 +932,10 @@ export default function TrabajadorDetailPage() {
 
           {/* TAB 2: PERMISOS Y AUSENCIAS */}
           {activeTab === 'permisos' && (
-            <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-sm space-y-5">
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm space-y-5">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                 <div>
-                  <h3 className="font-extrabold text-base text-[#363636] flex items-center gap-2">
+                  <h3 className="font-extrabold text-base text-[#213343] flex items-center gap-2">
                     <Clock className="w-4 h-4 text-amber-600" />
                     <span>Permisos, Licencias y Vacaciones</span>
                   </h3>
@@ -946,7 +946,7 @@ export default function TrabajadorDetailPage() {
 
                 <button
                   onClick={() => setShowNewPermisoModal(true)}
-                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-md font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Registrar permiso</span>
@@ -954,7 +954,7 @@ export default function TrabajadorDetailPage() {
               </div>
 
               {permisos.length === 0 ? (
-                <div className="p-8 text-center text-gray-400 text-xs italic border border-dashed border-gray-200 rounded-2xl">
+                <div className="p-8 text-center text-gray-400 text-xs italic border border-dashed border-gray-200 rounded-lg">
                   ✓ El colaborador no tiene permisos ni ausencias registradas.
                 </div>
               ) : (
@@ -962,10 +962,10 @@ export default function TrabajadorDetailPage() {
                   {permisos.map((p) => (
                     <div
                       key={p.id}
-                      className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200 space-y-2 text-xs"
+                      className="p-4 rounded-lg bg-amber-50/60 border border-amber-200 space-y-2 text-xs"
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 font-black text-[#363636] capitalize">
+                        <div className="flex items-center gap-2 font-black text-[#213343] capitalize">
                           <span className="w-2 h-2 rounded-full bg-amber-500" />
                           <span>{p.tipo.replace('_', ' ')}</span>
                           <span className="text-[10.5px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold border border-amber-300">
@@ -988,7 +988,7 @@ export default function TrabajadorDetailPage() {
                       </div>
 
                       {p.motivo && (
-                        <p className="text-gray-600 italic bg-white/70 p-2 rounded-xl border border-amber-100">
+                        <p className="text-gray-600 italic bg-white/70 p-2 rounded-md border border-amber-100">
                           &quot;{p.motivo}&quot;
                         </p>
                       )}
@@ -1008,10 +1008,10 @@ export default function TrabajadorDetailPage() {
 
           {/* TAB 3: SUELDOS Y LIQUIDACIONES */}
           {activeTab === 'liquidaciones' && (
-            <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-sm space-y-5">
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm space-y-5">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                 <div>
-                  <h3 className="font-extrabold text-base text-[#363636] flex items-center gap-2">
+                  <h3 className="font-extrabold text-base text-[#213343] flex items-center gap-2">
                     <DollarSign className="w-4 h-4 text-emerald-600" />
                     <span>Historial de Sueldos & Liquidaciones</span>
                   </h3>
@@ -1022,7 +1022,7 @@ export default function TrabajadorDetailPage() {
 
                 <button
                   onClick={() => setShowNewLiquidacionModal(true)}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Registrar liquidación</span>
@@ -1030,7 +1030,7 @@ export default function TrabajadorDetailPage() {
               </div>
 
               {liquidaciones.length === 0 ? (
-                <div className="p-8 text-center text-gray-400 text-xs italic border border-dashed border-gray-200 rounded-2xl">
+                <div className="p-8 text-center text-gray-400 text-xs italic border border-dashed border-gray-200 rounded-lg">
                   No hay liquidaciones de sueldo registradas aún.
                 </div>
               ) : (
@@ -1038,10 +1038,10 @@ export default function TrabajadorDetailPage() {
                   {liquidaciones.map((l) => (
                     <div
                       key={l.id}
-                      className="p-3.5 rounded-2xl bg-gray-50 border border-gray-200 flex items-center justify-between text-xs"
+                      className="p-3.5 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-between text-xs"
                     >
                       <div>
-                        <span className="font-black text-[#363636] block">
+                        <span className="font-black text-[#213343] block">
                           Período: {l.mes}/{l.anio}
                         </span>
                         <span className="text-[11px] text-gray-400 font-medium">
@@ -1066,11 +1066,11 @@ export default function TrabajadorDetailPage() {
 
           {/* TAB 4: BITÁCORA Y NOTAS INTERNAS */}
           {activeTab === 'bitacora' && (
-            <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-sm space-y-5">
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm space-y-5">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                 <div>
-                  <h3 className="font-extrabold text-base text-[#363636] flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-[#F7931F]" />
+                  <h3 className="font-extrabold text-base text-[#213343] flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-[#f97316]" />
                     <span>Bitácora de Recursos Humanos</span>
                   </h3>
                   <p className="text-xs text-gray-500 font-medium">
@@ -1080,13 +1080,13 @@ export default function TrabajadorDetailPage() {
               </div>
 
               {/* Formulario Agregar Nota */}
-              <form onSubmit={handleSaveNota} className="space-y-3 bg-gray-50 p-4 rounded-2xl border border-gray-200 text-xs">
+              <form onSubmit={handleSaveNota} className="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200 text-xs">
                 <div className="flex items-center justify-between">
                   <label className="font-bold text-gray-600">Nueva entrada en bitácora:</label>
                   <select
                     value={newNotaTipo}
                     onChange={(e) => setNewNotaTipo(e.target.value as any)}
-                    className="bg-white border border-gray-300 rounded-xl px-2.5 py-1 font-bold text-xs cursor-pointer focus:outline-none"
+                    className="bg-white border border-gray-300 rounded-md px-2.5 py-1 font-bold text-xs cursor-pointer focus:outline-none"
                   >
                     <option value="nota">Nota general</option>
                     <option value="felicitacion">Felicitación</option>
@@ -1101,14 +1101,14 @@ export default function TrabajadorDetailPage() {
                   placeholder="Escribe aquí las observaciones o registro interno de RR.HH..."
                   value={newNotaText}
                   onChange={(e) => setNewNotaText(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-xl p-3 font-medium text-xs focus:outline-none focus:border-[#F7931F]"
+                  className="w-full bg-white border border-gray-300 rounded-md p-3 font-medium text-xs focus:outline-none focus:border-[#f97316]"
                 />
 
                 <div className="flex justify-end">
                   <button
                     type="submit"
                     disabled={savingNota || !newNotaText.trim()}
-                    className="px-4 py-2 bg-[#F7931F] hover:bg-[#e08316] text-white rounded-xl font-bold text-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    className="px-4 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-bold text-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
                     <Send className="w-3.5 h-3.5" />
                     <span>{savingNota ? 'Guardando...' : 'Publicar en bitácora'}</span>
@@ -1126,11 +1126,11 @@ export default function TrabajadorDetailPage() {
                   {notas.map((n) => (
                     <div
                       key={n.id}
-                      className="p-4 rounded-2xl bg-gray-50 border border-gray-200 space-y-1.5 text-xs"
+                      className="p-4 rounded-lg bg-gray-50 border border-gray-200 space-y-1.5 text-xs"
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="font-black text-[#363636]">
+                          <span className="font-black text-[#213343]">
                             {n.usuario?.nombre || 'Administración'}
                           </span>
                           <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full capitalize bg-white border border-gray-200 text-gray-600">
@@ -1157,16 +1157,16 @@ export default function TrabajadorDetailPage() {
         {/* ========================================================= */}
         <div className="lg:col-span-3 space-y-5">
           {/* Asignaciones en Faenas & Producción */}
-          <div className="bg-white rounded-3xl border border-gray-200 p-5 shadow-sm space-y-4 text-xs">
+          <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm space-y-4 text-xs">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div>
-                <h3 className="font-extrabold text-sm text-[#363636] flex items-center gap-1.5">
-                  <HardHat className="w-4 h-4 text-[#F7931F]" />
+                <h3 className="font-extrabold text-sm text-[#213343] flex items-center gap-1.5">
+                  <HardHat className="w-4 h-4 text-[#f97316]" />
                   <span>Obras & Faenas</span>
                 </h3>
                 <p className="text-[11px] text-gray-400 font-medium">Asignaciones en planta y terreno</p>
               </div>
-              <span className="font-black text-[#F7931F] bg-orange-50 px-2 py-0.5 rounded-full">
+              <span className="font-black text-[#f97316] bg-orange-50 px-2 py-0.5 rounded-full">
                 {eventosAsociados.length}
               </span>
             </div>
@@ -1178,8 +1178,8 @@ export default function TrabajadorDetailPage() {
             ) : (
               <div className="space-y-2">
                 {eventosAsociados.slice(0, 4).map((ev) => (
-                  <div key={ev.id} className="p-3 bg-gray-50 rounded-2xl border border-gray-200 space-y-1">
-                    <span className="font-bold text-[#363636] block truncate">
+                  <div key={ev.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-1">
+                    <span className="font-bold text-[#213343] block truncate">
                       {ev.titulo}
                     </span>
                     <div className="flex items-center justify-between text-[11px] text-gray-400 font-mono">
@@ -1193,10 +1193,10 @@ export default function TrabajadorDetailPage() {
           </div>
 
           {/* Visitas a Terreno */}
-          <div className="bg-white rounded-3xl border border-gray-200 p-5 shadow-sm space-y-4 text-xs">
+          <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm space-y-4 text-xs">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div>
-                <h3 className="font-extrabold text-sm text-[#363636] flex items-center gap-1.5">
+                <h3 className="font-extrabold text-sm text-[#213343] flex items-center gap-1.5">
                   <CalendarDays className="w-4 h-4 text-blue-600" />
                   <span>Visitas a Terreno</span>
                 </h3>
@@ -1214,8 +1214,8 @@ export default function TrabajadorDetailPage() {
             ) : (
               <div className="space-y-2">
                 {visitasAsociadas.slice(0, 4).map((vis) => (
-                  <div key={vis.id} className="p-3 bg-blue-50/50 rounded-2xl border border-blue-200 space-y-1">
-                    <span className="font-bold text-[#363636] block truncate">
+                  <div key={vis.id} className="p-3 bg-blue-50/50 rounded-lg border border-blue-200 space-y-1">
+                    <span className="font-bold text-[#213343] block truncate">
                       {vis.oportunidad?.titulo || 'Visita a terreno'}
                     </span>
                     <div className="flex items-center justify-between text-[11px] text-gray-400 font-mono">
@@ -1234,10 +1234,10 @@ export default function TrabajadorDetailPage() {
       {/* MODAL 1: EDITAR PERFIL Y DATOS DEL TRABAJADOR              */}
       {/* ========================================================= */}
       {showEditInfoModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-200 shadow-2xl p-6 space-y-5">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 ">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-200 shadow-sm p-6 space-y-5">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h2 className="text-xl font-black text-[#363636]">Editar Colaborador</h2>
+              <h2 className="text-xl font-black text-[#213343]">Editar Colaborador</h2>
               <button
                 onClick={() => setShowEditInfoModal(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -1255,7 +1255,7 @@ export default function TrabajadorDetailPage() {
                     required
                     value={editFormData.nombre}
                     onChange={(e) => setEditFormData({ ...editFormData, nombre: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold"
                   />
                 </div>
                 <div>
@@ -1265,7 +1265,7 @@ export default function TrabajadorDetailPage() {
                     required
                     value={editFormData.rut}
                     onChange={(e) => setEditFormData({ ...editFormData, rut: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-mono font-bold"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-mono font-bold"
                   />
                 </div>
                 <div>
@@ -1273,7 +1273,7 @@ export default function TrabajadorDetailPage() {
                   <select
                     value={editFormData.cargo}
                     onChange={(e) => setEditFormData({ ...editFormData, cargo: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold cursor-pointer"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold cursor-pointer"
                   >
                     {CARGOS_RRHH_DEFAULT.map((c) => (
                       <option key={c} value={c}>{c}</option>
@@ -1285,7 +1285,7 @@ export default function TrabajadorDetailPage() {
                   <select
                     value={editFormData.area}
                     onChange={(e) => setEditFormData({ ...editFormData, area: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold cursor-pointer"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold cursor-pointer"
                   >
                     {AREAS_RRHH_DEFAULT.map((a) => (
                       <option key={a} value={a}>{a}</option>
@@ -1298,7 +1298,7 @@ export default function TrabajadorDetailPage() {
                     type="text"
                     value={editFormData.telefono}
                     onChange={(e) => setEditFormData({ ...editFormData, telefono: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-semibold"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-semibold"
                   />
                 </div>
                 <div>
@@ -1307,7 +1307,7 @@ export default function TrabajadorDetailPage() {
                     type="email"
                     value={editFormData.email}
                     onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-semibold"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-semibold"
                   />
                 </div>
                 <div>
@@ -1316,7 +1316,7 @@ export default function TrabajadorDetailPage() {
                     type="number"
                     value={editFormData.sueldo_base}
                     onChange={(e) => setEditFormData({ ...editFormData, sueldo_base: Number(e.target.value) })}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-mono font-bold"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-mono font-bold"
                   />
                 </div>
                 <div>
@@ -1324,7 +1324,7 @@ export default function TrabajadorDetailPage() {
                   <select
                     value={editFormData.tipo_contrato}
                     onChange={(e) => setEditFormData({ ...editFormData, tipo_contrato: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold cursor-pointer"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold cursor-pointer"
                   >
                     <option value="Indefinido">Indefinido</option>
                     <option value="Plazo fijo">Plazo fijo</option>
@@ -1338,7 +1338,7 @@ export default function TrabajadorDetailPage() {
                     type="text"
                     value={editFormData.banco}
                     onChange={(e) => setEditFormData({ ...editFormData, banco: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2"
                   />
                 </div>
                 <div>
@@ -1347,7 +1347,7 @@ export default function TrabajadorDetailPage() {
                     type="text"
                     value={editFormData.numero_cuenta}
                     onChange={(e) => setEditFormData({ ...editFormData, numero_cuenta: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-mono"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-mono"
                   />
                 </div>
               </div>
@@ -1356,14 +1356,14 @@ export default function TrabajadorDetailPage() {
                 <button
                   type="button"
                   onClick={() => setShowEditInfoModal(false)}
-                  className="px-4 py-2 rounded-xl text-gray-600 font-bold hover:bg-gray-100"
+                  className="px-4 py-2 rounded-md text-gray-600 font-bold hover:bg-gray-100"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={savingEdit}
-                  className="px-5 py-2 rounded-xl bg-[#F7931F] hover:bg-[#e08316] text-white font-black"
+                  className="px-5 py-2 rounded-md bg-[#f97316] hover:bg-[#ea580c] text-white font-black"
                 >
                   {savingEdit ? 'Guardando...' : 'Guardar cambios'}
                 </button>
@@ -1377,10 +1377,10 @@ export default function TrabajadorDetailPage() {
       {/* MODAL 2: SUBIR DOCUMENTO / CONTRATO / ANEXO              */}
       {/* ========================================================= */}
       {showNewDocModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-md w-full border border-gray-200 shadow-2xl p-6 space-y-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 ">
+          <div className="bg-white rounded-lg max-w-md w-full border border-gray-200 shadow-sm p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h2 className="text-lg font-black text-[#363636]">Subir Documento</h2>
+              <h2 className="text-lg font-black text-[#213343]">Subir Documento</h2>
               <button
                 onClick={() => setShowNewDocModal(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -1395,7 +1395,7 @@ export default function TrabajadorDetailPage() {
                 <select
                   value={newDocData.categoria}
                   onChange={(e) => setNewDocData({ ...newDocData, categoria: e.target.value as any })}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold cursor-pointer"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold cursor-pointer"
                 >
                   {CATEGORIAS_DOCUMENTOS.map((c) => (
                     <option key={c.id} value={c.id}>{c.label}</option>
@@ -1411,7 +1411,7 @@ export default function TrabajadorDetailPage() {
                   placeholder="Ej: Contrato de Trabajo Indefinido 2026.pdf"
                   value={newDocData.nombre_archivo}
                   onChange={(e) => setNewDocData({ ...newDocData, nombre_archivo: e.target.value })}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold"
                 />
               </div>
 
@@ -1422,7 +1422,7 @@ export default function TrabajadorDetailPage() {
                   placeholder="https://... o link a Supabase Storage"
                   value={newDocData.url}
                   onChange={(e) => setNewDocData({ ...newDocData, url: e.target.value })}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-mono text-xs"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-mono text-xs"
                 />
               </div>
 
@@ -1432,7 +1432,7 @@ export default function TrabajadorDetailPage() {
                   type="date"
                   value={newDocData.fecha_emision}
                   onChange={(e) => setNewDocData({ ...newDocData, fecha_emision: e.target.value })}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold"
                 />
               </div>
 
@@ -1440,14 +1440,14 @@ export default function TrabajadorDetailPage() {
                 <button
                   type="button"
                   onClick={() => setShowNewDocModal(false)}
-                  className="px-4 py-2 rounded-xl text-gray-600 font-bold hover:bg-gray-100"
+                  className="px-4 py-2 rounded-md text-gray-600 font-bold hover:bg-gray-100"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={savingDoc || !newDocData.nombre_archivo.trim()}
-                  className="px-5 py-2 rounded-xl bg-[#F7931F] hover:bg-[#e08316] text-white font-black"
+                  className="px-5 py-2 rounded-md bg-[#f97316] hover:bg-[#ea580c] text-white font-black"
                 >
                   {savingDoc ? 'Guardando...' : 'Guardar documento'}
                 </button>
@@ -1461,10 +1461,10 @@ export default function TrabajadorDetailPage() {
       {/* MODAL 3: REGISTRAR PERMISO / LICENCIA                    */}
       {/* ========================================================= */}
       {showNewPermisoModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-md w-full border border-gray-200 shadow-2xl p-6 space-y-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 ">
+          <div className="bg-white rounded-lg max-w-md w-full border border-gray-200 shadow-sm p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h2 className="text-lg font-black text-[#363636]">Registrar Permiso o Ausencia</h2>
+              <h2 className="text-lg font-black text-[#213343]">Registrar Permiso o Ausencia</h2>
               <button
                 onClick={() => setShowNewPermisoModal(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -1479,7 +1479,7 @@ export default function TrabajadorDetailPage() {
                 <select
                   value={newPermisoData.tipo}
                   onChange={(e) => setNewPermisoData({ ...newPermisoData, tipo: e.target.value as any })}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold cursor-pointer"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold cursor-pointer"
                 >
                   <option value="permiso">Permiso personal / día administrativo</option>
                   <option value="vacaciones">Vacaciones legales</option>
@@ -1496,7 +1496,7 @@ export default function TrabajadorDetailPage() {
                     required
                     value={newPermisoData.fecha_inicio}
                     onChange={(e) => setNewPermisoData({ ...newPermisoData, fecha_inicio: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold"
                   />
                 </div>
                 <div>
@@ -1506,7 +1506,7 @@ export default function TrabajadorDetailPage() {
                     required
                     value={newPermisoData.fecha_fin}
                     onChange={(e) => setNewPermisoData({ ...newPermisoData, fecha_fin: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold"
                   />
                 </div>
               </div>
@@ -1518,7 +1518,7 @@ export default function TrabajadorDetailPage() {
                   placeholder="Ej: Cita médica familiar / Trámite personal..."
                   value={newPermisoData.motivo}
                   onChange={(e) => setNewPermisoData({ ...newPermisoData, motivo: e.target.value })}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl p-2.5 font-medium"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md p-2.5 font-medium"
                 />
               </div>
 
@@ -1528,7 +1528,7 @@ export default function TrabajadorDetailPage() {
                   id="chkBloquea"
                   checked={newPermisoData.bloquea_calendario}
                   onChange={(e) => setNewPermisoData({ ...newPermisoData, bloquea_calendario: e.target.checked })}
-                  className="rounded text-[#F7931F] focus:ring-0"
+                  className="rounded text-[#f97316] focus:ring-0"
                 />
                 <label htmlFor="chkBloquea" className="font-bold text-gray-700 cursor-pointer text-[11px]">
                   Bloquear disponibilidad en calendarios durante este período
@@ -1539,14 +1539,14 @@ export default function TrabajadorDetailPage() {
                 <button
                   type="button"
                   onClick={() => setShowNewPermisoModal(false)}
-                  className="px-4 py-2 rounded-xl text-gray-600 font-bold hover:bg-gray-100"
+                  className="px-4 py-2 rounded-md text-gray-600 font-bold hover:bg-gray-100"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={savingPermiso}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black"
+                  className="px-5 py-2 rounded-md bg-amber-500 hover:bg-amber-600 text-white font-black"
                 >
                   {savingPermiso ? 'Guardando...' : 'Registrar permiso'}
                 </button>
@@ -1560,10 +1560,10 @@ export default function TrabajadorDetailPage() {
       {/* MODAL 4: REGISTRAR LIQUIDACIÓN DE SUELDO                 */}
       {/* ========================================================= */}
       {showNewLiquidacionModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-md w-full border border-gray-200 shadow-2xl p-6 space-y-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 ">
+          <div className="bg-white rounded-lg max-w-md w-full border border-gray-200 shadow-sm p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h2 className="text-lg font-black text-[#363636]">Registrar Liquidación de Sueldo</h2>
+              <h2 className="text-lg font-black text-[#213343]">Registrar Liquidación de Sueldo</h2>
               <button
                 onClick={() => setShowNewLiquidacionModal(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -1579,7 +1579,7 @@ export default function TrabajadorDetailPage() {
                   <select
                     value={newLiquidacionData.mes}
                     onChange={(e) => setNewLiquidacionData({ ...newLiquidacionData, mes: Number(e.target.value) })}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold cursor-pointer"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold cursor-pointer"
                   >
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
                       <option key={m} value={m}>Mes {m}</option>
@@ -1592,7 +1592,7 @@ export default function TrabajadorDetailPage() {
                     type="number"
                     value={newLiquidacionData.anio}
                     onChange={(e) => setNewLiquidacionData({ ...newLiquidacionData, anio: Number(e.target.value) })}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold font-mono"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold font-mono"
                   />
                 </div>
               </div>
@@ -1607,7 +1607,7 @@ export default function TrabajadorDetailPage() {
                     const liq = base + newLiquidacionData.bonos - newLiquidacionData.descuentos;
                     setNewLiquidacionData({ ...newLiquidacionData, monto_sueldo_base: base, monto_liquido: liq });
                   }}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-mono font-bold"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-mono font-bold"
                 />
               </div>
 
@@ -1622,7 +1622,7 @@ export default function TrabajadorDetailPage() {
                       const liq = newLiquidacionData.monto_sueldo_base + bonos - newLiquidacionData.descuentos;
                       setNewLiquidacionData({ ...newLiquidacionData, bonos, monto_liquido: liq });
                     }}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-mono font-bold"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-mono font-bold"
                   />
                 </div>
                 <div>
@@ -1635,7 +1635,7 @@ export default function TrabajadorDetailPage() {
                       const liq = newLiquidacionData.monto_sueldo_base + newLiquidacionData.bonos - desc;
                       setNewLiquidacionData({ ...newLiquidacionData, descuentos: desc, monto_liquido: liq });
                     }}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-mono font-bold"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-mono font-bold"
                   />
                 </div>
               </div>
@@ -1647,7 +1647,7 @@ export default function TrabajadorDetailPage() {
                   required
                   value={newLiquidacionData.monto_liquido}
                   onChange={(e) => setNewLiquidacionData({ ...newLiquidacionData, monto_liquido: Number(e.target.value) })}
-                  className="w-full bg-emerald-50 border border-emerald-300 rounded-xl px-3 py-2 font-mono font-black text-emerald-900 text-sm"
+                  className="w-full bg-emerald-50 border border-emerald-300 rounded-md px-3 py-2 font-mono font-black text-emerald-900 text-sm"
                 />
               </div>
 
@@ -1656,7 +1656,7 @@ export default function TrabajadorDetailPage() {
                 <select
                   value={newLiquidacionData.estado_pago}
                   onChange={(e) => setNewLiquidacionData({ ...newLiquidacionData, estado_pago: e.target.value as any })}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-3 py-2 font-bold cursor-pointer"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold cursor-pointer"
                 >
                   <option value="pagado">Pagado</option>
                   <option value="pendiente">Pendiente de pago</option>
@@ -1667,14 +1667,14 @@ export default function TrabajadorDetailPage() {
                 <button
                   type="button"
                   onClick={() => setShowNewLiquidacionModal(false)}
-                  className="px-4 py-2 rounded-xl text-gray-600 font-bold hover:bg-gray-100"
+                  className="px-4 py-2 rounded-md text-gray-600 font-bold hover:bg-gray-100"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={savingLiquidacion}
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black"
+                  className="px-5 py-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-black"
                 >
                   {savingLiquidacion ? 'Guardando...' : 'Registrar sueldo'}
                 </button>

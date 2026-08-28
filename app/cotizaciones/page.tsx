@@ -199,12 +199,12 @@ export default function CotizacionesPage() {
 
 
   return (
-    <div className="space-y-6 text-[#363636]">
+    <div className="space-y-6 text-[#213343]">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
         <div>
-          <h1 className="text-2xl font-extrabold text-[#363636] flex items-center gap-2">
-            <FileText className="w-6 h-6 text-[#F7931F]" />
+          <h1 className="text-2xl font-extrabold text-[#213343] flex items-center gap-2">
+            <FileText className="w-6 h-6 text-[#f97316]" />
             <span>Cotizaciones Emitidas</span>
           </h1>
           <p className="text-xs text-gray-600 mt-1">
@@ -216,16 +216,16 @@ export default function CotizacionesPage() {
           {selectedIds.length > 0 && (
             <button
               onClick={handleDownloadSelected}
-              className="bg-[#363636] hover:bg-black text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition flex items-center gap-2"
+              className="bg-[#213343] hover:bg-black text-white font-bold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2"
             >
-              <Download className="w-4 h-4 text-[#F7931F]" />
+              <Download className="w-4 h-4 text-[#f97316]" />
               <span>Ver PDF Selección ({selectedIds.length})</span>
             </button>
           )}
 
           <Link
             href="/cotizaciones/nuevo"
-            className="bg-[#F7931F] hover:bg-[#e08316] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition flex items-center gap-2 self-start md:self-auto"
+            className="bg-[#f97316] hover:bg-[#ea580c] text-white font-bold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2 self-start md:self-auto"
           >
             <Plus className="w-4 h-4" />
             <span>Crear Nueva Cotización</span>
@@ -234,14 +234,14 @@ export default function CotizacionesPage() {
       </div>
 
       {successMsg && (
-        <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 p-4 rounded-xl text-xs flex items-center gap-2 font-bold animate-fadeIn">
+        <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 p-4 rounded-md text-xs flex items-center gap-2 font-bold ">
           <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           <span>{successMsg}</span>
         </div>
       )}
 
       {/* Barra Búsqueda y Selección */}
-      <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
         <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
           <input
@@ -249,7 +249,7 @@ export default function CotizacionesPage() {
             placeholder="Buscar por N° cotización, cliente o RUT..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-white border border-gray-300 rounded-xl pl-9 pr-3 py-2 text-xs text-[#363636] placeholder-gray-400 focus:outline-none focus:border-[#F7931F]"
+            className="w-full bg-white border border-gray-300 rounded-md pl-9 pr-3 py-2 text-xs text-[#213343] placeholder-gray-400 focus:outline-none focus:border-[#f97316]"
           />
         </div>
 
@@ -259,15 +259,15 @@ export default function CotizacionesPage() {
       </div>
 
       {/* Tabla de Cotizaciones */}
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-visible shadow-sm">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-visible shadow-sm">
         <div className="overflow-visible">
           <table className="w-full text-left text-xs min-w-[950px]">
-            <thead className="bg-[#363636] text-white uppercase text-[10px] tracking-wider">
+            <thead className="bg-[#213343] text-white uppercase text-[10px] tracking-normal">
               <tr>
                 <th className="py-3.5 px-4 w-10 text-center">
-                  <button onClick={toggleSelectAll} className="text-white hover:text-[#F7931F]">
+                  <button onClick={toggleSelectAll} className="text-white hover:text-[#f97316]">
                     {selectedIds.length === filtered.length && filtered.length > 0 ? (
-                      <CheckSquare className="w-4 h-4 text-[#F7931F]" />
+                      <CheckSquare className="w-4 h-4 text-[#f97316]" />
                     ) : (
                       <Square className="w-4 h-4" />
                     )}
@@ -312,16 +312,16 @@ export default function CotizacionesPage() {
                       <td className="py-3.5 px-4 text-center">
                         <button
                           onClick={() => toggleSelectOne(cot.id)}
-                          className="text-[#363636] hover:text-[#F7931F]"
+                          className="text-[#213343] hover:text-[#f97316]"
                         >
                           {isSelected ? (
-                            <CheckSquare className="w-4 h-4 text-[#F7931F]" />
+                            <CheckSquare className="w-4 h-4 text-[#f97316]" />
                           ) : (
                             <Square className="w-4 h-4 text-gray-400" />
                           )}
                         </button>
                       </td>
-                      <td className="py-3.5 px-4 font-bold text-[#363636] font-mono">{cot.numero_cotizacion}</td>
+                      <td className="py-3.5 px-4 font-bold text-[#213343] font-mono">{cot.numero_cotizacion}</td>
                       <td className="py-3.5 px-4">
                         <span className="text-[10px] font-extrabold uppercase bg-blue-50 text-blue-800 px-2 py-0.5 rounded-full border border-blue-200">
                           v{cot.version || 1}
@@ -332,10 +332,10 @@ export default function CotizacionesPage() {
                       <td className="py-3.5 px-4">
                         <Link
                           href={`/clientes/${cot.cliente_id}`}
-                          className="group flex flex-col hover:text-[#F7931F] transition"
+                          className="group flex flex-col hover:text-[#f97316] transition"
                         >
-                          <div className="flex items-center gap-1.5 font-bold text-[#363636] group-hover:text-[#F7931F] group-hover:underline">
-                            <Building className="w-3.5 h-3.5 text-[#F7931F]" />
+                          <div className="flex items-center gap-1.5 font-bold text-[#213343] group-hover:text-[#f97316] group-hover:underline">
+                            <Building className="w-3.5 h-3.5 text-[#f97316]" />
                             <span>{cot.cliente?.nombre || 'Cliente Registrado'}</span>
                           </div>
                           <span className="text-[11px] text-gray-500 font-mono pl-5">
@@ -349,12 +349,12 @@ export default function CotizacionesPage() {
                         {linkedOp ? (
                           <Link
                             href={`/ventas?oportunidad=${linkedOp.id}`}
-                            className="flex flex-col text-xs text-[#363636] hover:text-[#F7931F] transition font-bold group"
+                            className="flex flex-col text-xs text-[#213343] hover:text-[#f97316] transition font-bold group"
                           >
                             <div className="flex items-center gap-1">
-                              <TrendingUp className="w-3.5 h-3.5 text-[#F7931F] shrink-0" />
-                              <span className="font-extrabold font-mono text-[#F7931F] group-hover:underline">{linkedOp.codigo}</span>
-                              <span className="text-[10px] bg-orange-100 text-[#F7931F] font-bold px-1.5 py-0.5 rounded uppercase">
+                              <TrendingUp className="w-3.5 h-3.5 text-[#f97316] shrink-0" />
+                              <span className="font-extrabold font-mono text-[#f97316] group-hover:underline">{linkedOp.codigo}</span>
+                              <span className="text-[10px] bg-orange-100 text-[#f97316] font-bold px-1.5 py-0.5 rounded uppercase">
                                 {linkedOp.estado_pipeline}
                               </span>
                             </div>
@@ -378,7 +378,7 @@ export default function CotizacionesPage() {
                                   console.error('Error linking op:', err);
                                 }
                               }}
-                              className="bg-white border border-gray-300 rounded-lg px-2 py-1 text-[11px] text-gray-700 font-medium focus:outline-none focus:border-[#F7931F] w-full"
+                              className="bg-white border border-gray-300 rounded-lg px-2 py-1 text-[11px] text-gray-700 font-medium focus:outline-none focus:border-[#f97316] w-full"
                             >
                               <option value="">-- Asignar Oportunidad --</option>
                               {oportunidades.map((op) => (
@@ -396,7 +396,7 @@ export default function CotizacionesPage() {
                         <select
                           value={cot.estado}
                           onChange={(e) => handleChangeStatus(cot.id, e.target.value as EstadoCotizacion)}
-                          className={`text-[11px] font-extrabold uppercase px-2.5 py-1 rounded-xl border cursor-pointer focus:outline-none ${
+                          className={`text-[11px] font-extrabold uppercase px-2.5 py-1 rounded-md border cursor-pointer focus:outline-none ${
                             cot.estado === 'aprobada'
                               ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                               : cot.estado === 'enviada'
@@ -413,14 +413,14 @@ export default function CotizacionesPage() {
                         </select>
                       </td>
 
-                      <td className="py-3.5 px-4 text-right font-black text-[#363636] text-sm">
+                      <td className="py-3.5 px-4 text-right font-black text-[#213343] text-sm">
                         ${(cot.monto_total || 0).toLocaleString('es-CL')}
                       </td>
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={() => setPreviewCotizacion(cot)}
-                            className="p-1.5 bg-orange-50 hover:bg-[#F7931F] text-[#F7931F] hover:text-white rounded-lg transition border border-orange-200"
+                            className="p-1.5 bg-orange-50 hover:bg-[#f97316] text-[#f97316] hover:text-white rounded-lg transition border border-orange-200"
                             title="Previsualizar PDF"
                           >
                             <Eye className="w-3.5 h-3.5" />
@@ -464,23 +464,23 @@ export default function CotizacionesPage() {
 
       {/* Modal Confirmación Eliminación de Cotización */}
       {cotToDelete && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl text-[#363636]">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
+          <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-[#213343]">
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
               <h3 className="text-base font-extrabold text-red-700 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
                 <span>Eliminar Cotización de Supabase</span>
               </h3>
-              <button onClick={() => setCotToDelete(null)} className="text-gray-400 hover:text-[#363636] font-bold">
+              <button onClick={() => setCotToDelete(null)} className="text-gray-400 hover:text-[#213343] font-bold">
                 ✕
               </button>
             </div>
 
             <div className="space-y-2 text-xs text-gray-700">
               <p>
-                ¿Estás seguro de que deseas eliminar la cotización <strong className="font-mono text-[#363636]">{cotToDelete.numero_cotizacion}</strong> por un monto de <strong className="text-emerald-700">${(cotToDelete.monto_total || 0).toLocaleString('es-CL')}</strong>?
+                ¿Estás seguro de que deseas eliminar la cotización <strong className="font-mono text-[#213343]">{cotToDelete.numero_cotizacion}</strong> por un monto de <strong className="text-emerald-700">${(cotToDelete.monto_total || 0).toLocaleString('es-CL')}</strong>?
               </p>
-              <p className="bg-red-50 p-3 rounded-xl border border-red-200 text-red-900 font-medium">
+              <p className="bg-red-50 p-3 rounded-md border border-red-200 text-red-900 font-medium">
                 Esta acción la eliminará de Supabase permanentemente.
               </p>
             </div>
@@ -489,14 +489,14 @@ export default function CotizacionesPage() {
               <button
                 type="button"
                 onClick={() => setCotToDelete(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleDeleteCotizacion}
-                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-xl transition shadow-md flex items-center gap-1.5"
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-md transition shadow-sm flex items-center gap-1.5"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Eliminar Cotización</span>

@@ -4,11 +4,9 @@ import React, { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../lib/context/AuthContext';
 
-// La protección real de rutas ocurre en middleware.ts (server-side, corre
-// antes de que se sirva la página o se dispare cualquier query). Este
-// componente ya NO es la guardia de seguridad — solo evita un flash de
-// contenido mientras carga el perfil, y hace de respaldo por si el estado
-// del cliente queda desalineado (ej. tras un logout desde otra pestaña).
+// Guardia centralizada del cliente. La seguridad real de datos vive en RLS de
+// Supabase; este componente evita flashes de contenido y accesos de UI fuera
+// del rol esperado.
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { currentUser, loading } = useAuth();
   const pathname = usePathname();
@@ -25,7 +23,15 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
           router.replace('/');
         }
       } else if (currentUser && currentUser.rol === 'mano_obra') {
-        const manoObraAllowed = ['/rrhh', '/visitas', '/planificacion/calendario', '/reventa/calendario', '/notificaciones'];
+        const manoObraAllowed = [
+          '/rrhh',
+          '/administracion',
+          '/visitas',
+          '/planificacion/calendario',
+          '/reventa/calendario',
+          '/notificaciones',
+          '/recordatorios',
+        ];
         const isAllowed = manoObraAllowed.some((route) => pathname.startsWith(route)) || pathname.startsWith('/auth');
         if (!isAllowed) {
           router.replace('/rrhh');
@@ -36,9 +42,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#363636] text-white">
+      <div className="min-h-screen flex items-center justify-center bg-[#213343] text-white">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-[#F7931F] border-t-transparent rounded-full animate-spin" />
+          <div className="w-10 h-10 border-4 border-[#f97316] border-t-transparent rounded-full animate-spin" />
           <p className="text-xs font-bold text-gray-300">Cargando Hormiglass CRM...</p>
         </div>
       </div>

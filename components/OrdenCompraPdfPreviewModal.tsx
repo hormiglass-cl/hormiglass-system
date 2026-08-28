@@ -222,15 +222,15 @@ export function OrdenCompraPdfPreviewModal({ orden, onClose }: OrdenCompraPdfPre
   const blanks = Array.from({ length: Math.max(0, 8 - displayItems.length) });
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-      <div className="bg-white border border-gray-200 rounded-3xl max-w-5xl w-full p-6 space-y-5 shadow-2xl text-[#363636] max-h-[92vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
+      <div className="bg-white border border-gray-200 rounded-lg max-w-5xl w-full p-6 space-y-5 shadow-sm text-[#213343] max-h-[92vh] flex flex-col">
         <div className="flex items-center justify-between border-b border-gray-200 pb-4 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-orange-50 text-[#F7931F] rounded-2xl flex items-center justify-center border border-orange-200">
+            <div className="w-10 h-10 bg-orange-50 text-[#f97316] rounded-lg flex items-center justify-center border border-orange-200">
               <FileText className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-xs font-bold text-[#F7931F] font-mono uppercase">Documento oficial Hormiglass</span>
+              <span className="text-xs font-bold text-[#f97316] font-mono uppercase">Documento oficial Hormiglass</span>
               <h3 className="text-xl font-black">Orden de Compra {orden.numero_oc}</h3>
             </div>
           </div>
@@ -238,18 +238,18 @@ export function OrdenCompraPdfPreviewModal({ orden, onClose }: OrdenCompraPdfPre
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrint}
-              className="bg-[#F7931F] hover:bg-[#e08316] text-white font-bold text-xs px-4 py-2 rounded-xl transition flex items-center gap-2 shadow-sm"
+              className="bg-[#f97316] hover:bg-[#ea580c] text-white font-bold text-xs px-4 py-2 rounded-md transition flex items-center gap-2 shadow-sm"
             >
               <Printer className="w-4 h-4" />
               <span>Imprimir / Descargar PDF</span>
             </button>
-            <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-700 rounded-xl hover:bg-gray-100 transition" title="Cerrar">
+            <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-700 rounded-md hover:bg-gray-100 transition" title="Cerrar">
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-gray-100 p-4 rounded-2xl border border-gray-200">
+        <div className="flex-1 overflow-y-auto bg-gray-100 p-4 rounded-lg border border-gray-200">
           <div className="mx-auto bg-white text-[11px] text-gray-900 shadow-sm border border-gray-200 p-8 w-full max-w-[816px] min-h-[1056px]">
             <div className="grid grid-cols-[1fr_190px] gap-5 items-start">
               <div className="leading-relaxed">
@@ -264,9 +264,9 @@ export function OrdenCompraPdfPreviewModal({ orden, onClose }: OrdenCompraPdfPre
               <div>
                 <h2 className="text-right text-lg font-black mb-2">ORDEN DE COMPRA</h2>
                 <div className="grid grid-cols-[74px_1fr] border border-gray-300">
-                  <div className="bg-[#F7931F] text-white font-black p-1.5">FECHA</div>
+                  <div className="bg-[#f97316] text-white font-black p-1.5">FECHA</div>
                   <div className="p-1.5 font-bold">{formatOcDate(orden.fecha_emision)}</div>
-                  <div className="bg-[#F7931F] text-white font-black p-1.5 border-t border-orange-300">OC #</div>
+                  <div className="bg-[#f97316] text-white font-black p-1.5 border-t border-orange-300">OC #</div>
                   <div className="p-1.5 font-bold border-t border-gray-300">{orden.numero_oc}</div>
                 </div>
               </div>
@@ -274,7 +274,7 @@ export function OrdenCompraPdfPreviewModal({ orden, onClose }: OrdenCompraPdfPre
 
             <div className="grid grid-cols-2 gap-5 mt-4">
               <div>
-                <div className="bg-[#F7931F] text-white font-black uppercase px-2 py-1">Vendedor</div>
+                <div className="bg-[#f97316] text-white font-black uppercase px-2 py-1">Vendedor</div>
                 <div className="border border-gray-300 border-t-0 p-3 min-h-36 leading-relaxed">
                   <p className="font-black">{orden.proveedor?.nombre || 'Proveedor'}</p>
                   <p>RUT: {orden.proveedor?.rut || ''}</p>
@@ -287,7 +287,7 @@ export function OrdenCompraPdfPreviewModal({ orden, onClose }: OrdenCompraPdfPre
                 </div>
               </div>
               <div>
-                <div className="bg-[#F7931F] text-white font-black uppercase px-2 py-1">Envie A</div>
+                <div className="bg-[#f97316] text-white font-black uppercase px-2 py-1">Envie A</div>
                 <div className="border border-gray-300 border-t-0 p-3 min-h-36 leading-relaxed">
                   <p className="font-black">{orden.envie_a_nombre}</p>
                   <p>RUT: {orden.envie_a_rut}</p>
@@ -303,7 +303,7 @@ export function OrdenCompraPdfPreviewModal({ orden, onClose }: OrdenCompraPdfPre
 
             <div className="grid grid-cols-4 mt-4 border border-gray-300">
               {['Contacto Pago', 'Nombre', 'Telefono', 'Email'].map((label) => (
-                <div key={label} className="bg-[#F7931F] text-white font-black px-2 py-1">{label}</div>
+                <div key={label} className="bg-[#f97316] text-white font-black px-2 py-1">{label}</div>
               ))}
               <div className="px-2 py-2 border-t border-gray-300">Pago: {orden.condicion_pago}</div>
               <div className="px-2 py-2 border-t border-gray-300">{orden.contacto_pago_nombre}</div>
@@ -312,7 +312,7 @@ export function OrdenCompraPdfPreviewModal({ orden, onClose }: OrdenCompraPdfPre
             </div>
 
             <table className="w-full mt-4 table-fixed border-collapse">
-              <thead className="bg-[#F7931F] text-white">
+              <thead className="bg-[#f97316] text-white">
                 <tr>
                   <th className="p-1.5 w-[18%]">ARTICULO #</th>
                   <th className="p-1.5">DESCRIPCIÓN</th>
@@ -345,7 +345,7 @@ export function OrdenCompraPdfPreviewModal({ orden, onClose }: OrdenCompraPdfPre
 
             <div className="grid grid-cols-[1fr_235px] gap-5 mt-4">
               <div className="border border-gray-300 min-h-24">
-                <div className="bg-[#F7931F] text-white font-black px-2 py-1">Comentarios o instrucciones especiales</div>
+                <div className="bg-[#f97316] text-white font-black px-2 py-1">Comentarios o instrucciones especiales</div>
                 <p className="p-3">{orden.instrucciones_especiales}</p>
               </div>
               <div className="text-[11px]">
@@ -360,7 +360,7 @@ export function OrdenCompraPdfPreviewModal({ orden, onClose }: OrdenCompraPdfPre
                     <span className="font-black">{value}</span>
                   </div>
                 ))}
-                <div className="flex justify-between bg-[#F7931F] text-white font-black px-2 py-2 text-sm">
+                <div className="flex justify-between bg-[#f97316] text-white font-black px-2 py-2 text-sm">
                   <span>TOTAL</span>
                   <span>{formatCurrency(orden.monto_total)}</span>
                 </div>
@@ -376,10 +376,10 @@ export function OrdenCompraPdfPreviewModal({ orden, onClose }: OrdenCompraPdfPre
 
         <div className="flex items-center justify-between border-t border-gray-200 pt-4 shrink-0 text-xs text-gray-500">
           <span className="flex items-center gap-1">
-            <CheckCircle className="w-4 h-4 text-[#F7931F]" />
+            <CheckCircle className="w-4 h-4 text-[#f97316]" />
             <span>Preview listo para impresión en tamaño carta</span>
           </span>
-          <button onClick={onClose} className="px-5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition">
+          <button onClick={onClose} className="px-5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition">
             Cerrar Preview
           </button>
         </div>
