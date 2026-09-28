@@ -23,6 +23,7 @@ import {
 import { Pagination } from '../../components/Pagination';
 import { SearchableSelect } from '../../components/SearchableSelect';
 import { REGIONES_CHILE, TODAS_COMUNAS_CHILE } from '../../lib/chile-data';
+import { mensajeError } from '../../lib/errores';
 
 interface ColumnState {
   rut: boolean;
@@ -258,7 +259,7 @@ export default function ClientesPage() {
     try {
       const { error } = await supabase.from('clientes').delete().in('id', idsToDelete);
       if (error) {
-        setDuplicateError(`Error al eliminar cliente(s) en Supabase: ${error.message}`);
+        setDuplicateError(mensajeError(error, 'No se pudo eliminar el cliente.'));
       } else {
         setClientes((prev) => prev.filter((c) => !idsToDelete.includes(c.id)));
         setSelectedClientIds((prev) => prev.filter((id) => !idsToDelete.includes(id)));
@@ -275,14 +276,14 @@ export default function ClientesPage() {
 
         setSuccessMsg(
           idsToDelete.length === 1
-            ? `Cliente "${clientsToDelete[0].nombre}" eliminado de Supabase exitosamente.`
-            : `Se eliminaron ${idsToDelete.length} clientes de Supabase exitosamente.`
+            ? `Cliente "${clientsToDelete[0].nombre}" eliminado exitosamente.`
+            : `Se eliminaron ${idsToDelete.length} clientes exitosamente.`
         );
         setTimeout(() => setSuccessMsg(''), 4000);
       }
     } catch (err: unknown) {
       console.error('Error deleting client(s):', err);
-      setDuplicateError(`Error al eliminar: ${err instanceof Error ? err.message : 'No se pudo eliminar.'}`);
+      setDuplicateError(mensajeError(err, 'No se pudo eliminar el cliente.'));
     }
 
     setClientsToDelete(null);
@@ -388,7 +389,7 @@ export default function ClientesPage() {
         .single();
 
       if (error || !data) {
-        setDuplicateError(`Error al guardar en Supabase: ${error?.message || 'No se pudo crear el cliente.'}`);
+        setDuplicateError(mensajeError(error, 'No se pudo crear el cliente.'));
         return;
       }
 
@@ -403,7 +404,7 @@ export default function ClientesPage() {
       });
     } catch (err: unknown) {
       console.error('Error creating client in Supabase:', err);
-      setDuplicateError(`Error de conexión con Supabase: ${err instanceof Error ? err.message : 'No se pudo crear el cliente.'}`);
+      setDuplicateError(mensajeError(err, 'No se pudo crear el cliente.'));
       return;
     }
 
@@ -751,7 +752,7 @@ export default function ClientesPage() {
                           </Link>
                           <button
                             onClick={() => setClientsToDelete([cli])}
-                            title="Eliminar Cliente de Supabase"
+                            title="Eliminar Cliente"
                             className="p-1 text-gray-400 hover:text-red-600 transition"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -1101,12 +1102,12 @@ export default function ClientesPage() {
               {clientsToDelete.length === 1 ? (
                 <>
                   ¿Estás seguro de que deseas eliminar permanentemente a{' '}
-                  <strong className="text-[#213343] font-bold">{clientsToDelete[0].nombre}</strong> de Supabase? Esta acción eliminará el registro de la base de datos y no se podrá deshacer.
+                  <strong className="text-[#213343] font-bold">{clientsToDelete[0].nombre}</strong>? Esta acción eliminará el registro de la base de datos y no se podrá deshacer.
                 </>
               ) : (
                 <>
                   ¿Estás seguro de que deseas eliminar permanentemente los{' '}
-                  <strong className="text-[#213343] font-bold">{clientsToDelete.length} clientes seleccionados</strong> de Supabase? Esta acción eliminará los registros de la base de datos y no se podrá deshacer.
+                  <strong className="text-[#213343] font-bold">{clientsToDelete.length} clientes seleccionados</strong>? Esta acción eliminará los registros de la base de datos y no se podrá deshacer.
                 </>
               )}
             </p>
@@ -1134,7 +1135,7 @@ export default function ClientesPage() {
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-extrabold shadow-sm transition flex items-center gap-1.5"
               >
                 <Trash2 className="w-4 h-4" />
-                <span>Eliminar de Supabase</span>
+                <span>Eliminar</span>
               </button>
             </div>
           </div>

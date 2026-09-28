@@ -20,6 +20,7 @@ import {
   Calendar,
   Tag,
 } from 'lucide-react';
+import { mensajeError } from '../lib/errores';
 
 interface CotizacionModalProps {
   isOpen: boolean;
@@ -266,7 +267,7 @@ export function CotizacionModal({
         p_items: itemsPayload,
         p_cotizacion_id: initialCotizacion && !isNewVersion ? initialCotizacion.id : null,
       });
-      if (saveError || !savedId) throw new Error(saveError?.message || 'No se confirmó la cotización.');
+      if (saveError || !savedId) throw new Error(mensajeError(saveError, 'No se confirmó la cotización.'));
       void logSistema({
         tipo_accion: initialCotizacion && !isNewVersion ? 'actualizacion' : 'creacion',
         entidad: 'cotizaciones',
@@ -289,7 +290,7 @@ export function CotizacionModal({
       onClose();
     } catch (err: any) {
       console.error('Error saving quote in Supabase:', err);
-      setErrorMsg(`Error al guardar en Supabase: ${err?.message || 'Revisa los campos.'}`);
+      setErrorMsg(mensajeError(err, 'No se pudo guardar la cotización. Revisa los campos.'));
     } finally {
       setLoading(false);
     }
@@ -587,7 +588,7 @@ export function CotizacionModal({
               className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold px-5 py-2 rounded-md transition flex items-center gap-2 shadow-sm disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
-              <span>{loading ? 'Guardando en Supabase...' : initialCotizacion ? 'Guardar Cambios' : 'Emitir Cotización'}</span>
+              <span>{loading ? 'Guardando...' : initialCotizacion ? 'Guardar Cambios' : 'Emitir Cotización'}</span>
             </button>
           </div>
         </form>

@@ -9,6 +9,7 @@ import {
   EstadoEventoProduccionLogistica,
   ContextoEventoProduccionLogistica,
   OportunidadVenta,
+  ROL_NOMBRE,
 } from '../lib/types';
 import { useAuth } from '../lib/context/AuthContext';
 import { logSistema } from '../lib/logger';
@@ -33,6 +34,7 @@ import {
   RotateCcw,
   XCircle,
 } from 'lucide-react';
+import { mensajeError } from '../lib/errores';
 
 export const ESTADOS_EVENTO_CONFIG: Record<
   string,
@@ -351,7 +353,7 @@ export function CalendarioEventos({
       fetchEventos();
     } catch (err: unknown) {
       console.error('Error creating calendar event:', err);
-      alert(`Error al guardar evento: ${err instanceof Error ? err.message : 'Revisa los campos.'}`);
+      alert(mensajeError(err, 'No se pudo guardar el evento. Revisa los campos.'));
     } finally {
       setSavingLoading(false);
     }
@@ -428,7 +430,7 @@ export function CalendarioEventos({
       fetchEventos();
     } catch (err: unknown) {
       console.error('Error updating calendar event:', err);
-      alert(`Error al actualizar: ${err instanceof Error ? err.message : 'Revisa los campos.'}`);
+      alert(mensajeError(err, 'No se pudo actualizar el evento. Revisa los campos.'));
     } finally {
       setSavingLoading(false);
     }
@@ -981,7 +983,7 @@ export function CalendarioEventos({
                   <option value="">-- Sin Asignar --</option>
                   {personalList.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.nombre} ({p.rol === 'mano_obra' ? 'Mano de Obra' : p.rol === 'admin' ? 'Admin' : 'Ejecutivo'})
+                      {p.nombre} ({ROL_NOMBRE[p.rol] ?? p.rol})
                     </option>
                   ))}
                 </select>
@@ -1127,7 +1129,7 @@ export function CalendarioEventos({
                   <option value="">-- Sin Asignar --</option>
                   {personalList.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.nombre} ({p.rol === 'mano_obra' ? 'Mano de Obra' : p.rol === 'admin' ? 'Admin' : 'Ejecutivo'})
+                      {p.nombre} ({ROL_NOMBRE[p.rol] ?? p.rol})
                     </option>
                   ))}
                 </select>

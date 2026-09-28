@@ -505,7 +505,7 @@ export default function TrabajadorDetailPage() {
   if (loading) {
     return (
       <div className="p-12 text-center text-gray-500 font-medium animate-pulse">
-        Cargando ficha del colaborador desde Supabase...
+        Cargando ficha del colaborador...
       </div>
     );
   }
@@ -592,7 +592,7 @@ export default function TrabajadorDetailPage() {
                 <span className="font-bold text-[#f97316]">{trabajador.tipo_contrato}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-gray-400 font-semibold">Cuenta Supabase:</span>
+                <span className="text-gray-400 font-semibold">Cuenta de usuario:</span>
                 <span className="font-mono font-bold text-[11px] text-gray-700 truncate max-w-[170px]">
                   {trabajador.email || 'Vinculada'}
                 </span>
@@ -1414,7 +1414,7 @@ export default function TrabajadorDetailPage() {
                 <label className="font-bold text-gray-500 block mb-1">Enlace / URL de descarga</label>
                 <input
                   type="text"
-                  placeholder="https://... o link a Supabase Storage"
+                  placeholder="https://... o enlace al documento"
                   value={newDocData.url}
                   onChange={(e) => setNewDocData({ ...newDocData, url: e.target.value })}
                   className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-mono text-xs"

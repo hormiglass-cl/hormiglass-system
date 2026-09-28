@@ -23,6 +23,7 @@ import {
   ContextoEventoProduccionLogistica,
   EstadoEventoProduccionLogistica,
   TipoEventoProduccionLogistica,
+  ROL_NOMBRE,
 } from '../../lib/types';
 import { useAuth } from '../../lib/context/AuthContext';
 import { PdfPreviewModal } from '../../components/PdfPreviewModal';
@@ -90,6 +91,7 @@ import {
 
 import { useSearchParams } from 'next/navigation';
 import { CotizacionModal } from '../../components/CotizacionModal';
+import { mensajeError } from '../../lib/errores';
 
 function AreaCardHeader({
   icon: Icon,
@@ -552,7 +554,7 @@ export default function PipelineVentasPage() {
         .select('*, proveedor:proveedores(*), items:orden_compra_items(*)')
         .order('created_at', { ascending: false });
 
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(mensajeError(error));
       const list = ((data || []) as OrdenCompra[])
         .filter((oc) => oc.oportunidad_id === opId || assignedIds.includes(oc.id))
         .map((oc) => ({
@@ -1369,7 +1371,7 @@ export default function PipelineVentasPage() {
       console.error('Error deleting oportunidad from Supabase:', err);
       const message = err && typeof err === 'object' && 'code' in err && err.code === '23503'
         ? 'Esta oportunidad tiene una orden de compra vinculada. No se puede eliminar mientras conserve ese vínculo.'
-        : err instanceof Error ? err.message : 'No se pudo eliminar la oportunidad.';
+        : mensajeError(err, 'No se pudo eliminar la oportunidad.');
       setDeleteOpError(message);
     } finally {
       setDeletingOp(false);
@@ -1381,7 +1383,7 @@ export default function PipelineVentasPage() {
     if (!cotToDeleteInModal) return;
     const { error } = await supabase.from('cotizaciones').delete().eq('id', cotToDeleteInModal.id);
     if (error) {
-      setCotizacionErrorMsg(error.message);
+      setCotizacionErrorMsg(mensajeError(error));
       return;
     }
 
@@ -1496,10 +1498,10 @@ export default function PipelineVentasPage() {
   ) => {
     const { data, error } = await supabase.from('cotizaciones')
       .update(cambios).eq('id', cotizacion.id).select().single();
-    if (error || !data) throw new Error(error?.message || 'No se confirmó el cambio de cotización.');
+    if (error || !data) throw new Error(mensajeError(error, 'No se confirmó el cambio de cotización.'));
     const { data: oportunidad, error: opError } = await supabase.from('oportunidades')
       .select('cotizacion_actual_id').eq('id', selectedOp!.id).single();
-    if (opError || !oportunidad) throw new Error(opError?.message || 'No se pudo actualizar la cotización vigente.');
+    if (opError || !oportunidad) throw new Error(mensajeError(opError, 'No se pudo actualizar la cotización vigente.'));
     setAllCotizaciones((prev) => prev.map((cot) => cot.id === data.id ? data as Cotizacion : cot));
     setSelectedOp((prev) => prev ? { ...prev, cotizacion_actual_id: oportunidad.cotizacion_actual_id } : null);
     setOportunidades((prev) => prev.map((op) => op.id === selectedOp!.id
@@ -1525,7 +1527,7 @@ export default function PipelineVentasPage() {
       p_pago: pago,
       p_operacion: operacion,
     });
-    if (error || !data) throw new Error(error?.message || 'No se confirmó el abono.');
+    if (error || !data) throw new Error(mensajeError(error, 'No se confirmó el abono.'));
     const updated = data as { comprobantes_pago: OportunidadVenta['comprobantes_pago']; monto_abonado: number };
     setSelectedOp((prev) => prev ? { ...prev, ...updated } : null);
     setOportunidades((prev) => prev.map((op) => op.id === selectedOp.id ? { ...op, ...updated } : op));
@@ -1548,7 +1550,7 @@ export default function PipelineVentasPage() {
     const { data, error } = await supabase.storage.from('documentos').createSignedUrl(path, 60);
     if (error || !data?.signedUrl) {
       tab?.close();
-      setAbonoErrorMsg(error?.message || 'No se pudo abrir el comprobante.');
+      setAbonoErrorMsg(mensajeError(error, 'No se pudo abrir el comprobante.'));
       return;
     }
     if (tab) tab.location.href = data.signedUrl;
@@ -1673,7 +1675,7 @@ export default function PipelineVentasPage() {
         setSelectedOp(previousSelectedOp);
         setToastAlert({
           id: Date.now().toString(),
-          message: 'No se pudo cambiar la rama en Supabase. La oportunidad quedo sin cambios.',
+          message: 'No se pudo cambiar la rama. La oportunidad quedó sin cambios.',
           user: 'Sistema CRM',
         });
         setTimeout(() => setToastAlert(null), 5000);
@@ -1708,7 +1710,7 @@ export default function PipelineVentasPage() {
     if (['entregada', 'prod_finalizado', 'rev_entregado'].includes(targetState)) {
       const { data: accredited, error: deliveryError } = await supabase.rpc('entrega_acreditada', { p_venta: opId });
       if (deliveryError || !accredited) {
-        window.alert(deliveryError?.message || 'La venta aún no tiene entrega completa acreditada. Revisa guías y excepciones en la vista operativa.');
+        window.alert(mensajeError(deliveryError, 'La venta aún no tiene entrega completa acreditada. Revisa guías y excepciones en la vista operativa.'));
         return;
       }
       if (!window.confirm('¿Confirmar el cierre de esta venta con entrega acreditada?')) return;
@@ -1761,7 +1763,7 @@ export default function PipelineVentasPage() {
         console.error('Error updating oportunidad state in Supabase:', err);
         setOportunidades((prev) => prev.map((o) => o.id === opId ? targetOp : o));
         if (selectedOp?.id === opId) setSelectedOp(targetOp);
-        window.alert(err instanceof Error ? err.message : 'No se pudo actualizar la etapa.');
+        window.alert(mensajeError(err, 'No se pudo actualizar la etapa.'));
         return;
       }
     }
@@ -2102,7 +2104,7 @@ export default function PipelineVentasPage() {
 
     try {
       if (!isUUID(selectedOp.id)) {
-        throw new Error('La oportunidad debe estar guardada en Supabase antes de adjuntar antecedentes.');
+        throw new Error('La oportunidad debe estar guardada antes de adjuntar antecedentes.');
       }
 
       const cleanFileName = nuevoAntecedenteFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -2115,7 +2117,7 @@ export default function PipelineVentasPage() {
         });
 
       if (uploadError || !uploadData) {
-        throw new Error(uploadError?.message || 'Supabase Storage no confirmó la subida.');
+        throw new Error(mensajeError(uploadError, 'No se pudo subir el archivo.'));
       }
 
       const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(storagePath);
@@ -2140,7 +2142,7 @@ export default function PipelineVentasPage() {
 
       if (insertError || !inserted) {
         await supabase.storage.from('documentos').remove([storagePath]);
-        throw new Error(insertError?.message || 'No se pudo registrar la metadata del antecedente.');
+        throw new Error(mensajeError(insertError, 'No se pudo registrar la metadata del antecedente.'));
       }
 
       const newDoc = mapAntecedenteRecord(inserted);
@@ -2162,7 +2164,7 @@ export default function PipelineVentasPage() {
       setNuevoAntecedenteTipo('contrato');
     } catch (err: any) {
       console.error('Error uploading antecedente:', err);
-      setAntecedenteErrorMsg(`Error al subir archivo: ${err?.message || 'Error al subir.'}`);
+      setAntecedenteErrorMsg(`Error al subir archivo: ${mensajeError(err, 'Error al subir.')}`);
     } finally {
       setAntecedenteUploading(false);
     }
@@ -3282,7 +3284,7 @@ export default function PipelineVentasPage() {
                                         await guardarCambioCotizacion(targetCot, { oportunidad_id: selectedOp.id });
                                         setSelectedCandidateCotId('');
                                       } catch (err: any) {
-                                        setCotizacionErrorMsg(err?.message || 'No se pudo vincular la cotización.');
+                                        setCotizacionErrorMsg(mensajeError(err, 'No se pudo vincular la cotización.'));
                                         return;
                                       }
                                       await addOportunidadActividad(
@@ -3331,7 +3333,7 @@ export default function PipelineVentasPage() {
                                             try {
                                               await guardarCambioCotizacion(cot, { oportunidad_id: newOpId || null });
                                             } catch (err: any) {
-                                              setCotizacionErrorMsg(err?.message || 'No se pudo cambiar el vínculo.');
+                                              setCotizacionErrorMsg(mensajeError(err, 'No se pudo cambiar el vínculo.'));
                                               return;
                                             }
 
@@ -3380,7 +3382,7 @@ export default function PipelineVentasPage() {
                                             try {
                                               await guardarCambioCotizacion(cot, { estado: newStatus });
                                             } catch (err: any) {
-                                              setCotizacionErrorMsg(err?.message || 'No se pudo cambiar el estado.');
+                                              setCotizacionErrorMsg(mensajeError(err, 'No se pudo cambiar el estado.'));
                                               return;
                                             }
 
@@ -3421,7 +3423,7 @@ export default function PipelineVentasPage() {
                                             try {
                                               await guardarCambioCotizacion(cot, { oportunidad_id: null });
                                             } catch (err: any) {
-                                              setCotizacionErrorMsg(err?.message || 'No se pudo desvincular la cotización.');
+                                              setCotizacionErrorMsg(mensajeError(err, 'No se pudo desvincular la cotización.'));
                                               return;
                                             }
 
@@ -3596,7 +3598,7 @@ export default function PipelineVentasPage() {
                                           contentType: nuevoAbonoFile.type || undefined,
                                           upsert: false,
                                         });
-                                        if (uploadError || !upload) throw new Error(uploadError?.message || 'Storage no confirmó la subida.');
+                                        if (uploadError || !upload) throw new Error(mensajeError(uploadError, 'No se pudo subir el archivo.'));
                                         await guardarAbono('crear', {
                                           id: pagoId,
                                           monto: rawVal,
@@ -3635,7 +3637,7 @@ export default function PipelineVentasPage() {
                                           const { error: cleanupError } = await supabase.storage.from('documentos').remove([fileName]);
                                           if (cleanupError) console.error('No se pudo limpiar el comprobante tras el error:', cleanupError);
                                         }
-                                        setAbonoErrorMsg(err?.message || 'No se pudo registrar el abono.');
+                                        setAbonoErrorMsg(mensajeError(err, 'No se pudo registrar el abono.'));
                                       } finally {
                                         setAbonoSaving(false);
                                       }
@@ -3697,7 +3699,7 @@ export default function PipelineVentasPage() {
                                                         await guardarAbono('editar', { id: ab.id, monto: rawNum, nota: editAbonoNota });
                                                         setEditingAbonoId(null);
                                                       } catch (err: any) {
-                                                        setAbonoErrorMsg(err?.message || 'No se pudo editar el abono.');
+                                                        setAbonoErrorMsg(mensajeError(err, 'No se pudo editar el abono.'));
                                                       } finally {
                                                         setAbonoSaving(false);
                                                       }
@@ -3769,7 +3771,7 @@ export default function PipelineVentasPage() {
                                                   try {
                                                     await guardarAbono('eliminar', { id: ab.id });
                                                   } catch (err: any) {
-                                                    setAbonoErrorMsg(err?.message || 'No se pudo eliminar el abono.');
+                                                    setAbonoErrorMsg(mensajeError(err, 'No se pudo eliminar el abono.'));
                                                   } finally {
                                                     setAbonoSaving(false);
                                                   }
@@ -5102,7 +5104,7 @@ export default function PipelineVentasPage() {
                             }
                           } catch (err: any) {
                             console.error('Error uploading file:', err);
-                            alert(`Error al subir archivo: ${err?.message || 'Error desconocido'}`);
+                            alert(`Error al subir archivo: ${mensajeError(err, 'Error desconocido')}`);
                           } finally {
                             setAntecedenteUploading(false);
                             e.target.value = '';
@@ -5723,7 +5725,7 @@ export default function PipelineVentasPage() {
                           }`}
                         >
                           <span className="font-bold">{usr.nombre}</span>
-                          <span className="text-[10px] opacity-80 uppercase font-mono">{usr.rol}</span>
+                          <span className="text-[10px] opacity-80 uppercase font-mono">{ROL_NOMBRE[usr.rol] ?? usr.rol}</span>
                         </button>
                       ))}
                     </div>
@@ -5999,7 +6001,7 @@ export default function PipelineVentasPage() {
           if (selectedOp) {
             const { data: opData, error: opError } = await supabase.from('oportunidades')
               .select('cotizacion_actual_id').eq('id', selectedOp.id).single();
-            if (opError) setCotizacionErrorMsg(opError.message);
+            if (opError) setCotizacionErrorMsg(mensajeError(opError));
             setSelectedOp((prev) => prev ? { ...prev, cotizacion_actual_id: opData?.cotizacion_actual_id || undefined } : null);
             setOportunidades((prev) => prev.map((op) => op.id === selectedOp.id
               ? { ...op, cotizacion_actual_id: opData?.cotizacion_actual_id || undefined } : op));
@@ -6202,7 +6204,7 @@ export default function PipelineVentasPage() {
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
               <h3 className="text-base font-extrabold text-red-700 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
-                <span>Eliminar Cotización de Supabase</span>
+                <span>Eliminar Cotización</span>
               </h3>
               <button onClick={() => setCotToDeleteInModal(null)} className="text-gray-400 hover:text-[#213343] font-bold">
                 ✕
@@ -6214,7 +6216,7 @@ export default function PipelineVentasPage() {
                 ¿Estás seguro de que deseas eliminar la cotización <strong className="font-mono text-[#213343]">{cotToDeleteInModal.numero_cotizacion}</strong> por <strong className="text-emerald-700">${(cotToDeleteInModal.monto_total || 0).toLocaleString('es-CL')}</strong>?
               </p>
               <p className="bg-red-50 p-3 rounded-md border border-red-200 text-red-900 font-medium">
-                Esta acción la eliminará de Supabase.
+                Esta acción la eliminará del sistema.
               </p>
             </div>
 

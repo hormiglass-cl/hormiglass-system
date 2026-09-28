@@ -24,6 +24,7 @@ import {
   Sliders,
   UserRound,
 } from 'lucide-react';
+import { mensajeError } from '../../lib/errores';
 
 export interface FieldDefinition {
   id: string;
@@ -199,7 +200,7 @@ export default function ConfiguracionPage() {
   const handleSaveField = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombre.trim() || !campoSupabase.trim()) {
-      setUserErrorMsg('El nombre y el identificador en Supabase son obligatorios.');
+      setUserErrorMsg('El nombre y la columna son obligatorios.');
       return;
     }
 
@@ -220,15 +221,15 @@ export default function ConfiguracionPage() {
 
       if (editingField) {
         setFields(fields.map((f) => (f.id === editingField.id ? fieldData : f)));
-        setSuccessMsg(`Campo "${nombre}" actualizado correctamente en Supabase.`);
+        setSuccessMsg(`Campo "${nombre}" actualizado correctamente.`);
       } else {
         setFields([...fields, fieldData]);
-        setSuccessMsg(`Campo personalizado "${nombre}" creado exitosamente en Supabase.`);
+        setSuccessMsg(`Campo personalizado "${nombre}" creado exitosamente.`);
       }
       setShowFieldModal(false);
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err: any) {
-      setUserErrorMsg(err?.message || 'Error al persistir el campo.');
+      setUserErrorMsg(mensajeError(err, 'Error al persistir el campo.'));
     }
   };
 
@@ -248,7 +249,7 @@ export default function ConfiguracionPage() {
       setSuccessMsg(`El campo "${field.nombre}" ahora está ${newStatus ? 'Activo' : 'Oculto'}.`);
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err: any) {
-      setUserErrorMsg(err?.message || 'Error al cambiar estado del campo.');
+      setUserErrorMsg(mensajeError(err, 'Error al cambiar estado del campo.'));
     }
   };
 
@@ -262,10 +263,10 @@ export default function ConfiguracionPage() {
         if (error) throw error;
 
         setFields(fields.filter((f) => f.id !== id));
-        setSuccessMsg(`Campo "${field.nombre}" eliminado de Supabase.`);
+        setSuccessMsg(`Campo "${field.nombre}" eliminado.`);
         setTimeout(() => setSuccessMsg(''), 3000);
       } catch (err: any) {
-        setUserErrorMsg(err?.message || 'Error al eliminar el campo.');
+        setUserErrorMsg(mensajeError(err, 'Error al eliminar el campo.'));
       }
     }
   };
@@ -288,7 +289,7 @@ export default function ConfiguracionPage() {
       setSuccessMsg(`Preferencia de calendario actualizada para el usuario.`);
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err: any) {
-      setUserErrorMsg(err?.message || 'Error al actualizar calendario.');
+      setUserErrorMsg(mensajeError(err, 'Error al actualizar calendario.'));
     }
   };
 
@@ -328,7 +329,7 @@ export default function ConfiguracionPage() {
         usuario_id: currentUser?.id,
       });
 
-      setSuccessMsg(`Usuario ${userNombre} registrado exitosamente en Supabase.`);
+      setSuccessMsg(`Usuario ${userNombre} registrado exitosamente.`);
       setShowUserModal(false);
       setUserNombre('');
       setUserEmail('');
@@ -340,7 +341,7 @@ export default function ConfiguracionPage() {
       await refreshUsers();
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err: any) {
-      setUserErrorMsg(err?.message || 'Error al registrar usuario en Supabase.');
+      setUserErrorMsg(mensajeError(err, 'No se pudo registrar el usuario.'));
     }
   };
 
@@ -390,7 +391,7 @@ export default function ConfiguracionPage() {
       await refreshUsers();
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err: any) {
-      setUserErrorMsg(err?.message || 'Error al actualizar usuario.');
+      setUserErrorMsg(mensajeError(err, 'Error al actualizar usuario.'));
     }
   };
 
@@ -409,12 +410,12 @@ export default function ConfiguracionPage() {
         usuario_id: currentUser?.id,
       });
 
-      setSuccessMsg(`Usuario ${userToDelete.nombre} eliminado exitosamente de Supabase.`);
+      setSuccessMsg(`Usuario ${userToDelete.nombre} eliminado exitosamente.`);
       setUserToDelete(null);
       await refreshUsers();
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err: any) {
-      setUserErrorMsg(err?.message || 'Error al eliminar usuario.');
+      setUserErrorMsg(mensajeError(err, 'Error al eliminar usuario.'));
     }
   };
 
@@ -524,7 +525,7 @@ export default function ConfiguracionPage() {
                 A
               </div>
               <div>
-                <span className="font-extrabold text-red-700 block text-xs mb-0.5">ADMIN (Acceso Total)</span>
+                <span className="font-extrabold text-red-700 block text-xs mb-0.5">ADMINISTRADOR</span>
                 <p className="text-gray-600 text-[11px] leading-relaxed">
                   Control total: configuración, finanzas, ventas, compras y gestión de colaboradores.
                 </p>
@@ -536,7 +537,7 @@ export default function ConfiguracionPage() {
                 U
               </div>
               <div>
-                <span className="font-extrabold text-blue-700 block text-xs mb-0.5">USER (Ejecutivo Comercial)</span>
+                <span className="font-extrabold text-blue-700 block text-xs mb-0.5">EJECUTIVO COMERCIAL</span>
                 <p className="text-gray-600 text-[11px] leading-relaxed">
                   Operación comercial: clientes, cotizaciones, pipeline de ventas y movimientos de caja.
                 </p>
@@ -548,7 +549,7 @@ export default function ConfiguracionPage() {
                 M
               </div>
               <div>
-                <span className="font-extrabold text-amber-800 block text-xs mb-0.5">MANO DE OBRA (Terreno / Planta)</span>
+                <span className="font-extrabold text-amber-800 block text-xs mb-0.5">MANO DE OBRA</span>
                 <p className="text-gray-600 text-[11px] leading-relaxed">
                   Acceso exclusivo a Recursos Humanos (ficha personal, carpetas, permisos) y Calendarios de faenas.
                 </p>
@@ -561,7 +562,7 @@ export default function ConfiguracionPage() {
             <div className="p-4 border-b border-gray-200 font-extrabold text-sm text-[#213343] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-[#f97316]" />
-                <span>Usuarios Registrados en Supabase ({usersList.length})</span>
+                <span>Usuarios Registrados ({usersList.length})</span>
               </div>
               <span className="text-xs font-semibold text-gray-400">
                 Sincronización 1-a-1 con Recursos Humanos
@@ -603,9 +604,9 @@ export default function ConfiguracionPage() {
                           onChange={(e) => updateUserRole(usr.id, e.target.value as UserRole, usr.activo)}
                           className="bg-white text-[#213343] font-bold text-xs border border-gray-300 rounded-md px-2.5 py-1.5 focus:outline-none focus:border-[#f97316] cursor-pointer"
                         >
-                          <option value="admin">Admin (Acceso Total)</option>
-                          <option value="user">User (Acceso Comercial)</option>
-                          <option value="mano_obra">Mano de Obra (Solo RR.HH. & Calendarios)</option>
+                          <option value="admin">Administrador</option>
+                          <option value="user">Ejecutivo Comercial</option>
+                          <option value="mano_obra">Mano de Obra</option>
                         </select>
                       </td>
 
@@ -926,9 +927,9 @@ export default function ConfiguracionPage() {
                   onChange={(e) => setUserRol(e.target.value as UserRole)}
                   className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316] cursor-pointer"
                 >
-                  <option value="mano_obra">Mano de Obra (Solo RR.HH. & Calendarios)</option>
-                  <option value="user">User (Acceso Comercial)</option>
-                  <option value="admin">Admin (Acceso Total)</option>
+                  <option value="mano_obra">Mano de Obra</option>
+                  <option value="user">Ejecutivo Comercial</option>
+                  <option value="admin">Administrador</option>
                 </select>
               </div>
 
@@ -1037,9 +1038,9 @@ export default function ConfiguracionPage() {
                   onChange={(e) => setEditUserRol(e.target.value as UserRole)}
                   className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold text-[#213343] focus:outline-none focus:border-[#f97316] cursor-pointer"
                 >
-                  <option value="admin">Admin (Acceso Total)</option>
-                  <option value="user">User (Acceso Comercial)</option>
-                  <option value="mano_obra">Mano de Obra (Solo RR.HH. & Calendarios)</option>
+                  <option value="admin">Administrador</option>
+                  <option value="user">Ejecutivo Comercial</option>
+                  <option value="mano_obra">Mano de Obra</option>
                 </select>
               </div>
 
@@ -1121,7 +1122,7 @@ export default function ConfiguracionPage() {
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="text-base font-extrabold text-red-700 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
-                <span>Eliminar Usuario de Supabase</span>
+                <span>Eliminar Usuario</span>
               </h3>
               <button onClick={() => setUserToDelete(null)} className="text-gray-400 hover:text-[#213343] font-bold cursor-pointer">
                 ✕

@@ -7,6 +7,7 @@ import { useAuth } from '../lib/context/AuthContext';
 import { EstadoOrdenCompra, OrdenCompra, OrdenCompraItem, Proveedor, OportunidadVenta, ProductoCatalogo } from '../lib/types';
 import { logSistema } from '../lib/logger';
 import { AlertTriangle, Calculator, Check, ChevronDown, FileText, Plus, Save, Trash2 } from 'lucide-react';
+import { mensajeError } from '../lib/errores';
 
 interface OrdenCompraModalProps {
   isOpen: boolean;
@@ -254,7 +255,7 @@ export function OrdenCompraModal({
       .or(`numero_oc.eq.${baseNumeroOc},numero_oc.like.${baseNumeroOc}-v%`);
 
     if (versionError) {
-      throw new Error(versionError.message);
+      throw new Error(mensajeError(versionError));
     }
 
     const maxExistingVersion = (existingVersions || []).reduce((maxVersion: number, orden: { version?: number; numero_oc?: string }) => {
@@ -295,7 +296,7 @@ export function OrdenCompraModal({
       }
 
       const { data: duplicateOrden, error: duplicateError } = await duplicateQuery.maybeSingle();
-      if (duplicateError) throw new Error(duplicateError.message);
+      if (duplicateError) throw new Error(mensajeError(duplicateError));
       if (duplicateOrden) {
         setErrorMsg(`Ya existe una orden de compra con el numero ${finalNumeroOc}.`);
         setLoading(false);
@@ -342,7 +343,7 @@ export function OrdenCompraModal({
         ? await supabase.from('ordenes_compra').update(payload).eq('id', initialOrden!.id).select().single()
         : await supabase.from('ordenes_compra').insert([payload]).select().single();
 
-      if (ordenError || !ordenData) throw new Error(ordenError?.message || 'No se pudo guardar la orden.');
+      if (ordenError || !ordenData) throw new Error(mensajeError(ordenError, 'No se pudo guardar la orden.'));
       if (!isEditing) {
         insertedOrdenId = ordenData.id;
       }
@@ -352,7 +353,7 @@ export function OrdenCompraModal({
           .from('orden_compra_items')
           .delete()
           .eq('orden_compra_id', initialOrden!.id);
-        if (deleteItemsError) throw new Error(deleteItemsError.message);
+        if (deleteItemsError) throw new Error(mensajeError(deleteItemsError));
       }
 
       const itemPayload = validItems.map((item) => ({
@@ -372,7 +373,7 @@ export function OrdenCompraModal({
         if (insertedOrdenId) {
           await supabase.from('ordenes_compra').delete().eq('id', insertedOrdenId);
         }
-        throw new Error(itemsError.message);
+        throw new Error(mensajeError(itemsError));
       }
 
       const persistedItems = savedItems as OrdenCompraItem[] | null;
@@ -409,7 +410,7 @@ export function OrdenCompraModal({
       onClose();
     } catch (err: unknown) {
       console.error('Error saving orden de compra:', err);
-      const message = err instanceof Error ? err.message : 'Revisa los campos.';
+      const message = mensajeError(err, 'Revisa los campos.');
       setErrorMsg(message.startsWith('Ya existe una orden de compra') || message.startsWith('Quita las asignaciones')
         ? message
         : 'No se pudo guardar la orden de compra. Revisa los datos e intenta nuevamente.');

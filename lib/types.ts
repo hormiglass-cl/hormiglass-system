@@ -1,5 +1,11 @@
 export type UserRole = 'admin' | 'user' | 'mano_obra';
 
+export const ROL_NOMBRE: Record<UserRole, string> = {
+  admin: 'Administrador',
+  user: 'Ejecutivo Comercial',
+  mano_obra: 'Mano de Obra',
+};
+
 export interface Usuario {
   id: string;
   nombre: string;

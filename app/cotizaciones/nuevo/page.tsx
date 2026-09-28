@@ -22,6 +22,7 @@ import {
   Tag,
   Calendar,
 } from 'lucide-react';
+import { mensajeError } from '../../../lib/errores';
 
 function generateCotNumber(version = 1): string {
   const sequence = Math.floor(1000 + Math.random() * 9000);
@@ -257,7 +258,7 @@ function NuevaCotizacionForm() {
         })),
         p_cotizacion_id: null,
       });
-      if (error || !savedId) throw new Error(error?.message || 'No se confirmó la cotización.');
+      if (error || !savedId) throw new Error(mensajeError(error, 'No se confirmó la cotización.'));
       void logSistema({
         tipo_accion: 'creacion',
         entidad: 'cotizaciones',
@@ -268,7 +269,7 @@ function NuevaCotizacionForm() {
       router.push('/cotizaciones');
     } catch (err: any) {
       console.error('Error saving quote:', err);
-      setErrorMsg(err?.message || 'No se pudo guardar la cotización.');
+      setErrorMsg(mensajeError(err, 'No se pudo guardar la cotización.'));
     } finally {
       setLoading(false);
     }

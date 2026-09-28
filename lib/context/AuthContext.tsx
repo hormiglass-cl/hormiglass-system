@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import type { Session } from '@supabase/supabase-js';
 import { Usuario, UserRole } from '../types';
 import { createClient } from '../supabase/client';
+import { mensajeError } from '../errores';
 
 interface AuthContextType {
   currentUser: Usuario | null;
@@ -132,7 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (rpcError.message.includes('ya se encuentra registrado')) {
         throw new Error(`El correo ${userData.email} ya se encuentra registrado.`);
       }
-      throw new Error(`No se pudo crear el usuario: ${rpcError.message}`);
+      throw new Error(mensajeError(rpcError, 'No se pudo crear el usuario.'));
     }
 
     if (!createdUser || createdUser.success !== true || !createdUser.user_id) {
@@ -149,7 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .eq('id', id);
 
     if (error) {
-      throw new Error(`No se pudo actualizar el usuario: ${error.message}`);
+      throw new Error(mensajeError(error, 'No se pudo actualizar el usuario.'));
     }
 
     setUsersList((prev) =>
@@ -169,7 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .single();
 
     if (error) {
-      throw new Error(`No se pudo actualizar el usuario: ${error.message}`);
+      throw new Error(mensajeError(error, 'No se pudo actualizar el usuario.'));
     }
 
     const updated = data as Usuario;
@@ -182,7 +183,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const deleteUser = async (id: string) => {
     const { error } = await supabase.from('usuarios').delete().eq('id', id);
     if (error) {
-      throw new Error(`No se pudo eliminar el usuario: ${error.message}`);
+      throw new Error(mensajeError(error, 'No se pudo eliminar el usuario.'));
     }
     setUsersList((prev) => prev.filter((u) => u.id !== id));
   };

@@ -6,6 +6,7 @@ import { createClient } from '../../lib/supabase/client';
 import { Mail, Lock, AlertCircle, LogIn, User, Eye, EyeOff, CheckCircle2, UserPlus, Clock } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { mensajeError } from '../../lib/errores';
 
 function readInactiveNotice(): string {
   if (typeof window === 'undefined') return '';
@@ -113,12 +114,12 @@ export default function LoginPage() {
       });
 
       if (signUpError) {
-        const errText = signUpError.message || (typeof signUpError === 'object' ? JSON.stringify(signUpError) : String(signUpError));
+        const errText = signUpError.message || '';
         if (errText.toLowerCase().includes('rate limit')) {
           setCooldownSeconds(300); // 5 minutos de temporizador
-          setError(`Supabase ha limitado los envíos de correo por esta hora. Podrás reintentar el registro en ${formatTimer(300)} min.`);
+          setError(`Se alcanzó el límite de registros por esta hora. Podrás reintentar el registro en ${formatTimer(300)} min.`);
         } else {
-          setError(errText === '{}' ? 'No se pudo completar el registro en Supabase. Intenta nuevamente o verifica la conexión.' : errText);
+          setError(mensajeError(signUpError, 'No se pudo completar el registro. Intenta nuevamente o verifica la conexión.'));
         }
         setLoading(false);
         return;
@@ -211,7 +212,7 @@ export default function LoginPage() {
             <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
             <span>
               {cooldownSeconds > 0
-                ? `Supabase ha limitado los envíos de correo. Tiempo restante para reintentar: ${formatTimer(cooldownSeconds)}`
+                ? `Se alcanzó el límite de registros. Tiempo restante para reintentar: ${formatTimer(cooldownSeconds)}`
                 : error || inactiveNotice}
             </span>
           </div>

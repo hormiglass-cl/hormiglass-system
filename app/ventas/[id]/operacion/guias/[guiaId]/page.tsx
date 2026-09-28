@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { createClient } from '../../../../../../lib/supabase/client';
 import type { GuiaDespacho, OportunidadVenta } from '../../../../../../lib/types';
+import { mensajeError } from '../../../../../../lib/errores';
 
 export default function GuiaImprimiblePage() {
   const { id, guiaId } = useParams<{ id: string; guiaId: string }>();
@@ -21,7 +22,7 @@ export default function GuiaImprimiblePage() {
       supabase.from('operacion_excepciones').select('id').eq('guia_despacho_id', guiaId).eq('tipo', 'firma_entrega').eq('estado', 'aprobada'),
     ]);
     const queryError = guideResult.error || saleResult.error || documentResult.error || exceptionResult.error;
-    if (queryError) { setError(queryError.message); return; }
+    if (queryError) { setError(mensajeError(queryError)); return; }
     setGuia(guideResult.data as GuiaDespacho); setVenta(saleResult.data as OportunidadVenta);
     setAcreditada(guideResult.data?.estado === 'entregada' && Boolean(documentResult.data?.length || exceptionResult.data?.length));
   }, [guiaId, id, supabase]);

@@ -11,6 +11,7 @@ import {
   AREAS_RRHH_DEFAULT,
   Usuario,
   UserRole,
+  ROL_NOMBRE,
 } from '../../lib/types';
 import {
   Users,
@@ -34,6 +35,7 @@ import {
 } from 'lucide-react';
 import { TODAS_COMUNAS_CHILE } from '../../lib/chile-data';
 import { SearchableSelect } from '../../components/SearchableSelect';
+import { mensajeError } from '../../lib/errores';
 
 // Configuración visual de los estados de disponibilidad
 const DISPONIBILIDAD_CONFIG: Record<
@@ -86,15 +88,15 @@ const DISPONIBILIDAD_CONFIG: Record<
 
 const USER_ROLE_CONFIG: Record<UserRole, { label: string; className: string }> = {
   admin: {
-    label: 'Admin',
+    label: ROL_NOMBRE.admin,
     className: 'bg-red-50 text-red-800 border-red-200',
   },
   user: {
-    label: 'Usuario',
+    label: ROL_NOMBRE.user,
     className: 'bg-blue-50 text-blue-800 border-blue-200',
   },
   mano_obra: {
-    label: 'Mano de obra',
+    label: ROL_NOMBRE.mano_obra,
     className: 'bg-amber-50 text-amber-800 border-amber-200',
   },
 };
@@ -248,7 +250,7 @@ export default function RecursosHumanosPage() {
     } catch (err) {
       console.error('Error actualizando tipo de usuario:', err);
       setUsuarios(previousUsuarios);
-      alert(err instanceof Error ? err.message : 'No se pudo actualizar el tipo de usuario.');
+      alert(mensajeError(err, 'No se pudo actualizar el tipo de usuario.'));
     }
   };
 
@@ -352,7 +354,7 @@ export default function RecursosHumanosPage() {
         ]);
 
       if (error) {
-        setFormError(`Error al guardar: ${error.message}`);
+        setFormError(mensajeError(error, 'No se pudo guardar la ficha del colaborador.'));
         setSavingNewWorker(false);
         return;
       }
@@ -361,8 +363,7 @@ export default function RecursosHumanosPage() {
       setSavingNewWorker(false);
       loadTrabajadores();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Error desconocido';
-      setFormError(`Error inesperado: ${message}`);
+      setFormError(mensajeError(err, 'No se pudo guardar la ficha del colaborador.'));
       setSavingNewWorker(false);
     }
   };
@@ -606,7 +607,7 @@ export default function RecursosHumanosPage() {
       {/* ========================================================= */}
       {loading ? (
         <div className="p-12 text-center text-gray-500 font-medium animate-pulse">
-          Cargando colaboradores de Hormiglass desde Supabase...
+          Cargando colaboradores de Hormiglass...
         </div>
       ) : filteredTrabajadores.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center space-y-3">
@@ -824,7 +825,7 @@ export default function RecursosHumanosPage() {
                     Nuevo colaborador
                   </h2>
                   <p className="text-xs text-gray-500 font-medium">
-                    Registrar ficha personal vinculada a cuenta de usuario de Supabase
+                    Registrar ficha personal vinculada a una cuenta de usuario
                   </p>
                 </div>
               </div>
@@ -851,7 +852,7 @@ export default function RecursosHumanosPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <span className="font-extrabold text-[#213343] flex items-center gap-1.5">
                     <Lock className="w-4 h-4 text-[#f97316]" />
-                    <span>Cuenta de Usuario en Supabase Auth *</span>
+                    <span>Cuenta de usuario *</span>
                   </span>
 
                   <div className="inline-flex bg-white p-1 rounded-md border border-orange-200 text-[11px] font-bold">
@@ -883,7 +884,7 @@ export default function RecursosHumanosPage() {
                 {workerAccountMode === 'link' ? (
                   <div>
                     <label className="text-[11px] font-bold text-gray-600 block mb-1">
-                      Seleccionar usuario registrado en Supabase:
+                      Seleccionar usuario registrado:
                     </label>
                     <select
                       value={selectedUserId}
@@ -904,7 +905,7 @@ export default function RecursosHumanosPage() {
                       <option value="">-- Seleccionar usuario registrado --</option>
                       {usuarios.map((u) => (
                         <option key={u.id} value={u.id}>
-                          {u.nombre} ({u.email}) — Rol: {u.rol === 'mano_obra' ? 'Mano de obra' : u.rol}
+                          {u.nombre} ({u.email}) — Rol: {ROL_NOMBRE[u.rol] ?? u.rol}
                         </option>
                       ))}
                     </select>
@@ -920,9 +921,9 @@ export default function RecursosHumanosPage() {
                         onChange={(e) => setNewUserRole(e.target.value as UserRole)}
                         className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 font-bold text-xs focus:outline-none focus:border-[#f97316]"
                       >
-                        <option value="mano_obra">Mano de Obra (Solo RR.HH. & Calendarios)</option>
-                        <option value="user">User (Acceso Comercial)</option>
-                        <option value="admin">Admin (Acceso Total)</option>
+                        <option value="mano_obra">Mano de Obra</option>
+                        <option value="user">Ejecutivo Comercial</option>
+                        <option value="admin">Administrador</option>
                       </select>
                     </div>
 

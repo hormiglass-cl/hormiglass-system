@@ -1,5 +1,6 @@
 'use client';
 
+import { ROL_NOMBRE } from '../lib/types';
 import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -140,7 +141,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: bo
       <div className="shrink-0 border-t border-[#e5e7e4] p-3">
         <div className="mt-2 flex items-center gap-2 border-t border-[#e5e7e4] pt-3">
           <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#fff1e7] font-bold text-[#bd5b18]">{currentUser?.nombre?.charAt(0) || 'H'}</div>
-          {!collapsed && <><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">{currentUser?.nombre}</p><p className="text-[11px] capitalize text-[#8a9390]">{currentUser?.rol}</p></div><button onClick={handleLogout} title="Cerrar sesión" aria-label="Cerrar sesión" className="rounded-lg p-2 text-[#66716f] hover:bg-[#f4f5f3]"><LogOut size={17} /></button></>}
+          {!collapsed && <><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">{currentUser?.nombre}</p><p className="text-[11px] text-[#8a9390]">{currentUser ? ROL_NOMBRE[currentUser.rol] ?? currentUser.rol : ""}</p></div><button onClick={handleLogout} title="Cerrar sesión" aria-label="Cerrar sesión" className="rounded-lg p-2 text-[#66716f] hover:bg-[#f4f5f3]"><LogOut size={17} /></button></>}
         </div>
         <button type="button" onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? 'Expandir menú' : 'Contraer menú'} className="mt-3 hidden w-full justify-center rounded-lg border border-[#e5e7e4] py-1.5 text-[#66716f] hover:bg-white md:flex">{collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button>
       </div>

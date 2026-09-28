@@ -1,5 +1,6 @@
 'use client';
 
+import { ROL_NOMBRE } from '../../lib/types';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -37,6 +38,7 @@ import type {
   TipoRecordatorioActividad,
   UrgenciaRecordatorio,
 } from '../../lib/types';
+import { mensajeError } from '../../lib/errores';
 
 const DOCUMENTOS_SECCION: SeccionAdministracionEmpresa = 'documentos';
 const LEGAL_SECCION: SeccionAdministracionEmpresa = 'legal';
@@ -474,7 +476,7 @@ export default function AdministracionPage() {
         });
 
       if (error || !data) {
-        throw new Error(error?.message || 'Supabase Storage no confirmó la subida.');
+        throw new Error(mensajeError(error, 'No se pudo subir el archivo.'));
       }
 
       await insertTaskActivity(
@@ -491,7 +493,7 @@ export default function AdministracionPage() {
       );
     } catch (err) {
       console.error('Error adjuntando documento a task:', err);
-      alert(err instanceof Error ? err.message : 'No se pudo adjuntar el documento.');
+      alert(mensajeError(err, 'No se pudo adjuntar el documento.'));
     } finally {
       setUploadingTaskAttachment(false);
     }
@@ -506,13 +508,13 @@ export default function AdministracionPage() {
         .createSignedUrl(activity.archivo_path, 300);
 
       if (error || !data?.signedUrl) {
-        throw new Error(error?.message || 'No se pudo generar el enlace privado.');
+        throw new Error(mensajeError(error, 'No se pudo generar el enlace privado.'));
       }
 
       window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
     } catch (err) {
       console.error('Error abriendo adjunto de task:', err);
-      alert(err instanceof Error ? err.message : 'No se pudo abrir el documento.');
+      alert(mensajeError(err, 'No se pudo abrir el documento.'));
     }
   };
 
@@ -591,7 +593,7 @@ export default function AdministracionPage() {
       setTaskMentionMenuOpen(false);
     } catch (err) {
       console.error('Error agregando comentario de task:', err);
-      alert(err instanceof Error ? err.message : 'No se pudo guardar el comentario.');
+      alert(mensajeError(err, 'No se pudo guardar el comentario.'));
     } finally {
       setSendingActivity(false);
     }
@@ -657,7 +659,7 @@ export default function AdministracionPage() {
         });
 
       if (uploadError || !uploadData) {
-        throw new Error(uploadError?.message || 'Supabase Storage no confirmó la subida.');
+        throw new Error(mensajeError(uploadError, 'No se pudo subir el archivo.'));
       }
 
       const { data: inserted, error: insertError } = await supabase
@@ -680,7 +682,7 @@ export default function AdministracionPage() {
 
       if (insertError || !inserted) {
         await supabase.storage.from('administracion').remove([storagePath]);
-        throw new Error(insertError?.message || 'No se pudo registrar la metadata del documento.');
+        throw new Error(mensajeError(insertError, 'No se pudo registrar la metadata del documento.'));
       }
 
       await logSistema({
@@ -697,7 +699,7 @@ export default function AdministracionPage() {
       setShowUploadModal(false);
     } catch (err) {
       console.error('Error subiendo documento administrativo:', err);
-      setErrorMsg(err instanceof Error ? err.message : 'Error al subir el documento.');
+      setErrorMsg(mensajeError(err, 'Error al subir el documento.'));
     } finally {
       setUploading(false);
     }
@@ -710,13 +712,13 @@ export default function AdministracionPage() {
         .createSignedUrl(doc.storage_path, 300);
 
       if (error || !data?.signedUrl) {
-        throw new Error(error?.message || 'No se pudo generar el enlace privado.');
+        throw new Error(mensajeError(error, 'No se pudo generar el enlace privado.'));
       }
 
       window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
     } catch (err) {
       console.error('Error generando signed URL:', err);
-      alert(err instanceof Error ? err.message : 'No se pudo abrir el documento.');
+      alert(mensajeError(err, 'No se pudo abrir el documento.'));
     }
   };
 
@@ -750,7 +752,7 @@ export default function AdministracionPage() {
     } catch (err) {
       console.error('Error eliminando documento administrativo:', err);
       setDocumentos(previousDocs);
-      alert(err instanceof Error ? err.message : 'No se pudo eliminar el documento.');
+      alert(mensajeError(err, 'No se pudo eliminar el documento.'));
     }
   };
 
@@ -820,7 +822,7 @@ export default function AdministracionPage() {
       setShowTaskModal(false);
     } catch (err) {
       console.error('Error creando task administrativa:', err);
-      setTaskErrorMsg(err instanceof Error ? err.message : 'No se pudo crear la task.');
+      setTaskErrorMsg(mensajeError(err, 'No se pudo crear la task.'));
     } finally {
       setSavingTask(false);
     }
@@ -881,7 +883,7 @@ export default function AdministracionPage() {
       console.error('Error actualizando estado de task:', err);
       setRecordatorios(previous);
       setSelectedTask((prev) => (prev?.id === recordatorio.id ? recordatorio : prev));
-      alert(err instanceof Error ? err.message : 'No se pudo actualizar el estado.');
+      alert(mensajeError(err, 'No se pudo actualizar el estado.'));
     }
   };
 
@@ -935,7 +937,7 @@ export default function AdministracionPage() {
       console.error('Error actualizando urgencia de task:', err);
       setRecordatorios(previous);
       setSelectedTask((prev) => (prev?.id === recordatorio.id ? recordatorio : prev));
-      alert(err instanceof Error ? err.message : 'No se pudo actualizar la urgencia.');
+      alert(mensajeError(err, 'No se pudo actualizar la urgencia.'));
     }
   };
 
@@ -985,7 +987,7 @@ export default function AdministracionPage() {
       console.error('Error eliminando task administrativa:', err);
       setRecordatorios(previous);
       if (previousSelectedTask?.id === recordatorio.id) setSelectedTask(previousSelectedTask);
-      alert(err instanceof Error ? err.message : 'No se pudo eliminar la task.');
+      alert(mensajeError(err, 'No se pudo eliminar la task.'));
     }
   };
 
@@ -1597,7 +1599,7 @@ export default function AdministracionPage() {
                               }`}
                             >
                               <span className="font-black">{user.nombre}</span>
-                              <span className="text-[10px] uppercase font-mono opacity-75">{user.rol}</span>
+                              <span className="text-[10px] uppercase font-mono opacity-75">{ROL_NOMBRE[user.rol] ?? user.rol}</span>
                             </button>
                           ))}
                         </div>

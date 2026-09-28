@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { createClient } from '../../../../lib/supabase/client';
 import type { OrdenCompra, OrdenCompraAsignacion, OportunidadVenta } from '../../../../lib/types';
+import { mensajeError } from '../../../../lib/errores';
 
 export default function AsignacionesOrdenCompraPage() {
   const { id } = useParams<{ id: string }>();
@@ -27,7 +28,7 @@ export default function AsignacionesOrdenCompraPage() {
       supabase.from('orden_compra_asignaciones').select('*').eq('orden_compra_id', id),
       supabase.from('oportunidades').select('id, codigo, titulo').order('created_at', { ascending: false }),
     ]);
-    if (ocRes.error) setError(ocRes.error.message);
+    if (ocRes.error) setError(mensajeError(ocRes.error));
     else setOrden(ocRes.data as OrdenCompra);
     if (!asRes.error) setAsignaciones(asRes.data as OrdenCompraAsignacion[]);
     if (!opRes.error) setOportunidades(opRes.data as OportunidadVenta[]);
@@ -67,7 +68,7 @@ export default function AsignacionesOrdenCompraPage() {
     });
     setSaving(false);
     if (insertError) {
-      setError(insertError.message);
+      setError(mensajeError(insertError));
       return;
     }
     setCantidad(''); setCosto(''); setUnidad(''); setNotas('');
@@ -76,7 +77,7 @@ export default function AsignacionesOrdenCompraPage() {
 
   async function removeAsignacion(asignacionId: string) {
     const { error: deleteError } = await supabase.from('orden_compra_asignaciones').delete().eq('id', asignacionId);
-    if (deleteError) setError(deleteError.message);
+    if (deleteError) setError(mensajeError(deleteError));
     else await load();
   }
 
@@ -95,7 +96,7 @@ export default function AsignacionesOrdenCompraPage() {
           onChange={async (e) => {
             const tipo_compra = e.target.value as 'reventa' | 'insumos_fabricacion';
             const { error: updateError } = await supabase.from('ordenes_compra').update({ tipo_compra }).eq('id', id);
-            if (updateError) setError(updateError.message); else setOrden({ ...orden, tipo_compra });
+            if (updateError) setError(mensajeError(updateError)); else setOrden({ ...orden, tipo_compra });
           }}
         >
           <option value="reventa">Compra para reventa</option>

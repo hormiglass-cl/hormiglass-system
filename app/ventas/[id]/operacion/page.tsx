@@ -7,6 +7,7 @@ import { createClient } from '../../../../lib/supabase/client';
 import { cotizacionVigente, saldoPendiente } from '../../../../lib/oportunidad-finanzas';
 import type { Cotizacion, GuiaDespacho, GuiaDespachoDocumento, OperacionExcepcion, OrdenProduccion, OportunidadVenta, PostventaCaso, ProduccionDiaria } from '../../../../lib/types';
 import { useAuth } from '../../../../lib/context/AuthContext';
+import { mensajeError } from '../../../../lib/errores';
 
 const money = (value: number) => `$${Number(value || 0).toLocaleString('es-CL')}`;
 
@@ -63,7 +64,7 @@ export default function OperacionVentaPage() {
       supabase.rpc('entrega_acreditada', { p_venta: id }),
     ]);
     const firstError = opRes.error || quoteRes.error || orderRes.error || dailyRes.error || guideRes.error || postventaRes.error || purchaseRes.error || exceptionRes.error || accreditationRes.error;
-    if (firstError) { setError(firstError.message); return; }
+    if (firstError) { setError(mensajeError(firstError)); return; }
     setError(''); setOp(opRes.data as OportunidadVenta); setQuotes(quoteRes.data as Cotizacion[]);
     setOrders(orderRes.data as OrdenProduccion[]); setDaily(dailyRes.data as ProduccionDiaria[]);
     setGuides(guideRes.data as GuiaDespacho[]);
@@ -139,7 +140,7 @@ export default function OperacionVentaPage() {
       guia_despacho_id: extra.guia_despacho_id || null,
       cantidad_excedente: extra.cantidad_excedente || null,
     });
-    if (requestError) setError(requestError.message);
+    if (requestError) setError(mensajeError(requestError));
     else { setExceptionReason(''); await logOperation(`Excepción ${tipo} solicitada para aprobación administrativa.`); await load(); }
   }
 
@@ -148,7 +149,7 @@ export default function OperacionVentaPage() {
     const { error: resolveError } = await supabase.rpc('resolver_excepcion_operativa', {
       p_excepcion_id: entry.id, p_estado: status,
     });
-    if (resolveError) { setError(resolveError.message); return; }
+    if (resolveError) { setError(mensajeError(resolveError)); return; }
     await logOperation(`Excepción ${entry.tipo} ${status} por administración.`);
     await load();
   }
@@ -157,7 +158,7 @@ export default function OperacionVentaPage() {
     if (!delivered) { setError('El cobro del saldo comienza cuando la entrega está acreditada.'); return; }
     const { error: dateError } = await supabase.from('oportunidades')
       .update({ fecha_vencimiento_cobro: dueDate || null }).eq('id', id);
-    if (dateError) setError(dateError.message); else await load();
+    if (dateError) setError(mensajeError(dateError)); else await load();
   }
 
   async function createProductionOrder() {
@@ -167,12 +168,12 @@ export default function OperacionVentaPage() {
       oportunidad_id: id, fecha_inicio: new Date().toISOString().slice(0, 10),
       fecha_objetivo: productionDate || null, responsable_id: op.responsable_operativo_id || null,
     }).select('id').single();
-    if (orderError || !data) { setError(orderError?.message || 'No se pudo crear la orden.'); setBusy(false); return; }
+    if (orderError || !data) { setError(mensajeError(orderError, 'No se pudo crear la orden.')); setBusy(false); return; }
     const { error: itemsError } = await supabase.from('orden_produccion_items').insert(quoteItems.map((item) => ({
       orden_produccion_id: data.id, cotizacion_item_id: item.id || null,
       producto: item.producto, cantidad_objetivo: item.cantidad,
     })));
-    if (itemsError) { await supabase.from('ordenes_produccion').delete().eq('id', data.id); setError(itemsError.message); }
+    if (itemsError) { await supabase.from('ordenes_produccion').delete().eq('id', data.id); setError(mensajeError(itemsError)); }
     else { await logOperation('Orden de producción creada desde la cotización vigente.'); await load(); }
     setBusy(false);
   }
@@ -201,7 +202,7 @@ export default function OperacionVentaPage() {
       producto: item.producto, cantidad_producida: Number(producedQty), fecha_produccion: producedDate,
       registrado_por: currentUser?.id || null,
     });
-    if (insertError) setError(insertError.message);
+    if (insertError) setError(mensajeError(insertError));
     else { await logOperation(`Producción real registrada: ${item.producto}, ${producedQty}.`); setProducedQty(''); await load(); }
     setBusy(false);
   }
@@ -220,12 +221,12 @@ export default function OperacionVentaPage() {
       vehiculo: vehicle.trim() || null, chofer: driver.trim() || null,
       tipo_transporte: transportType, costo_estimado: Number(estimatedCost) || 0,
     }).select('id').single();
-    if (guideError || !data) { setError(guideError?.message || 'No se pudo crear la guía.'); setBusy(false); return; }
+    if (guideError || !data) { setError(mensajeError(guideError, 'No se pudo crear la guía.')); setBusy(false); return; }
     const { error: itemsError } = await supabase.from('guia_despacho_items').insert(selected.map(({ item, qty }) => ({
       guia_despacho_id: data.id, cotizacion_item_id: item.id || null,
       producto: item.producto, cantidad_planificada: qty,
     })));
-    if (itemsError) { await supabase.from('guias_despacho').delete().eq('id', data.id); setError(itemsError.message); }
+    if (itemsError) { await supabase.from('guias_despacho').delete().eq('id', data.id); setError(mensajeError(itemsError)); }
     else { await logOperation(`Orden de despacho ${guideNumber.trim()} creada con ${selected.length} ítem(s).`); setGuideNumber(''); setGuideQuantities({}); setEstimatedCost('0'); await load(); }
     setBusy(false);
   }
@@ -234,7 +235,7 @@ export default function OperacionVentaPage() {
     const amount = Number(value);
     if (!Number.isFinite(amount) || amount < 0) { setError('La cantidad debe ser cero o mayor.'); return; }
     const { error: updateError } = await supabase.from('guia_despacho_items').update({ [field]: amount }).eq('id', itemId);
-    if (updateError) setError(updateError.message); else await load();
+    if (updateError) setError(mensajeError(updateError)); else await load();
   }
 
   async function updateGuide(guide: GuiaDespacho, estado: GuiaDespacho['estado']) {
@@ -255,18 +256,18 @@ export default function OperacionVentaPage() {
       entrega_confirmada_por: estado === 'entregada' ? currentUser?.id || null : null,
       entrega_confirmada_at: estado === 'entregada' ? new Date().toISOString() : null,
     }).eq('id', guide.id);
-    if (updateError) setError(updateError.message); else { await logOperation(`Guía ${guide.numero_guia}: estado ${estado}.`); await load(); }
+    if (updateError) setError(mensajeError(updateError)); else { await logOperation(`Guía ${guide.numero_guia}: estado ${estado}.`); await load(); }
   }
 
   async function uploadEvidence(guide: GuiaDespacho, file: File, tipo: GuiaDespachoDocumento['tipo']) {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const path = `entregas/${guide.id}/${Date.now()}_${safeName}`;
     const { error: uploadError } = await supabase.storage.from('administracion').upload(path, file, { upsert: false });
-    if (uploadError) { setError(uploadError.message); return; }
+    if (uploadError) { setError(mensajeError(uploadError)); return; }
     const { error: insertError } = await supabase.from('guia_despacho_documentos').insert({
       guia_despacho_id: guide.id, tipo, nombre: file.name, archivo_path: path,
     });
-    if (insertError) { await supabase.storage.from('administracion').remove([path]); setError(insertError.message); return; }
+    if (insertError) { await supabase.storage.from('administracion').remove([path]); setError(mensajeError(insertError)); return; }
     await logOperation(`Respaldo de ${tipo} adjuntado a la orden de despacho ${guide.numero_guia}: ${file.name}.`);
     await load();
   }
@@ -275,7 +276,7 @@ export default function OperacionVentaPage() {
     const cost = Number(amount);
     if (!Number.isFinite(cost) || cost < 0) { setError('El costo debe ser cero o mayor.'); return; }
     const { error: costError } = await supabase.from('guias_despacho').update({ costo_real: cost, costo_real_confirmado: true }).eq('id', guideId);
-    if (costError) setError(costError.message); else await load();
+    if (costError) setError(mensajeError(costError)); else await load();
   }
 
   async function createPostventa() {
@@ -305,7 +306,7 @@ export default function OperacionVentaPage() {
       setPostventaDescription(''); setPostventaAdditional(''); setPostventaAuthorization('');
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No se pudo registrar la postventa.');
+      setError(mensajeError(cause, 'No se pudo registrar la postventa.'));
     } finally {
       setBusy(false);
     }
@@ -313,7 +314,7 @@ export default function OperacionVentaPage() {
 
   async function openEvidence(document: GuiaDespachoDocumento) {
     const { data, error: signedError } = await supabase.storage.from('administracion').createSignedUrl(document.archivo_path, 60);
-    if (signedError) setError(signedError.message);
+    if (signedError) setError(mensajeError(signedError));
     else if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   }
 
@@ -325,7 +326,7 @@ export default function OperacionVentaPage() {
     const { error: requestError } = await supabase.from('operacion_excepciones').insert({
       tipo: 'entrega_manual', oportunidad_id: id, motivo: manualReason.trim(), solicitado_por: currentUser.id,
     });
-    if (requestError) setError(requestError.message);
+    if (requestError) setError(mensajeError(requestError));
     else { setManualReason(''); await logOperation('Confirmación manual de entrega solicitada a administración.'); await load(); }
   }
 
@@ -354,7 +355,7 @@ export default function OperacionVentaPage() {
       <h2 className="font-bold">Orden de producción</h2>
       <div className="flex flex-wrap gap-2"><input aria-label="Fecha objetivo de producción" type="date" value={productionDate} onChange={(e) => setProductionDate(e.target.value)} className="border rounded-md p-2 text-sm" /><button disabled={busy || !quoteItems.length} onClick={createProductionOrder} className="bg-[#f97316] disabled:opacity-50 text-white rounded-md px-3 py-2 text-sm font-bold">Crear desde cotización vigente</button></div>
       {orders.map((order) => <div key={order.id} className="border-t pt-2 text-sm space-y-1">
-        <div className="flex flex-wrap items-center gap-2"><strong>Orden {order.id.slice(0, 8)}</strong><select aria-label={`Estado de orden ${order.id.slice(0, 8)}`} value={order.estado} onChange={async (e) => { const { error: statusError } = await supabase.from('ordenes_produccion').update({ estado: e.target.value }).eq('id', order.id); if (statusError) setError(statusError.message); else await load(); }} className="border rounded-md px-2 py-1"><option value="planificada">Planificada</option><option value="en_curso">En curso</option><option value="completada">Completada</option><option value="cancelada">Cancelada</option></select><span className="text-gray-500">Objetivo: {order.fecha_objetivo || 'Sin fecha'}</span></div>
+        <div className="flex flex-wrap items-center gap-2"><strong>Orden {order.id.slice(0, 8)}</strong><select aria-label={`Estado de orden ${order.id.slice(0, 8)}`} value={order.estado} onChange={async (e) => { const { error: statusError } = await supabase.from('ordenes_produccion').update({ estado: e.target.value }).eq('id', order.id); if (statusError) setError(mensajeError(statusError)); else await load(); }} className="border rounded-md px-2 py-1"><option value="planificada">Planificada</option><option value="en_curso">En curso</option><option value="completada">Completada</option><option value="cancelada">Cancelada</option></select><span className="text-gray-500">Objetivo: {order.fecha_objetivo || 'Sin fecha'}</span></div>
         <p>{order.items?.map((item) => `${item.producto}: ${daily.filter((row) => row.orden_produccion_id === order.id && row.cotizacion_item_id === item.cotizacion_item_id).reduce((sum, row) => sum + Number(row.cantidad_producida), 0)} / ${item.cantidad_objetivo}`).join(' · ')}</p>
       </div>)}
       {orders.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 border-t pt-3">
@@ -392,7 +393,7 @@ export default function OperacionVentaPage() {
         {(guide.items || []).map((item) => <div key={item.id} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center border-t pt-2"><span>{item.producto} · plan {item.cantidad_planificada}</span><label>Cargado <input type="number" min="0" step="0.01" defaultValue={item.cantidad_cargada} disabled={guide.estado === 'entregada' || guide.estado === 'cancelada'} onBlur={(e) => updateGuideItem(item.id, 'cantidad_cargada', e.target.value)} className="w-24 border rounded-md p-1 ml-1 disabled:opacity-50" /></label><label>Recibido <input type="number" min="0" step="0.01" defaultValue={item.cantidad_recibida} disabled={guide.estado === 'entregada' || guide.estado === 'cancelada'} onBlur={(e) => updateGuideItem(item.id, 'cantidad_recibida', e.target.value)} className="w-24 border rounded-md p-1 ml-1 disabled:opacity-50" /></label></div>)}
         <p className="text-xs text-gray-500">Diferencia total: {(guide.items || []).reduce((sum, item) => sum + Number(item.cantidad_planificada) - Number(item.cantidad_recibida), 0).toLocaleString('es-CL')}</p>
         <div className="flex flex-wrap gap-2 items-center">
-          <button disabled={guide.estado === 'entregada' || guide.estado === 'cancelada'} onClick={async () => { const { error: e } = await supabase.from('guias_despacho').update({ carga_verificada: true, carga_verificada_por: currentUser?.id || null, carga_verificada_at: new Date().toISOString(), estado: 'cargada' }).eq('id', guide.id); if (e) setError(e.message); else await load(); }} className="border rounded-md px-3 py-1.5 font-semibold disabled:opacity-50">Verificar carga</button>
+          <button disabled={guide.estado === 'entregada' || guide.estado === 'cancelada'} onClick={async () => { const { error: e } = await supabase.from('guias_despacho').update({ carga_verificada: true, carga_verificada_por: currentUser?.id || null, carga_verificada_at: new Date().toISOString(), estado: 'cargada' }).eq('id', guide.id); if (e) setError(mensajeError(e)); else await load(); }} className="border rounded-md px-3 py-1.5 font-semibold disabled:opacity-50">Verificar carga</button>
           <button disabled={guide.estado === 'entregada' || guide.estado === 'cancelada'} onClick={() => updateGuide(guide, 'entregada')} className="border rounded-md px-3 py-1.5 font-semibold disabled:opacity-50">Confirmar entrega</button>
           {guide.estado === 'entregada' && !guideHasEvidence(guide) && <button onClick={() => requestException('firma_entrega', { guia_despacho_id: guide.id })} className="border rounded-md px-3 py-1.5 font-semibold text-amber-800">Solicitar excepción de firma</button>}
           {guide.estado !== 'cancelada' && <label className="border rounded-md px-3 py-1.5 cursor-pointer">Adjuntar respaldo firmado auténtico<input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadEvidence(guide, file, 'firma'); }} /></label>}
@@ -413,7 +414,7 @@ export default function OperacionVentaPage() {
       <textarea aria-label="Descripción del caso" placeholder="Descripción del caso" value={postventaDescription} onChange={(e) => setPostventaDescription(e.target.value)} className="w-full border rounded-md p-2 text-sm" />
       <input aria-label="Autorización del cliente" placeholder="Referencia de autorización del cliente para cantidad adicional" value={postventaAuthorization} onChange={(e) => setPostventaAuthorization(e.target.value)} className="w-full border rounded-md p-2 text-sm" />
       <button disabled={busy} onClick={createPostventa} className="bg-[#213343] text-white rounded-md px-3 py-2 text-sm font-bold">Abrir caso</button>
-      {postventa.map((caso) => <div key={caso.id} className="border-t pt-3 text-sm"><div className="flex flex-wrap gap-2 items-center"><strong>{caso.tipo}</strong><select aria-label={`Estado de caso ${caso.id.slice(0, 8)}`} value={caso.estado} onChange={async (e) => { const { error: statusError } = await supabase.from('postventa_casos').update({ estado: e.target.value }).eq('id', caso.id); if (statusError) setError(statusError.message); else await load(); }} className="border rounded-md p-1"><option value="abierto">Abierto</option><option value="programado">Programado</option><option value="en_curso">En curso</option><option value="resuelto">Resuelto</option><option value="cancelado">Cancelado</option></select><span>{caso.fecha_compromiso || 'Sin fecha'}</span></div><p>{caso.descripcion}</p>{caso.cantidad_adicional ? <p>Cantidad adicional: {caso.cantidad_adicional} · Autorización: {caso.autorizacion_cliente}</p> : null}</div>)}
+      {postventa.map((caso) => <div key={caso.id} className="border-t pt-3 text-sm"><div className="flex flex-wrap gap-2 items-center"><strong>{caso.tipo}</strong><select aria-label={`Estado de caso ${caso.id.slice(0, 8)}`} value={caso.estado} onChange={async (e) => { const { error: statusError } = await supabase.from('postventa_casos').update({ estado: e.target.value }).eq('id', caso.id); if (statusError) setError(mensajeError(statusError)); else await load(); }} className="border rounded-md p-1"><option value="abierto">Abierto</option><option value="programado">Programado</option><option value="en_curso">En curso</option><option value="resuelto">Resuelto</option><option value="cancelado">Cancelado</option></select><span>{caso.fecha_compromiso || 'Sin fecha'}</span></div><p>{caso.descripcion}</p>{caso.cantidad_adicional ? <p>Cantidad adicional: {caso.cantidad_adicional} · Autorización: {caso.autorizacion_cliente}</p> : null}</div>)}
     </section>
     {!delivered && <section className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-2"><h2 className="font-bold">Confirmación manual de entrega</h2><p className="text-xs text-gray-600">Solicita aprobación al administrador cuando la entrega está acreditada fuera de las guías.</p><input aria-label="Motivo de confirmación manual" placeholder="Motivo obligatorio" value={manualReason} onChange={(e) => setManualReason(e.target.value)} className="w-full border rounded-md p-2 text-sm" /><button onClick={confirmManualDelivery} className="bg-amber-700 text-white rounded-md px-3 py-2 text-sm font-bold">Solicitar excepción</button></section>}
   </div>;

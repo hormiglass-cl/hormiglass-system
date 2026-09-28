@@ -25,6 +25,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { Pagination } from '../../components/Pagination';
+import { mensajeError } from '../../lib/errores';
 
 export default function CotizacionesPage() {
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
@@ -187,8 +188,7 @@ export default function CotizacionesPage() {
       });
     } catch (err) {
       console.error('Error updating status in Supabase:', err);
-      const reason = err && typeof err === 'object' && 'message' in err ? String(err.message) : String(err);
-      setLoadError(`No se pudo cambiar el estado de la cotización: ${reason}`);
+      setLoadError(mensajeError(err, 'No se pudo cambiar el estado de la cotización.'));
       setCotizaciones((prev) => prev.map((c) => c.id === cotId ? { ...c, estado: targetCot?.estado || c.estado } : c));
     }
   };
@@ -211,7 +211,7 @@ export default function CotizacionesPage() {
     }
 
     setCotizaciones((prev) => prev.filter((c) => c.id !== cotToDelete.id));
-    setSuccessMsg(`Cotización ${cotToDelete.numero_cotizacion} eliminada de Supabase.`);
+    setSuccessMsg(`Cotización ${cotToDelete.numero_cotizacion} eliminada.`);
     setCotToDelete(null);
     setTimeout(() => setSuccessMsg(''), 4000);
   };
@@ -488,7 +488,7 @@ export default function CotizacionesPage() {
                           <button
                             onClick={() => setCotToDelete(cot)}
                             className="p-1.5 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-lg transition border border-red-200"
-                            title="Eliminar Cotización de Supabase"
+                            title="Eliminar Cotización"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -517,7 +517,7 @@ export default function CotizacionesPage() {
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
               <h3 className="text-base font-extrabold text-red-700 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
-                <span>Eliminar Cotización de Supabase</span>
+                <span>Eliminar Cotización</span>
               </h3>
               <button onClick={() => setCotToDelete(null)} className="text-gray-400 hover:text-[#213343] font-bold">
                 ✕
@@ -529,7 +529,7 @@ export default function CotizacionesPage() {
                 ¿Estás seguro de que deseas eliminar la cotización <strong className="font-mono text-[#213343]">{cotToDelete.numero_cotizacion}</strong> por un monto de <strong className="text-emerald-700">${(cotToDelete.monto_total || 0).toLocaleString('es-CL')}</strong>?
               </p>
               <p className="bg-red-50 p-3 rounded-md border border-red-200 text-red-900 font-medium">
-                Esta acción la eliminará de Supabase permanentemente.
+                Esta acción la eliminará del sistema permanentemente.
               </p>
             </div>
 

@@ -6,6 +6,7 @@ import { createClient } from '../../lib/supabase/client';
 import type { ProductoCatalogo } from '../../lib/types';
 import { parseProductosCsv, type ProductoCsv } from '../../lib/productos-csv';
 import { useAuth } from '../../lib/context/AuthContext';
+import { mensajeError } from '../../lib/errores';
 
 type Form = Omit<ProductoCatalogo, 'id' | 'es_demo'>;
 const empty: Form = { codigo: '', nombre: '', categoria: 'producto', unidad: 'unidad', precio_referencia: 0, costo_referencia: 0, descripcion: '', activo: true };
@@ -27,7 +28,7 @@ export default function ProductosPage() {
 
   const load = useCallback(async () => {
     const { data, error: loadError } = await supabase.from('catalogo_productos').select('*').order('nombre');
-    if (loadError) setError(loadError.message);
+    if (loadError) setError(mensajeError(loadError));
     else { setItems((data || []) as ProductoCatalogo[]); setError(''); }
   }, [supabase]);
 
@@ -46,7 +47,7 @@ export default function ProductosPage() {
     const result = editingId
       ? await supabase.from('catalogo_productos').update(payload).eq('id', editingId)
       : await supabase.from('catalogo_productos').insert({ ...payload, es_demo: false });
-    if (result.error) setError(result.error.message);
+    if (result.error) setError(mensajeError(result.error));
     else { closeForm(); await load(); }
     setSaving(false);
   }
@@ -72,7 +73,7 @@ export default function ProductosPage() {
     setSaving(true); setError('');
     const { error: importError } = await supabase.from('catalogo_productos')
       .upsert(preview.map((row) => ({ ...row, es_demo: false })), { onConflict: 'codigo' });
-    if (importError) setError(importError.message);
+    if (importError) setError(mensajeError(importError));
     else { closeImport(); await load(); }
     setSaving(false);
   }

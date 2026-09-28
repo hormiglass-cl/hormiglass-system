@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ChevronLeft, ChevronRight, Factory } from 'lucide-react';
 import { createClient } from '../../../lib/supabase/client';
 import type { OrdenProduccion, ProduccionDiaria } from '../../../lib/types';
+import { mensajeError } from '../../../lib/errores';
 
 type Fila = OrdenProduccion & { oportunidad?: { codigo: string; titulo: string } | null };
 
@@ -44,7 +45,7 @@ export default function SemanaProduccionPage() {
         .or(`and(estado.neq.completada,fecha_inicio.lte.${sunday},fecha_objetivo.gte.${monday}),and(fecha_objetivo.gte.${monday},fecha_objetivo.lte.${sunday}),and(fecha_objetivo.is.null,fecha_inicio.lte.${sunday},estado.neq.completada),and(fecha_objetivo.is.null,fecha_inicio.is.null,estado.neq.completada)`)
         .order('fecha_objetivo', { nullsFirst: false });
       if (!active) return;
-      if (queryError) setError(queryError.message);
+      if (queryError) setError(mensajeError(queryError));
       else {
         const rows = (data || []) as Fila[];
         const ids = rows.map((row) => row.id);
@@ -52,7 +53,7 @@ export default function SemanaProduccionPage() {
           ? await supabase.from('produccion_diaria').select('*').in('orden_produccion_id', ids)
           : { data: [], error: null };
         if (!active) return;
-        if (production.error) setError(production.error.message);
+        if (production.error) setError(mensajeError(production.error));
         else { setError(''); setOrders(rows); setDaily((production.data || []) as ProduccionDiaria[]); }
       }
     }

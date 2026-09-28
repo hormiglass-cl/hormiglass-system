@@ -108,6 +108,7 @@ import {
   ExternalLink,
   Filter,
 } from 'lucide-react';
+import { mensajeError } from '../../../lib/errores';
 
 const STAGE_CONFIG: Record<string, { label: string; area: string; step: number; totalSteps: number; bg: string; text: string; border: string }> = {
   nueva: { label: 'Nueva oportunidad', area: 'Comercial y ventas', step: 1, totalSteps: 3, bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-300' },
@@ -452,7 +453,7 @@ export default function ClienteDetailPage() {
 
       if (error) {
         console.error('Error actualizando cliente:', error);
-        setEditRutError(`Error: ${error.message}`);
+        setEditRutError(mensajeError(error, 'No se pudo actualizar el RUT.'));
         return;
       }
 

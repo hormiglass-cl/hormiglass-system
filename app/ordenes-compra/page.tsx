@@ -9,6 +9,7 @@ import { OrdenCompraPdfPreviewModal } from '../../components/OrdenCompraPdfPrevi
 import { Pagination } from '../../components/Pagination';
 import { useAuth } from '../../lib/context/AuthContext';
 import { AlertTriangle, Building, CheckCircle2, Download, Edit3, Eye, FileText, Plus, Search, Trash2 } from 'lucide-react';
+import { mensajeError } from '../../lib/errores';
 
 const statusStyles = 'bg-white text-[#213343] border-gray-300';
 
@@ -92,7 +93,7 @@ export default function OrdenesCompraPage() {
     if (error) {
       console.error('Error deleting OC:', error);
       setSuccessMsg('');
-      setErrorMsg(`No se pudo eliminar la OC: ${error.message}`);
+      setErrorMsg(mensajeError(error, 'No se pudo eliminar la OC.'));
       return;
     }
     setOrdenes((prev) => prev.filter((orden) => orden.id !== deleteOrden.id));
