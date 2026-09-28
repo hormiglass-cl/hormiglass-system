@@ -17,8 +17,6 @@ import {
   UserCheck,
   Plus,
   Search,
-  Phone,
-  Mail,
   DollarSign,
   AlertCircle,
   CheckCircle2,
@@ -32,6 +30,7 @@ import {
   X,
   Save,
   Lock,
+  UserRound,
 } from 'lucide-react';
 import { TODAS_COMUNAS_CHILE } from '../../lib/chile-data';
 import { SearchableSelect } from '../../components/SearchableSelect';
@@ -627,11 +626,9 @@ export default function RecursosHumanosPage() {
               <thead>
                 <tr className="bg-gray-50/80 text-gray-500 font-bold border-b border-gray-200">
                   <th className="py-3.5 px-4">Colaborador</th>
-                  <th className="py-3.5 px-4">Cuenta de Usuario</th>
                   <th className="py-3.5 px-4">Tipo de Usuario</th>
                   <th className="py-3.5 px-4">Cargo & Área</th>
                   <th className="py-3.5 px-4">Disponibilidad / Asistencia</th>
-                  <th className="py-3.5 px-4">Contacto</th>
                   <th className="py-3.5 px-4 text-right">Acción</th>
                 </tr>
               </thead>
@@ -640,12 +637,6 @@ export default function RecursosHumanosPage() {
                   const dispCfg =
                     DISPONIBILIDAD_CONFIG[t.estado_disponibilidad] ||
                     DISPONIBILIDAD_CONFIG.disponible;
-                  const initials = t.nombre
-                    .split(' ')
-                    .slice(0, 2)
-                    .map((p) => p[0])
-                    .join('')
-                    .toUpperCase();
 
                   const linkedUser = usuarios.find(
                     (u) =>
@@ -663,7 +654,7 @@ export default function RecursosHumanosPage() {
                           className="flex items-center gap-3 group-hover:text-[#f97316] transition"
                         >
                           <div className="w-9 h-9 rounded-lg bg-orange-500 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
-                            {initials}
+                            <UserRound className="w-5 h-5" />
                           </div>
                           <div>
                             <span className="font-extrabold text-[#213343] block group-hover:text-[#f97316] transition">
@@ -674,19 +665,6 @@ export default function RecursosHumanosPage() {
                             </span>
                           </div>
                         </Link>
-                      </td>
-
-                      {/* 2. Cuenta de Usuario Vinculada */}
-                      <td className="py-3 px-4">
-                        {linkedUser ? (
-                          <span className="font-mono text-[11px] font-bold text-gray-700 block">
-                            {linkedUser.email}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-gray-400 italic">
-                            Cuenta vinculada por email
-                          </span>
-                        )}
                       </td>
 
                       {/* 3. Tipo de Usuario */}
@@ -736,24 +714,6 @@ export default function RecursosHumanosPage() {
                         </select>
                       </td>
 
-                      {/* 6. Contacto */}
-                      <td className="py-3 px-4">
-                        <div className="space-y-0.5 text-[11px]">
-                          {t.telefono && (
-                            <span className="flex items-center gap-1 text-gray-600 font-medium">
-                              <Phone className="w-3 h-3 text-[#f97316]" />
-                              <span>{t.telefono}</span>
-                            </span>
-                          )}
-                          {t.email && (
-                            <span className="flex items-center gap-1 text-gray-400">
-                              <Mail className="w-3 h-3 text-gray-400" />
-                              <span className="truncate max-w-[150px]">{t.email}</span>
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
                       {/* 7. Acción */}
                       <td className="py-3 px-4 text-right">
                         <Link
@@ -778,18 +738,6 @@ export default function RecursosHumanosPage() {
             const dispCfg =
               DISPONIBILIDAD_CONFIG[t.estado_disponibilidad] ||
               DISPONIBILIDAD_CONFIG.disponible;
-            const initials = t.nombre
-              .split(' ')
-              .slice(0, 2)
-              .map((p) => p[0])
-              .join('')
-              .toUpperCase();
-
-            const linkedUser = usuarios.find(
-              (u) =>
-                u.id === t.usuario_id ||
-                (t.email && u.email?.toLowerCase() === t.email?.toLowerCase())
-            );
 
             return (
               <div
@@ -799,7 +747,7 @@ export default function RecursosHumanosPage() {
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <div className="w-12 h-12 rounded-lg bg-orange-500 text-white font-black text-base flex items-center justify-center shadow-xs">
-                      {initials}
+                      <UserRound className="w-6 h-6" />
                     </div>
 
                     <select
@@ -830,12 +778,6 @@ export default function RecursosHumanosPage() {
                       <span className="text-gray-400 font-semibold">Cargo:</span>
                       <span className="font-bold text-[#213343] truncate max-w-[180px]">
                         {t.cargo}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-400 font-semibold">Cuenta:</span>
-                      <span className="font-mono text-[11px] text-gray-600 truncate max-w-[180px]">
-                        {linkedUser?.email || t.email || 'Vinculada'}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Bell, Boxes, CalendarDays, ChartNoAxesCombined, ChevronLeft, ChevronRight,
-  ClipboardList, ContactRound, FileText, FolderKanban, LayoutDashboard,
+  ContactRound, FileText, FolderKanban, LayoutDashboard,
   LogOut, Package, Settings2, ShoppingCart, Truck, Users, Wallet, X,
 } from 'lucide-react';
 import { useAuth } from '../lib/context/AuthContext';
@@ -17,11 +17,9 @@ type NavItem = { label: string; href: string; icon: typeof LayoutDashboard; matc
 type NavGroup = { label: string; items: NavItem[] };
 
 const mainGroups: NavGroup[] = [
-  { label: 'Inicio', items: [{ label: 'Panel operativo', href: '/', icon: LayoutDashboard }] },
-  { label: 'Pipelines', items: [
+  { label: 'Inicio', items: [
+    { label: 'Panel operativo', href: '/', icon: LayoutDashboard },
     { label: 'Pipeline de ventas', href: '/ventas', icon: FolderKanban, match: '/ventas' },
-    { label: 'Planificación', href: '/planificacion', icon: ClipboardList, match: '/planificacion' },
-    { label: 'Reventa', href: '/reventa', icon: Truck, match: '/reventa' },
   ] },
   { label: 'Comercial', items: [
     { label: 'Clientes', href: '/clientes', icon: ContactRound },
@@ -52,7 +50,6 @@ const administration: NavGroup = { label: 'Administración', items: [
   { label: 'Soc. Transportes', href: '/administracion?empresa=transportes&seccion=cuentas_por_cobrar', icon: Truck },
   { label: 'Soc. Inmobiliaria', href: '/administracion?empresa=inmobiliaria&seccion=cuentas_por_cobrar', icon: Boxes },
   { label: 'Recursos humanos', href: '/rrhh', icon: Users },
-  { label: 'Recordatorios', href: '/recordatorios', icon: ClipboardList },
 ] };
 
 const systemItems: NavItem[] = [

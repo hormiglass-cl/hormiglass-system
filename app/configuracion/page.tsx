@@ -22,6 +22,7 @@ import {
   ToggleRight,
   UserPlus,
   Sliders,
+  UserRound,
 } from 'lucide-react';
 
 export interface FieldDefinition {
@@ -587,7 +588,7 @@ export default function ConfiguracionPage() {
                       {/* Usuario / Nombre */}
                       <td className="py-3 px-4 font-bold text-[#213343] flex items-center gap-2.5">
                         <div className="w-8 h-8 bg-[#213343] text-white rounded-md flex items-center justify-center font-black text-xs">
-                          {usr.nombre.charAt(0).toUpperCase()}
+                          <UserRound className="w-4 h-4" />
                         </div>
                         <span>{usr.nombre}</span>
                       </td>

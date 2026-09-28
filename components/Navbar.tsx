@@ -8,7 +8,6 @@ import { useAuth } from '../lib/context/AuthContext';
 
 const destinations = [
   ['Panel operativo', '/'], ['Pipeline de ventas', '/ventas'],
-  ['Planificación', '/planificacion'], ['Reventa', '/reventa'],
   ['Clientes', '/clientes'], ['Cotizaciones', '/cotizaciones'],
   ['Órdenes de compra', '/ordenes-compra'], ['Proveedores', '/proveedores'],
   ['Productos e insumos', '/productos'],
@@ -16,7 +15,7 @@ const destinations = [
   ['Producción y logística', '/planificacion/calendario'], ['Programa semanal', '/planificacion/semana'],
   ['Reventa y logística', '/reventa/calendario'], ['Caja', '/caja'], ['Reportes', '/reportes'],
   ['Administración', '/administracion'], ['Recursos humanos', '/rrhh'],
-  ['Recordatorios', '/recordatorios'], ['Notificaciones', '/notificaciones'],
+  ['Notificaciones', '/notificaciones'],
   ['Configuración', '/configuracion'],
 ] as const;
 
@@ -29,7 +28,7 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const isFieldWorker = currentUser?.rol === 'mano_obra';
   const allowed = useMemo(() => destinations.filter(([, href]) =>
-    !isFieldWorker || ['/rrhh', '/recordatorios', '/notificaciones', '/visitas', '/calendarios/general', '/planificacion/calendario', '/planificacion/semana', '/reventa/calendario', '/administracion'].includes(href)
+    !isFieldWorker || ['/rrhh', '/notificaciones', '/visitas', '/calendarios/general', '/planificacion/calendario', '/planificacion/semana', '/reventa/calendario', '/administracion'].includes(href)
   ), [isFieldWorker]);
   const results = allowed.filter(([label]) => label.toLocaleLowerCase('es-CL').includes(query.toLocaleLowerCase('es-CL'))).slice(0, 7);
   const current = [...allowed].sort((a, b) => b[1].length - a[1].length)

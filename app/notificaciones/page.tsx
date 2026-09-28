@@ -5,7 +5,25 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '../../lib/supabase/client';
 import { Notificacion } from '../../lib/types';
 import { useAuth } from '../../lib/context/AuthContext';
-import { Bell, Info, Trash2, Calendar, AtSign, ExternalLink, Filter, CheckSquare, Square, CheckCircle2 } from 'lucide-react';
+import { Bell, Info, Trash2, AtSign, ChevronRight, CheckCheck, AlarmClock, ChevronDown } from 'lucide-react';
+
+const TIPO_LABELS: Record<string, string> = {
+  mencion: 'Menciones',
+  asignacion: 'Asignaciones',
+  seguimiento: 'Seguimientos',
+  recordatorio: 'Recordatorios',
+  cobro_pendiente: 'Cobros pendientes',
+  cobro_vencido: 'Cobros vencidos',
+  reprogramacion: 'Reprogramaciones',
+  excepcion_pendiente: 'Excepciones pendientes',
+  excepcion_resuelta: 'Excepciones resueltas',
+  general: 'General',
+  info: 'Información',
+};
+
+function tipoLabel(tipo: string): string {
+  return TIPO_LABELS[tipo] || tipo.charAt(0).toUpperCase() + tipo.slice(1).replace(/_/g, ' ');
+}
 
 export default function NotificacionesPage() {
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
@@ -13,6 +31,7 @@ export default function NotificacionesPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [filterType, setFilterType] = useState<'todas' | 'no_leidas' | 'leidas' | 'menciones' | 'sistema'>('todas');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [tipoFilter, setTipoFilter] = useState('');
   const router = useRouter();
   const supabase = createClient();
   const { currentUser } = useAuth();
@@ -98,6 +117,7 @@ export default function NotificacionesPage() {
 
   // Filter notifications
   const filteredNotifications = notificaciones.filter((n) => {
+    if (tipoFilter && (n.tipo || 'general') !== tipoFilter) return false;
     if (filterType === 'no_leidas') {
       return !n.leido;
     }
@@ -178,270 +198,201 @@ export default function NotificacionesPage() {
     setSelectedIds([]);
   };
 
-  return (
-    <div className="space-y-6 max-w-5xl mx-auto text-[#213343] relative">
-      {errorMessage && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errorMessage}</p>}
+  const tiposDisponibles = Array.from(new Set(notificaciones.map((n) => String(n.tipo || 'general'))))
+    .sort((a, b) => tipoLabel(a).localeCompare(tipoLabel(b), 'es'));
 
+  const counts = {
+    todas: notificaciones.length,
+    no_leidas: notificaciones.filter((n) => !n.leido).length,
+    leidas: notificaciones.filter((n) => n.leido).length,
+    menciones: notificaciones.filter((n) => n.tipo === 'mencion' || n.mensaje.includes('@')).length,
+    sistema: notificaciones.filter((n) => n.tipo !== 'mencion' && !n.mensaje.includes('@')).length,
+  };
+  const filters: { id: typeof filterType; label: string }[] = [
+    { id: 'todas', label: 'Todas' },
+    { id: 'no_leidas', label: 'No leídas' },
+    { id: 'leidas', label: 'Leídas' },
+    { id: 'menciones', label: 'Menciones' },
+    { id: 'sistema', label: 'Sistema' },
+  ];
+  const allSelected = filteredNotifications.length > 0 && filteredNotifications.every((n) => selectedIds.includes(n.id));
+
+  return (
+    <div className="space-y-5 text-[#213343]">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
         <div>
-          <h1 className="text-2xl font-extrabold text-[#213343] flex items-center gap-2">
+          <h1 className="text-2xl font-extrabold flex items-center gap-2">
             <Bell className="w-6 h-6 text-[#f97316]" />
-            <span>Centro de Notificaciones & Recordatorios</span>
+            <span>Notificaciones</span>
           </h1>
-          <p className="text-xs text-gray-600 mt-1">
-            Visualización clasificada por Tipo, Cliente y Detalle con navegación directa.
-          </p>
+          <p className="text-xs text-gray-600 mt-1">Menciones, recordatorios y avisos del sistema. Haz clic en una notificación para ir a su origen.</p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
           <button
             type="button"
             onClick={handleMarkAllAsRead}
-            className="text-xs text-[#f97316] hover:text-[#e08316] font-extrabold flex items-center gap-1.5 bg-orange-50 px-3.5 py-2 rounded-md border border-orange-200 transition"
+            disabled={counts.no_leidas === 0}
+            className="bg-white hover:bg-gray-50 border border-gray-200 text-[#213343] font-bold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>Marcar Todas Leídas</span>
+            <CheckCheck className="w-4 h-4 text-[#f97316]" />
+            <span>Marcar todas como leídas</span>
           </button>
-
+          <div className="relative">
+            <select
+              aria-label="Filtrar por tipo de notificación"
+              value={tipoFilter}
+              onChange={(e) => { setTipoFilter(e.target.value); setSelectedIds([]); }}
+              className={`appearance-none bg-white hover:bg-gray-50 border rounded-md shadow-sm pl-4 pr-9 py-2.5 text-xs font-bold cursor-pointer transition focus:outline-none focus:border-[#f97316] ${
+                tipoFilter ? 'border-[#f97316] text-[#ea580c]' : 'border-gray-200 text-[#213343]'
+              }`}
+            >
+              <option value="">Todos los tipos</option>
+              {tiposDisponibles.map((tipo) => (
+                <option key={tipo} value={tipo}>
+                  {tipoLabel(tipo)} ({notificaciones.filter((n) => String(n.tipo || 'general') === tipo).length})
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
           {notificaciones.length > 0 && (
             <button
+              type="button"
               onClick={handleClearAll}
-              className="text-xs text-red-600 hover:text-red-800 font-bold flex items-center gap-1 bg-red-50 px-3 py-2 rounded-md border border-red-200 transition"
+              className="bg-white hover:bg-red-50 border border-gray-200 hover:border-red-200 text-red-600 font-bold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2"
             >
-              <Trash2 className="w-3.5 h-3.5" />
-                <span>Eliminar todas</span>
+              <Trash2 className="w-4 h-4" />
+              <span>Eliminar todas</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Bar de Acciones Masivas y Filtros */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        {/* Tabs de Filtrado */}
-        <div className="flex flex-wrap items-center gap-2 bg-gray-100 p-1.5 rounded-lg border border-gray-200 text-xs">
+      {errorMessage && <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errorMessage}</p>}
+
+      {/* Filtros */}
+      <div className="flex items-center gap-1 p-1 bg-white rounded-md border border-gray-200 text-xs overflow-x-auto">
+        {filters.map((f) => (
           <button
-            onClick={() => setFilterType('todas')}
-            className={`px-3.5 py-1.5 rounded-md font-extrabold transition flex items-center gap-1.5 ${
-              filterType === 'todas'
-                ? 'bg-[#f97316] text-white shadow-xs'
-                : 'text-gray-600 hover:text-[#213343]'
+            key={f.id}
+            type="button"
+            onClick={() => { setFilterType(f.id); setSelectedIds([]); }}
+            className={`shrink-0 flex-1 py-1.5 px-3 rounded-md font-bold transition flex items-center justify-center gap-1.5 ${
+              filterType === f.id ? 'bg-[#f97316] text-white shadow-xs' : 'text-gray-500 hover:text-[#213343] hover:bg-gray-100'
             }`}
           >
-            <Filter className="w-3.5 h-3.5" />
-            <span>Todas ({notificaciones.length})</span>
+            <span>{f.label}</span>
+            <span className={`rounded-full px-1.5 text-[10px] font-mono ${filterType === f.id ? 'bg-white/25' : 'bg-gray-100 text-gray-500'}`}>{counts[f.id]}</span>
           </button>
-
-          <button
-            onClick={() => setFilterType('no_leidas')}
-            className={`px-3.5 py-1.5 rounded-md font-extrabold transition flex items-center gap-1.5 ${
-              filterType === 'no_leidas'
-                ? 'bg-[#f97316] text-white shadow-xs'
-                : 'text-gray-600 hover:text-[#213343]'
-            }`}
-          >
-            <Bell className="w-3.5 h-3.5 text-amber-500" />
-            <span>No Leídas ({notificaciones.filter((n) => !n.leido).length})</span>
-          </button>
-
-          <button
-            onClick={() => setFilterType('leidas')}
-            className={`px-3.5 py-1.5 rounded-md font-extrabold transition flex items-center gap-1.5 ${
-              filterType === 'leidas'
-                ? 'bg-[#f97316] text-white shadow-xs'
-                : 'text-gray-600 hover:text-[#213343]'
-            }`}
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-            <span>Leídas ({notificaciones.filter((n) => n.leido).length})</span>
-          </button>
-
-          <button
-            onClick={() => setFilterType('menciones')}
-            className={`px-3.5 py-1.5 rounded-md font-extrabold transition flex items-center gap-1.5 ${
-              filterType === 'menciones'
-                ? 'bg-[#f97316] text-white shadow-xs'
-                : 'text-gray-600 hover:text-[#213343]'
-            }`}
-          >
-            <AtSign className="w-3.5 h-3.5" />
-            <span>@ Menciones ({notificaciones.filter((n) => n.tipo === 'mencion' || n.mensaje.includes('@')).length})</span>
-          </button>
-
-          <button
-            onClick={() => setFilterType('sistema')}
-            className={`px-3.5 py-1.5 rounded-md font-extrabold transition flex items-center gap-1.5 ${
-              filterType === 'sistema'
-                ? 'bg-[#f97316] text-white shadow-xs'
-                : 'text-gray-600 hover:text-[#213343]'
-            }`}
-          >
-            <Info className="w-3.5 h-3.5" />
-            <span>Sistema ({notificaciones.filter((n) => n.tipo !== 'mencion' && !n.mensaje.includes('@')).length})</span>
-          </button>
-        </div>
-
-        {/* Acciones Masivas cuando hay ítems seleccionados */}
-        {selectedIds.length > 0 && (
-          <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 p-2 rounded-lg  text-xs">
-            <span className="font-extrabold text-[#f97316] px-1">
-              {selectedIds.length} seleccionada(s)
-            </span>
-
-            <button
-              onClick={handleBulkMarkAsRead}
-              className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold text-xs px-3 py-1.5 rounded-md transition flex items-center gap-1 shadow-sm"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Marcar Leídas</span>
-            </button>
-
-            <button
-              onClick={handleBulkDelete}
-              className="bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-md transition flex items-center gap-1 shadow-sm"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Eliminar</span>
-            </button>
-          </div>
-        )}
+        ))}
       </div>
 
-      {/* Tabla de Notificaciones estructurada por Seleccionar, Tipo, Cliente, Descripción */}
-      <div className="hg-list-group overflow-x-auto text-xs">
-        <table className="hg-list-table w-full min-w-[760px] text-left">
-          <thead className="bg-[#f4f5f3] text-[#66716f] uppercase text-[10px] tracking-normal">
-            <tr>
-              <th className="py-3.5 px-4 w-10 text-center">
-                <input
-                  type="checkbox"
-                  checked={
-                    filteredNotifications.length > 0 &&
-                    filteredNotifications.every((n) => selectedIds.includes(n.id))
-                  }
-                  onChange={toggleSelectAll}
-                  className="w-4 h-4 rounded text-[#f97316] focus:ring-[#F7931F] accent-[#F7931F] cursor-pointer"
-                />
-              </th>
-              <th className="py-3.5 px-4 w-32">Tipo</th>
-              <th className="py-3.5 px-4 w-48">Ubicación / Ficha Origen</th>
-              <th className="py-3.5 px-4">Descripción o Detalle del Recordatorio</th>
-              <th className="py-3.5 px-4 w-36 text-right">Fecha & Hora</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200 text-[#213343]">
-            {loading ? (
-              <tr>
-                <td colSpan={5} className="py-8 text-center text-gray-400 font-medium">
-                  Cargando notificaciones...
-                </td>
-              </tr>
-            ) : filteredNotifications.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-8 text-center text-gray-400 font-medium">
-                  No hay notificaciones registradas en esta categoría.
-                </td>
-              </tr>
-            ) : (
-              filteredNotifications.map((n) => {
-                const isMention = n.tipo === 'mencion' || n.mensaje.includes('@');
-                const isReminder = String(n.tipo) === 'seguimiento' || n.tipo === 'recordatorio' || n.mensaje.toUpperCase().includes('RECORDATORIO');
-                
-                // Extract exact location / context where the mention or notification occurred
-                const opMatch = n.mensaje.match(/oportunidad ([A-Z0-9-]+)/i);
-                const recMatch = n.mensaje.match(/RECORDATORIO \((.*?)\):/);
-                const cliMatch = n.mensaje.match(/cliente ([\w\s]+)/i);
+      {/* Listado */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-xs overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs">
+          <label className="flex items-center gap-2.5 font-semibold text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+              disabled={filteredNotifications.length === 0}
+              className="w-4 h-4 rounded accent-[#f97316] cursor-pointer"
+            />
+            <span>{selectedIds.length > 0 ? `${selectedIds.length} seleccionada(s)` : `${filteredNotifications.length} notificaciones`}</span>
+          </label>
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={handleBulkMarkAsRead} className="bg-white hover:bg-orange-50 border border-gray-200 text-[#213343] font-bold px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
+                <CheckCheck className="w-3.5 h-3.5 text-[#f97316]" />
+                <span>Marcar leídas</span>
+              </button>
+              <button type="button" onClick={handleBulkDelete} className="bg-white hover:bg-red-50 border border-gray-200 text-red-600 font-bold px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Eliminar</span>
+              </button>
+            </div>
+          )}
+        </div>
 
-                let ubicacionNombre = 'Sistema CRM';
-                if (opMatch) {
-                  ubicacionNombre = `Oportunidad ${opMatch[1]}`;
-                } else if (recMatch) {
-                  ubicacionNombre = `Ficha Cliente: ${recMatch[1]}`;
-                } else if (cliMatch) {
-                  ubicacionNombre = `Ficha Cliente: ${cliMatch[1]}`;
-                } else if (n.link_url?.includes('/ventas')) {
-                  ubicacionNombre = 'Pipeline de Ventas';
-                } else if (n.link_url?.includes('/clientes')) {
-                  ubicacionNombre = 'Módulo Clientes';
-                }
+        {loading ? (
+          <p className="py-12 text-center text-sm text-gray-400">Cargando notificaciones...</p>
+        ) : filteredNotifications.length === 0 ? (
+          <div className="py-14 text-center space-y-2">
+            <Bell className="w-10 h-10 text-gray-300 mx-auto" />
+            <p className="text-sm font-semibold text-gray-600">No hay notificaciones en esta categoría.</p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {filteredNotifications.map((n) => {
+              const isMention = n.tipo === 'mencion' || n.mensaje.includes('@');
+              const isReminder = String(n.tipo) === 'seguimiento' || n.tipo === 'recordatorio' || n.mensaje.toUpperCase().includes('RECORDATORIO');
 
-                const isSelected = selectedIds.includes(n.id);
+              // Ubicación / ficha de origen de la notificación
+              const opMatch = n.mensaje.match(/oportunidad ([A-Z0-9-]+)/i);
+              const recMatch = n.mensaje.match(/RECORDATORIO \((.*?)\):/);
+              const cliMatch = n.mensaje.match(/cliente ([\w\s]+)/i);
+              let ubicacionNombre = 'Sistema CRM';
+              if (opMatch) ubicacionNombre = `Oportunidad ${opMatch[1]}`;
+              else if (recMatch) ubicacionNombre = `Cliente: ${recMatch[1]}`;
+              else if (cliMatch) ubicacionNombre = `Cliente: ${cliMatch[1]}`;
+              else if (n.link_url?.includes('/ventas')) ubicacionNombre = 'Pipeline de ventas';
+              else if (n.link_url?.includes('/clientes')) ubicacionNombre = 'Clientes';
 
-                return (
-                  <tr
-                    key={n.id}
-                    className={`hover:bg-orange-100/60 transition ${
-                      isSelected
-                        ? 'bg-orange-200/60 font-bold'
-                        : !n.leido
-                        ? 'bg-orange-50/90 border-l-4 border-l-[#F7931F] font-extrabold text-[#213343] shadow-xs'
-                        : 'bg-white text-gray-600 opacity-75'
-                    }`}
+              const tipoCfg = isMention
+                ? { label: 'Mención', Icon: AtSign, box: 'bg-orange-50 text-[#f97316] border-orange-200' }
+                : isReminder
+                  ? { label: 'Recordatorio', Icon: AlarmClock, box: 'bg-amber-50 text-amber-600 border-amber-200' }
+                  : { label: 'Sistema', Icon: Info, box: 'bg-gray-50 text-gray-500 border-gray-200' };
+              const isSelected = selectedIds.includes(n.id);
+
+              return (
+                <li
+                  key={n.id}
+                  className={`group flex items-start gap-3 px-4 py-3.5 transition ${
+                    isSelected ? 'bg-orange-50' : !n.leido ? 'bg-orange-50/40 hover:bg-orange-50/70' : 'bg-white hover:bg-gray-50'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleSelectOne(n.id)}
+                    aria-label="Seleccionar notificación"
+                    className="mt-2.5 w-4 h-4 rounded accent-[#f97316] cursor-pointer shrink-0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleMarkAsReadAndNavigate(n)}
+                    className="flex flex-1 min-w-0 items-start gap-3 text-left"
                   >
-                    {/* Checkbox de Selección */}
-                    <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelectOne(n.id)}
-                        className="w-4 h-4 rounded text-[#f97316] focus:ring-[#F7931F] accent-[#F7931F] cursor-pointer"
-                      />
-                    </td>
-
-                    {/* Column 1: Tipo & Estado No Leída */}
-                    <td className="py-3.5 px-4 cursor-pointer" onClick={() => handleMarkAsReadAndNavigate(n)}>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span
-                          className={`inline-flex items-center gap-1 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
-                            isMention
-                              ? 'bg-orange-100 text-[#f97316] border-orange-300'
-                              : isReminder
-                              ? 'bg-amber-100 text-amber-800 border-amber-300'
-                              : 'bg-blue-100 text-blue-800 border-blue-300'
-                          }`}
-                        >
-                          {isMention ? <AtSign className="w-3 h-3" /> : isReminder ? <Calendar className="w-3 h-3" /> : <Info className="w-3 h-3" />}
-                          <span>{isMention ? 'Mención' : isReminder ? 'Recordatorio' : 'Sistema'}</span>
-                        </span>
-                        {!n.leido && (
-                          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase bg-[#f97316] text-white px-2 py-0.5 rounded-full shadow-xs">
-                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                            <span>No Leída</span>
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Column 2: Ubicación / Ficha de Origen */}
-                    <td className="py-3.5 px-4 font-extrabold text-[#213343] cursor-pointer" onClick={() => handleMarkAsReadAndNavigate(n)}>
-                      <span className="bg-gray-100 px-2.5 py-1 rounded-lg border border-gray-200 inline-block text-xs">
-                        {ubicacionNombre}
+                    <span className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 ${tipoCfg.box}`}>
+                      <tipoCfg.Icon className="w-4 h-4" />
+                    </span>
+                    <span className="flex-1 min-w-0 space-y-1">
+                      <span className="flex flex-wrap items-center gap-2 text-[11px]">
+                        <span className="font-bold text-gray-500">{tipoCfg.label}</span>
+                        <span className="text-gray-300">·</span>
+                        <span className="font-semibold text-gray-500 truncate">{ubicacionNombre}</span>
                       </span>
-                    </td>
-
-                    {/* Column 3: Descripción o Detalle del Recordatorio */}
-                    <td className="py-3.5 px-4 cursor-pointer" onClick={() => handleMarkAsReadAndNavigate(n)}>
-                      <p className="text-xs text-[#213343] font-medium leading-relaxed flex items-center gap-1.5">
-                        <span>{n.mensaje}</span>
-                        {n.link_url && <ExternalLink className="w-3 h-3 text-[#f97316] shrink-0" />}
-                      </p>
-                    </td>
-
-                    {/* Column 4: Fecha & Hora */}
-                    <td className="py-3.5 px-4 text-right font-mono text-gray-500 text-[11px] cursor-pointer" onClick={() => handleMarkAsReadAndNavigate(n)}>
-                      {new Date(n.fecha).toLocaleDateString('es-CL', {
-                        day: '2-digit',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                      <span className={`block text-sm leading-snug break-words ${n.leido ? 'text-gray-600' : 'font-semibold text-[#213343]'}`}>
+                        {n.mensaje}
+                      </span>
+                    </span>
+                    <span className="flex flex-col items-end gap-1.5 shrink-0 pl-2">
+                      <span className="text-[11px] font-mono text-gray-400 whitespace-nowrap">
+                        {new Date(n.fecha).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        {!n.leido && <span className="w-2 h-2 rounded-full bg-[#f97316]" aria-label="No leída" />}
+                        {n.link_url && <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-[#f97316] transition" />}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
     </div>
   );

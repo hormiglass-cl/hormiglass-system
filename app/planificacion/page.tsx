@@ -315,7 +315,7 @@ export default function PlanificacionPage() {
           </div>
           <h1 className="text-2xl font-extrabold text-[#213343] flex items-center gap-2.5">
             <Factory className="w-7 h-7 text-[#f97316]" />
-            <span>Pipeline de Producción</span>
+            <span>Planificación de Producción</span>
           </h1>
           <p className="text-xs text-gray-500 mt-1">
             Misma oportunidad de venta vinculada para el control de etapas de producción e instalación.
@@ -418,67 +418,10 @@ export default function PlanificacionPage() {
                       </div>
                       <ChevronRight className="h-4 w-4 text-[#a8afac]" aria-hidden="true" />
                     </div>)}
-                    {colProyectos.length === 0 ? (
+                    {colProyectos.length === 0 && (
                       <div className="px-5 py-4 text-xs text-[#8a9390]">
                         No hay oportunidades en esta etapa.
                       </div>
-                    ) : (
-                      <details className="border-t border-[#eff0ee]"><summary className="cursor-pointer px-5 py-2.5 text-xs font-semibold text-[#66716f] hover:bg-[#fafaf8]">Mostrar columnas y detalles</summary>
-                      <div className="overflow-x-auto bg-white">
-                        <table className="hg-list-table w-full text-left text-xs min-w-[1050px] table-fixed">
-                          <thead className="text-gray-500 uppercase text-xs font-extrabold border-b border-gray-200 bg-gray-50/50">
-                            <tr>
-                              <th className="py-3 px-3 w-10 text-center"></th>
-                              <th className="py-3 px-3 w-28 text-left font-extrabold uppercase tracking-normal">Código</th>
-                              <th className="py-3 px-3 text-left font-extrabold uppercase tracking-normal">Oportunidad / Nombre</th>
-                              <th className="py-3 px-3 text-left font-extrabold uppercase tracking-normal">Cliente</th>
-                              <th className="py-3 px-3 text-left font-extrabold uppercase tracking-normal">Tipo Venta</th>
-                              <th className="py-3 px-3 text-left font-extrabold uppercase tracking-normal">Prioridad</th>
-                              <th className="py-3 px-3 text-left font-extrabold uppercase tracking-normal">Fecha Inicio</th>
-                              <th className="py-3 px-3 text-left font-extrabold uppercase tracking-normal">Fecha Límite</th>
-                              <th className="py-3 px-3 text-right font-extrabold uppercase tracking-normal">Monto Total</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100 font-semibold text-[#213343]">
-                            {colProyectos.map((proy) => {
-                              const op = proy.oportunidad;
-                              const monto = getOportunidadTotalValue(op);
-
-                              return (
-                                <tr
-                                  key={proy.id}
-                                  className="hover:bg-orange-50/40 transition group cursor-pointer text-xs"
-                                  onClick={() => handleOpenProyectoModal(proy)}
-                                >
-                                  <td className="py-3 px-3 text-center">
-                                    <div className="w-3 h-3 rounded-full border border-gray-400 bg-white group-hover:border-[#f97316] mx-auto" />
-                                  </td>
-                                  <td className="py-3 px-3 font-mono font-bold text-[#f97316]">{proy.codigo}</td>
-                                  <td className="py-3 px-3 font-bold text-[#213343]">{proy.titulo}</td>
-                                  <td className="py-3 px-3 text-[#f97316] font-bold">
-                                    {proy.cliente?.nombre || 'Cliente sin asignar'}
-                                  </td>
-                                  <td className="py-3 px-3">
-                                    <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full text-[11px] font-bold">
-                                      {op?.tipo_venta || 'Instalación'}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-3">
-                                    <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-[11px] font-bold">
-                                      {op?.prioridad || 'Sin definir'}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-3 font-mono text-gray-600">{op?.fecha_inicio || 'Sin fecha'}</td>
-                                  <td className="py-3 px-3 font-mono font-bold text-amber-800">{op?.fecha_limite || 'Sin fecha'}</td>
-                                  <td className="py-3 px-3 text-right font-bold text-[#213343]">
-                                    ${monto.toLocaleString('es-CL')}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div></details>
                     )}
                   </div>
                 )}

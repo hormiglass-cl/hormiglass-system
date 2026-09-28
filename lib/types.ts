@@ -169,7 +169,7 @@ export interface ChatMensaje {
   contenido?: string;
   menciones?: string[];
   created_at: string;
-  tipo?: 'comentario' | 'actualizacion' | 'abono' | 'reclamo' | string;
+  tipo?: 'comentario' | 'actualizacion' | 'abono' | 'reclamo' | 'seguimiento' | string;
 }
 
 export type TipoAntecedenteDocumento =

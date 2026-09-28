@@ -69,9 +69,6 @@ import {
   MoreHorizontal,
   ListFilter,
   SlidersHorizontal,
-  ArrowUp,
-  ArrowDown,
-  ArrowUpDown,
   ChevronRight,
   ChevronDown,
   ChevronUp,
@@ -87,10 +84,60 @@ import {
   Tag,
   Compass,
   Disc,
+  AlarmClock,
+  ClipboardCheck,
 } from 'lucide-react';
 
 import { useSearchParams } from 'next/navigation';
 import { CotizacionModal } from '../../components/CotizacionModal';
+
+function AreaCardHeader({
+  icon: Icon,
+  title,
+  open,
+  onToggle,
+  aside,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  aside?: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="w-full p-3 bg-white hover:bg-gray-50 text-[#213343] font-semibold text-sm flex items-center justify-between gap-3 transition cursor-pointer text-left"
+    >
+      <span className="flex items-center gap-2.5 min-w-0">
+        <Icon className="w-4 h-4 text-[#f97316] shrink-0" />
+        <span className="truncate">{title}</span>
+      </span>
+      <span className="flex items-center gap-2 shrink-0">
+        {aside}
+        {open ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
+      </span>
+    </button>
+  );
+}
+
+// Convierte el texto de un recordatorio en pares [etiqueta, valor].
+// Soporta el formato actual (una línea por campo) y el anterior ("⏰ ... · fecha · Resp: ...").
+function parseSeguimientoContenido(contenido: string): [string, string][] {
+  const limpio = contenido.replace(/^⏰\s*/, '');
+  const partes = limpio.includes('\n') ? limpio.split('\n') : limpio.split(' · ');
+  return partes
+    .map((parte) => parte.trim())
+    .filter(Boolean)
+    .map((parte): [string, string] => {
+      const idx = parte.indexOf(': ');
+      if (idx === -1) return ['Fecha', parte];
+      const label = parte.slice(0, idx);
+      return [label === 'Resp' ? 'Responsable' : label, parte.slice(idx + 2)];
+    });
+}
 
 function isUUID(id: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
@@ -115,9 +162,7 @@ export default function PipelineVentasPage() {
   const [filterAsignado, setFilterAsignado] = useState<string>('todos');
   const [collapsedParentSections, setCollapsedParentSections] = useState<Record<string, boolean>>({});
 
-  // Sorting & List View Section Collapsing State
-  const [sortField, setSortField] = useState<'titulo' | 'cliente' | 'tipo_venta' | 'fecha_inicio' | 'fecha_limite' | 'monto' | 'prioridad'>('titulo');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  // List View Section Collapsing State
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [stageMenuPos, setStageMenuPos] = useState<{ opId: string; top: number; left: number } | null>(null);
   const [statusSearchQuery, setStatusSearchQuery] = useState('');
@@ -130,6 +175,8 @@ export default function PipelineVentasPage() {
 
   // Deletion Modal State for Oportunidad
   const [opToDelete, setOpToDelete] = useState<OportunidadVenta | null>(null);
+  const [deleteOpError, setDeleteOpError] = useState('');
+  const [deletingOp, setDeletingOp] = useState(false);
   const [cotToDeleteInModal, setCotToDeleteInModal] = useState<Cotizacion | null>(null);
 
   // Accordion Sections State in Modal (Todas cerradas por defecto)
@@ -168,11 +215,17 @@ export default function PipelineVentasPage() {
   // Reclamo Mode in Chat
   const [isReclamoMode, setIsReclamoMode] = useState(false);
 
+  // Seguimiento comercial (recordatorio) desde el compositor de Actividad
+  const [isSeguimientoMode, setIsSeguimientoMode] = useState(false);
+  const [seguimientoDraft, setSeguimientoDraft] = useState({ resultado: '', accion: '', fecha: '', responsable: '' });
+  const [seguimientoSaving, setSeguimientoSaving] = useState(false);
+
   // Area Sections Collapsible State (Secciones 1, 2 y 3) (Todas contraídas por defecto al entrar)
-  const [areaExpanded, setAreaExpanded] = useState<{ comercial: boolean; produccion: boolean; reventa: boolean }>({
+  const [areaExpanded, setAreaExpanded] = useState<{ comercial: boolean; produccion: boolean; reventa: boolean; cierre: boolean }>({
     comercial: false,
     produccion: false,
     reventa: false,
+    cierre: false,
   });
 
   // Órdenes de Compra vinculadas a la Oportunidad
@@ -263,7 +316,7 @@ export default function PipelineVentasPage() {
 
   // Activity Search & Filter State
   const [activitySearchQuery, setActivitySearchQuery] = useState('');
-  const [activityFilter, setActivityFilter] = useState<'all' | 'comentarios' | 'sistema' | 'reclamos'>('all');
+  const [activityFilter, setActivityFilter] = useState<'all' | 'comentarios' | 'sistema' | 'reclamos' | 'seguimiento'>('all');
   const [showActivitySearch, setShowActivitySearch] = useState(false);
   const [likedMessages, setLikedMessages] = useState<Record<string, boolean>>({});
 
@@ -593,7 +646,9 @@ export default function PipelineVentasPage() {
       comercial: false,
       produccion: false,
       reventa: false,
+      cierre: false,
     });
+    setIsSeguimientoMode(false);
     setSelectedOp(op);
     setEditTitleValue(op.titulo);
     loadLatestActivities(op.id);
@@ -794,6 +849,7 @@ export default function PipelineVentasPage() {
                 comercial: false,
                 produccion: false,
                 reventa: false,
+                cierre: false,
               });
               setSelectedOp(found);
               setEditTitleValue(found.titulo);
@@ -1053,6 +1109,7 @@ export default function PipelineVentasPage() {
       etapas: [
         { id: 'nueva' as EstadoPipeline, label: 'Nueva Oportunidad', color: 'border-amber-300 text-amber-900', bg: 'bg-amber-50' },
         { id: 'pagada' as EstadoPipeline, label: 'Pago Validado', color: 'border-blue-300 text-blue-900', bg: 'bg-blue-50' },
+        { id: 'programada' as EstadoPipeline, label: 'En Programación', color: 'border-indigo-300 text-indigo-900', bg: 'bg-indigo-50' },
         { id: 'entregada' as EstadoPipeline, label: 'Venta Cerrada', color: 'border-emerald-300 text-emerald-900', bg: 'bg-emerald-50' },
       ],
     },
@@ -1089,11 +1146,6 @@ export default function PipelineVentasPage() {
       ],
     },
   ];
-  const SECCION_COMERCIAL = SECCIONES_PIPELINE[0];
-  const ETAPAS_COMERCIALES = SECCION_COMERCIAL.etapas;
-  const esEtapaComercial = (estado: EstadoPipeline) =>
-    ETAPAS_COMERCIALES.some((etapa) => etapa.id === estado);
-
   const getProdLogTipoLabel = (tipo: string) => {
     if (tipo === 'obra') return 'Obra';
     if (tipo === 'produccion') return 'Producción';
@@ -1299,20 +1351,29 @@ export default function PipelineVentasPage() {
 
   const pipelineStates = SECCIONES_PIPELINE.flatMap((s) => s.etapas);
 
-  // Delete Oportunidad permanently from Supabase
   const handleDeleteOportunidad = async () => {
-    if (!opToDelete) return;
+    if (!opToDelete || deletingOp) return;
+    setDeletingOp(true);
+    setDeleteOpError('');
     try {
-      await supabase.from('oportunidades').delete().eq('id', opToDelete.id);
+      const { data, error } = await supabase.from('oportunidades')
+        .delete().eq('id', opToDelete.id).select('id').maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error('No se eliminó el registro. Revisa tus permisos e intenta nuevamente.');
+
+      setOportunidades((prev) => prev.filter((o) => o.id !== opToDelete.id));
+      setAllCotizaciones((prev) => prev.filter((c) => c.oportunidad_id !== opToDelete.id));
+      if (selectedOp?.id === opToDelete.id) setSelectedOp(null);
+      setOpToDelete(null);
     } catch (err) {
       console.error('Error deleting oportunidad from Supabase:', err);
+      const message = err && typeof err === 'object' && 'code' in err && err.code === '23503'
+        ? 'Esta oportunidad tiene una orden de compra vinculada. No se puede eliminar mientras conserve ese vínculo.'
+        : err instanceof Error ? err.message : 'No se pudo eliminar la oportunidad.';
+      setDeleteOpError(message);
+    } finally {
+      setDeletingOp(false);
     }
-
-    setOportunidades((prev) => prev.filter((o) => o.id !== opToDelete.id));
-    if (selectedOp && selectedOp.id === opToDelete.id) {
-      setSelectedOp(null);
-    }
-    setOpToDelete(null);
   };
 
   // Delete Cotización in modal from Supabase
@@ -1340,84 +1401,8 @@ export default function PipelineVentasPage() {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
   };
 
-  // Sort Opportunities Helper for List View
-  const sortOpportunities = (ops: OportunidadVenta[]) => {
-    return [...ops].sort((a, b) => {
-      let valA: any = '';
-      let valB: any = '';
-
-      if (sortField === 'titulo') {
-        valA = (a.titulo || '').toLowerCase();
-        valB = (b.titulo || '').toLowerCase();
-      } else if (sortField === 'cliente') {
-        valA = (a.cliente?.nombre || '').toLowerCase();
-        valB = (b.cliente?.nombre || '').toLowerCase();
-      } else if (sortField === 'tipo_venta') {
-        valA = (a.tipo_venta || '').toLowerCase();
-        valB = (b.tipo_venta || '').toLowerCase();
-      } else if (sortField === 'fecha_inicio') {
-        valA = a.fecha_inicio || '';
-        valB = b.fecha_inicio || '';
-      } else if (sortField === 'fecha_limite') {
-        valA = a.fecha_limite || '9999-99-99';
-        valB = b.fecha_limite || '9999-99-99';
-      } else if (sortField === 'monto') {
-        valA = getOportunidadTotalValue(a);
-        valB = getOportunidadTotalValue(b);
-      } else if (sortField === 'prioridad') {
-        const priorityOrder: Record<string, number> = { urgente: 3, alta: 2, normal: 1 };
-        valA = priorityOrder[a.prioridad || 'normal'] || 0;
-        valB = priorityOrder[b.prioridad || 'normal'] || 0;
-      }
-
-      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
-      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-  };
-
-  // Column Widths para la Vista de Lista (Ajustable por arrastre)
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({
-    codigo: 110,
-    titulo: 280,
-    cliente: 220,
-    tipo_venta: 150,
-    prioridad: 130,
-    fecha_inicio: 130,
-    fecha_limite: 130,
-    monto: 140,
-  });
-
-  const resizingRef = React.useRef<{ colKey: string; startX: number; startWidth: number } | null>(null);
-
-  const handleMouseDownResize = (colKey: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    resizingRef.current = {
-      colKey,
-      startX: e.clientX,
-      startWidth: columnWidths[colKey] || 130,
-    };
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!resizingRef.current) return;
-      const deltaX = moveEvent.clientX - resizingRef.current.startX;
-      const newWidth = Math.max(70, resizingRef.current.startWidth + deltaX);
-      setColumnWidths((prev) => ({
-        ...prev,
-        [resizingRef.current!.colKey]: newWidth,
-      }));
-    };
-
-    const handleMouseUp = () => {
-      resizingRef.current = null;
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  };
+  const sortOpportunities = (ops: OportunidadVenta[]) =>
+    [...ops].sort((a, b) => (a.titulo || '').localeCompare(b.titulo || '', 'es'));
 
   // Modal Split Ratio State (Porcentaje de ancho de la columna izquierda, por defecto 64%)
   const [modalLeftColRatio, setModalLeftColRatio] = useState<number>(64);
@@ -1487,57 +1472,6 @@ export default function PipelineVentasPage() {
     if (stage === 'entregada') return 'bg-emerald-500 border-emerald-400 text-emerald-500';
     if (stage.startsWith('prod_')) return 'bg-purple-500 border-purple-400 text-purple-500';
     return 'bg-indigo-500 border-indigo-400 text-indigo-500';
-  };
-
-  // Helper for sorting and resizing table headers
-  const renderSortHeader = (
-    label: string,
-    field: 'titulo' | 'cliente' | 'tipo_venta' | 'fecha_inicio' | 'fecha_limite' | 'monto' | 'prioridad',
-    colKey: string,
-    align: 'left' | 'center' | 'right' = 'left'
-  ) => {
-    const isActive = sortField === field;
-    const width = columnWidths[colKey] || 130;
-
-    return (
-      <th
-        style={{ width: `${width}px` }}
-        onClick={() => {
-          if (sortField === field) {
-            setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-          } else {
-            setSortField(field);
-            setSortDirection('asc');
-          }
-        }}
-        className={`py-2.5 px-3 cursor-pointer hover:text-[#f97316] transition select-none text-${align} text-xs font-extrabold uppercase tracking-normal text-gray-500 relative group border-r border-gray-200/50`}
-      >
-        <div
-          className={`flex items-center gap-1.5 ${
-            align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start'
-          }`}
-        >
-          <span className="truncate">{label}</span>
-          {isActive ? (
-            sortDirection === 'asc' ? (
-              <ArrowUp className="w-3.5 h-3.5 text-[#f97316] shrink-0" />
-            ) : (
-              <ArrowDown className="w-3.5 h-3.5 text-[#f97316] shrink-0" />
-            )
-          ) : (
-            <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-40 hover:opacity-100 shrink-0" />
-          )}
-        </div>
-
-        {/* Resizer Handle Bar */}
-        <div
-          onMouseDown={(e) => handleMouseDownResize(colKey, e)}
-          onClick={(e) => e.stopPropagation()}
-          className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#f97316] active:bg-[#f97316] z-10 transition opacity-0 group-hover:opacity-100"
-          title="Arrastrar para cambiar ancho de columna"
-        />
-      </th>
-    );
   };
 
   // Una versión nueva reemplaza a la anterior en los importes comerciales.
@@ -1630,7 +1564,7 @@ export default function PipelineVentasPage() {
   const addOportunidadActividad = async (
     opId: string,
     contenido: string,
-    tipo: 'comentario' | 'actualizacion' | 'abono' | 'reclamo' = 'actualizacion'
+    tipo: 'comentario' | 'actualizacion' | 'abono' | 'reclamo' | 'seguimiento' = 'actualizacion'
   ) => {
     const targetOp = oportunidades.find((o) => o.id === opId) || selectedOp;
     if (!targetOp) return;
@@ -1913,6 +1847,56 @@ export default function PipelineVentasPage() {
         console.error(`Error updating field ${String(field)}:`, err);
       }
     }
+  };
+
+  const toDateTimeLocal = (iso?: string | null) =>
+    iso ? new Date(iso).toLocaleString('sv-SE', { hour12: false }).replace(' ', 'T').slice(0, 16) : '';
+
+  const openSeguimientoPanel = () => {
+    if (!selectedOp) return;
+    setSeguimientoDraft({
+      resultado: '',
+      accion: selectedOp.proxima_accion || '',
+      fecha: toDateTimeLocal(selectedOp.proxima_accion_fecha),
+      responsable: selectedOp.seguimiento_responsable_id || selectedOp.asignado_a || '',
+    });
+    setIsReclamoMode(false);
+    setIsSeguimientoMode(true);
+  };
+
+  const handleSaveSeguimiento = async () => {
+    if (!selectedOp || !seguimientoDraft.accion.trim()) return;
+    setSeguimientoSaving(true);
+    const opId = selectedOp.id;
+    const resultado = seguimientoDraft.resultado.trim();
+    const changes: Partial<OportunidadVenta> = {
+      proxima_accion: seguimientoDraft.accion.trim(),
+      proxima_accion_fecha: seguimientoDraft.fecha ? new Date(seguimientoDraft.fecha).toISOString() : null,
+      seguimiento_responsable_id: seguimientoDraft.responsable || null,
+      ...(resultado ? { seguimiento_resultado: resultado } : {}),
+    };
+
+    setOportunidades((prev) => prev.map((o) => (o.id === opId ? { ...o, ...changes } : o)));
+    setSelectedOp((prev) => (prev && prev.id === opId ? { ...prev, ...changes } : prev));
+    if (isUUID(opId)) {
+      const { error } = await supabase.from('oportunidades').update(changes).eq('id', opId);
+      if (error) console.error('Error guardando seguimiento comercial:', error);
+    }
+
+    const responsable = usuariosApp.find((u) => u.id === changes.seguimiento_responsable_id);
+    const fechaTexto = changes.proxima_accion_fecha
+      ? new Date(changes.proxima_accion_fecha).toLocaleString('es-CL', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : 'Sin fecha';
+    const partes = [
+      `Próxima acción: ${changes.proxima_accion}`,
+      `Fecha: ${fechaTexto}`,
+      `Responsable: ${responsable?.nombre || 'Sin responsable'}`,
+      ...(resultado ? [`Último contacto: ${resultado}`] : []),
+    ];
+    await addOportunidadActividad(opId, partes.join('\n'), 'seguimiento');
+
+    setSeguimientoSaving(false);
+    setIsSeguimientoMode(false);
   };
 
   // Toggle producto en oportunidad
@@ -2278,10 +2262,9 @@ export default function PipelineVentasPage() {
     setIsEditingTitle(false);
   };
 
-  const oportunidadesComerciales = oportunidades.filter((op) => esEtapaComercial(op.estado_pipeline));
   const isUnaccreditedClose = (op: OportunidadVenta) =>
     ['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline) && deliveryAccreditation[op.id] !== true;
-  const filteredOportunidades = oportunidadesComerciales.filter((op) => {
+  const filteredOportunidades = oportunidades.filter((op) => {
     // 1. Text Search (código, título, cliente nombre, cliente rut)
     if (filterSearch.trim()) {
       const q = filterSearch.toLowerCase().trim();
@@ -2354,13 +2337,7 @@ export default function PipelineVentasPage() {
             <span>Pipeline de Oportunidades de Venta</span>
           </h1>
           <p className="text-xs text-gray-600 mt-1">
-            Gestiona oportunidades desde la captación hasta el cierre comercial.
-          </p>
-          <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
-            Después del cierre, continúa en
-            <Link href="/planificacion" className="font-semibold text-[#c9621d] hover:underline">Planificación</Link>
-            o
-            <Link href="/reventa" className="font-semibold text-[#c9621d] hover:underline">Reventa</Link>.
+            Gestiona todas las oportunidades desde la captación hasta la entrega y postventa.
           </p>
         </div>
 
@@ -2426,7 +2403,7 @@ export default function PipelineVentasPage() {
             className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 font-bold text-[#213343] focus:outline-none focus:border-[#f97316] cursor-pointer"
           >
             <option value="todos">Todos los Estados</option>
-            {ETAPAS_COMERCIALES.map((etapa) => (
+            {pipelineStates.map((etapa) => (
               <option key={etapa.id} value={etapa.id}>{etapa.label}</option>
             ))}
           </select>
@@ -2490,7 +2467,7 @@ export default function PipelineVentasPage() {
           )}
 
           <span className="font-extrabold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-md border border-gray-200">
-            Mostrando <strong className="text-[#f97316]">{filteredOportunidades.length}</strong> de {oportunidadesComerciales.length}
+            Mostrando <strong className="text-[#f97316]">{filteredOportunidades.length}</strong> de {oportunidades.length}
           </span>
         </div>
       </div>
@@ -2510,11 +2487,8 @@ export default function PipelineVentasPage() {
         </div>
       ) : activeTab === 'tablero' ? (
         <div className="space-y-4 ">
-          {(() => {
-            const activeSection = SECCION_COMERCIAL;
-
-            return (
-              <div className="p-4 rounded-xl border border-gray-200 bg-white space-y-4 min-h-[560px]">
+          {SECCIONES_PIPELINE.map((activeSection) => (
+              <div key={activeSection.id} className="p-4 rounded-xl border border-gray-200 bg-white space-y-4 min-h-[560px]">
                 <div className="flex items-center justify-between border-b border-gray-200 pb-3">
                   <h3 className="text-base font-semibold text-[#26313a]">{activeSection.nombre}</h3>
                   <span className="text-xs font-mono font-bold text-gray-500">
@@ -2596,6 +2570,7 @@ export default function PipelineVentasPage() {
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
+                                        setDeleteOpError('');
                                         setOpToDelete(op);
                                       }}
                                       className="p-1 text-gray-400 hover:text-red-600 rounded transition"
@@ -2663,13 +2638,12 @@ export default function PipelineVentasPage() {
                   })}
                 </div>
               </div>
-            );
-          })()}
+          ))}
         </div>
       ) : (
         /* Vista Lista Agrupada por Secciones del Pipeline */
         <div className="space-y-5">
-          {[SECCION_COMERCIAL].map((sec) => {
+          {SECCIONES_PIPELINE.map((sec) => {
             const isSecCollapsed = !!collapsedParentSections[sec.id];
             const secOps = filteredOportunidades.filter((o) =>
               sec.etapas.some((e) => e.id === o.estado_pipeline)
@@ -2777,169 +2751,11 @@ export default function PipelineVentasPage() {
                                   </div>;
                                 })}
                               </div>}
-                              {colOps.length === 0 ? (
+                              {colOps.length === 0 && (
                                 <div className="px-5 py-4 text-xs text-[#8a9390]">
                                   No hay oportunidades en esta etapa.
                                 </div>
-                              ) : (
-                                <details className="border-t border-[#eff0ee]">
-                                  <summary className="cursor-pointer px-5 py-2.5 text-xs font-semibold text-[#66716f] hover:bg-[#fafaf8]">Mostrar columnas y edición rápida</summary>
-                                <div className="overflow-x-auto bg-white">
-                                  <table className="hg-list-table w-full text-left text-xs min-w-[1000px] table-fixed">
-                                    <thead className="text-gray-500 uppercase text-xs font-extrabold border-b border-gray-200 bg-gray-50/60">
-                                      <tr>
-                                        <th className="py-3 px-2 w-10 text-center align-middle"></th>
-                                        <th
-                                          style={{ width: `${columnWidths.codigo}px` }}
-                                          className="py-3 px-3 text-left text-xs font-extrabold uppercase tracking-normal align-middle relative group border-r border-gray-200/50"
-                                        >
-                                          <span>Código</span>
-                                          <div
-                                            onMouseDown={(e) => handleMouseDownResize('codigo', e)}
-                                            onClick={(e) => e.stopPropagation()}
-                                            className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#f97316] active:bg-[#f97316] z-10 transition opacity-0 group-hover:opacity-100"
-                                            title="Arrastrar para cambiar ancho de columna"
-                                          />
-                                        </th>
-                                        {renderSortHeader('Oportunidad / Nombre', 'titulo', 'titulo', 'left')}
-                                        {renderSortHeader('Cliente', 'cliente', 'cliente', 'left')}
-                                        {renderSortHeader('Tipo Venta', 'tipo_venta', 'tipo_venta', 'left')}
-                                        {renderSortHeader('Prioridad', 'prioridad', 'prioridad', 'left')}
-                                        {renderSortHeader('Fecha Inicio', 'fecha_inicio', 'fecha_inicio', 'left')}
-                                        {renderSortHeader('Fecha Límite', 'fecha_limite', 'fecha_limite', 'left')}
-                                        {renderSortHeader('Monto Total', 'monto', 'monto', 'right')}
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100 font-semibold text-[#213343]">
-                                      {colOps.map((op) => {
-                                        const montoTotal = getOportunidadTotalValue(op);
-                                        const isBeingDragged = draggedOpId === op.id;
-
-                                        return (
-                                          <tr
-                                            key={op.id}
-                                            draggable={true}
-                                            onDragStart={(e) => handleDragStart(e, op.id)}
-                                            onDragEnd={handleDragEnd}
-                                            onClick={() => handleOpenOportunidad(op)}
-                                            className={`hover:bg-orange-50/40 transition group cursor-grab active:cursor-grabbing text-xs ${
-                                              isBeingDragged ? 'opacity-40 bg-amber-50 border-dashed border-[#f97316]' : ''
-                                            }`}
-                                          >
-                                            <td className="py-3 px-2 w-10 text-center align-middle" onClick={(e) => e.stopPropagation()}>
-                                              <div className="flex items-center justify-center gap-1">
-                                                <GripVertical className="w-3.5 h-3.5 text-gray-400 opacity-50 group-hover:opacity-100 transition shrink-0 cursor-grab" />
-                                                <button
-                                                  type="button"
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    const rect = e.currentTarget.getBoundingClientRect();
-                                                    setStageMenuPos({
-                                                      opId: op.id,
-                                                      top: rect.bottom + 4,
-                                                      left: rect.left,
-                                                    });
-                                                  }}
-                                                  className={`w-3.5 h-3.5 rounded-full border shadow-2xs transition hover:scale-110 cursor-pointer ${getStageDotColor(op.estado_pipeline)}`}
-                                                  title="Hacer clic para cambiar el estado del pipeline"
-                                                />
-                                              </div>
-                                            </td>
-
-                                        <td style={{ width: `${columnWidths.codigo}px` }} className="py-3 px-3 font-mono font-bold text-gray-600 text-xs align-middle truncate">
-                                          {op.codigo}
-                                        </td>
-
-                                        <td style={{ width: `${columnWidths.titulo}px` }} className="py-3 px-3 font-bold text-[#213343] group-hover:text-[#f97316] transition text-xs truncate align-middle" title={op.titulo}>
-                                          {op.titulo}
-                                        </td>
-
-                                        <td style={{ width: `${columnWidths.cliente}px` }} className="py-3 px-3 text-xs align-middle truncate" onClick={(e) => e.stopPropagation()}>
-                                          <Link
-                                            href={`/clientes/${op.cliente_id}`}
-                                            className="font-bold text-[#f97316] hover:underline flex items-center gap-1.5 truncate"
-                                            title={op.cliente?.nombre || 'Ver Cliente'}
-                                          >
-                                            <Building className="w-3.5 h-3.5 text-[#f97316] shrink-0" />
-                                            <span className="truncate">{op.cliente?.nombre || 'Ver Cliente'}</span>
-                                          </Link>
-                                        </td>
-
-                                        <td style={{ width: `${columnWidths.tipo_venta}px` }} className="py-3 px-3 text-xs align-middle" onClick={(e) => e.stopPropagation()}>
-                                          <select
-                                            value={op.tipo_venta || 'Instalación'}
-                                            onChange={async (e) => {
-                                              const newTipo = e.target.value;
-                                              updateOportunidadField(op.id, 'tipo_venta', newTipo);
-                                              await addOportunidadActividad(op.id, `Tipo de venta cambiado a "${newTipo}" desde la lista.`);
-                                            }}
-                                            className="text-xs font-bold px-2 py-1 rounded-md border bg-purple-50 text-purple-900 border-purple-200 cursor-pointer focus:outline-none w-full"
-                                          >
-                                            <option value="Instalación">Instalación</option>
-                                            <option value="Suministro">Suministro</option>
-                                            <option value="Reventa de Material">Reventa Material</option>
-                                          </select>
-                                        </td>
-
-                                        <td style={{ width: `${columnWidths.prioridad}px` }} className="py-3 px-3 text-xs align-middle" onClick={(e) => e.stopPropagation()}>
-                                          <select
-                                            value={op.prioridad || 'normal'}
-                                            onChange={async (e) => {
-                                              const newPrio = e.target.value as 'normal' | 'alta' | 'urgente';
-                                              updateOportunidadField(op.id, 'prioridad', newPrio);
-                                              await addOportunidadActividad(op.id, `Prioridad cambiada a "${newPrio.toUpperCase()}" desde la lista.`);
-                                            }}
-                                            className={`text-xs font-bold px-2 py-1 rounded-md border cursor-pointer focus:outline-none w-full ${
-                                              op.prioridad === 'urgente'
-                                                ? 'bg-red-50 text-red-700 border-red-200'
-                                                : op.prioridad === 'alta'
-                                                ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                                : 'bg-blue-50 text-blue-700 border-blue-200'
-                                            }`}
-                                          >
-                                            <option value="normal">Baja / Normal</option>
-                                            <option value="alta">Alta</option>
-                                            <option value="urgente">Urgente</option>
-                                          </select>
-                                        </td>
-
-                                        <td style={{ width: `${columnWidths.fecha_inicio}px` }} className="py-3 px-3 font-mono text-gray-600 text-xs align-middle" onClick={(e) => e.stopPropagation()}>
-                                          <input
-                                            type="date"
-                                            value={op.fecha_inicio || ''}
-                                            onChange={async (e) => {
-                                              const newDate = e.target.value;
-                                              updateOportunidadField(op.id, 'fecha_inicio', newDate);
-                                              await addOportunidadActividad(op.id, `Fecha de inicio actualizada a ${newDate} desde la lista.`);
-                                            }}
-                                            className="bg-transparent hover:bg-gray-100 border border-transparent hover:border-gray-300 rounded-lg px-1.5 py-1 font-mono text-xs text-gray-700 cursor-pointer focus:outline-none focus:border-[#f97316] w-full"
-                                          />
-                                        </td>
-
-                                        <td style={{ width: `${columnWidths.fecha_limite}px` }} className="py-3 px-3 font-mono font-bold text-amber-800 text-xs align-middle" onClick={(e) => e.stopPropagation()}>
-                                          <input
-                                            type="date"
-                                            value={op.fecha_limite || ''}
-                                            onChange={async (e) => {
-                                              const newDate = e.target.value;
-                                              updateOportunidadField(op.id, 'fecha_limite', newDate);
-                                              await addOportunidadActividad(op.id, `Fecha límite actualizada a ${newDate} desde la lista.`);
-                                            }}
-                                            className="bg-transparent hover:bg-amber-50 border border-transparent hover:border-amber-300 rounded-lg px-1.5 py-1 font-mono font-bold text-amber-800 cursor-pointer focus:outline-none focus:border-[#f97316] w-full"
-                                          />
-                                        </td>
-
-                                        <td style={{ width: `${columnWidths.monto}px` }} className="py-3 px-3 text-right font-bold text-[#213343] text-xs align-middle">
-                                          ${montoTotal.toLocaleString('es-CL')}
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                            </details>
-                          )}
+                              )}
                         </div>
                       )}
                     </div>
@@ -2993,9 +2809,9 @@ export default function PipelineVentasPage() {
                 <div className="flex items-center gap-3">
                   <Link href={`/ventas/${selectedOp.id}/operacion`} className="px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-[#f97316] rounded-md border border-orange-200 font-bold text-xs">Producción y entregas</Link>
                   <button
-                    onClick={() => setOpToDelete(selectedOp)}
+                    onClick={() => { setDeleteOpError(''); setOpToDelete(selectedOp); }}
                     className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-md transition border border-red-200 font-bold text-xs flex items-center gap-1.5"
-                    title="Eliminar esta oportunidad de Supabase"
+                    title="Eliminar oportunidad"
                   >
                     <Trash2 className="w-4 h-4" />
                     <span>Eliminar</span>
@@ -3062,32 +2878,19 @@ export default function PipelineVentasPage() {
                         <span>Estado</span>
                       </div>
                       <div className="relative min-w-0 flex-1 h-8">
-                        {esEtapaComercial(selectedOp.estado_pipeline) ? (
-                          <>
-                            <select
-                              value={selectedOp.estado_pipeline}
-                              onChange={async (e) => {
-                                const newStage = e.target.value as EstadoPipeline;
-                                await moveOportunidadToState(selectedOp.id, newStage);
-                              }}
-                              className="w-full h-full appearance-none bg-gray-100 hover:bg-gray-200 text-[#213343] font-bold text-xs pl-3 pr-8 rounded-md border border-gray-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316] transition shadow-xs"
-                            >
-                              {ETAPAS_COMERCIALES.map((etapa) => (
-                                <option key={etapa.id} value={etapa.id}>{etapa.label}</option>
-                              ))}
-                            </select>
-                            <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                          </>
-                        ) : (
-                          <Link
-                            href={selectedOp.rama_destino === 'reventa' || selectedOp.estado_pipeline.startsWith('rev_') ? '/reventa' : '/planificacion'}
-                            className="flex h-full items-center justify-between gap-2 rounded-md border border-gray-200 bg-gray-100 px-3 text-xs font-semibold text-[#213343] hover:border-[#f97316]"
-                            title="Abrir el pipeline operativo correspondiente"
-                          >
-                            <span className="truncate">{pipelineStates.find((etapa) => etapa.id === selectedOp.estado_pipeline)?.label || 'Etapa operativa'}</span>
-                            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#f97316]" />
-                          </Link>
-                        )}
+                        <select
+                          value={selectedOp.estado_pipeline}
+                          onChange={async (e) => {
+                            const newStage = e.target.value as EstadoPipeline;
+                            await moveOportunidadToState(selectedOp.id, newStage);
+                          }}
+                          className="w-full h-full appearance-none bg-gray-100 hover:bg-gray-200 text-[#213343] font-bold text-xs pl-3 pr-8 rounded-md border border-gray-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316] transition shadow-xs"
+                        >
+                          {pipelineStates.map((etapa) => (
+                            <option key={etapa.id} value={etapa.id}>{etapa.label}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                       </div>
                     </div>
                   </div>
@@ -3189,79 +2992,6 @@ export default function PipelineVentasPage() {
                       </div>
                     </div>
                   </div>
-                </div>
-              </section>
-
-              <details key={`seguimiento-panel-${selectedOp.id}`} className="group rounded-xl border border-gray-200 bg-white">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[#213343] hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-[#f97316] [&::-webkit-details-marker]:hidden">
-                  <span className="flex items-center gap-2"><Calendar className="h-4 w-4 text-[#f97316]" />Seguimiento comercial</span>
-                  <span className="ml-auto hidden truncate text-xs font-normal text-gray-500 sm:block">{selectedOp.proxima_accion || 'Sin próxima acción'}</span>
-                  <ChevronDown className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-180" />
-                </summary>
-                <div className="border-t border-gray-100 p-3">
-                  <div className="space-y-2" key={`seguimiento-${selectedOp.id}`}>
-                    <p className="text-xs text-gray-500">Registra el último contacto y define el siguiente paso.</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <input
-                        aria-label="Resultado del último contacto"
-                        placeholder="Resultado del último contacto"
-                        defaultValue={selectedOp.seguimiento_resultado || ''}
-                        onBlur={async (e) => {
-                          const value = e.target.value.trim();
-                          if (value === (selectedOp.seguimiento_resultado || '')) return;
-                          await updateOportunidadField(selectedOp.id, 'seguimiento_resultado', value || null);
-                          await addOportunidadActividad(selectedOp.id, `Contacto comercial registrado: ${value || 'sin resultado'}.`);
-                        }}
-                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
-                      />
-                      <input
-                        aria-label="Próxima acción"
-                        placeholder="Próxima acción"
-                        defaultValue={selectedOp.proxima_accion || ''}
-                        onBlur={async (e) => {
-                          const value = e.target.value.trim();
-                          if (value === (selectedOp.proxima_accion || '')) return;
-                          await updateOportunidadField(selectedOp.id, 'proxima_accion', value || null);
-                          await addOportunidadActividad(selectedOp.id, `Próxima acción: ${value || 'sin definir'}.`);
-                        }}
-                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
-                      />
-                      <input
-                        type="datetime-local"
-                        aria-label="Fecha de próxima acción"
-                        defaultValue={selectedOp.proxima_accion_fecha ? new Date(selectedOp.proxima_accion_fecha).toLocaleString('sv-SE', { hour12: false }).replace(' ', 'T').slice(0, 16) : ''}
-                        onChange={async (e) => {
-                          const date = e.target.value ? new Date(e.target.value).toISOString() : null;
-                          await updateOportunidadField(selectedOp.id, 'proxima_accion_fecha', date);
-                          await addOportunidadActividad(selectedOp.id, `Fecha de próxima acción ${date ? 'programada' : 'eliminada'}.`);
-                        }}
-                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
-                      />
-                      <select
-                        aria-label="Responsable del seguimiento"
-                        defaultValue={selectedOp.seguimiento_responsable_id || selectedOp.asignado_a || ''}
-                        onChange={async (e) => {
-                          const user = usuariosApp.find((u) => u.id === e.target.value);
-                          await updateOportunidadField(selectedOp.id, 'seguimiento_responsable_id', e.target.value || null);
-                          await addOportunidadActividad(selectedOp.id, `Seguimiento asignado a ${user?.nombre || 'sin responsable'}.`);
-                        }}
-                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
-                      >
-                        <option value="">Sin responsable</option>
-                        {usuariosApp.map((user) => <option key={user.id} value={user.id}>{user.nombre}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </details>
-
-              <details key={`clasificacion-panel-${selectedOp.id}`} className="group rounded-xl border border-gray-200 bg-white">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[#213343] hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-[#f97316] [&::-webkit-details-marker]:hidden">
-                  <span className="flex items-center gap-2"><Tag className="h-4 w-4 text-[#f97316]" />Clasificación comercial</span>
-                  <span className="ml-auto hidden truncate text-xs font-normal text-gray-500 sm:block">{selectedOp.tipo_venta || 'Instalación'} · {selectedOp.origen || 'Sin origen'}</span>
-                  <ChevronDown className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-180" />
-                </summary>
-                <div className="grid gap-3 border-t border-gray-100 p-4 text-xs xl:grid-cols-2">
                   <div className="min-w-0">
                     {/* 3. Origen */}
                     <div className="flex min-w-0 items-center gap-3 min-h-[40px]">
@@ -3353,126 +3083,7 @@ export default function PipelineVentasPage() {
                     </div>
                   </div>
                 </div>
-              </details>
-
-              <details key={`cierre-panel-${selectedOp.id}`} className="group rounded-xl border border-gray-200 bg-white">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[#213343] hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-[#f97316] [&::-webkit-details-marker]:hidden">
-                  <span className="flex items-center gap-2"><Check className="h-4 w-4 text-[#f97316]" />Preparación del cierre</span>
-                  <span className="ml-auto text-xs font-normal text-gray-500">
-                    {[
-                      getOportunidadTotalValue(selectedOp) > 0,
-                      Boolean(selectedOp.direccion && selectedOp.comuna),
-                      Boolean(selectedOp.fecha_limite),
-                      Boolean(selectedOp.modalidad_entrega),
-                      Boolean(selectedOp.condicion_pago),
-                      Boolean(selectedOp.rama_destino),
-                    ].filter(Boolean).length}/6 completos
-                  </span>
-                  <ChevronDown className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-180" />
-                </summary>
-                <div className="border-t border-gray-100 p-3">
-                  <div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                      {([
-                        ['Cotización vigente', getOportunidadTotalValue(selectedOp) > 0],
-                        ['Dirección y comuna', Boolean(selectedOp.direccion && selectedOp.comuna)],
-                        ['Fecha estimada', Boolean(selectedOp.fecha_limite)],
-                        ['Modalidad de entrega', Boolean(selectedOp.modalidad_entrega)],
-                        ['Condición de pago', Boolean(selectedOp.condicion_pago)],
-                        ['Ruta operacional', Boolean(selectedOp.rama_destino)],
-                      ] as [string, boolean][]).map(([label, ready]) => (
-                        <span key={label} className={`text-xs ${ready ? 'text-emerald-700' : 'text-amber-700'}`}>
-                          {ready ? '✓' : '○'} {label}
-                        </span>
-                      ))}
-                    </div>
-                    <p className="text-[11px] text-gray-500 mt-2">
-                      Abonos registrados: ${getOportunidadAbonadoValue(selectedOp).toLocaleString('es-CL')}. Los pendientes no impiden avanzar.
-                    </p>
-                  </div>
-                </div>
-              </details>
-
-              <details key={`ruta-panel-${selectedOp.id}`} className="group rounded-xl border border-gray-200 bg-white">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[#213343] hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-[#f97316] [&::-webkit-details-marker]:hidden">
-                  <span className="flex items-center gap-2"><Layers className="h-4 w-4 text-[#f97316]" />Ruta operativa</span>
-                  <span className="ml-auto hidden text-xs font-normal text-gray-500 sm:block">Abastecimiento, entrega y responsables</span>
-                  <ChevronDown className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-180" />
-                </summary>
-                <div className="border-t border-gray-100 p-3">
-                  <div className="space-y-2" key={`ruta-${selectedOp.id}`}>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <select
-                        aria-label="Abastecimiento"
-                        defaultValue={selectedOp.abastecimiento || ''}
-                        onChange={async (e) => {
-                          await updateOportunidadField(selectedOp.id, 'abastecimiento', e.target.value || null);
-                          await addOportunidadActividad(selectedOp.id, `Abastecimiento: ${e.target.selectedOptions[0].text}.`);
-                        }}
-                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
-                      >
-                        <option value="">Definir abastecimiento</option>
-                        <option value="fabricar">Fabricar</option>
-                        <option value="compra_proveedor">Comprar a proveedor</option>
-                        <option value="stock">Stock disponible</option>
-                      </select>
-                      <select
-                        aria-label="Forma de entrega"
-                        defaultValue={selectedOp.forma_entrega || ''}
-                        onChange={async (e) => {
-                          await updateOportunidadField(selectedOp.id, 'forma_entrega', e.target.value || null);
-                          await addOportunidadActividad(selectedOp.id, `Entrega: ${e.target.selectedOptions[0].text}.`);
-                        }}
-                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
-                      >
-                        <option value="">Definir entrega</option>
-                        <option value="retiro_cliente">Retiro por cliente</option>
-                        <option value="retiro_proveedor">Retiro en proveedor</option>
-                        <option value="despacho_propio">Despacho propio</option>
-                        <option value="despacho_subcontratado">Despacho subcontratado</option>
-                      </select>
-                      {([
-                        ['fecha_prometida', 'Fecha prometida'],
-                        ['fecha_tentativa_produccion', 'Producción tentativa'],
-                        ['fecha_tentativa_entrega', 'Entrega tentativa'],
-                      ] as [keyof OportunidadVenta, string][]).map(([field, label]) => (
-                        <label key={field} className="text-[11px] text-gray-600">
-                          {label}
-                          <input
-                            type="date"
-                            defaultValue={String(selectedOp[field] || '').slice(0, 10)}
-                            onChange={(e) => updateOportunidadField(selectedOp.id, field, e.target.value || null)}
-                            className="block w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
-                          />
-                        </label>
-                      ))}
-                      <input
-                        aria-label="Dirección de obra"
-                        placeholder="Dirección de obra"
-                        defaultValue={selectedOp.direccion_obra || ''}
-                        onBlur={(e) => updateOportunidadField(selectedOp.id, 'direccion_obra', e.target.value.trim() || null)}
-                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
-                      />
-                      <input
-                        aria-label="Vehículo o transporte"
-                        placeholder="Vehículo o transporte"
-                        defaultValue={selectedOp.transporte || ''}
-                        onBlur={(e) => updateOportunidadField(selectedOp.id, 'transporte', e.target.value.trim() || null)}
-                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
-                      />
-                      <select
-                        aria-label="Responsable operativo"
-                        defaultValue={selectedOp.responsable_operativo_id || ''}
-                        onChange={(e) => updateOportunidadField(selectedOp.id, 'responsable_operativo_id', e.target.value || null)}
-                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
-                      >
-                        <option value="">Sin responsable operativo</option>
-                        {usuariosApp.map((user) => <option key={user.id} value={user.id}>{user.nombre}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </details>
+              </section>
 
               {(() => {
                 const activeClient = clientes.find((c) => c.id === selectedOp.cliente_id) || selectedOp.cliente;
@@ -3559,27 +3170,17 @@ export default function PipelineVentasPage() {
               })()}
 
               {/* Listas Desplegables (Accordions) */}
-                {/* Banner Header: SECCIÓN 1: Área Comercial & Ventas (Contraíble con Jerarquía) */}
-                <button
-                  type="button"
-                  onClick={() => setAreaExpanded((prev) => ({ ...prev, comercial: !prev.comercial }))}
-                  className="w-full p-3 bg-white hover:bg-gray-50 border border-gray-200 hover:border-amber-300 rounded-lg flex items-center justify-between font-semibold text-sm text-[#213343] transition shadow-xs cursor-pointer group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <TrendingUp className="w-4 h-4 text-[#f97316] group-hover:scale-110 transition-transform" />
-                    <span>Área Comercial & Ventas</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {areaExpanded.comercial ? (
-                      <ChevronUp className="w-4 h-4 text-gray-500" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-gray-500" />
-                    )}
-                  </div>
-                </button>
+                {/* Área Comercial & Ventas */}
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
+                <AreaCardHeader
+                  icon={TrendingUp}
+                  title="Área Comercial & Ventas"
+                  open={areaExpanded.comercial}
+                  onToggle={() => setAreaExpanded((prev) => ({ ...prev, comercial: !prev.comercial }))}
+                />
 
                 {areaExpanded.comercial && (
-                  <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-amber-300 space-y-3.5 my-2.5 relative">
+                  <div className="border-t border-gray-200 p-3 sm:p-4 space-y-3.5">
 
                 {/* Accordion 1: Cotizaciones de la Oportunidad */}
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
@@ -4704,40 +4305,30 @@ export default function PipelineVentasPage() {
                 </div>
               </div>
             )}
+            </div>
 
-            {/* Banner & Acordeón de Producción y Logística */}
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => setAreaExpanded((prev) => ({ ...prev, produccion: !prev.produccion }))}
-                className="w-full p-3 bg-white hover:bg-gray-50 border border-gray-200 hover:border-purple-300 rounded-lg flex items-center justify-between font-semibold text-sm text-[#213343] transition shadow-xs cursor-pointer group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Factory className="w-4 h-4 text-purple-600 group-hover:scale-110 transition-transform" />
-                  <span>Producción y Logística</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {areaExpanded.produccion ? (
-                    <ChevronUp className="w-4 h-4 text-gray-500" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 text-gray-500" />
-                  )}
-                </div>
-              </button>
+            {/* Producción y Logística */}
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
+              <AreaCardHeader
+                icon={Factory}
+                title="Producción y Logística"
+                open={areaExpanded.produccion}
+                onToggle={() => setAreaExpanded((prev) => ({ ...prev, produccion: !prev.produccion }))}
+              />
 
               {areaExpanded.produccion && (
-                <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-purple-300 space-y-3.5 my-2.5 relative">
+                <div className="border-t border-gray-200 p-3 sm:p-4 space-y-3.5">
                   <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
                     <div className="w-full p-3 bg-gray-50 text-[#213343] font-semibold text-xs flex flex-wrap items-center justify-between gap-3 border-b border-gray-200">
                       <button
                         type="button"
                         onClick={() => setOpenSections({ ...openSections, produccionEventos: !openSections.produccionEventos })}
-                        className="flex items-center gap-2.5 hover:text-purple-900 transition cursor-pointer text-left font-semibold text-xs text-[#213343]"
+                        className="flex items-center gap-2.5 hover:text-[#ea580c] transition cursor-pointer text-left font-semibold text-xs text-[#213343]"
                       >
-                        <Calendar className="w-4 h-4 text-purple-600" />
+                        <Calendar className="w-4 h-4 text-[#f97316]" />
                         <span>Eventos de Producción y Logística</span>
                         {produccionEventos.length > 0 && (
-                          <span className="text-xs bg-purple-600 text-white font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
+                          <span className="text-xs bg-[#f97316] text-white font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
                             {produccionEventos.length}
                           </span>
                         )}
@@ -4752,7 +4343,7 @@ export default function PipelineVentasPage() {
                             onChange={(e) => setProduccionEventosEnabled(e.target.checked)}
                             className="sr-only peer"
                           />
-                          <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                          <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#f97316]"></div>
                           <span className="ml-2 text-xs font-bold text-gray-700 capitalize tracking-normal">
                             {produccionEventosEnabled ? 'Habilitado' : 'No Requiere'}
                           </span>
@@ -4760,7 +4351,7 @@ export default function PipelineVentasPage() {
                         {produccionEventosEnabled && (
                           <Link
                             href={`/planificacion/calendario?opId=${selectedOp.id}`}
-                            className="text-[11px] bg-purple-600 hover:bg-purple-700 text-white px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition lowercase tracking-normal"
+                            className="text-[11px] bg-[#f97316] hover:bg-[#ea580c] text-white px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition lowercase tracking-normal"
                           >
                             <span>Ver Calendario</span>
                           </Link>
@@ -4779,7 +4370,7 @@ export default function PipelineVentasPage() {
                             resetProdLogForm('produccion_logistica', 'produccion');
                             setShowAddProdLogEventForm(!showAddProdLogEventForm || newProdLogContexto !== 'produccion_logistica');
                           }}
-                          className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-md transition flex items-center gap-1.5 shadow-xs"
+                          className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold text-xs px-3 py-1.5 rounded-md transition flex items-center gap-1.5 shadow-xs"
                         >
                           <Plus className="w-4 h-4" />
                           <span>Agregar Evento</span>
@@ -4787,8 +4378,8 @@ export default function PipelineVentasPage() {
                       </div>
 
                       {showAddProdLogEventForm && newProdLogContexto === 'produccion_logistica' && (
-                        <div className="bg-gray-50 p-4 rounded-lg border border-purple-300 space-y-3">
-                          <h4 className="font-extrabold text-purple-700 text-xs uppercase flex items-center gap-1.5">
+                        <div className="bg-gray-50 p-4 rounded-lg border border-orange-300 space-y-3">
+                          <h4 className="font-extrabold text-[#ea580c] text-xs uppercase flex items-center gap-1.5">
                             <Plus className="w-4 h-4" />
                             <span>Registrar Evento</span>
                           </h4>
@@ -4802,7 +4393,7 @@ export default function PipelineVentasPage() {
                                   const nextTipo = e.target.value as TipoEventoProduccionLogistica;
                                   setNewProdLogTipo(nextTipo);
                                 }}
-                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-purple-500"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-[#f97316]"
                               >
                                 <option value="obra">Obra</option>
                                 <option value="logistica">Logística</option>
@@ -4817,7 +4408,7 @@ export default function PipelineVentasPage() {
                                 required
                                 value={newProdLogFecha}
                                 onChange={(e) => setNewProdLogFecha(e.target.value)}
-                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-purple-500"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-[#f97316]"
                               />
                             </div>
 
@@ -4827,7 +4418,7 @@ export default function PipelineVentasPage() {
                                 type="time"
                                 value={newProdLogHora}
                                 onChange={(e) => setNewProdLogHora(e.target.value)}
-                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-purple-500"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-[#f97316]"
                               />
                             </div>
                           </div>
@@ -4839,7 +4430,7 @@ export default function PipelineVentasPage() {
                                 type="text"
                                 value={newProdLogTitulo}
                                 onChange={(e) => setNewProdLogTitulo(e.target.value)}
-                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3 py-1.5 font-bold focus:outline-none focus:border-purple-500"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3 py-1.5 font-bold focus:outline-none focus:border-[#f97316]"
                               />
                             </div>
 
@@ -4848,7 +4439,7 @@ export default function PipelineVentasPage() {
                               <select
                                 value={newProdLogResponsableId}
                                 onChange={(e) => setNewProdLogResponsableId(e.target.value)}
-                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-purple-500"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-[#f97316]"
                               >
                                 <option value="">-- Sin asignar --</option>
                                 {responsablesProduccionLogistica.map((p) => (
@@ -4864,7 +4455,7 @@ export default function PipelineVentasPage() {
                               <select
                                 value={newProdLogEstado}
                                 onChange={(e) => setNewProdLogEstado(e.target.value as EstadoEventoProduccionLogistica)}
-                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-extrabold uppercase focus:outline-none focus:border-purple-500"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-extrabold uppercase focus:outline-none focus:border-[#f97316]"
                               >
                                 {prodLogEstadoOptions.map((option) => (
                                   <option key={option.value} value={option.value}>
@@ -4882,7 +4473,7 @@ export default function PipelineVentasPage() {
                               placeholder="Ej: coordinar retiro, despacho, fabricación o instalación..."
                               value={newProdLogNotas}
                               onChange={(e) => setNewProdLogNotas(e.target.value)}
-                              className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-purple-500"
+                              className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-[#f97316]"
                             />
                           </div>
 
@@ -4897,7 +4488,7 @@ export default function PipelineVentasPage() {
                             <button
                               type="button"
                               onClick={() => saveProdLogEvent('produccion_logistica')}
-                              className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-md font-extrabold transition shadow-xs"
+                              className="px-4 py-1.5 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-extrabold transition shadow-xs"
                             >
                               {editingProdLogEventId ? 'Guardar cambios' : 'Guardar evento'}
                             </button>
@@ -4935,7 +4526,7 @@ export default function PipelineVentasPage() {
                                     <button
                                       type="button"
                                       onClick={() => startEditProdLogEvent(event)}
-                                      className="p-1.5 bg-white hover:bg-purple-50 text-purple-600 border border-gray-200 rounded-lg transition"
+                                      className="p-1.5 bg-white hover:bg-orange-50 text-[#f97316] border border-gray-200 rounded-lg transition"
                                       title="Editar evento"
                                     >
                                       <Edit className="w-4 h-4" />
@@ -4954,7 +4545,7 @@ export default function PipelineVentasPage() {
                                   <strong className="text-[#213343] text-sm block">{event.titulo}</strong>
                                   <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 font-bold">
                                     <span className="font-mono flex items-center gap-1 text-[#213343]">
-                                      <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                                      <Calendar className="w-3.5 h-3.5 text-[#f97316]" />
                                       {fecha}
                                     </span>
                                     <span className="font-mono flex items-center gap-1 text-gray-500">
@@ -4987,11 +4578,11 @@ export default function PipelineVentasPage() {
                       <button
                         type="button"
                         onClick={() => setOpenSections({ ...openSections, produccionOc: !openSections.produccionOc })}
-                        className="flex items-center gap-2.5 hover:text-purple-900 transition cursor-pointer text-left font-semibold text-xs text-[#213343]"
+                        className="flex items-center gap-2.5 hover:text-[#ea580c] transition cursor-pointer text-left font-semibold text-xs text-[#213343]"
                       >
-                        <ShoppingCart className="w-4 h-4 text-purple-600" />
+                        <ShoppingCart className="w-4 h-4 text-[#f97316]" />
                         <span>Órdenes de Compra (OC) — Insumos de Fabricación</span>
-                        <span className="text-xs text-purple-700 font-mono font-bold">
+                        <span className="text-xs text-[#ea580c] font-mono font-bold">
                           {opOrdenesCompra.length} {opOrdenesCompra.length === 1 ? 'OC' : 'OCs'}
                         </span>
                         {openSections.produccionOc ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
@@ -5000,7 +4591,7 @@ export default function PipelineVentasPage() {
                       <button
                         type="button"
                         onClick={() => setShowCreateOcModal(true)}
-                        className="bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                        className="bg-[#f97316] hover:bg-[#ea580c] text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Crear Orden de Compra</span>
@@ -5032,7 +4623,7 @@ export default function PipelineVentasPage() {
                             <tbody className="divide-y divide-gray-100">
                               {opOrdenesCompra.map((oc) => (
                                 <tr key={oc.id} className="hover:bg-gray-50">
-	                                  <td className="py-2.5 px-3 font-mono font-bold text-purple-700">
+	                                  <td className="py-2.5 px-3 font-mono font-bold text-[#ea580c]">
 	                                    {oc.numero_oc}
 	                                  </td>
 	                                  <td className="py-2.5 px-3 text-center font-mono text-gray-500">
@@ -5048,7 +4639,7 @@ export default function PipelineVentasPage() {
                                     ${(oc.asignaciones || []).reduce((sum, a) => sum + Number(a.costo_asignado), 0).toLocaleString('es-CL')}
                                   </td>
                                   <td className="py-2.5 px-3 text-center">
-                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded">
+                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-orange-50 text-[#ea580c] border border-orange-200 rounded">
                                       {oc.estado}
                                     </span>
                                   </td>
@@ -5056,7 +4647,7 @@ export default function PipelineVentasPage() {
                                     <button
                                       type="button"
                                       onClick={() => setPdfPreviewOc(oc)}
-                                      className="px-2.5 py-1 bg-white hover:bg-purple-50 text-purple-700 rounded-lg transition border border-gray-200 font-bold text-[11px] flex items-center gap-1 mx-auto cursor-pointer"
+                                      className="px-2.5 py-1 bg-white hover:bg-orange-50 text-[#ea580c] rounded-lg transition border border-gray-200 font-bold text-[11px] flex items-center gap-1 mx-auto cursor-pointer"
                                     >
                                       <FileText className="w-3 h-3" />
                                       <span>Ver / Imprimir OC</span>
@@ -5077,39 +4668,28 @@ export default function PipelineVentasPage() {
               )}
             </div>
 
-            {/* Banner & Acordeón de Sección 3: Reventa y Logística (Ajustes 11) */}
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => setAreaExpanded((prev) => ({ ...prev, reventa: !prev.reventa }))}
-                className="w-full p-3 bg-white hover:bg-gray-50 border border-gray-200 hover:border-indigo-300 rounded-lg flex items-center justify-between font-semibold text-sm text-[#213343] transition shadow-xs cursor-pointer group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Truck className="w-4 h-4 text-indigo-600 group-hover:scale-110 transition-transform" />
-                  <span>Reventa y Logística</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {areaExpanded.reventa ? (
-                    <ChevronUp className="w-4 h-4 text-gray-500" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 text-gray-500" />
-                  )}
-                </div>
-              </button>
+            {/* Reventa y Logística */}
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
+              <AreaCardHeader
+                icon={Truck}
+                title="Reventa y Logística"
+                open={areaExpanded.reventa}
+                onToggle={() => setAreaExpanded((prev) => ({ ...prev, reventa: !prev.reventa }))}
+              />
 
               {areaExpanded.reventa && (
-                <div className="ml-4 sm:ml-6 pl-4 border-l-2 border-indigo-300 space-y-3.5 my-2.5 relative">
+                <div className="border-t border-gray-200 p-3 sm:p-4 space-y-3.5">
                   <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
                     <div className="w-full p-3 bg-gray-50 text-[#213343] font-semibold text-xs flex flex-wrap items-center justify-between gap-3 border-b border-gray-200">
                       <button
                         type="button"
                         onClick={() => setOpenSections({ ...openSections, reventaEventos: !openSections.reventaEventos })}
-                        className="flex items-center gap-2.5 hover:text-indigo-900 transition cursor-pointer text-left font-semibold text-xs text-[#213343]"
+                        className="flex items-center gap-2.5 hover:text-[#ea580c] transition cursor-pointer text-left font-semibold text-xs text-[#213343]"
                       >
-                        <Calendar className="w-4 h-4 text-indigo-600" />
+                        <Calendar className="w-4 h-4 text-[#f97316]" />
                         <span>Eventos de Reventa y Logística</span>
                         {reventaEventos.length > 0 && (
-                          <span className="text-xs bg-indigo-600 text-white font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
+                          <span className="text-xs bg-[#f97316] text-white font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
                             {reventaEventos.length}
                           </span>
                         )}
@@ -5124,7 +4704,7 @@ export default function PipelineVentasPage() {
                             onChange={(e) => setReventaEventosEnabled(e.target.checked)}
                             className="sr-only peer"
                           />
-                          <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                          <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#f97316]"></div>
                           <span className="ml-2 text-xs font-bold text-gray-700 capitalize tracking-normal">
                             {reventaEventosEnabled ? 'Habilitado' : 'No Requiere'}
                           </span>
@@ -5132,7 +4712,7 @@ export default function PipelineVentasPage() {
                         {reventaEventosEnabled && (
                           <Link
                             href={`/reventa/calendario?opId=${selectedOp.id}`}
-                            className="text-[11px] bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition lowercase tracking-normal"
+                            className="text-[11px] bg-[#f97316] hover:bg-[#ea580c] text-white px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition lowercase tracking-normal"
                           >
                             <span>Ver Calendario</span>
                           </Link>
@@ -5150,7 +4730,7 @@ export default function PipelineVentasPage() {
                               resetProdLogForm('reventa_logistica', 'reventa');
                               setShowAddProdLogEventForm(!showAddProdLogEventForm || newProdLogContexto !== 'reventa_logistica');
                             }}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-md transition flex items-center gap-1.5 shadow-xs"
+                            className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold text-xs px-3 py-1.5 rounded-md transition flex items-center gap-1.5 shadow-xs"
                           >
                             <Plus className="w-4 h-4" />
                             <span>Agregar Evento</span>
@@ -5158,8 +4738,8 @@ export default function PipelineVentasPage() {
                         </div>
 
                         {showAddProdLogEventForm && newProdLogContexto === 'reventa_logistica' && (
-                          <div className="bg-gray-50 p-4 rounded-lg border border-indigo-300 space-y-3">
-                            <h4 className="font-extrabold text-indigo-700 text-xs uppercase flex items-center gap-1.5">
+                          <div className="bg-gray-50 p-4 rounded-lg border border-orange-300 space-y-3">
+                            <h4 className="font-extrabold text-[#ea580c] text-xs uppercase flex items-center gap-1.5">
                               <Plus className="w-4 h-4" />
                               <span>Registrar Evento</span>
                             </h4>
@@ -5173,7 +4753,7 @@ export default function PipelineVentasPage() {
                                     const nextTipo = e.target.value as TipoEventoProduccionLogistica;
                                     setNewProdLogTipo(nextTipo);
                                   }}
-                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-indigo-500"
+                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-[#f97316]"
                                 >
                                   <option value="logistica">Logística</option>
                                   <option value="reventa">Reventa</option>
@@ -5187,7 +4767,7 @@ export default function PipelineVentasPage() {
                                   required
                                   value={newProdLogFecha}
                                   onChange={(e) => setNewProdLogFecha(e.target.value)}
-                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-indigo-500"
+                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-[#f97316]"
                                 />
                               </div>
 
@@ -5197,7 +4777,7 @@ export default function PipelineVentasPage() {
                                   type="time"
                                   value={newProdLogHora}
                                   onChange={(e) => setNewProdLogHora(e.target.value)}
-                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-indigo-500"
+                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-[#f97316]"
                                 />
                               </div>
                             </div>
@@ -5209,7 +4789,7 @@ export default function PipelineVentasPage() {
                                   type="text"
                                   value={newProdLogTitulo}
                                   onChange={(e) => setNewProdLogTitulo(e.target.value)}
-                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3 py-1.5 font-bold focus:outline-none focus:border-indigo-500"
+                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3 py-1.5 font-bold focus:outline-none focus:border-[#f97316]"
                                 />
                               </div>
 
@@ -5218,7 +4798,7 @@ export default function PipelineVentasPage() {
                                 <select
                                   value={newProdLogResponsableId}
                                   onChange={(e) => setNewProdLogResponsableId(e.target.value)}
-                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-indigo-500"
+                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-[#f97316]"
                                 >
                                   <option value="">-- Sin asignar --</option>
                                   {(responsablesReventaLogistica.length > 0 ? responsablesReventaLogistica : personalTerrenoList).map((p) => (
@@ -5234,7 +4814,7 @@ export default function PipelineVentasPage() {
                                 <select
                                   value={newProdLogEstado}
                                   onChange={(e) => setNewProdLogEstado(e.target.value as EstadoEventoProduccionLogistica)}
-                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-extrabold uppercase focus:outline-none focus:border-indigo-500"
+                                  className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-2.5 py-1.5 font-extrabold uppercase focus:outline-none focus:border-[#f97316]"
                                 >
                                   {prodLogEstadoOptions.map((option) => (
                                     <option key={option.value} value={option.value}>
@@ -5252,7 +4832,7 @@ export default function PipelineVentasPage() {
                                 placeholder="Ej: coordinar proveedor, retiro, despacho o entrega..."
                                 value={newProdLogNotas}
                                 onChange={(e) => setNewProdLogNotas(e.target.value)}
-                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-indigo-500"
+                                className="w-full bg-white text-[#213343] border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-[#f97316]"
                               />
                             </div>
 
@@ -5267,7 +4847,7 @@ export default function PipelineVentasPage() {
                               <button
                                 type="button"
                                 onClick={() => saveProdLogEvent('reventa_logistica')}
-                                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-extrabold transition shadow-xs"
+                                className="px-4 py-1.5 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-extrabold transition shadow-xs"
                               >
                                 {editingProdLogEventId ? 'Guardar cambios' : 'Guardar evento'}
                               </button>
@@ -5305,7 +4885,7 @@ export default function PipelineVentasPage() {
                                       <button
                                         type="button"
                                         onClick={() => startEditProdLogEvent(event)}
-                                        className="p-1.5 bg-white hover:bg-indigo-50 text-indigo-600 border border-gray-200 rounded-lg transition"
+                                        className="p-1.5 bg-white hover:bg-orange-50 text-[#f97316] border border-gray-200 rounded-lg transition"
                                         title="Editar evento"
                                       >
                                         <Edit className="w-4 h-4" />
@@ -5324,7 +4904,7 @@ export default function PipelineVentasPage() {
                                     <strong className="text-[#213343] text-sm block">{event.titulo}</strong>
                                     <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 font-bold">
                                       <span className="font-mono flex items-center gap-1 text-[#213343]">
-                                        <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                                        <Calendar className="w-3.5 h-3.5 text-[#f97316]" />
                                         {fecha}
                                       </span>
                                       <span className="font-mono flex items-center gap-1 text-gray-500">
@@ -5357,11 +4937,11 @@ export default function PipelineVentasPage() {
                       <button
                         type="button"
                         onClick={() => setOpenSections({ ...openSections, reventaOc: !openSections.reventaOc })}
-                        className="flex items-center gap-2.5 hover:text-indigo-900 transition cursor-pointer text-left font-semibold text-xs text-[#213343]"
+                        className="flex items-center gap-2.5 hover:text-[#ea580c] transition cursor-pointer text-left font-semibold text-xs text-[#213343]"
                       >
-                        <ShoppingCart className="w-4 h-4 text-indigo-600" />
+                        <ShoppingCart className="w-4 h-4 text-[#f97316]" />
                         <span>Órdenes de Compra a Proveedores / Distribución</span>
-                        <span className="text-xs text-indigo-700 font-mono font-bold">
+                        <span className="text-xs text-[#ea580c] font-mono font-bold">
                           {opOrdenesCompra.length} {opOrdenesCompra.length === 1 ? 'OC' : 'OCs'}
                         </span>
                         {openSections.reventaOc ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
@@ -5370,7 +4950,7 @@ export default function PipelineVentasPage() {
                       <button
                         type="button"
                         onClick={() => setShowCreateOcModal(true)}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                        className="bg-[#f97316] hover:bg-[#ea580c] text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Crear Orden de Compra</span>
@@ -5402,7 +4982,7 @@ export default function PipelineVentasPage() {
                             <tbody className="divide-y divide-gray-100">
                               {opOrdenesCompra.map((oc) => (
                                 <tr key={oc.id} className="hover:bg-gray-50">
-	                                  <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">
+	                                  <td className="py-2.5 px-3 font-mono font-bold text-[#ea580c]">
 	                                    {oc.numero_oc}
 	                                  </td>
 	                                  <td className="py-2.5 px-3 text-center font-mono text-gray-500">
@@ -5418,7 +4998,7 @@ export default function PipelineVentasPage() {
                                     ${(oc.asignaciones || []).reduce((sum, a) => sum + Number(a.costo_asignado), 0).toLocaleString('es-CL')}
                                   </td>
                                   <td className="py-2.5 px-3 text-center">
-                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">
+                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-orange-50 text-[#ea580c] border border-orange-200 rounded">
                                       {oc.estado}
                                     </span>
                                   </td>
@@ -5426,7 +5006,7 @@ export default function PipelineVentasPage() {
                                     <button
                                       type="button"
                                       onClick={() => setPdfPreviewOc(oc)}
-                                      className="px-2.5 py-1 bg-white hover:bg-indigo-50 text-indigo-700 rounded-lg transition border border-gray-200 font-bold text-[11px] flex items-center gap-1 mx-auto cursor-pointer"
+                                      className="px-2.5 py-1 bg-white hover:bg-orange-50 text-[#ea580c] rounded-lg transition border border-gray-200 font-bold text-[11px] flex items-center gap-1 mx-auto cursor-pointer"
                                     >
                                       <FileText className="w-3 h-3" />
                                       <span>Ver / Imprimir OC</span>
@@ -5445,6 +5025,7 @@ export default function PipelineVentasPage() {
                   )}
                 </div>
               )}
+            </div>
 
                 {/* Accordion: Archivos Adjuntos (Ubicado debajo de Reventa y Logística) */}
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
@@ -5611,7 +5192,175 @@ export default function PipelineVentasPage() {
                     </div>
                   )}
                 </div>
-            </div>
+
+                {/* Cierre y traspaso a operación (checklist + ruta operativa) */}
+                {(() => {
+                  const cierreItems: { label: string; ready: boolean; target?: string }[] = [
+                    { label: 'Cotización vigente', ready: getOportunidadTotalValue(selectedOp) > 0 },
+                    { label: 'Dirección de obra', ready: Boolean(selectedOp.direccion_obra || (selectedOp.direccion && selectedOp.comuna)), target: 'cierre-direccion_obra' },
+                    { label: 'Fecha prometida', ready: Boolean(selectedOp.fecha_prometida || selectedOp.fecha_limite), target: 'cierre-fecha_prometida' },
+                    { label: 'Forma de entrega', ready: Boolean(selectedOp.forma_entrega), target: 'cierre-forma_entrega' },
+                    { label: 'Abastecimiento', ready: Boolean(selectedOp.abastecimiento), target: 'cierre-abastecimiento' },
+                    { label: 'Condición de pago', ready: Boolean(selectedOp.condicion_pago), target: 'cierre-condicion_pago' },
+                  ];
+                  const completos = cierreItems.filter((item) => item.ready).length;
+                  const fieldLabel = 'text-[11px] font-medium text-gray-500';
+                  const fieldClass = 'mt-0.5 block w-full h-8 bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 rounded-md px-3 text-xs font-bold text-[#213343] focus:outline-none focus:border-[#f97316] transition shadow-xs';
+
+                  return (
+                    <div key={`cierre-${selectedOp.id}`} className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-xs">
+                      <AreaCardHeader
+                        icon={ClipboardCheck}
+                        title="Cierre y traspaso a operación"
+                        open={areaExpanded.cierre}
+                        onToggle={() => setAreaExpanded((prev) => ({ ...prev, cierre: !prev.cierre }))}
+                        aside={
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                            completos === cierreItems.length
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-orange-50 text-[#ea580c] border-orange-200'
+                          }`}>
+                            {completos}/{cierreItems.length} completos
+                          </span>
+                        }
+                      />
+
+                      {areaExpanded.cierre && (
+                        <div className="border-t border-gray-200 p-3 sm:p-4 space-y-4 text-xs">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                            {cierreItems.map((item) => (
+                              <button
+                                key={item.label}
+                                type="button"
+                                disabled={item.ready || !item.target}
+                                onClick={() => {
+                                  const el = item.target ? document.getElementById(item.target) : null;
+                                  el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  el?.focus();
+                                }}
+                                className={`text-left text-xs font-semibold flex items-center gap-1.5 rounded-md px-2 py-1 transition ${
+                                  item.ready ? 'text-emerald-700' : 'text-amber-700 hover:bg-amber-50 enabled:cursor-pointer disabled:cursor-default'
+                                }`}
+                              >
+                                {item.ready ? <CheckCircle className="w-3.5 h-3.5" /> : <Circle className="w-3.5 h-3.5" />}
+                                {item.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="border-t border-gray-100 pt-3">
+                            <p className="text-[11px] text-gray-500 mb-2">Estos datos alimentan la página de Operación y la guía de despacho.</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
+                              <label className={fieldLabel}>
+                                Abastecimiento
+                                <select
+                                  id="cierre-abastecimiento"
+                                  value={selectedOp.abastecimiento || ''}
+                                  onChange={async (e) => {
+                                    await updateOportunidadField(selectedOp.id, 'abastecimiento', e.target.value || null);
+                                    await addOportunidadActividad(selectedOp.id, `Abastecimiento: ${e.target.selectedOptions[0].text}.`);
+                                  }}
+                                  className={fieldClass}
+                                >
+                                  <option value="">Definir abastecimiento</option>
+                                  <option value="fabricar">Fabricar</option>
+                                  <option value="compra_proveedor">Comprar a proveedor</option>
+                                  <option value="stock">Stock disponible</option>
+                                </select>
+                              </label>
+                              <label className={fieldLabel}>
+                                Forma de entrega
+                                <select
+                                  id="cierre-forma_entrega"
+                                  value={selectedOp.forma_entrega || ''}
+                                  onChange={async (e) => {
+                                    await updateOportunidadField(selectedOp.id, 'forma_entrega', e.target.value || null);
+                                    await addOportunidadActividad(selectedOp.id, `Entrega: ${e.target.selectedOptions[0].text}.`);
+                                  }}
+                                  className={fieldClass}
+                                >
+                                  <option value="">Definir entrega</option>
+                                  <option value="retiro_cliente">Retiro por cliente</option>
+                                  <option value="retiro_proveedor">Retiro en proveedor</option>
+                                  <option value="despacho_propio">Despacho propio</option>
+                                  <option value="despacho_subcontratado">Despacho subcontratado</option>
+                                </select>
+                              </label>
+                              <label className={fieldLabel}>
+                                Condición de pago
+                                <select
+                                  id="cierre-condicion_pago"
+                                  value={selectedOp.condicion_pago || ''}
+                                  onChange={async (e) => {
+                                    await updateOportunidadField(selectedOp.id, 'condicion_pago', e.target.value || null);
+                                    await addOportunidadActividad(selectedOp.id, `Condición de pago: ${e.target.selectedOptions[0].text}.`);
+                                  }}
+                                  className={fieldClass}
+                                >
+                                  <option value="">Definir condición</option>
+                                  <option value="total">Pago total</option>
+                                  <option value="abono50">Abono 50%</option>
+                                  <option value="oc">Orden de compra</option>
+                                  <option value="especial">Especial</option>
+                                </select>
+                              </label>
+                              <label className={fieldLabel}>
+                                Responsable operativo
+                                <select
+                                  value={selectedOp.responsable_operativo_id || ''}
+                                  onChange={(e) => updateOportunidadField(selectedOp.id, 'responsable_operativo_id', e.target.value || null)}
+                                  className={fieldClass}
+                                >
+                                  <option value="">Sin responsable operativo</option>
+                                  {usuariosApp.map((user) => <option key={user.id} value={user.id}>{user.nombre}</option>)}
+                                </select>
+                              </label>
+                              {([
+                                ['fecha_prometida', 'Fecha prometida'],
+                                ['fecha_tentativa_produccion', 'Producción tentativa'],
+                                ['fecha_tentativa_entrega', 'Entrega tentativa'],
+                              ] as [keyof OportunidadVenta, string][]).map(([field, label]) => (
+                                <label key={field} className={fieldLabel}>
+                                  {label}
+                                  <input
+                                    id={`cierre-${field}`}
+                                    type="date"
+                                    value={String(selectedOp[field] || '').slice(0, 10)}
+                                    onChange={(e) => updateOportunidadField(selectedOp.id, field, e.target.value || null)}
+                                    className={`${fieldClass} font-mono [color-scheme:light]`}
+                                  />
+                                </label>
+                              ))}
+                              <label className={fieldLabel}>
+                                Vehículo o transporte
+                                <input
+                                  placeholder="Vehículo o transporte"
+                                  defaultValue={selectedOp.transporte || ''}
+                                  onBlur={(e) => updateOportunidadField(selectedOp.id, 'transporte', e.target.value.trim() || null)}
+                                  className={fieldClass}
+                                />
+                              </label>
+                              <label className={`${fieldLabel} sm:col-span-2`}>
+                                Dirección de obra
+                                <input
+                                  id="cierre-direccion_obra"
+                                  placeholder={selectedOp.direccion || 'Dirección de obra'}
+                                  defaultValue={selectedOp.direccion_obra || ''}
+                                  onBlur={(e) => updateOportunidadField(selectedOp.id, 'direccion_obra', e.target.value.trim() || null)}
+                                  className={fieldClass}
+                                />
+                              </label>
+                            </div>
+                          </div>
+
+                          <p className="text-[11px] text-gray-500">
+                            Abonos registrados: ${getOportunidadAbonadoValue(selectedOp).toLocaleString('es-CL')}. Los pendientes no impiden avanzar.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
@@ -5700,6 +5449,17 @@ export default function PipelineVentasPage() {
                   >
                     <span>Reclamos</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivityFilter('seguimiento')}
+                    className={`flex-1 py-1 px-1.5 rounded-lg font-extrabold transition flex items-center justify-center gap-1 ${
+                      activityFilter === 'seguimiento'
+                        ? 'bg-amber-500 text-white shadow-xs'
+                        : 'text-amber-600 hover:text-amber-700 hover:bg-amber-50'
+                    }`}
+                  >
+                    <span>Seguimiento</span>
+                  </button>
                 </div>
 
                 {/* Input de Búsqueda Flotante de Actividad */}
@@ -5738,15 +5498,19 @@ export default function PipelineVentasPage() {
 
                     if (activityFilter === 'comentarios') {
                       filteredList = filteredList.filter(
-                        (m) => (m.tipo === 'comentario' || (!m.tipo && !m.contenido?.startsWith('['))) && m.tipo !== 'reclamo'
+                        (m) => m.tipo === 'comentario' || (!m.tipo && !m.contenido?.startsWith('['))
                       );
                     } else if (activityFilter === 'sistema') {
                       filteredList = filteredList.filter(
-                        (m) => m.tipo !== 'comentario' && m.tipo !== 'reclamo' && (m.tipo || m.contenido?.startsWith('['))
+                        (m) => m.tipo !== 'comentario' && m.tipo !== 'reclamo' && m.tipo !== 'seguimiento' && (m.tipo || m.contenido?.startsWith('['))
                       );
                     } else if (activityFilter === 'reclamos') {
                       filteredList = filteredList.filter(
                         (m) => m.tipo === 'reclamo'
+                      );
+                    } else if (activityFilter === 'seguimiento') {
+                      filteredList = filteredList.filter(
+                        (m) => m.tipo === 'seguimiento'
                       );
                     }
 
@@ -5769,9 +5533,11 @@ export default function PipelineVentasPage() {
 
                     return sortedList.map((msg) => {
                       const isReclamoMsg = msg.tipo === 'reclamo';
+                      const isSeguimientoMsg = msg.tipo === 'seguimiento';
                       const isUserComment =
                         msg.tipo === 'comentario' ||
                         isReclamoMsg ||
+                        isSeguimientoMsg ||
                         (!msg.tipo && !msg.contenido?.startsWith('['));
 
                       const msgDate = new Date(msg.created_at);
@@ -5792,7 +5558,9 @@ export default function PipelineVentasPage() {
                             className={`p-4 rounded-lg border shadow-xs space-y-3 transition ${
                               isReclamoMsg
                                 ? 'bg-red-50/70 border-red-200 hover:border-red-300'
-                                : 'bg-white border-gray-200 hover:border-gray-300'
+                                : isSeguimientoMsg
+                                  ? 'bg-amber-50/70 border-amber-200 hover:border-amber-300'
+                                  : 'bg-white border-gray-200 hover:border-gray-300'
                             }`}
                           >
                             <div className="flex items-center justify-between">
@@ -5801,11 +5569,15 @@ export default function PipelineVentasPage() {
                                   className={`w-8 h-8 rounded-full font-black text-xs flex items-center justify-center border shrink-0 ${
                                     isReclamoMsg
                                       ? 'bg-red-100 text-red-600 border-red-200'
-                                      : 'bg-orange-50 text-[#f97316] border-orange-200'
+                                      : isSeguimientoMsg
+                                        ? 'bg-amber-100 text-amber-600 border-amber-200'
+                                        : 'bg-orange-50 text-[#f97316] border-orange-200'
                                   }`}
                                 >
                                   {isReclamoMsg ? (
                                     <AlertTriangle className="w-4 h-4 text-red-600" />
+                                  ) : isSeguimientoMsg ? (
+                                    <AlarmClock className="w-4 h-4 text-amber-600" />
                                   ) : (
                                     <User className="w-4 h-4 text-[#f97316]" />
                                   )}
@@ -5820,6 +5592,11 @@ export default function PipelineVentasPage() {
                                         Reclamo / Postventa
                                       </span>
                                     )}
+                                    {isSeguimientoMsg && (
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-amber-100 text-amber-700 border border-amber-200">
+                                        Recordatorio
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -5829,9 +5606,45 @@ export default function PipelineVentasPage() {
                               </span>
                             </div>
 
-                            <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">
-                              {renderMessageContentWithMentions(msg.contenido)}
-                            </p>
+                            {isSeguimientoMsg ? (() => {
+                              const campos = Object.fromEntries(parseSeguimientoContenido(msg.contenido || ''));
+                              return (
+                                <div className="rounded-lg bg-white border border-amber-100 p-3 space-y-2.5">
+                                  <div>
+                                    <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Próxima acción</span>
+                                    <p className="text-sm font-bold text-[#213343] leading-snug break-words">
+                                      {campos['Próxima acción'] || msg.contenido}
+                                    </p>
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <div className="flex items-center gap-2 rounded-md bg-amber-50/60 border border-amber-100 px-2.5 py-1.5 min-w-0">
+                                      <Calendar className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                      <div className="min-w-0">
+                                        <span className="block text-[10px] font-medium text-gray-500 leading-none mb-0.5">Fecha del recordatorio</span>
+                                        <span className="block text-xs font-semibold text-[#213343] truncate">{campos['Fecha'] || 'Sin fecha'}</span>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 rounded-md bg-amber-50/60 border border-amber-100 px-2.5 py-1.5 min-w-0">
+                                      <User className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                      <div className="min-w-0">
+                                        <span className="block text-[10px] font-medium text-gray-500 leading-none mb-0.5">Responsable</span>
+                                        <span className="block text-xs font-semibold text-[#213343] truncate">{campos['Responsable'] || 'Sin responsable'}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {campos['Último contacto'] && (
+                                    <p className="border-l-2 border-amber-300 pl-2.5 text-xs text-gray-600 break-words">
+                                      <span className="font-semibold text-gray-700">Último contacto: </span>
+                                      {campos['Último contacto']}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })() : (
+                              <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">
+                                {renderMessageContentWithMentions(msg.contenido)}
+                              </p>
+                            )}
 
                             <div className="flex items-center justify-end pt-2 border-t border-gray-100 text-xs">
                               <button
@@ -5913,6 +5726,83 @@ export default function PipelineVentasPage() {
                           <span className="text-[10px] opacity-80 uppercase font-mono">{usr.rol}</span>
                         </button>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {isSeguimientoMode && (
+                  <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-3 shadow-xs space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-2 text-xs font-bold text-amber-800">
+                        <AlarmClock className="w-4 h-4" />
+                        Nuevo recordatorio de seguimiento
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsSeguimientoMode(false)}
+                        className="p-1 text-amber-700 hover:bg-amber-100 rounded-md transition"
+                        title="Cancelar"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <label className="sm:col-span-2 text-[11px] font-medium text-gray-600">
+                        Próxima acción *
+                        <input
+                          autoFocus
+                          value={seguimientoDraft.accion}
+                          onChange={(e) => setSeguimientoDraft((d) => ({ ...d, accion: e.target.value }))}
+                          placeholder="Ej: Llamar para confirmar cotización"
+                          className="mt-0.5 block w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-xs text-[#213343] focus:outline-none focus:border-amber-400"
+                        />
+                      </label>
+                      <label className="text-[11px] font-medium text-gray-600">
+                        Fecha y hora
+                        <input
+                          type="datetime-local"
+                          value={seguimientoDraft.fecha}
+                          onChange={(e) => setSeguimientoDraft((d) => ({ ...d, fecha: e.target.value }))}
+                          className="mt-0.5 block w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-xs text-[#213343] focus:outline-none focus:border-amber-400 [color-scheme:light]"
+                        />
+                      </label>
+                      <label className="text-[11px] font-medium text-gray-600">
+                        Responsable
+                        <select
+                          value={seguimientoDraft.responsable}
+                          onChange={(e) => setSeguimientoDraft((d) => ({ ...d, responsable: e.target.value }))}
+                          className="mt-0.5 block w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-xs text-[#213343] focus:outline-none focus:border-amber-400"
+                        >
+                          <option value="">Sin responsable</option>
+                          {usuariosApp.map((user) => <option key={user.id} value={user.id}>{user.nombre}</option>)}
+                        </select>
+                      </label>
+                      <label className="sm:col-span-2 text-[11px] font-medium text-gray-600">
+                        Resultado del último contacto (opcional)
+                        <input
+                          value={seguimientoDraft.resultado}
+                          onChange={(e) => setSeguimientoDraft((d) => ({ ...d, resultado: e.target.value }))}
+                          placeholder={selectedOp.seguimiento_resultado || 'Ej: Cliente pidió ajustar medidas'}
+                          className="mt-0.5 block w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-xs text-[#213343] focus:outline-none focus:border-amber-400"
+                        />
+                      </label>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsSeguimientoMode(false)}
+                        className="px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-white rounded-md border border-transparent hover:border-gray-200 transition"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!seguimientoDraft.accion.trim() || seguimientoSaving}
+                        onClick={handleSaveSeguimiento}
+                        className="px-3 py-1.5 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 rounded-md transition shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {seguimientoSaving ? 'Guardando...' : 'Guardar recordatorio'}
+                      </button>
                     </div>
                   </div>
                 )}
@@ -6040,7 +5930,10 @@ export default function PipelineVentasPage() {
 
                       <button
                         type="button"
-                        onClick={() => setIsReclamoMode(!isReclamoMode)}
+                        onClick={() => {
+                          setIsSeguimientoMode(false);
+                          setIsReclamoMode(!isReclamoMode);
+                        }}
                         className={`px-2.5 py-1 rounded-md transition flex items-center gap-1 text-xs font-black ${
                           isReclamoMode
                             ? 'bg-red-500 text-white shadow-xs'
@@ -6050,6 +5943,20 @@ export default function PipelineVentasPage() {
                       >
                         <AlertTriangle className="w-3.5 h-3.5" />
                         <span>{isReclamoMode ? 'Modo Reclamo' : 'Reclamo'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => (isSeguimientoMode ? setIsSeguimientoMode(false) : openSeguimientoPanel())}
+                        className={`px-2.5 py-1 rounded-md transition flex items-center gap-1 text-xs font-black ${
+                          isSeguimientoMode
+                            ? 'bg-amber-500 text-white shadow-xs'
+                            : 'text-gray-500 hover:text-amber-600 hover:bg-amber-50'
+                        }`}
+                        title="Agendar un recordatorio de seguimiento comercial"
+                      >
+                        <AlarmClock className="w-3.5 h-3.5" />
+                        <span>Seguimiento</span>
                       </button>
                     </div>
 
@@ -6249,7 +6156,7 @@ export default function PipelineVentasPage() {
             <div className="flex items-center justify-between border-b border-gray-200 pb-3">
               <h3 className="text-base font-extrabold text-red-700 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
-                <span>Eliminar Oportunidad de Supabase</span>
+                <span>Eliminar Oportunidad</span>
               </h3>
               <button onClick={() => setOpToDelete(null)} className="text-gray-400 hover:text-[#213343] font-bold">
                 ✕
@@ -6261,8 +6168,9 @@ export default function PipelineVentasPage() {
                 ¿Estás seguro de que deseas eliminar la oportunidad <strong className="font-mono text-[#213343]">{opToDelete.codigo}</strong> (&quot;{opToDelete.titulo}&quot;)?
               </p>
               <p className="bg-red-50 p-3 rounded-md border border-red-200 text-red-900 font-medium">
-                Esta acción eliminará permanentemente la oportunidad de la base de datos de Supabase.
+                Esta acción eliminará permanentemente la oportunidad y sus registros vinculados, incluidas cotizaciones y actividades. Una orden de compra vinculada impedirá eliminarla.
               </p>
+              {deleteOpError && <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-red-800">{deleteOpError}</p>}
             </div>
 
             <div className="pt-2 flex items-center justify-end gap-2 text-xs">
@@ -6276,10 +6184,11 @@ export default function PipelineVentasPage() {
               <button
                 type="button"
                 onClick={handleDeleteOportunidad}
-                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-md transition shadow-sm flex items-center gap-1.5"
+                disabled={deletingOp}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold rounded-md transition shadow-sm flex items-center gap-1.5"
               >
                 <Trash2 className="w-4 h-4" />
-                <span>Eliminar Oportunidad</span>
+                <span>{deletingOp ? 'Eliminando...' : 'Eliminar Oportunidad'}</span>
               </button>
             </div>
           </div>
@@ -6456,7 +6365,7 @@ export default function PipelineVentasPage() {
 
             {/* Listado Agrupado de Estados con Filtro */}
             <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1 scrollbar-thin">
-              {[SECCION_COMERCIAL].map((sec) => {
+              {SECCIONES_PIPELINE.map((sec) => {
                 const filteredEtapas = sec.etapas.filter((st) =>
                   st.label.toLowerCase().includes(statusSearchQuery.toLowerCase())
                 );

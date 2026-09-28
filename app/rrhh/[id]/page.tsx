@@ -54,6 +54,7 @@ import {
   AlertCircle,
   CreditCard,
   Check,
+  UserRound,
 } from 'lucide-react';
 import { REGIONES_CHILE, TODAS_COMUNAS_CHILE } from '../../../lib/chile-data';
 import { SearchableSelect } from '../../../components/SearchableSelect';
@@ -529,12 +530,6 @@ export default function TrabajadorDetailPage() {
     DISPONIBILIDAD_CONFIG[trabajador.estado_disponibilidad] ||
     DISPONIBILIDAD_CONFIG.disponible;
 
-  const initials = trabajador.nombre
-    .split(' ')
-    .slice(0, 2)
-    .map((p) => p[0])
-    .join('')
-    .toUpperCase();
 
   return (
     <div className="space-y-6 text-[#213343] pb-12 ">
@@ -561,7 +556,7 @@ export default function TrabajadorDetailPage() {
           <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm space-y-5">
             <div className="flex items-start justify-between">
               <div className="w-16 h-16 rounded-lg bg-orange-500 text-white font-black text-2xl flex items-center justify-center shadow-sm">
-                {initials}
+                <UserRound className="w-8 h-8" />
               </div>
 
               <button
