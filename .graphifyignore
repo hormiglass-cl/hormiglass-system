@@ -1,0 +1,34 @@
+# graphify: excluir secretos, dependencias, builds y binarios pesados
+.env
+*.env
+.env.*
+node_modules/
+.next/
+dist/
+build/
+out/
+.vercel/
+coverage/
+venv/
+.venv/
+__pycache__/
+.git/
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+bun.lockb
+# Media y PDFs: cuestan tokens y aportan poco al grafo
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.svg
+*.ico
+*.pdf
+*.mp4
+*.mov
+*.mp3
+*.wav
+# HTML exportado/landing: casi todo es marcado
+*.html

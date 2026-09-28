@@ -30,6 +30,7 @@ export default function CotizacionesPage() {
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [previewCotizacion, setPreviewCotizacion] = useState<Cotizacion | null>(null);
@@ -60,12 +61,16 @@ export default function CotizacionesPage() {
         const [cotRes, opRes] = await Promise.all([
           supabase
             .from('cotizaciones')
-            .select('*, cliente:clientes(*), oportunidad:oportunidades(*), items:cotizacion_items(*)')
+            .select('*, cliente:clientes(*), oportunidad:oportunidades!cotizaciones_oportunidad_id_fkey(*), items:cotizacion_items(*)')
             .order('created_at', { ascending: false }),
           supabase.from('oportunidades').select('*'),
         ]);
 
+        if (cotRes.error) throw cotRes.error;
+        if (opRes.error) throw opRes.error;
+
         if (!ignore) {
+          setLoadError(null);
           if (cotRes.data) {
             setCotizaciones(cotRes.data as Cotizacion[]);
           } else {
@@ -82,6 +87,7 @@ export default function CotizacionesPage() {
       } catch (err) {
         console.error('Error fetching cotizaciones from Supabase:', err);
         if (!ignore) {
+          setLoadError('No se pudieron cargar las cotizaciones. Reintenta más tarde.');
           setCotizaciones([]);
           setOportunidades([]);
           setLoading(false);
@@ -158,7 +164,18 @@ export default function CotizacionesPage() {
       prev.map((c) => (c.id === cotId ? { ...c, estado: newStatus } : c))
     );
     try {
-      await supabase.from('cotizaciones').update({ estado: newStatus }).eq('id', cotId);
+      const { error } = await supabase.from('cotizaciones').update({ estado: newStatus }).eq('id', cotId);
+      if (error) throw error;
+      setLoadError(null);
+      if (targetCot?.oportunidad_id) {
+        await supabase.from('actividades_op').insert({
+          oportunidad_id: targetCot.oportunidad_id,
+          usuario_id: currentUser?.id || null,
+          usuario_nombre: currentUser?.nombre || 'Sistema',
+          contenido: `Cotización ${targetCot.numero_cotizacion} cambió de ${targetCot.estado} a ${newStatus}.`,
+          tipo: 'actualizacion',
+        });
+      }
       await logSistema({
         tipo_accion: 'estado_cambiado',
         entidad: 'cotizaciones',
@@ -170,6 +187,9 @@ export default function CotizacionesPage() {
       });
     } catch (err) {
       console.error('Error updating status in Supabase:', err);
+      const reason = err && typeof err === 'object' && 'message' in err ? String(err.message) : String(err);
+      setLoadError(`No se pudo cambiar el estado de la cotización: ${reason}`);
+      setCotizaciones((prev) => prev.map((c) => c.id === cotId ? { ...c, estado: targetCot?.estado || c.estado } : c));
     }
   };
 
@@ -208,7 +228,7 @@ export default function CotizacionesPage() {
             <span>Cotizaciones Emitidas</span>
           </h1>
           <p className="text-xs text-gray-600 mt-1">
-            Gestión comercial de cotizaciones almacenadas en Supabase. Puedes cambiar estados, asociar a oportunidades y eliminarlas.
+            Gestiona estados, versiones y vínculos con oportunidades de venta.
           </p>
         </div>
 
@@ -241,31 +261,50 @@ export default function CotizacionesPage() {
       )}
 
       {/* Barra Búsqueda y Selección */}
-      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
-        <div className="relative w-full sm:w-80">
+      <div className="hg-list-toolbar">
+        <div className="relative min-w-[220px] flex-[2]">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
           <input
             type="text"
             placeholder="Buscar por N° cotización, cliente o RUT..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-white border border-gray-300 rounded-md pl-9 pr-3 py-2 text-xs text-[#213343] placeholder-gray-400 focus:outline-none focus:border-[#f97316]"
+            className="hg-list-search w-full pl-9 pr-3 py-2 text-sm text-[#252b2d] placeholder-gray-400"
           />
         </div>
 
-        <div className="text-xs text-gray-600 font-semibold">
-          Mostrando {filtered.length} cotizaciones {selectedIds.length > 0 && `(${selectedIds.length} seleccionadas)`}
-        </div>
+        {!loadError && (
+          <div className="text-xs text-gray-600 font-semibold">
+            Mostrando {filtered.length} cotizaciones {selectedIds.length > 0 && `(${selectedIds.length} seleccionadas)`}
+          </div>
+        )}
       </div>
 
       {/* Tabla de Cotizaciones */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-visible shadow-sm">
-        <div className="overflow-visible">
-          <table className="w-full text-left text-xs min-w-[950px]">
-            <thead className="bg-[#213343] text-white uppercase text-[10px] tracking-normal">
+      {loadError && (
+        <div role="alert" className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+          {loadError}
+        </div>
+      )}
+      <div className="hg-list-group">
+        <div className="hg-list-group-heading"><span>Cotizaciones</span><span className="hg-list-count">{loadError ? 'Error' : filtered.length}</span></div>
+        <div className="md:hidden">
+          {loading ? <p className="p-5 text-sm text-[#66716f]">Cargando cotizaciones…</p> : loadError ? null : paginatedCotizaciones.length === 0 ? <p className="p-5 text-sm text-[#66716f]">No se encontraron cotizaciones.</p> : paginatedCotizaciones.map((cot) => <div key={cot.id} className="hg-list-row flex-wrap">
+            <button type="button" onClick={() => toggleSelectOne(cot.id)} aria-label={`Seleccionar cotización ${cot.numero_cotizacion}`} className="shrink-0 text-[#8a9390]">{selectedIds.includes(cot.id) ? <CheckSquare size={17} className="text-[#e87622]" /> : <Square size={17} />}</button>
+            <button type="button" onClick={() => setPreviewCotizacion(cot)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-semibold">{cot.numero_cotizacion} · v{cot.version || 1}</span><span className="block truncate text-xs text-[#8a9390]">{cot.cliente?.nombre || 'Cliente registrado'}</span></button>
+            <span className="hg-list-meta font-semibold text-[#252b2d]">${Number(cot.monto_total || 0).toLocaleString('es-CL')}</span>
+            <div className="flex basis-full items-center justify-end gap-2 pl-7">
+              <span className="text-xs capitalize text-[#66716f]">{cot.estado}</span>
+              <button type="button" onClick={() => { setEditingCotizacion(cot); setShowEditModal(true); }} className="rounded-lg p-1.5 text-[#d4671c]" aria-label={`Editar ${cot.numero_cotizacion}`}><Edit3 size={16} /></button>
+            </div>
+          </div>)}
+        </div>
+        <div className="hidden overflow-x-auto md:block">
+          <table className="hg-list-table w-full text-left text-xs min-w-[950px]">
+            <thead className="bg-[#f4f5f3] text-[#66716f] uppercase text-[10px] tracking-normal">
               <tr>
                 <th className="py-3.5 px-4 w-10 text-center">
-                  <button onClick={toggleSelectAll} className="text-white hover:text-[#f97316]">
+                  <button onClick={toggleSelectAll} className="text-[#66716f] hover:text-[#f97316]" aria-label="Seleccionar todas las cotizaciones">
                     {selectedIds.length === filtered.length && filtered.length > 0 ? (
                       <CheckSquare className="w-4 h-4 text-[#f97316]" />
                     ) : (
@@ -286,13 +325,13 @@ export default function CotizacionesPage() {
               {loading ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-gray-500 font-medium">
-                    Cargando cotizaciones desde Supabase...
+                    Cargando cotizaciones...
                   </td>
                 </tr>
-              ) : filtered.length === 0 ? (
+              ) : loadError ? null : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-gray-500 font-medium">
-                    No se encontraron cotizaciones registradas en Supabase.
+                    No se encontraron cotizaciones.
                   </td>
                 </tr>
               ) : (
@@ -373,9 +412,18 @@ export default function CotizacionesPage() {
                                   prev.map((c) => (c.id === cot.id ? { ...c, oportunidad_id: targetOpId } : c))
                                 );
                                 try {
-                                  await supabase.from('cotizaciones').update({ oportunidad_id: targetOpId }).eq('id', cot.id);
+                                  const { error } = await supabase.from('cotizaciones').update({ oportunidad_id: targetOpId }).eq('id', cot.id);
+                                  if (error) throw error;
+                                  await supabase.from('actividades_op').insert({
+                                    oportunidad_id: targetOpId,
+                                    usuario_id: currentUser?.id || null,
+                                    usuario_nombre: currentUser?.nombre || 'Sistema',
+                                    contenido: `Cotización ${cot.numero_cotizacion} vinculada a la oportunidad.`,
+                                    tipo: 'actualizacion',
+                                  });
                                 } catch (err) {
                                   console.error('Error linking op:', err);
+                                  setCotizaciones((prev) => prev.map((c) => c.id === cot.id ? { ...c, oportunidad_id: cot.oportunidad_id } : c));
                                 }
                               }}
                               className="bg-white border border-gray-300 rounded-lg px-2 py-1 text-[11px] text-gray-700 font-medium focus:outline-none focus:border-[#f97316] w-full"
@@ -409,7 +457,7 @@ export default function CotizacionesPage() {
                           <option value="borrador">Borrador</option>
                           <option value="enviada">Enviada</option>
                           <option value="aprobada">Aprobada</option>
-                          <option value="declinada">Declinada</option>
+                          <option value="rechazada">Rechazada</option>
                         </select>
                       </td>
 
@@ -515,11 +563,17 @@ export default function CotizacionesPage() {
         }}
         initialCotizacion={editingCotizacion}
         onSuccess={async () => {
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from('cotizaciones')
-            .select('*, cliente:clientes(*), oportunidad:oportunidades(*), items:cotizacion_items(*)')
+            .select('*, cliente:clientes(*), oportunidad:oportunidades!cotizaciones_oportunidad_id_fkey(*), items:cotizacion_items(*)')
             .order('created_at', { ascending: false });
-          if (data) setCotizaciones(data as Cotizacion[]);
+          if (error) {
+            console.error('Error refreshing cotizaciones from Supabase:', error);
+            setLoadError('No se pudieron actualizar las cotizaciones. Reintenta más tarde.');
+          } else {
+            setLoadError(null);
+            setCotizaciones((data || []) as Cotizacion[]);
+          }
         }}
       />
 

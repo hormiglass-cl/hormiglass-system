@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { createClient } from '../../lib/supabase/client';
 import { MovimientoCaja, TipoMovimientoCaja } from '../../lib/types';
 import {
@@ -22,6 +23,7 @@ export default function CajaPage() {
   const [movimientos, setMovimientos] = useState<MovimientoCaja[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [formError, setFormError] = useState('');
 
   const [tipo, setTipo] = useState<TipoMovimientoCaja>('ingreso');
   const [monto, setMonto] = useState<number>(100000);
@@ -97,13 +99,17 @@ export default function CajaPage() {
         .select()
         .single();
 
+      if (error) throw error;
       if (data) {
         setMovimientos([data as MovimientoCaja, ...movimientos]);
       }
     } catch (err) {
       console.error('Error adding movimiento to Supabase:', err);
+      setFormError('No se pudo guardar el movimiento. Verifica los datos y tus permisos.');
+      return;
     }
 
+    setFormError('');
     setShowModal(false);
     setMonto(100000);
     setDescripcion('');
@@ -117,19 +123,22 @@ export default function CajaPage() {
   );
 
   return (
-    <div className="space-y-8">
+    <div className="hg-page space-y-5">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-800 pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#e5e7e4] pb-5">
         <div>
-          <h1 className="text-2xl font-extrabold text-white flex items-center gap-2">
+          <p className="hg-overline">Finanzas / Movimientos</p>
+          <h1 className="text-2xl font-extrabold text-[#252b2d] flex items-center gap-2">
             <DollarSign className="w-6 h-6 text-[#f97316]" />
             <span>Caja & Estado de Resultados</span>
           </h1>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-gray-500 mt-1">
             Control de flujo de caja diario, ingresos por abonos/ventas y egresos por materias primas/gastos.
           </p>
         </div>
 
+        <div className="flex items-center gap-2">
+        <Link href="/reportes" className="hg-button-secondary">Ver reportes</Link>
         <button
           onClick={() => setShowModal(true)}
           className="bg-[#f97316] hover:bg-[#ea580c] text-white font-semibold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2 self-start md:self-auto"
@@ -137,53 +146,54 @@ export default function CajaPage() {
           <Plus className="w-4 h-4" />
           <span>Registrar Movimiento</span>
         </button>
+        </div>
       </div>
 
       {/* Tarjetas KPI de Estado de Resultados */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div className="bg-gray-900 p-5 rounded-lg border border-gray-800 shadow-sm">
+        <div className="bg-white p-5 rounded-lg border border-[#e5e7e4] shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-400">Total Ingresos</span>
-            <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg">
+            <span className="text-xs font-semibold text-gray-500">Total Ingresos</span>
+            <div className="p-2 bg-emerald-500/10 text-emerald-700 rounded-lg">
               <ArrowUpRight className="w-5 h-5" />
             </div>
           </div>
-          <p className="text-2xl font-black text-emerald-400 mt-3">${totalIngresos.toLocaleString('es-CL')}</p>
-          <span className="text-xs text-gray-400 font-medium">Abonos y Ventas Liquidadas</span>
+          <p className="text-2xl font-black text-emerald-700 mt-3">${totalIngresos.toLocaleString('es-CL')}</p>
+          <span className="text-xs text-gray-500 font-medium">Abonos y Ventas Liquidadas</span>
         </div>
 
-        <div className="bg-gray-900 p-5 rounded-lg border border-gray-800 shadow-sm">
+        <div className="bg-white p-5 rounded-lg border border-[#e5e7e4] shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-400">Total Egresos</span>
-            <div className="p-2 bg-red-500/10 text-red-400 rounded-lg">
+            <span className="text-xs font-semibold text-gray-500">Total Egresos</span>
+            <div className="p-2 bg-red-500/10 text-red-700 rounded-lg">
               <ArrowDownRight className="w-5 h-5" />
             </div>
           </div>
-          <p className="text-2xl font-black text-red-400 mt-3">${totalEgresos.toLocaleString('es-CL')}</p>
-          <span className="text-xs text-gray-400 font-medium">Pagos Proveedores y Operación</span>
+          <p className="text-2xl font-black text-red-700 mt-3">${totalEgresos.toLocaleString('es-CL')}</p>
+          <span className="text-xs text-gray-500 font-medium">Pagos Proveedores y Operación</span>
         </div>
 
-        <div className="bg-gray-900 p-5 rounded-lg border border-gray-800 shadow-sm">
+        <div className="bg-white p-5 rounded-lg border border-[#e5e7e4] shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-400">Resultado Neto (Margen)</span>
+            <span className="text-xs font-semibold text-gray-500">Saldo neto de Caja</span>
             <div className="p-2 bg-[#f97316]/10 text-[#f97316] rounded-lg">
               <DollarSign className="w-5 h-5" />
             </div>
           </div>
-          <p className="text-2xl font-black text-white mt-3">${flujoNeto.toLocaleString('es-CL')}</p>
-          <span className="text-xs text-emerald-400 font-medium">Balance Disponible en Planta</span>
+          <p className="text-2xl font-black text-[#252b2d] mt-3">${flujoNeto.toLocaleString('es-CL')}</p>
+          <span className="text-xs text-gray-500 font-medium">Ingresos registrados menos egresos registrados</span>
         </div>
       </div>
 
       {/* Historial de Movimientos de Caja */}
-      <div className="bg-gray-900 rounded-lg border border-gray-800 overflow-visible shadow-sm p-4 space-y-4">
-        <h2 className="text-sm font-bold text-white border-b border-gray-800 pb-3">
+      <div className="hg-list-group p-4 space-y-4">
+        <h2 className="text-sm font-bold text-[#252b2d] border-b border-[#e5e7e4] pb-3">
           Historial de Movimientos de Caja ({movimientos.length})
         </h2>
 
-        <div className="overflow-visible">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-gray-800/60 text-gray-400 uppercase text-[10px] tracking-normal border-b border-gray-800">
+        <div className="overflow-x-auto">
+          <table className="hg-list-table w-full min-w-[700px] text-left text-xs">
+            <thead className="bg-[#f7f7f5] text-gray-500 uppercase text-[10px] tracking-normal border-b border-[#e5e7e4]">
               <tr>
                 <th className="p-3.5">Fecha</th>
                 <th className="p-3.5">Tipo</th>
@@ -192,10 +202,10 @@ export default function CajaPage() {
                 <th className="p-3.5 text-right">Monto ($)</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-800">
+            <tbody className="divide-y divide-[#eff0ee]">
               {paginatedMovimientos.map((m) => (
-                <tr key={m.id} className="hover:bg-gray-800/40 transition">
-                  <td className="p-3.5 text-gray-400 font-mono">
+                <tr key={m.id} className="hover:bg-[#f7f7f5] transition">
+                  <td className="p-3.5 text-gray-500 font-mono">
                     {new Date(m.fecha).toLocaleDateString('es-CL', {
                       day: '2-digit',
                       month: 'short',
@@ -207,18 +217,18 @@ export default function CajaPage() {
                     <span
                       className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-md ${
                         m.tipo === 'ingreso'
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-red-50 text-red-700 border border-red-200'
                       }`}
                     >
                       {m.tipo}
                     </span>
                   </td>
-                  <td className="p-3.5 font-semibold text-white">{m.categoria}</td>
-                  <td className="p-3.5 text-gray-300">{m.descripcion || '-'}</td>
+                  <td className="p-3.5 font-semibold text-[#252b2d]">{m.categoria}</td>
+                  <td className="p-3.5 text-gray-600">{m.descripcion || '-'}</td>
                   <td
                     className={`p-3.5 text-right font-black text-sm ${
-                      m.tipo === 'ingreso' ? 'text-emerald-400' : 'text-red-400'
+                      m.tipo === 'ingreso' ? 'text-emerald-700' : 'text-red-700'
                     }`}
                   >
                     {m.tipo === 'ingreso' ? '+' : '-'}${m.monto.toLocaleString('es-CL')}
@@ -242,15 +252,16 @@ export default function CajaPage() {
       {/* Modal Registrar Movimiento */}
       {showModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-xs">
-            <h3 className="text-base font-bold text-white">Registrar Movimiento de Caja</h3>
+          <div className="bg-white border border-[#e5e7e4] rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-xs">
+            <h3 className="text-base font-bold text-[#252b2d]">Registrar Movimiento de Caja</h3>
+            {formError && <p role="alert" className="rounded-lg bg-red-50 p-2 text-red-700">{formError}</p>}
             <form onSubmit={handleAddMovimiento} className="space-y-3">
               <div>
-                <label className="block text-gray-300 mb-1">Tipo de Movimiento</label>
+                <label className="block text-gray-600 mb-1">Tipo de Movimiento</label>
                 <select
                   value={tipo}
                   onChange={(e) => setTipo(e.target.value as TipoMovimientoCaja)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
+                  className="w-full bg-[#f4f5f3] border border-[#e5e7e4] rounded-md p-2.5 text-[#252b2d]"
                 >
                   <option value="ingreso">Ingreso (Abono / Cobro Venta)</option>
                   <option value="egreso">Egreso (Pago Proveedor / Gasto Operativo)</option>
@@ -258,36 +269,36 @@ export default function CajaPage() {
               </div>
 
               <div>
-                <label className="block text-gray-300 mb-1">Monto ($) *</label>
+                <label className="block text-gray-600 mb-1">Monto ($) *</label>
                 <input
                   type="number"
                   required
                   value={monto}
                   onChange={(e) => setMonto(Number(e.target.value))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
+                  className="w-full bg-[#f4f5f3] border border-[#e5e7e4] rounded-md p-2.5 text-[#252b2d]"
                 />
               </div>
 
               <div>
-                <label className="block text-gray-300 mb-1">Categoría *</label>
+                <label className="block text-gray-600 mb-1">Categoría *</label>
                 <input
                   type="text"
                   required
                   placeholder="Ej. Abono 50% / Materia Prima / Flete"
                   value={categoria}
                   onChange={(e) => setCategoria(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
+                  className="w-full bg-[#f4f5f3] border border-[#e5e7e4] rounded-md p-2.5 text-[#252b2d]"
                 />
               </div>
 
               <div>
-                <label className="block text-gray-300 mb-1">Descripción / Glosa</label>
+                <label className="block text-gray-600 mb-1">Descripción / Glosa</label>
                 <textarea
                   rows={2}
                   placeholder="Detalle o respaldo del movimiento..."
                   value={descripcion}
                   onChange={(e) => setDescripcion(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-md p-2.5 text-white"
+                  className="w-full bg-[#f4f5f3] border border-[#e5e7e4] rounded-md p-2.5 text-[#252b2d]"
                 />
               </div>
 
@@ -295,7 +306,7 @@ export default function CajaPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 bg-gray-800 text-gray-300 rounded-md"
+                  className="px-4 py-2 bg-[#f4f5f3] text-gray-600 rounded-md"
                 >
                   Cancelar
                 </button>

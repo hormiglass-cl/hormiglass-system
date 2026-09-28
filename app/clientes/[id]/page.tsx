@@ -18,6 +18,7 @@ import { PdfPreviewModal } from '../../../components/PdfPreviewModal';
 import { CotizacionModal } from '../../../components/CotizacionModal';
 import { SearchableSelect } from '../../../components/SearchableSelect';
 import { REGIONES_CHILE, TODAS_COMUNAS_CHILE } from '../../../lib/chile-data';
+import { cotizacionVigente, totalAbonado, totalComercial } from '../../../lib/oportunidad-finanzas';
 
 const NICHOS_CLIENTE_DEFAULT = [
   'Constructora B2B',
@@ -142,6 +143,7 @@ export default function ClienteDetailPage() {
 
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [nichosOptions, setNichosOptions] = useState<string[]>(NICHOS_CLIENTE_DEFAULT);
@@ -201,6 +203,7 @@ export default function ClienteDetailPage() {
   const [notas, setNotas] = useState<NotaActividad[]>([]);
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
+  const [deliveryAccreditation, setDeliveryAccreditation] = useState<Record<string, boolean>>({});
   const [usuariosList, setUsuariosList] = useState<Usuario[]>([]);
   const [eventosList, setEventosList] = useState<EventoProduccionLogistica[]>([]);
   const [reclamosList, setReclamosList] = useState<{ id: string; contenido: string; created_at: string; usuario_nombre?: string; oportunidad_codigo?: string }[]>([]);
@@ -232,6 +235,8 @@ export default function ClienteDetailPage() {
         ]);
 
         if (ignore) return;
+        if (usersRes.error) throw usersRes.error;
+        if (nichosRes.error) throw nichosRes.error;
 
         if (usersRes.data) {
           setUsuariosList(usersRes.data as Usuario[]);
@@ -249,9 +254,10 @@ export default function ClienteDetailPage() {
           currentCli = clientData as Cliente;
         } else {
           // Fallback lookup
-          const { data: allClis } = await supabase.from('clientes').select('*');
+          const { data: allClis, error: clientsError } = await supabase.from('clientes').select('*');
+          if (clientsError) throw clientsError;
           if (allClis && allClis.length > 0) {
-            currentCli = (allClis as Cliente[]).find((c) => c.id === clienteId || c.rut === clienteId) || allClis[0] as Cliente;
+            currentCli = (allClis as Cliente[]).find((c) => c.id === clienteId || c.rut === clienteId) || null;
           }
         }
 
@@ -283,31 +289,34 @@ export default function ClienteDetailPage() {
         setEditRegion(currentCli.region || '');
 
         // 1. Fetch Notes
-        const { data: notesData } = await supabase
+        const { data: notesData, error: notesError } = await supabase
           .from('notas_actividad')
           .select('*, usuario:usuarios(*)')
           .eq('cliente_id', currentCli.id)
           .order('fecha', { ascending: false });
+        if (notesError) throw notesError;
 
         if (!ignore) {
           setNotas(notesData ? (notesData as NotaActividad[]) : []);
         }
 
         // 2. Fetch Quotes
-        const { data: quotesData } = await supabase
+        const { data: quotesData, error: quotesError } = await supabase
           .from('cotizaciones')
           .select('*, items:cotizacion_items(*)')
           .eq('cliente_id', currentCli.id)
           .order('created_at', { ascending: false });
+        if (quotesError) throw quotesError;
 
         if (!ignore) {
           setCotizaciones(quotesData ? (quotesData as Cotizacion[]) : []);
         }
 
         // 3. Fetch Opportunities
-        const { data: opData } = await supabase
+        const { data: opData, error: opError } = await supabase
           .from('oportunidades')
-          .select('*, cliente:clientes(*), cotizaciones(*)');
+          .select('*, cliente:clientes(*), cotizaciones:cotizaciones!cotizaciones_oportunidad_id_fkey(*)');
+        if (opError) throw opError;
 
         let matchedOps: OportunidadVenta[] = [];
         if (opData) {
@@ -317,9 +326,15 @@ export default function ClienteDetailPage() {
               (currentCli.rut && o.cliente?.rut === currentCli.rut) ||
               (currentCli.nombre && o.cliente?.nombre === currentCli.nombre)
           );
+          const closedIds = matchedOps.filter((op) => ['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline)).map((op) => op.id);
+          const { data: accreditationRows, error: accreditationError } = closedIds.length
+            ? await supabase.rpc('estado_entrega_acreditada', { p_ventas: closedIds })
+            : { data: [], error: null };
+          if (accreditationError) throw accreditationError;
+          if (!ignore) setDeliveryAccreditation(Object.fromEntries(((accreditationRows || []) as { venta_id: string; acreditada: boolean }[]).map((row) => [row.venta_id, row.acreditada])));
           if (!ignore) setOportunidades(matchedOps);
         } else {
-          if (!ignore) setOportunidades([]);
+          if (!ignore) { setOportunidades([]); setDeliveryAccreditation({}); }
         }
 
         // 4. Fetch Events & Reclamos for these opportunities
@@ -338,6 +353,8 @@ export default function ClienteDetailPage() {
               .eq('tipo', 'reclamo')
               .order('created_at', { ascending: false }),
           ]);
+          if (evRes.error) throw evRes.error;
+          if (reclamosRes.error) throw reclamosRes.error;
 
           if (!ignore) {
             if (evRes.data) setEventosList(evRes.data as EventoProduccionLogistica[]);
@@ -362,10 +379,16 @@ export default function ClienteDetailPage() {
           }
         }
 
-        if (!ignore) setLoading(false);
+        if (!ignore) {
+          setLoadError(null);
+          setLoading(false);
+        }
       } catch (err) {
         console.error('Error loading client detail from Supabase:', err);
-        if (!ignore) setLoading(false);
+        if (!ignore) {
+          setLoadError('No se pudo cargar la ficha del cliente. Reintenta más tarde.');
+          setLoading(false);
+        }
       }
     }
 
@@ -503,23 +526,20 @@ export default function ClienteDetailPage() {
   // ===== MÉTRICAS CONSOLIDADAS DE LA FICHA DE CLIENTE (Sin Cotizaciones Abiertas) =====
   // 1. Ventas acumuladas 100% pagadas
   const oportunidadesPagadas = oportunidades.filter((op) => {
-    const aprobada = op.cotizaciones?.find((c) => c.estado === 'aprobada');
-    const totalVal = aprobada?.monto_total || op.cotizacion_actual?.monto_total || op.monto_estimado || 0;
-    const abonadoVal = Number(op.monto_abonado || 0);
+    const totalVal = totalComercial(op, op.cotizaciones || []);
+    const abonadoVal = totalAbonado(op);
     return totalVal > 0 && abonadoVal >= totalVal;
   });
 
   const ventasAcumuladas100 = oportunidadesPagadas.reduce((sum, op) => {
-    const aprobada = op.cotizaciones?.find((c) => c.estado === 'aprobada');
-    const totalVal = aprobada?.monto_total || op.cotizacion_actual?.monto_total || op.monto_estimado || 0;
+    const totalVal = totalComercial(op, op.cotizaciones || []);
     return sum + Number(totalVal);
   }, 0);
 
   // 2. Saldo pendiente total
   const saldoPendienteTotal = oportunidades.reduce((sum, op) => {
-    const aprobada = op.cotizaciones?.find((c) => c.estado === 'aprobada');
-    const totalVal = aprobada?.monto_total || op.cotizacion_actual?.monto_total || op.monto_estimado || 0;
-    const abonadoVal = Number(op.monto_abonado || 0);
+    const totalVal = totalComercial(op, op.cotizaciones || []);
+    const abonadoVal = totalAbonado(op);
     const pend = Math.max(0, totalVal - abonadoVal);
     return sum + pend;
   }, 0);
@@ -534,14 +554,14 @@ export default function ClienteDetailPage() {
   const montoFacturadoObras = oportunidades
     .filter((op) => op.tipo_venta === 'Instalación' || op.tipo_venta === 'Obra')
     .reduce((sum, op) => {
-      const aprobada = op.cotizaciones?.find((c) => c.estado === 'aprobada');
-      return sum + Number(aprobada?.monto_total || 0);
+      return sum + totalComercial(op, op.cotizaciones || []);
     }, 0);
 
   // 6. Días promedio de pago
   const diffDaysList: number[] = [];
   oportunidades.forEach((op) => {
-    const cotAprobada = op.cotizaciones?.find((c) => c.estado === 'aprobada' && c.fecha_aprobacion);
+    const vigente = cotizacionVigente(op, op.cotizaciones || []);
+    const cotAprobada = vigente?.estado === 'aprobada' ? vigente : undefined;
     if (
       cotAprobada &&
       cotAprobada.fecha_aprobacion &&
@@ -618,6 +638,17 @@ export default function ClienteDetailPage() {
     return (
       <div className="p-12 text-center text-gray-500 font-medium">
         Cargando la ficha del cliente...
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-6 text-sm font-medium text-red-800">
+        {loadError}
+        <button type="button" onClick={() => window.location.reload()} className="ml-3 underline">
+          Reintentar
+        </button>
       </div>
     );
   }
@@ -1421,13 +1452,13 @@ export default function ClienteDetailPage() {
             ) : (
               <div className="space-y-2.5">
                 {oportunidades.map((op) => {
-                  const cotAprob = op.cotizaciones?.find((c) => c.estado === 'aprobada');
-                  const montoDisplay = cotAprob?.monto_total || op.cotizacion_actual?.monto_total || op.monto_estimado || 0;
+                  const montoDisplay = totalComercial(op, op.cotizaciones || []);
                   const stageInfo = STAGE_CONFIG[op.estado_pipeline] || {
                     ...STAGE_CONFIG.nueva,
                     label: op.estado_pipeline || 'Sin etapa',
                     area: 'Sin área definida',
                   };
+                  const closeWithoutEvidence = ['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline) && deliveryAccreditation[op.id] !== true;
 
                   return (
                     <div
@@ -1441,8 +1472,8 @@ export default function ClienteDetailPage() {
                           </span>
                           <span className="font-mono text-xs text-gray-500 font-bold block mt-0.5">{op.codigo}</span>
                         </div>
-                        <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${stageInfo.bg} ${stageInfo.text} ${stageInfo.border}`}>
-                          {stageInfo.label}
+                        <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${closeWithoutEvidence ? 'bg-amber-50 text-amber-900 border-amber-300' : `${stageInfo.bg} ${stageInfo.text} ${stageInfo.border}`}`}>
+                          {closeWithoutEvidence ? 'Entrega sin acreditar' : stageInfo.label}
                         </span>
                       </div>
 

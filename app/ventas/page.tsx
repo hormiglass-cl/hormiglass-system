@@ -15,6 +15,7 @@ import {
   VisitaTerreno,
   EventoProduccionLogistica,
   OrdenCompra,
+  OrdenCompraAsignacion,
   ProduccionDiaria,
   CotizacionItem,
   AntecedenteDocumento,
@@ -29,6 +30,7 @@ import { OrdenCompraModal } from '../../components/OrdenCompraModal';
 import { OrdenCompraPdfPreviewModal } from '../../components/OrdenCompraPdfPreviewModal';
 import { logSistema } from '../../lib/logger';
 import { playNotificationSound } from '../../lib/audio';
+import { cotizacionVigente, totalAbonado, totalComercial } from '../../lib/oportunidad-finanzas';
 import {
   TrendingUp,
   GripVertical,
@@ -98,12 +100,12 @@ export default function PipelineVentasPage() {
   const { currentUser, usersList } = useAuth();
   const searchParams = useSearchParams();
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
+  const [deliveryAccreditation, setDeliveryAccreditation] = useState<Record<string, boolean>>({});
   const [allCotizaciones, setAllCotizaciones] = useState<Cotizacion[]>([]);
   const [usuariosApp, setUsuariosApp] = useState<Usuario[]>([]);
   const [personalTerrenoList, setPersonalTerrenoList] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'lista' | 'tablero'>('lista');
-  const [activeBoardSection, setActiveBoardSection] = useState<string>('ventas');
 
   // Advanced Filters for List & Board View
   const [filterSearch, setFilterSearch] = useState('');
@@ -178,13 +180,6 @@ export default function PipelineVentasPage() {
   const [loadingOpOrdenes, setLoadingOpOrdenes] = useState(false);
   const [showCreateOcModal, setShowCreateOcModal] = useState(false);
   const [pdfPreviewOc, setPdfPreviewOc] = useState<OrdenCompra | null>(null);
-  const [resolvingRamaChangeOc, setResolvingRamaChangeOc] = useState(false);
-  const [ramaChangeOcModal, setRamaChangeOcModal] = useState<{
-    op: OportunidadVenta;
-    targetState: EstadoPipeline;
-    rama: 'produccion' | 'reventa';
-    ocCount: number;
-  } | null>(null);
 
   // Bitácora de Producción Diaria y Stock de la Oportunidad
   const [opProduccionDiaria, setOpProduccionDiaria] = useState<ProduccionDiaria[]>([]);
@@ -494,14 +489,24 @@ export default function PipelineVentasPage() {
 
     setLoadingOpOrdenes(true);
     try {
+      const { data: assignments } = await supabase
+        .from('orden_compra_asignaciones')
+        .select('*')
+        .eq('oportunidad_id', opId);
+      const assignedIds = [...new Set(((assignments || []) as OrdenCompraAsignacion[]).map((a) => a.orden_compra_id))];
       const { data, error } = await supabase
         .from('ordenes_compra')
         .select('*, proveedor:proveedores(*), items:orden_compra_items(*)')
-        .eq('oportunidad_id', opId)
         .order('created_at', { ascending: false });
 
       if (error) throw new Error(error.message);
-      const list = (data || []) as OrdenCompra[];
+      const list = ((data || []) as OrdenCompra[])
+        .filter((oc) => oc.oportunidad_id === opId || assignedIds.includes(oc.id))
+        .map((oc) => ({
+          ...oc,
+          asignaciones: ((assignments || []) as OrdenCompraAsignacion[])
+            .filter((a) => a.orden_compra_id === oc.id),
+        }));
       ordenesCompraCacheRef.current[opId] = list;
       setOpOrdenesCompra(list);
     } catch (err) {
@@ -724,6 +729,12 @@ export default function PipelineVentasPage() {
           let mergedOps: OportunidadVenta[] = [];
           if (opRes.data) {
             const rawOps = opRes.data as OportunidadVenta[];
+            const closedIds = rawOps.filter((op) => ['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline)).map((op) => op.id);
+            const { data: accreditationRows, error: accreditationError } = closedIds.length
+              ? await supabase.rpc('estado_entrega_acreditada', { p_ventas: closedIds })
+              : { data: [], error: null };
+            if (accreditationError) throw accreditationError;
+            setDeliveryAccreditation(Object.fromEntries(((accreditationRows || []) as { venta_id: string; acreditada: boolean }[]).map((row) => [row.venta_id, row.acreditada])));
             const allQuotes = (cotRes.data || []) as Cotizacion[];
             const allDbAct = actRes.data || [];
 
@@ -753,6 +764,7 @@ export default function PipelineVentasPage() {
             setOportunidades(mergedOps);
           } else {
             setOportunidades([]);
+            setDeliveryAccreditation({});
           }
 
           if (cotRes.data) {
@@ -799,6 +811,7 @@ export default function PipelineVentasPage() {
         console.error('Error fetching oportunidades from Supabase:', err);
         if (!ignore) {
           setOportunidades([]);
+          setDeliveryAccreditation({});
           setClientes([]);
           setUsuariosApp([]);
           setAllCotizaciones([]);
@@ -1076,6 +1089,10 @@ export default function PipelineVentasPage() {
       ],
     },
   ];
+  const SECCION_COMERCIAL = SECCIONES_PIPELINE[0];
+  const ETAPAS_COMERCIALES = SECCION_COMERCIAL.etapas;
+  const esEtapaComercial = (estado: EstadoPipeline) =>
+    ETAPAS_COMERCIALES.some((etapa) => etapa.id === estado);
 
   const getProdLogTipoLabel = (tipo: string) => {
     if (tipo === 'obra') return 'Obra';
@@ -1301,16 +1318,19 @@ export default function PipelineVentasPage() {
   // Delete Cotización in modal from Supabase
   const handleDeleteCotizacionInModal = async () => {
     if (!cotToDeleteInModal) return;
-    try {
-      await supabase.from('cotizaciones').delete().eq('id', cotToDeleteInModal.id);
-    } catch (err) {
-      console.error('Error deleting cotizacion from Supabase:', err);
+    const { error } = await supabase.from('cotizaciones').delete().eq('id', cotToDeleteInModal.id);
+    if (error) {
+      setCotizacionErrorMsg(error.message);
+      return;
     }
 
     setAllCotizaciones((prev) => prev.filter((c) => c.id !== cotToDeleteInModal.id));
     if (selectedOp) {
       const updatedCots = (selectedOp.cotizaciones || []).filter((c) => c.id !== cotToDeleteInModal.id);
-      setSelectedOp({ ...selectedOp, cotizaciones: updatedCots });
+      const { data: opData } = await supabase.from('oportunidades')
+        .select('cotizacion_actual_id').eq('id', selectedOp.id).single();
+      setSelectedOp({ ...selectedOp, cotizaciones: updatedCots,
+        cotizacion_actual_id: opData?.cotizacion_actual_id || undefined });
     }
     setCotToDeleteInModal(null);
   };
@@ -1399,8 +1419,8 @@ export default function PipelineVentasPage() {
     document.addEventListener('mouseup', handleMouseUp);
   };
 
-  // Modal Split Ratio State (Porcentaje de ancho de la columna izquierda, por defecto 58%)
-  const [modalLeftColRatio, setModalLeftColRatio] = useState<number>(58);
+  // Modal Split Ratio State (Porcentaje de ancho de la columna izquierda, por defecto 64%)
+  const [modalLeftColRatio, setModalLeftColRatio] = useState<number>(64);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -1520,42 +1540,37 @@ export default function PipelineVentasPage() {
     );
   };
 
-  // Helper para obtener el valor total de la oportunidad: suma de cotizaciones vinculadas directamente a la oportunidad
+  // Una versión nueva reemplaza a la anterior en los importes comerciales.
   const getOportunidadTotalValue = (op: OportunidadVenta): number => {
-    const linkedQuotes = allCotizaciones.filter((c) => c.oportunidad_id === op.id);
-    if (linkedQuotes.length > 0) {
-      return linkedQuotes.reduce((sum, c) => sum + (c.monto_total || 0), 0);
-    }
-    return 0;
+    return totalComercial(op, allCotizaciones);
   };
 
   // Helper para obtener el monto abonado de una oportunidad
   const getOportunidadAbonadoValue = (op: OportunidadVenta): number => {
-    if (op.abonos && Array.isArray(op.abonos) && op.abonos.length > 0) {
-      return op.abonos.reduce((acc, a) => acc + (a.monto || 0), 0);
-    }
-    return op.monto_abonado || 0;
+    return totalAbonado(op);
   };
 
   // Helper para obtener la cotización activa principal para una oportunidad
   const getActiveQuote = (op: OportunidadVenta): Cotizacion | undefined => {
-    if (op.cotizacion_actual) return op.cotizacion_actual;
-    // Search in allCotizaciones or op.cotizaciones for client or opportunity match
-    const candidates = allCotizaciones.filter(
-      (c) =>
-        c.oportunidad_id === op.id ||
-        c.cliente_id === op.cliente_id ||
-        (op.cotizaciones && op.cotizaciones.some((sc) => sc.id === c.id))
-    );
-    if (candidates.length > 0) {
-      // Pick approved/enviada first or highest version
-      const sorted = [...candidates].sort((a, b) => (b.version || 1) - (a.version || 1));
-      return sorted.find((c) => c.estado !== 'borrador') || sorted[0];
-    }
-    if (op.cotizaciones && op.cotizaciones.length > 0) {
-      return [...op.cotizaciones].sort((a, b) => (b.version || 1) - (a.version || 1))[0];
-    }
-    return undefined;
+    return cotizacionVigente(op, allCotizaciones);
+  };
+
+  const [cotizacionErrorMsg, setCotizacionErrorMsg] = useState('');
+  const guardarCambioCotizacion = async (
+    cotizacion: Cotizacion,
+    cambios: { oportunidad_id?: string | null; estado?: EstadoCotizacion },
+  ) => {
+    const { data, error } = await supabase.from('cotizaciones')
+      .update(cambios).eq('id', cotizacion.id).select().single();
+    if (error || !data) throw new Error(error?.message || 'No se confirmó el cambio de cotización.');
+    const { data: oportunidad, error: opError } = await supabase.from('oportunidades')
+      .select('cotizacion_actual_id').eq('id', selectedOp!.id).single();
+    if (opError || !oportunidad) throw new Error(opError?.message || 'No se pudo actualizar la cotización vigente.');
+    setAllCotizaciones((prev) => prev.map((cot) => cot.id === data.id ? data as Cotizacion : cot));
+    setSelectedOp((prev) => prev ? { ...prev, cotizacion_actual_id: oportunidad.cotizacion_actual_id } : null);
+    setOportunidades((prev) => prev.map((op) => op.id === selectedOp!.id
+      ? { ...op, cotizacion_actual_id: oportunidad.cotizacion_actual_id } : op));
+    setCotizacionErrorMsg('');
   };
 
   // Candidate quote dropdown selection state
@@ -1567,6 +1582,44 @@ export default function PipelineVentasPage() {
   const [nuevoAbonoFile, setNuevoAbonoFile] = useState<File | null>(null);
   const [nuevoAbonoFileName, setNuevoAbonoFileName] = useState<string>('');
   const [abonoErrorMsg, setAbonoErrorMsg] = useState<string>('');
+  const [abonoSaving, setAbonoSaving] = useState(false);
+
+  const guardarAbono = async (operacion: 'crear' | 'editar' | 'eliminar', pago: Record<string, unknown>) => {
+    if (!selectedOp) throw new Error('Selecciona una oportunidad.');
+    const { data, error } = await supabase.rpc('registrar_abono_atomico', {
+      p_oportunidad_id: selectedOp.id,
+      p_pago: pago,
+      p_operacion: operacion,
+    });
+    if (error || !data) throw new Error(error?.message || 'No se confirmó el abono.');
+    const updated = data as { comprobantes_pago: OportunidadVenta['comprobantes_pago']; monto_abonado: number };
+    setSelectedOp((prev) => prev ? { ...prev, ...updated } : null);
+    setOportunidades((prev) => prev.map((op) => op.id === selectedOp.id ? { ...op, ...updated } : op));
+    setAbonoErrorMsg('');
+    return updated;
+  };
+
+  const abrirComprobante = async (storedUrl: string) => {
+    const publicMarker = '/storage/v1/object/public/documentos/';
+    const privateMarker = '/storage/v1/object/sign/documentos/';
+    const marker = storedUrl.includes(publicMarker) ? publicMarker : privateMarker;
+    const path = storedUrl.includes(marker)
+      ? decodeURIComponent(storedUrl.split(marker)[1].split('?')[0])
+      : storedUrl;
+    if (!path || /^https?:/i.test(path)) {
+      setAbonoErrorMsg('El comprobante histórico no tiene una ruta privada válida.');
+      return;
+    }
+    const tab = window.open('', '_blank');
+    const { data, error } = await supabase.storage.from('documentos').createSignedUrl(path, 60);
+    if (error || !data?.signedUrl) {
+      tab?.close();
+      setAbonoErrorMsg(error?.message || 'No se pudo abrir el comprobante.');
+      return;
+    }
+    if (tab) tab.location.href = data.signedUrl;
+    else window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+  };
 
   // Editing abono state
   const [editingAbonoId, setEditingAbonoId] = useState<string | null>(null);
@@ -1709,68 +1762,8 @@ export default function PipelineVentasPage() {
     targetState: EstadoPipeline,
     rama: 'produccion' | 'reventa'
   ) => {
-    const targetOp = oportunidades.find((o) => o.id === opId);
-    if (!targetOp) return;
-
-    if (targetOp.rama_destino && targetOp.rama_destino !== rama && isUUID(opId)) {
-      const { count, error } = await supabase
-        .from('ordenes_compra')
-        .select('id', { count: 'exact', head: true })
-        .eq('oportunidad_id', opId);
-      if (error) {
-        console.error('Error checking OC count before branch change:', error);
-        return;
-      }
-      const ocCount = count || 0;
-
-      if (ocCount > 0) {
-        setRamaChangeOcModal({ op: targetOp, targetState, rama, ocCount });
-        return;
-      }
-    }
-
+    // Una OC puede distribuirse entre varias ventas y no se borra al cambiar de ruta.
     await applyMoveWithRama(opId, targetState, rama);
-  };
-
-  const resolveRamaChangeWithOc = async (action: 'desvincular' | 'eliminar') => {
-    if (!ramaChangeOcModal || resolvingRamaChangeOc) return;
-    const { op, targetState, rama } = ramaChangeOcModal;
-    setResolvingRamaChangeOc(true);
-
-    try {
-      if (action === 'desvincular') {
-        const { error } = await supabase
-          .from('ordenes_compra')
-          .update({ oportunidad_id: null })
-          .eq('oportunidad_id', op.id);
-        if (error) throw new Error(error.message);
-        await addOportunidadActividad(op.id, 'Ordenes de compra desvinculadas antes de cambiar la rama de la oportunidad.');
-      } else {
-        const { error } = await supabase
-          .from('ordenes_compra')
-          .delete()
-          .eq('oportunidad_id', op.id);
-        if (error) throw new Error(error.message);
-        await addOportunidadActividad(op.id, 'Ordenes de compra eliminadas antes de cambiar la rama de la oportunidad.');
-      }
-
-      setOpOrdenesCompra([]);
-      ordenesCompraCacheRef.current[op.id] = [];
-      setRamaChangeOcModal(null);
-      await applyMoveWithRama(op.id, targetState, rama);
-    } catch (err) {
-      console.error('Error resolving OC branch change:', err);
-      setToastAlert({
-        id: Date.now().toString(),
-        message: action === 'desvincular'
-          ? 'No se pudo desvincular la orden de compra. Intenta nuevamente.'
-          : 'No se pudo eliminar la orden de compra. Intenta nuevamente.',
-        user: 'Sistema CRM',
-      });
-      setTimeout(() => setToastAlert(null), 5000);
-    } finally {
-      setResolvingRamaChangeOc(false);
-    }
   };
 
   // Mover Oportunidad en el Pipeline (Sin gates bloqueantes de abono)
@@ -1778,14 +1771,13 @@ export default function PipelineVentasPage() {
     const targetOp = oportunidades.find((o) => o.id === opId);
     if (!targetOp || targetOp.estado_pipeline === targetState) return;
 
-    if (currentUser?.rol !== 'admin') {
-      setToastAlert({
-        id: Date.now().toString(),
-        message: 'Solo un usuario admin puede cambiar la etapa o rama de una oportunidad.',
-        user: 'Sistema CRM',
-      });
-      setTimeout(() => setToastAlert(null), 5000);
-      return;
+    if (['entregada', 'prod_finalizado', 'rev_entregado'].includes(targetState)) {
+      const { data: accredited, error: deliveryError } = await supabase.rpc('entrega_acreditada', { p_venta: opId });
+      if (deliveryError || !accredited) {
+        window.alert(deliveryError?.message || 'La venta aún no tiene entrega completa acreditada. Revisa guías y excepciones en la vista operativa.');
+        return;
+      }
+      if (!window.confirm('¿Confirmar el cierre de esta venta con entrega acreditada?')) return;
     }
 
     // Si se mueve a etapas específicas de Producción o Reventa, asignar rama automáticamente
@@ -1826,12 +1818,17 @@ export default function PipelineVentasPage() {
 
     if (isUUID(opId)) {
       try {
-        await supabase
+        const { error } = await supabase
           .from('oportunidades')
           .update({ estado_pipeline: targetState })
           .eq('id', opId);
+        if (error) throw error;
       } catch (err) {
         console.error('Error updating oportunidad state in Supabase:', err);
+        setOportunidades((prev) => prev.map((o) => o.id === opId ? targetOp : o));
+        if (selectedOp?.id === opId) setSelectedOp(targetOp);
+        window.alert(err instanceof Error ? err.message : 'No se pudo actualizar la etapa.');
+        return;
       }
     }
 
@@ -2281,7 +2278,10 @@ export default function PipelineVentasPage() {
     setIsEditingTitle(false);
   };
 
-  const filteredOportunidades = oportunidades.filter((op) => {
+  const oportunidadesComerciales = oportunidades.filter((op) => esEtapaComercial(op.estado_pipeline));
+  const isUnaccreditedClose = (op: OportunidadVenta) =>
+    ['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline) && deliveryAccreditation[op.id] !== true;
+  const filteredOportunidades = oportunidadesComerciales.filter((op) => {
     // 1. Text Search (código, título, cliente nombre, cliente rut)
     if (filterSearch.trim()) {
       const q = filterSearch.toLowerCase().trim();
@@ -2354,7 +2354,13 @@ export default function PipelineVentasPage() {
             <span>Pipeline de Oportunidades de Venta</span>
           </h1>
           <p className="text-xs text-gray-600 mt-1">
-            Arrastra oportunidades entre estados, gestiona productos, cotizaciones, archivos de finanzas y comunícate con menciones @.
+            Gestiona oportunidades desde la captación hasta el cierre comercial.
+          </p>
+          <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+            Después del cierre, continúa en
+            <Link href="/planificacion" className="font-semibold text-[#c9621d] hover:underline">Planificación</Link>
+            o
+            <Link href="/reventa" className="font-semibold text-[#c9621d] hover:underline">Reventa</Link>.
           </p>
         </div>
 
@@ -2391,17 +2397,17 @@ export default function PipelineVentasPage() {
       </div>
 
       {/* Barra de Filtros Avanzados (Ajustes 11 - Req 5) */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className="hg-list-toolbar text-xs">
         <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
           {/* Búsqueda por Texto */}
-          <div className="relative flex-1 min-w-[180px] max-w-sm">
+          <div className="relative flex-[2] min-w-[220px]">
             <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Buscar por código, cliente, título, RUT..."
               value={filterSearch}
               onChange={(e) => setFilterSearch(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-200 rounded-md pl-9 pr-8 py-2 text-[#213343] font-medium placeholder-gray-400 focus:outline-none focus:border-[#f97316]"
+              className="hg-list-search w-full pl-9 pr-8 py-2 text-[#252b2d] font-medium placeholder-gray-400"
             />
             {filterSearch && (
               <button
@@ -2420,27 +2426,9 @@ export default function PipelineVentasPage() {
             className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 font-bold text-[#213343] focus:outline-none focus:border-[#f97316] cursor-pointer"
           >
             <option value="todos">Todos los Estados</option>
-            <optgroup label="Comercial">
-              <option value="nueva">Nueva Oportunidad</option>
-              <option value="pagada">Pago Validado</option>
-              <option value="entregada">Venta Cerrada</option>
-            </optgroup>
-            <optgroup label="Producción">
-              <option value="prod_pendiente">Pendiente Planificación</option>
-              <option value="prod_cola">En Cola de Fabricación</option>
-              <option value="prod_fabricacion">En Fabricación</option>
-              <option value="prod_listo_instalacion">Listo p/ Instalación</option>
-              <option value="prod_instalacion">En Instalación</option>
-              <option value="prod_finalizado">Finalizado / Entregado</option>
-            </optgroup>
-            <optgroup label="Reventa">
-              <option value="rev_coordinacion">Coordinación Proveedor</option>
-              <option value="rev_stock">Confirmación Stock</option>
-              <option value="rev_listo_retiro">Listo para Retiro</option>
-              <option value="rev_listo_despacho">Listo para Despacho</option>
-              <option value="rev_entregado">Entregado al Cliente</option>
-              <option value="rev_postventa">Postventa & Seguimiento</option>
-            </optgroup>
+            {ETAPAS_COMERCIALES.map((etapa) => (
+              <option key={etapa.id} value={etapa.id}>{etapa.label}</option>
+            ))}
           </select>
 
           {/* Filtro Tipo Venta */}
@@ -2502,10 +2490,19 @@ export default function PipelineVentasPage() {
           )}
 
           <span className="font-extrabold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-md border border-gray-200">
-            Mostrando <strong className="text-[#f97316]">{filteredOportunidades.length}</strong> de {oportunidades.length}
+            Mostrando <strong className="text-[#f97316]">{filteredOportunidades.length}</strong> de {oportunidadesComerciales.length}
           </span>
         </div>
       </div>
+
+      {activeTab === 'lista' && (filterEstado !== 'todos' || filterTipoVenta !== 'todos' || filterPrioridad !== 'todos' || filterAsignado !== 'todos') && (
+        <div className="flex flex-wrap items-center gap-2" aria-label="Filtros activos">
+          {filterEstado !== 'todos' && <button type="button" onClick={() => setFilterEstado('todos')} className="hg-list-meta hover:bg-[#ecefed]">Estado: {SECCIONES_PIPELINE.flatMap((section) => section.etapas).find((stage) => stage.id === filterEstado)?.label || filterEstado} <X className="h-3 w-3" /></button>}
+          {filterTipoVenta !== 'todos' && <button type="button" onClick={() => setFilterTipoVenta('todos')} className="hg-list-meta hover:bg-[#ecefed]">{filterTipoVenta} <X className="h-3 w-3" /></button>}
+          {filterPrioridad !== 'todos' && <button type="button" onClick={() => setFilterPrioridad('todos')} className="hg-list-meta hover:bg-[#ecefed]">Prioridad: {filterPrioridad} <X className="h-3 w-3" /></button>}
+          {filterAsignado !== 'todos' && <button type="button" onClick={() => setFilterAsignado('todos')} className="hg-list-meta hover:bg-[#ecefed]">{filterAsignado === 'me' ? 'Asignadas a mí' : usuariosApp.find((user) => user.id === filterAsignado)?.nombre || 'Responsable'} <X className="h-3 w-3" /></button>}
+        </div>
+      )}
 
       {loading ? (
         <div className="py-12 text-center text-gray-500 font-medium text-xs">
@@ -2513,42 +2510,13 @@ export default function PipelineVentasPage() {
         </div>
       ) : activeTab === 'tablero' ? (
         <div className="space-y-4 ">
-          <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
-            <div className="flex min-w-max divide-x divide-gray-200">
-              {SECCIONES_PIPELINE.map((sec) => {
-                const sectionCount = filteredOportunidades.filter((o) =>
-                  sec.etapas.some((stage) => stage.id === o.estado_pipeline)
-                ).length;
-                const isActiveSection = activeBoardSection === sec.id;
-
-                return (
-                  <button
-                    key={sec.id}
-                    type="button"
-                    onClick={() => setActiveBoardSection(sec.id)}
-                    className={`px-5 py-3 text-left min-w-[220px] transition border-b-2 ${
-                      isActiveSection
-                        ? 'bg-[#213343] text-white border-[#f97316]'
-                        : 'bg-white text-[#213343] border-transparent hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="block text-xs font-extrabold uppercase">{sec.nombre}</span>
-                    <span className={`block text-[11px] mt-1 ${isActiveSection ? 'text-gray-200' : 'text-gray-500'}`}>
-                      {sectionCount} {sectionCount === 1 ? 'oportunidad' : 'oportunidades'}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           {(() => {
-            const activeSection = SECCIONES_PIPELINE.find((sec) => sec.id === activeBoardSection) || SECCIONES_PIPELINE[0];
+            const activeSection = SECCION_COMERCIAL;
 
             return (
-              <div className="p-4 rounded-lg border border-gray-200 bg-gray-50 space-y-4 min-h-[560px]">
+              <div className="p-4 rounded-xl border border-gray-200 bg-white space-y-4 min-h-[560px]">
                 <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-                  <h3 className="text-base font-extrabold text-[#213343]">{activeSection.nombre}</h3>
+                  <h3 className="text-base font-semibold text-[#26313a]">{activeSection.nombre}</h3>
                   <span className="text-xs font-mono font-bold text-gray-500">
                     {activeSection.etapas.length} etapas
                   </span>
@@ -2567,25 +2535,29 @@ export default function PipelineVentasPage() {
                         key={stage.id}
                         onDragOver={(e) => handleDragOver(e, stage.id)}
                         onDrop={(e) => handleDrop(e, stage.id)}
-                        className={`rounded-lg border p-3 min-h-[470px] transition ${
+                        className={`rounded-xl border p-3 min-h-[470px] transition ${
                           isTargetColumn
                             ? 'bg-orange-50 border-[#f97316] ring-2 ring-[#F7931F]/20'
-                            : 'bg-white border-gray-200'
+                            : 'bg-[#f7f7f5] border-[#ececeb]'
                         }`}
                       >
                         <div className="flex items-center justify-between border-b border-gray-200 pb-2 mb-3">
                           <div className="flex items-center gap-2">
                             <span className={`w-2.5 h-2.5 rounded-full border ${stage.color}`} />
-                            <h4 className="text-xs font-black uppercase text-[#213343]">{stage.label}</h4>
+                            <h4 className="text-sm font-semibold text-[#26313a]">{stage.label}</h4>
                           </div>
-                          <span className="text-[11px] font-mono font-bold text-gray-500">{colOps.length}</span>
+                          <span className="text-[11px] font-mono font-bold text-gray-500">
+                            {stage.id === 'entregada'
+                              ? `${colOps.filter((op) => !isUnaccreditedClose(op)).length} acreditadas · ${colOps.length} registros`
+                              : colOps.length}
+                          </span>
                         </div>
 
                         <div className="space-y-3">
                           {colOps.map((op) => {
                             const latestQuote = getActiveQuote(op);
                             const montoTotal = getOportunidadTotalValue(op);
-                            const montoAbonado = op.monto_abonado || 0;
+                            const montoAbonado = getOportunidadAbonadoValue(op);
                             const saldoPendiente = Math.max(0, montoTotal - montoAbonado);
                             const isBeingDragged = draggedOpId === op.id;
 
@@ -2596,7 +2568,17 @@ export default function PipelineVentasPage() {
                                 onDragStart={(e) => handleDragStart(e, op.id)}
                                 onDragEnd={handleDragEnd}
                                 onClick={() => handleOpenOportunidad(op)}
-                                className={`bg-white p-3 rounded-lg border border-gray-200 space-y-3 shadow-sm hover:shadow-sm hover:border-[#f97316] transition cursor-pointer active:cursor-grabbing relative group ${
+                                onKeyDown={(event) => {
+                                  if (event.target !== event.currentTarget) return;
+                                  if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault();
+                                    handleOpenOportunidad(op);
+                                  }
+                                }}
+                                role="button"
+                                tabIndex={0}
+                                aria-label={`Abrir oportunidad ${op.codigo}: ${op.titulo}`}
+                                className={`bg-white p-3 rounded-xl border border-gray-200 space-y-3 shadow-sm hover:shadow-md hover:border-[#f97316] transition cursor-pointer active:cursor-grabbing relative group ${
                                   isBeingDragged ? 'opacity-40 border-dashed border-[#f97316]' : ''
                                 }`}
                               >
@@ -2628,6 +2610,7 @@ export default function PipelineVentasPage() {
                                   <p className="text-sm font-extrabold text-[#213343] leading-snug group-hover:text-[#f97316] transition">
                                     {op.titulo}
                                   </p>
+                                  {isUnaccreditedClose(op) && <span className="mt-1 inline-block rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">Entrega sin acreditar</span>}
                                   <div className="mt-1 flex items-center gap-1 text-xs text-[#f97316] font-bold hover:underline" onClick={(e) => e.stopPropagation()}>
                                     <Building className="w-3.5 h-3.5 shrink-0" />
                                     <Link href={`/clientes/${op.cliente_id}`}>
@@ -2685,39 +2668,35 @@ export default function PipelineVentasPage() {
         </div>
       ) : (
         /* Vista Lista Agrupada por Secciones del Pipeline */
-        <div className="space-y-8 ">
-          {SECCIONES_PIPELINE.map((sec) => {
+        <div className="space-y-5">
+          {[SECCION_COMERCIAL].map((sec) => {
             const isSecCollapsed = !!collapsedParentSections[sec.id];
             const secOps = filteredOportunidades.filter((o) =>
               sec.etapas.some((e) => e.id === o.estado_pipeline)
             );
 
             return (
-              <div key={sec.id} className="space-y-4">
+              <div key={sec.id} className="hg-list-group">
                 {/* Header de Sección Colapsable */}
-                <div
+                <button
+                  type="button"
                   onClick={() =>
                     setCollapsedParentSections((prev) => ({
                       ...prev,
                       [sec.id]: !prev[sec.id],
                     }))
                   }
-                  className="p-4 rounded-lg border border-gray-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs cursor-pointer hover:border-[#f97316]/60 transition select-none"
+                  aria-expanded={!isSecCollapsed}
+                  className="hg-list-group-heading w-full cursor-pointer select-none text-left hover:bg-[#fafaf8]"
                 >
-                  <div className="flex items-center gap-3">
-                    <button type="button" className="text-[#213343] cursor-pointer">
-                      {isSecCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                    </button>
-                    <h3 className="text-base font-extrabold text-[#213343]">{sec.nombre}</h3>
-                    <span className="text-xs font-mono font-bold px-2 py-0.5 border border-gray-200 bg-gray-50 text-[#213343]">
-                      {secOps.length} {secOps.length === 1 ? 'oportunidad' : 'oportunidades'}
-                    </span>
-                  </div>
-                </div>
+                    {isSecCollapsed ? <ChevronRight className="w-5 h-5 text-[#66716f]" /> : <ChevronDown className="w-5 h-5 text-[#66716f]" />}
+                    <span className="text-sm font-semibold text-[#252b2d]">{sec.nombre}</span>
+                    <span className="hg-list-count">{secOps.length}</span>
+                </button>
 
                 {/* Tablas por etapa dentro de esta sección */}
                 {!isSecCollapsed && (
-                  <div className="space-y-4">
+                  <div className="divide-y divide-[#eff0ee]">
                     {sec.etapas.map((col) => {
                       const isCollapsed = !!collapsedSections[col.id];
                       const rawOps = filteredOportunidades.filter((o) => o.estado_pipeline === col.id);
@@ -2729,42 +2708,38 @@ export default function PipelineVentasPage() {
                           key={col.id}
                           onDragOver={(e) => handleDragOver(e, col.id)}
                           onDrop={(e) => handleDrop(e, col.id)}
-                          className={`space-y-2 mb-4 p-2 rounded-lg transition-all duration-200 ${
+                          className={`transition-all duration-200 ${
                             isTargetColumn
-                              ? 'bg-orange-100/60 border-2 border-[#f97316] ring-2 ring-[#F7931F]/30 scale-[1.005]'
-                              : 'border border-transparent'
+                              ? 'bg-orange-50 ring-2 ring-inset ring-[#f97316]'
+                              : 'bg-white'
                           }`}
                         >
-                          <div
-                            onClick={() =>
-                              setCollapsedSections((prev) => ({
-                                ...prev,
-                                [col.id]: !prev[col.id],
-                              }))
-                            }
-                            className="flex items-center justify-between py-2 px-1 border-b border-gray-200/80 cursor-pointer select-none transition group"
-                          >
-                            <div className="flex items-center gap-2.5">
-                              <button type="button" className="text-gray-400 group-hover:text-[#213343] transition cursor-pointer">
+                          <div className="flex items-center justify-between px-4 py-3 transition group hover:bg-[#fafaf8]">
+                            <button
+                              type="button"
+                              onClick={() => setCollapsedSections((prev) => ({ ...prev, [col.id]: !prev[col.id] }))}
+                              aria-expanded={!isCollapsed}
+                              className="flex min-w-0 items-center gap-2.5 text-left"
+                            >
+                              <span className="text-gray-400 group-hover:text-[#213343] transition">
                                 {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                              </button>
+                              </span>
 
-                              <span className={`px-2.5 py-1 text-xs font-black uppercase tracking-normal flex items-center gap-2 ${col.bg} ${col.color} border border-transparent shadow-2xs`}>
-                                <div className="w-2 h-2 rounded-full border border-current shadow-xs" />
+                              <span className="flex items-center gap-2 text-sm font-semibold text-[#252b2d]">
+                                <span className={`h-2.5 w-2.5 rounded-full border ${col.color} ${col.bg}`} />
                                 <span>{col.label}</span>
                               </span>
 
-                              <span className="font-mono text-xs text-gray-500 font-extrabold bg-gray-100 px-2 py-0.5 border border-gray-200">
-                                {rawOps.length}
+                              <span className="hg-list-count">
+                                {col.id === 'entregada'
+                                  ? `${rawOps.filter((op) => !isUnaccreditedClose(op)).length} acreditadas · ${rawOps.length} registros`
+                                  : rawOps.length}
                               </span>
-                            </div>
+                            </button>
 
                             <button
                               type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setShowNewOpModal(true);
-                              }}
+                              onClick={() => setShowNewOpModal(true)}
                               className="text-xs font-bold text-gray-500 hover:text-[#f97316] transition flex items-center gap-1 cursor-pointer"
                             >
                               <Plus className="w-3.5 h-3.5" />
@@ -2773,14 +2748,44 @@ export default function PipelineVentasPage() {
                           </div>
 
                           {!isCollapsed && (
-                            <div>
+                            <div className="border-t border-[#eff0ee]">
+                              {colOps.length > 0 && <div>
+                                {colOps.map((op) => {
+                                  const responsable = usuariosApp.find((user) => user.id === op.asignado_a)?.nombre || 'Sin asignar';
+                                  const monto = getOportunidadTotalValue(op);
+                                  return <div key={op.id} className="hg-list-row">
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        const rect = event.currentTarget.getBoundingClientRect();
+                                        setStageMenuPos({ opId: op.id, top: rect.bottom + 4, left: rect.left });
+                                      }}
+                                      className={`h-3.5 w-3.5 shrink-0 rounded-full border ${getStageDotColor(op.estado_pipeline)}`}
+                                      aria-label={`Cambiar etapa de ${op.codigo}`}
+                                    />
+                                    <button type="button" onClick={() => handleOpenOportunidad(op)} className="min-w-0 flex-1 text-left">
+                                      <span className="block truncate text-sm font-semibold text-[#252b2d] hover:text-[#c9621d]">{op.titulo}</span>
+                                      <span className="block truncate text-xs text-[#8a9390]">{op.codigo} · {op.cliente?.nombre || 'Cliente sin nombre'}</span>
+                                      {isUnaccreditedClose(op) && <span className="block text-xs font-semibold text-amber-800">Entrega sin acreditar</span>}
+                                    </button>
+                                    <div className="hidden items-center gap-2 lg:flex">
+                                      <span className="hg-list-meta" title={`Responsable: ${responsable}`}>{responsable}</span>
+                                      {op.fecha_limite && <span className="hg-list-meta">Límite {op.fecha_limite}</span>}
+                                      <span className="hg-list-meta font-semibold text-[#252b2d]">${monto.toLocaleString('es-CL')}</span>
+                                    </div>
+                                    <ChevronRight className="h-4 w-4 shrink-0 text-[#a8afac]" aria-hidden="true" />
+                                  </div>;
+                                })}
+                              </div>}
                               {colOps.length === 0 ? (
-                                <div className="py-4 px-2 text-xs text-gray-400 italic">
+                                <div className="px-5 py-4 text-xs text-[#8a9390]">
                                   No hay oportunidades en esta etapa.
                                 </div>
                               ) : (
-                                <div className="overflow-x-auto bg-white rounded-lg border border-gray-200/80 shadow-xs">
-                                  <table className="w-full text-left text-xs min-w-[1000px] table-fixed border-collapse">
+                                <details className="border-t border-[#eff0ee]">
+                                  <summary className="cursor-pointer px-5 py-2.5 text-xs font-semibold text-[#66716f] hover:bg-[#fafaf8]">Mostrar columnas y edición rápida</summary>
+                                <div className="overflow-x-auto bg-white">
+                                  <table className="hg-list-table w-full text-left text-xs min-w-[1000px] table-fixed">
                                     <thead className="text-gray-500 uppercase text-xs font-extrabold border-b border-gray-200 bg-gray-50/60">
                                       <tr>
                                         <th className="py-3 px-2 w-10 text-center align-middle"></th>
@@ -2933,6 +2938,7 @@ export default function PipelineVentasPage() {
                                 </tbody>
                               </table>
                             </div>
+                            </details>
                           )}
                         </div>
                       )}
@@ -2957,12 +2963,12 @@ export default function PipelineVentasPage() {
         >
           <div
             ref={modalContainerRef}
-            className="bg-white text-[#213343] border border-gray-200 rounded-lg max-w-[86vw] w-full p-4 sm:p-6 shadow-2xl h-[95vh] overflow-hidden flex flex-col lg:flex-row gap-0 relative"
+            className="bg-white text-[#213343] border border-gray-200 rounded-lg max-w-[96vw] lg:max-w-[86vw] w-full p-4 sm:p-6 shadow-2xl h-[95vh] overflow-y-auto lg:overflow-hidden flex flex-col lg:flex-row gap-0 relative"
           >
             {/* Columna Izquierda: Breadcrumb + Título + Accordions (Ancho Resizable) */}
             <div
               style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${modalLeftColRatio}%` : '100%' }}
-              className="flex flex-col h-full overflow-hidden pr-3 shrink-0"
+              className="flex flex-col h-[70vh] lg:h-full overflow-hidden pr-3 shrink-0"
             >
               {/* Header Superior con Breadcrumb y Botón Eliminar Oportunidad */}
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3 text-sm shrink-0">
@@ -2985,6 +2991,7 @@ export default function PipelineVentasPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
+                  <Link href={`/ventas/${selectedOp.id}/operacion`} className="px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-[#f97316] rounded-md border border-orange-200 font-bold text-xs">Producción y entregas</Link>
                   <button
                     onClick={() => setOpToDelete(selectedOp)}
                     className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-md transition border border-red-200 font-bold text-xs flex items-center gap-1.5"
@@ -2992,6 +2999,14 @@ export default function PipelineVentasPage() {
                   >
                     <Trash2 className="w-4 h-4" />
                     <span>Eliminar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCloseOportunidad}
+                    className="rounded-md border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 lg:hidden"
+                    aria-label="Cerrar oportunidad"
+                  >
+                    ✕
                   </button>
                 </div>
               </div>
@@ -3031,47 +3046,90 @@ export default function PipelineVentasPage() {
               </div>
 
               <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-2 text-sm">
-              {/* Strip de Datos Clave Estilo ClickUp / Tasks (2 Columnas con Celdas Uniformes) */}
-              <div className="py-2.5 px-1 border-b border-gray-200 mb-4 text-xs">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2.5">
-                  {/* Columna Izquierda */}
-                  <div className="space-y-2">
+              {isUnaccreditedClose(selectedOp) && <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-900">Esta venta figura cerrada en el historial, pero su entrega no tiene respaldo acreditado. La cobranza automática permanece suspendida.</p>}
+              {/* Resumen visible: campos de decisión y seguimiento rápido */}
+              <section aria-label="Resumen de la oportunidad" className="rounded-xl border border-gray-200 bg-[#fafaf8] p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">Resumen de la oportunidad</h3>
+                  <span className="text-[11px] text-gray-400">Datos principales</span>
+                </div>
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-5 gap-y-2 text-xs">
+                  <div className="min-w-0">
                     {/* 1. Status */}
-                    <div className="flex items-center gap-3 min-h-[36px]">
-                      <div className="w-32 sm:w-36 flex items-center gap-2 text-gray-500 font-medium shrink-0">
+                    <div className="flex min-w-0 items-center gap-3 min-h-[40px]">
+                      <div className="w-24 sm:w-28 flex items-center gap-2 text-gray-500 font-medium shrink-0">
                         <Disc className="w-4 h-4 text-gray-400 shrink-0" />
-                        <span>Status</span>
+                        <span>Estado</span>
                       </div>
-                      <div className="relative w-56 sm:w-64 max-w-full h-8">
-                        <select
-                          value={selectedOp.estado_pipeline}
-                          onChange={async (e) => {
-                            const newStage = e.target.value as EstadoPipeline;
-                            await moveOportunidadToState(selectedOp.id, newStage);
-                          }}
-                          className="w-full h-full appearance-none bg-gray-100 hover:bg-gray-200 text-[#213343] font-bold text-xs pl-3 pr-8 rounded-md border border-gray-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316] transition shadow-xs"
-                        >
-                          {SECCIONES_PIPELINE.map((sec) => (
-                            <optgroup key={sec.id} label={sec.nombre}>
-                              {sec.etapas.map((st) => (
-                                <option key={st.id} value={st.id}>
-                                  {st.label}
-                                </option>
+                      <div className="relative min-w-0 flex-1 h-8">
+                        {esEtapaComercial(selectedOp.estado_pipeline) ? (
+                          <>
+                            <select
+                              value={selectedOp.estado_pipeline}
+                              onChange={async (e) => {
+                                const newStage = e.target.value as EstadoPipeline;
+                                await moveOportunidadToState(selectedOp.id, newStage);
+                              }}
+                              className="w-full h-full appearance-none bg-gray-100 hover:bg-gray-200 text-[#213343] font-bold text-xs pl-3 pr-8 rounded-md border border-gray-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#f97316] transition shadow-xs"
+                            >
+                              {ETAPAS_COMERCIALES.map((etapa) => (
+                                <option key={etapa.id} value={etapa.id}>{etapa.label}</option>
                               ))}
-                            </optgroup>
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </>
+                        ) : (
+                          <Link
+                            href={selectedOp.rama_destino === 'reventa' || selectedOp.estado_pipeline.startsWith('rev_') ? '/reventa' : '/planificacion'}
+                            className="flex h-full items-center justify-between gap-2 rounded-md border border-gray-200 bg-gray-100 px-3 text-xs font-semibold text-[#213343] hover:border-[#f97316]"
+                            title="Abrir el pipeline operativo correspondiente"
+                          >
+                            <span className="truncate">{pipelineStates.find((etapa) => etapa.id === selectedOp.estado_pipeline)?.label || 'Etapa operativa'}</span>
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#f97316]" />
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="min-w-0">
+                    {/* 1. Vendedor (anteriormente Assignees) */}
+                    <div className="flex min-w-0 items-center gap-3 min-h-[40px]">
+                      <div className="w-24 sm:w-28 flex items-center gap-2 text-gray-500 font-medium shrink-0">
+                        <User className="w-4 h-4 text-gray-400 shrink-0" />
+                        <span>Vendedor</span>
+                      </div>
+                      <div className="relative min-w-0 flex-1 h-8">
+                        <select
+                          value={selectedOp.asignado_a || ''}
+                          onChange={async (e) => {
+                            const newUserId = e.target.value || null;
+                            updateOportunidadField(selectedOp.id, 'asignado_a', newUserId);
+                            const userObj = usuariosApp.find((u) => u.id === newUserId);
+                            await addOportunidadActividad(selectedOp.id, `Vendedor asignado actualizado a "${userObj?.nombre || 'Sin asignar'}".`);
+                          }}
+                          className={`w-full h-full appearance-none bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 rounded-md pl-3 pr-8 text-xs font-bold truncate focus:outline-none focus:border-[#f97316] transition shadow-xs cursor-pointer ${
+                            selectedOp.asignado_a ? 'text-[#213343]' : 'text-gray-400 font-normal'
+                          }`}
+                        >
+                          <option value="">Sin asignar</option>
+                          {usuariosApp.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.nombre}
+                            </option>
                           ))}
                         </select>
                         <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                       </div>
                     </div>
-
-                    {/* 2. Dates */}
-                    <div className="flex items-center gap-3 min-h-[36px]">
-                      <div className="w-32 sm:w-36 flex items-center gap-2 text-gray-500 font-medium shrink-0">
+                  </div>
+                  <div className="min-w-0">
+                    {/* Fechas */}
+                    <div className="flex min-w-0 flex-wrap items-center gap-2 sm:flex-nowrap sm:gap-3 min-h-[40px]">
+                      <div className="w-full sm:w-28 flex items-center gap-2 text-gray-500 font-medium shrink-0">
                         <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
-                        <span>Dates</span>
+                        <span>Fechas</span>
                       </div>
-                      <div className="w-56 sm:w-64 max-w-full h-8 bg-white border border-gray-200 hover:border-gray-300 rounded-md px-2.5 flex items-center justify-between text-xs text-[#213343] shadow-xs">
+                      <div className="w-full sm:w-auto min-w-0 flex-1 h-8 bg-white border border-gray-200 hover:border-gray-300 rounded-md px-2.5 flex items-center justify-between text-xs text-[#213343] shadow-xs">
                         <input
                           type="date"
                           value={selectedOp.fecha_inicio || ''}
@@ -3080,7 +3138,7 @@ export default function PipelineVentasPage() {
                             updateOportunidadField(selectedOp.id, 'fecha_inicio', newDate);
                             await addOportunidadActividad(selectedOp.id, `Fecha de inicio actualizada a ${newDate} desde el detalle.`);
                           }}
-                          className="bg-transparent text-[#213343] font-mono text-xs w-[100px] sm:w-[105px] focus:outline-none cursor-pointer [color-scheme:light]"
+                          className="bg-transparent text-[#213343] font-mono text-xs w-[95px] min-w-0 focus:outline-none cursor-pointer [color-scheme:light]"
                           title="Fecha de inicio"
                         />
                         <span className="text-gray-400 font-bold">→</span>
@@ -3092,19 +3150,126 @@ export default function PipelineVentasPage() {
                             updateOportunidadField(selectedOp.id, 'fecha_limite', newDate);
                             await addOportunidadActividad(selectedOp.id, `Fecha límite actualizada a ${newDate} desde el detalle.`);
                           }}
-                          className="bg-transparent text-amber-800 font-mono text-xs w-[100px] sm:w-[105px] focus:outline-none cursor-pointer [color-scheme:light]"
+                          className="bg-transparent text-amber-800 font-mono text-xs w-[95px] min-w-0 focus:outline-none cursor-pointer [color-scheme:light]"
                           title="Fecha límite"
                         />
                       </div>
                     </div>
+                  </div>
+                  <div className="min-w-0">
+                    {/* 2. Priority */}
+                    <div className="flex min-w-0 items-center gap-3 min-h-[40px]">
+                      <div className="w-24 sm:w-28 flex items-center gap-2 text-gray-500 font-medium shrink-0">
+                        <Flag className="w-4 h-4 text-gray-400 shrink-0" />
+                        <span>Prioridad</span>
+                      </div>
+                      <div className="relative min-w-0 flex-1 h-8">
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center">
+                          <Flag className={`w-3.5 h-3.5 ${
+                            selectedOp.prioridad === 'urgente' ? 'text-red-500' : selectedOp.prioridad === 'alta' ? 'text-amber-500' : selectedOp.prioridad === 'normal' ? 'text-blue-500' : 'text-gray-400'
+                          }`} />
+                        </div>
+                        <select
+                          value={selectedOp.prioridad || ''}
+                          onChange={async (e) => {
+                            const newPrio = e.target.value as 'normal' | 'alta' | 'urgente';
+                            updateOportunidadField(selectedOp.id, 'prioridad', newPrio || null);
+                            await addOportunidadActividad(selectedOp.id, `Prioridad cambiada a "${newPrio || 'normal'}" desde el detalle.`);
+                          }}
+                          className={`w-full h-full appearance-none bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 rounded-md pl-8 pr-8 text-xs font-bold focus:outline-none focus:border-[#f97316] transition shadow-xs cursor-pointer ${
+                            selectedOp.prioridad ? 'text-[#213343]' : 'text-gray-400 font-normal'
+                          }`}
+                        >
+                          <option value="">Sin prioridad</option>
+                          <option value="normal">Normal</option>
+                          <option value="alta">Alta</option>
+                          <option value="urgente">Urgente</option>
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
 
+              <details key={`seguimiento-panel-${selectedOp.id}`} className="group rounded-xl border border-gray-200 bg-white">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[#213343] hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-[#f97316] [&::-webkit-details-marker]:hidden">
+                  <span className="flex items-center gap-2"><Calendar className="h-4 w-4 text-[#f97316]" />Seguimiento comercial</span>
+                  <span className="ml-auto hidden truncate text-xs font-normal text-gray-500 sm:block">{selectedOp.proxima_accion || 'Sin próxima acción'}</span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="border-t border-gray-100 p-3">
+                  <div className="space-y-2" key={`seguimiento-${selectedOp.id}`}>
+                    <p className="text-xs text-gray-500">Registra el último contacto y define el siguiente paso.</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        aria-label="Resultado del último contacto"
+                        placeholder="Resultado del último contacto"
+                        defaultValue={selectedOp.seguimiento_resultado || ''}
+                        onBlur={async (e) => {
+                          const value = e.target.value.trim();
+                          if (value === (selectedOp.seguimiento_resultado || '')) return;
+                          await updateOportunidadField(selectedOp.id, 'seguimiento_resultado', value || null);
+                          await addOportunidadActividad(selectedOp.id, `Contacto comercial registrado: ${value || 'sin resultado'}.`);
+                        }}
+                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
+                      />
+                      <input
+                        aria-label="Próxima acción"
+                        placeholder="Próxima acción"
+                        defaultValue={selectedOp.proxima_accion || ''}
+                        onBlur={async (e) => {
+                          const value = e.target.value.trim();
+                          if (value === (selectedOp.proxima_accion || '')) return;
+                          await updateOportunidadField(selectedOp.id, 'proxima_accion', value || null);
+                          await addOportunidadActividad(selectedOp.id, `Próxima acción: ${value || 'sin definir'}.`);
+                        }}
+                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
+                      />
+                      <input
+                        type="datetime-local"
+                        aria-label="Fecha de próxima acción"
+                        defaultValue={selectedOp.proxima_accion_fecha ? new Date(selectedOp.proxima_accion_fecha).toLocaleString('sv-SE', { hour12: false }).replace(' ', 'T').slice(0, 16) : ''}
+                        onChange={async (e) => {
+                          const date = e.target.value ? new Date(e.target.value).toISOString() : null;
+                          await updateOportunidadField(selectedOp.id, 'proxima_accion_fecha', date);
+                          await addOportunidadActividad(selectedOp.id, `Fecha de próxima acción ${date ? 'programada' : 'eliminada'}.`);
+                        }}
+                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
+                      />
+                      <select
+                        aria-label="Responsable del seguimiento"
+                        defaultValue={selectedOp.seguimiento_responsable_id || selectedOp.asignado_a || ''}
+                        onChange={async (e) => {
+                          const user = usuariosApp.find((u) => u.id === e.target.value);
+                          await updateOportunidadField(selectedOp.id, 'seguimiento_responsable_id', e.target.value || null);
+                          await addOportunidadActividad(selectedOp.id, `Seguimiento asignado a ${user?.nombre || 'sin responsable'}.`);
+                        }}
+                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
+                      >
+                        <option value="">Sin responsable</option>
+                        {usuariosApp.map((user) => <option key={user.id} value={user.id}>{user.nombre}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </details>
+
+              <details key={`clasificacion-panel-${selectedOp.id}`} className="group rounded-xl border border-gray-200 bg-white">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[#213343] hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-[#f97316] [&::-webkit-details-marker]:hidden">
+                  <span className="flex items-center gap-2"><Tag className="h-4 w-4 text-[#f97316]" />Clasificación comercial</span>
+                  <span className="ml-auto hidden truncate text-xs font-normal text-gray-500 sm:block">{selectedOp.tipo_venta || 'Instalación'} · {selectedOp.origen || 'Sin origen'}</span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="grid gap-3 border-t border-gray-100 p-4 text-xs xl:grid-cols-2">
+                  <div className="min-w-0">
                     {/* 3. Origen */}
-                    <div className="flex items-center gap-3 min-h-[36px]">
-                      <div className="w-32 sm:w-36 flex items-center gap-2 text-gray-500 font-medium shrink-0">
+                    <div className="flex min-w-0 items-center gap-3 min-h-[40px]">
+                      <div className="w-24 sm:w-28 flex items-center gap-2 text-gray-500 font-medium shrink-0">
                         <Compass className="w-4 h-4 text-gray-400 shrink-0" />
                         <span>Origen</span>
                       </div>
-                      <div className="relative w-56 sm:w-64 max-w-full h-8">
+                      <div className="relative min-w-0 flex-1 h-8">
                         <select
                           value={selectedOp.origen || ''}
                           onChange={async (e) => {
@@ -3119,26 +3284,30 @@ export default function PipelineVentasPage() {
                             selectedOp.origen ? 'text-[#213343]' : 'text-gray-400 font-normal'
                           }`}
                         >
-                          <option value="">Empty</option>
+                          <option value="">Sin origen</option>
                           <option value="WhatsApp">WhatsApp</option>
-                          <option value="Web">Web</option>
-                          <option value="Correo">Correo</option>
+                          <option value="Webmail">Webmail</option>
+                          <option value="Llamado">Llamado</option>
+                          <option value="Visita presencial">Visita presencial</option>
                           <option value="Referido">Referido</option>
-                          {selectedOp.origen && !['WhatsApp', 'Web', 'Correo', 'Referido', 'whatsapp', 'web', 'correo', 'referido'].includes(selectedOp.origen) && (
+                          <option value="Cliente recurrente">Cliente recurrente</option>
+                          <option value="Manual">Manual</option>
+                          {selectedOp.origen && !['WhatsApp', 'Webmail', 'Llamado', 'Visita presencial', 'Referido', 'Cliente recurrente', 'Manual'].includes(selectedOp.origen) && (
                             <option value={selectedOp.origen}>{selectedOp.origen}</option>
                           )}
                         </select>
                         <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                       </div>
                     </div>
-
+                  </div>
+                  <div className="min-w-0">
                     {/* 4. Tipo de Venta / Tags */}
-                    <div className="flex items-center gap-3 min-h-[36px]">
-                      <div className="w-32 sm:w-36 flex items-center gap-2 text-gray-500 font-medium shrink-0">
+                    <div className="flex min-w-0 items-center gap-3 min-h-[40px]">
+                      <div className="w-24 sm:w-28 flex items-center gap-2 text-gray-500 font-medium shrink-0">
                         <Tag className="w-4 h-4 text-gray-400 shrink-0" />
                         <span>Tipo de venta</span>
                       </div>
-                      <div className="relative w-56 sm:w-64 max-w-full h-8">
+                      <div className="relative min-w-0 flex-1 h-8">
                         <select
                           value={selectedOp.tipo_venta || 'Instalación'}
                           onChange={async (e) => {
@@ -3155,14 +3324,15 @@ export default function PipelineVentasPage() {
                         <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                       </div>
                     </div>
-
+                  </div>
+                  <div className="min-w-0">
                     {/* 5. Requerimiento (debajo de Tipo de venta) */}
-                    <div className="flex items-center gap-3 min-h-[36px]">
-                      <div className="w-32 sm:w-36 flex items-center gap-2 text-gray-500 font-medium shrink-0">
+                    <div className="flex min-w-0 items-center gap-3 min-h-[40px]">
+                      <div className="w-24 sm:w-28 flex items-center gap-2 text-gray-500 font-medium shrink-0">
                         <Layers className="w-4 h-4 text-gray-400 shrink-0" />
                         <span>Requerimiento</span>
                       </div>
-                      <div className="relative w-56 sm:w-64 max-w-full h-8">
+                      <div className="relative min-w-0 flex-1 h-8">
                         <select
                           value={selectedOp.modalidad_requerimiento || 'instalacion'}
                           onChange={async (e) => {
@@ -3182,73 +3352,127 @@ export default function PipelineVentasPage() {
                       </div>
                     </div>
                   </div>
+                </div>
+              </details>
 
-                  {/* Columna Derecha */}
-                  <div className="space-y-2">
-                    {/* 1. Vendedor (anteriormente Assignees) */}
-                    <div className="flex items-center gap-3 min-h-[36px]">
-                      <div className="w-32 sm:w-36 flex items-center gap-2 text-gray-500 font-medium shrink-0">
-                        <User className="w-4 h-4 text-gray-400 shrink-0" />
-                        <span>Vendedor</span>
-                      </div>
-                      <div className="relative w-56 sm:w-64 max-w-full h-8">
-                        <select
-                          value={selectedOp.asignado_a || ''}
-                          onChange={async (e) => {
-                            const newUserId = e.target.value || null;
-                            updateOportunidadField(selectedOp.id, 'asignado_a', newUserId);
-                            const userObj = usuariosApp.find((u) => u.id === newUserId);
-                            await addOportunidadActividad(selectedOp.id, `Vendedor asignado actualizado a "${userObj?.nombre || 'Sin asignar'}".`);
-                          }}
-                          className={`w-full h-full appearance-none bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 rounded-md pl-3 pr-8 text-xs font-bold truncate focus:outline-none focus:border-[#f97316] transition shadow-xs cursor-pointer ${
-                            selectedOp.asignado_a ? 'text-[#213343]' : 'text-gray-400 font-normal'
-                          }`}
-                        >
-                          <option value="">Empty</option>
-                          {usuariosApp.map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.nombre}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
+              <details key={`cierre-panel-${selectedOp.id}`} className="group rounded-xl border border-gray-200 bg-white">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[#213343] hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-[#f97316] [&::-webkit-details-marker]:hidden">
+                  <span className="flex items-center gap-2"><Check className="h-4 w-4 text-[#f97316]" />Preparación del cierre</span>
+                  <span className="ml-auto text-xs font-normal text-gray-500">
+                    {[
+                      getOportunidadTotalValue(selectedOp) > 0,
+                      Boolean(selectedOp.direccion && selectedOp.comuna),
+                      Boolean(selectedOp.fecha_limite),
+                      Boolean(selectedOp.modalidad_entrega),
+                      Boolean(selectedOp.condicion_pago),
+                      Boolean(selectedOp.rama_destino),
+                    ].filter(Boolean).length}/6 completos
+                  </span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="border-t border-gray-100 p-3">
+                  <div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {([
+                        ['Cotización vigente', getOportunidadTotalValue(selectedOp) > 0],
+                        ['Dirección y comuna', Boolean(selectedOp.direccion && selectedOp.comuna)],
+                        ['Fecha estimada', Boolean(selectedOp.fecha_limite)],
+                        ['Modalidad de entrega', Boolean(selectedOp.modalidad_entrega)],
+                        ['Condición de pago', Boolean(selectedOp.condicion_pago)],
+                        ['Ruta operacional', Boolean(selectedOp.rama_destino)],
+                      ] as [string, boolean][]).map(([label, ready]) => (
+                        <span key={label} className={`text-xs ${ready ? 'text-emerald-700' : 'text-amber-700'}`}>
+                          {ready ? '✓' : '○'} {label}
+                        </span>
+                      ))}
                     </div>
+                    <p className="text-[11px] text-gray-500 mt-2">
+                      Abonos registrados: ${getOportunidadAbonadoValue(selectedOp).toLocaleString('es-CL')}. Los pendientes no impiden avanzar.
+                    </p>
+                  </div>
+                </div>
+              </details>
 
-                    {/* 2. Priority */}
-                    <div className="flex items-center gap-3 min-h-[36px]">
-                      <div className="w-32 sm:w-36 flex items-center gap-2 text-gray-500 font-medium shrink-0">
-                        <Flag className="w-4 h-4 text-gray-400 shrink-0" />
-                        <span>Priority</span>
-                      </div>
-                      <div className="relative w-56 sm:w-64 max-w-full h-8">
-                        <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center">
-                          <Flag className={`w-3.5 h-3.5 ${
-                            selectedOp.prioridad === 'urgente' ? 'text-red-500' : selectedOp.prioridad === 'alta' ? 'text-amber-500' : selectedOp.prioridad === 'normal' ? 'text-blue-500' : 'text-gray-400'
-                          }`} />
-                        </div>
-                        <select
-                          value={selectedOp.prioridad || ''}
-                          onChange={async (e) => {
-                            const newPrio = e.target.value as 'normal' | 'alta' | 'urgente';
-                            updateOportunidadField(selectedOp.id, 'prioridad', newPrio || null);
-                            await addOportunidadActividad(selectedOp.id, `Prioridad cambiada a "${newPrio || 'normal'}" desde el detalle.`);
-                          }}
-                          className={`w-full h-full appearance-none bg-white hover:bg-gray-50 border border-gray-200 hover:border-gray-300 rounded-md pl-8 pr-8 text-xs font-bold focus:outline-none focus:border-[#f97316] transition shadow-xs cursor-pointer ${
-                            selectedOp.prioridad ? 'text-[#213343]' : 'text-gray-400 font-normal'
-                          }`}
-                        >
-                          <option value="">Empty</option>
-                          <option value="normal">Normal</option>
-                          <option value="alta">Alta</option>
-                          <option value="urgente">Urgente</option>
-                        </select>
-                        <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
+              <details key={`ruta-panel-${selectedOp.id}`} className="group rounded-xl border border-gray-200 bg-white">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[#213343] hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-[#f97316] [&::-webkit-details-marker]:hidden">
+                  <span className="flex items-center gap-2"><Layers className="h-4 w-4 text-[#f97316]" />Ruta operativa</span>
+                  <span className="ml-auto hidden text-xs font-normal text-gray-500 sm:block">Abastecimiento, entrega y responsables</span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="border-t border-gray-100 p-3">
+                  <div className="space-y-2" key={`ruta-${selectedOp.id}`}>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <select
+                        aria-label="Abastecimiento"
+                        defaultValue={selectedOp.abastecimiento || ''}
+                        onChange={async (e) => {
+                          await updateOportunidadField(selectedOp.id, 'abastecimiento', e.target.value || null);
+                          await addOportunidadActividad(selectedOp.id, `Abastecimiento: ${e.target.selectedOptions[0].text}.`);
+                        }}
+                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
+                      >
+                        <option value="">Definir abastecimiento</option>
+                        <option value="fabricar">Fabricar</option>
+                        <option value="compra_proveedor">Comprar a proveedor</option>
+                        <option value="stock">Stock disponible</option>
+                      </select>
+                      <select
+                        aria-label="Forma de entrega"
+                        defaultValue={selectedOp.forma_entrega || ''}
+                        onChange={async (e) => {
+                          await updateOportunidadField(selectedOp.id, 'forma_entrega', e.target.value || null);
+                          await addOportunidadActividad(selectedOp.id, `Entrega: ${e.target.selectedOptions[0].text}.`);
+                        }}
+                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
+                      >
+                        <option value="">Definir entrega</option>
+                        <option value="retiro_cliente">Retiro por cliente</option>
+                        <option value="retiro_proveedor">Retiro en proveedor</option>
+                        <option value="despacho_propio">Despacho propio</option>
+                        <option value="despacho_subcontratado">Despacho subcontratado</option>
+                      </select>
+                      {([
+                        ['fecha_prometida', 'Fecha prometida'],
+                        ['fecha_tentativa_produccion', 'Producción tentativa'],
+                        ['fecha_tentativa_entrega', 'Entrega tentativa'],
+                      ] as [keyof OportunidadVenta, string][]).map(([field, label]) => (
+                        <label key={field} className="text-[11px] text-gray-600">
+                          {label}
+                          <input
+                            type="date"
+                            defaultValue={String(selectedOp[field] || '').slice(0, 10)}
+                            onChange={(e) => updateOportunidadField(selectedOp.id, field, e.target.value || null)}
+                            className="block w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
+                          />
+                        </label>
+                      ))}
+                      <input
+                        aria-label="Dirección de obra"
+                        placeholder="Dirección de obra"
+                        defaultValue={selectedOp.direccion_obra || ''}
+                        onBlur={(e) => updateOportunidadField(selectedOp.id, 'direccion_obra', e.target.value.trim() || null)}
+                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
+                      />
+                      <input
+                        aria-label="Vehículo o transporte"
+                        placeholder="Vehículo o transporte"
+                        defaultValue={selectedOp.transporte || ''}
+                        onBlur={(e) => updateOportunidadField(selectedOp.id, 'transporte', e.target.value.trim() || null)}
+                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
+                      />
+                      <select
+                        aria-label="Responsable operativo"
+                        defaultValue={selectedOp.responsable_operativo_id || ''}
+                        onChange={(e) => updateOportunidadField(selectedOp.id, 'responsable_operativo_id', e.target.value || null)}
+                        className="bg-white border border-gray-200 rounded-md px-3 py-2 text-xs"
+                      >
+                        <option value="">Sin responsable operativo</option>
+                        {usuariosApp.map((user) => <option key={user.id} value={user.id}>{user.nombre}</option>)}
+                      </select>
                     </div>
                   </div>
                 </div>
-              </div>
+              </details>
 
               {(() => {
                 const activeClient = clientes.find((c) => c.id === selectedOp.cliente_id) || selectedOp.cliente;
@@ -3372,6 +3596,7 @@ export default function PipelineVentasPage() {
 
                   {openSections.productos && (
                     <div className="p-5 space-y-4 bg-white text-[#213343]">
+                      {cotizacionErrorMsg && <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">{cotizacionErrorMsg}</p>}
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
                         <div>
                           <h4 className="text-[#213343] font-extrabold text-sm flex items-center gap-2">
@@ -3379,7 +3604,7 @@ export default function PipelineVentasPage() {
                             <span>Cotizaciones del Cliente:</span>
                           </h4>
                           <p className="text-xs text-gray-500 mt-1">
-                            Marca la casilla para considerar la cotización en esta oportunidad. Las cotizaciones en estado <strong>Enviada</strong> o <strong>Aprobada</strong> se sumarán al valor total.
+                            Vincula las cotizaciones a esta oportunidad. Solo la última versión <strong>Enviada</strong> o <strong>Aprobada</strong> determina el valor total.
                           </p>
                         </div>
 
@@ -3452,21 +3677,12 @@ export default function PipelineVentasPage() {
                                       const targetCot = unassignedQuotes.find((c) => c.id === selectedCandidateCotId);
                                       if (!targetCot) return;
 
-                                      const updatedCots = allCotizaciones.map((c) =>
-                                        c.id === targetCot.id ? { ...c, oportunidad_id: selectedOp.id } : c
-                                      );
-                                      setAllCotizaciones(updatedCots);
-                                      setSelectedCandidateCotId('');
-
-                                      if (isUUID(targetCot.id)) {
-                                        try {
-                                          await supabase
-                                            .from('cotizaciones')
-                                            .update({ oportunidad_id: selectedOp.id })
-                                            .eq('id', targetCot.id);
-                                        } catch (err) {
-                                          console.error('Error adding quote to op in Supabase:', err);
-                                        }
+                                      try {
+                                        await guardarCambioCotizacion(targetCot, { oportunidad_id: selectedOp.id });
+                                        setSelectedCandidateCotId('');
+                                      } catch (err: any) {
+                                        setCotizacionErrorMsg(err?.message || 'No se pudo vincular la cotización.');
+                                        return;
                                       }
                                       await addOportunidadActividad(
                                         selectedOp.id,
@@ -3491,7 +3707,8 @@ export default function PipelineVentasPage() {
                               <div className="space-y-3">
                                 {linkedQuotes.map((cot) => {
                                   const isLinked = true;
-                                  const isSummed = cot.estado === 'aprobada' || cot.estado === 'enviada';
+                                  const isSummed = cot.id === getActiveQuote(selectedOp)?.id &&
+                                    (cot.estado === 'aprobada' || cot.estado === 'enviada');
 
                                   return (
                                     <div
@@ -3510,20 +3727,11 @@ export default function PipelineVentasPage() {
                                             const checked = e.target.checked;
                                             const newOpId = checked ? selectedOp.id : undefined;
 
-                                            const updatedCots = allCotizaciones.map((c) =>
-                                              c.id === cot.id ? { ...c, oportunidad_id: newOpId } : c
-                                            );
-                                            setAllCotizaciones(updatedCots);
-
-                                            if (isUUID(cot.id)) {
-                                              try {
-                                                await supabase
-                                                  .from('cotizaciones')
-                                                  .update({ oportunidad_id: newOpId || null })
-                                                  .eq('id', cot.id);
-                                              } catch (err) {
-                                                console.error('Error updating quote oportunidad_id in Supabase:', err);
-                                              }
+                                            try {
+                                              await guardarCambioCotizacion(cot, { oportunidad_id: newOpId || null });
+                                            } catch (err: any) {
+                                              setCotizacionErrorMsg(err?.message || 'No se pudo cambiar el vínculo.');
+                                              return;
                                             }
 
                                             await addOportunidadActividad(
@@ -3544,7 +3752,7 @@ export default function PipelineVentasPage() {
                                             </span>
                                             {isSummed ? (
                                               <span className="text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                                                Sumando a Oportunidad
+                                                Cotización vigente
                                               </span>
                                             ) : isLinked ? (
                                               <span className="text-[10px] font-black uppercase bg-amber-50 text-amber-700 px-2.5 py-0.5 rounded-full border border-amber-200">
@@ -3568,20 +3776,11 @@ export default function PipelineVentasPage() {
                                           onChange={async (e) => {
                                             const newStatus = e.target.value as EstadoCotizacion;
 
-                                            const updatedCots = allCotizaciones.map((c) =>
-                                              c.id === cot.id ? { ...c, estado: newStatus } : c
-                                            );
-                                            setAllCotizaciones(updatedCots);
-
-                                            if (isUUID(cot.id)) {
-                                              try {
-                                                await supabase
-                                                  .from('cotizaciones')
-                                                  .update({ estado: newStatus })
-                                                  .eq('id', cot.id);
-                                              } catch (err) {
-                                                console.error('Error updating quote status in Supabase:', err);
-                                              }
+                                            try {
+                                              await guardarCambioCotizacion(cot, { estado: newStatus });
+                                            } catch (err: any) {
+                                              setCotizacionErrorMsg(err?.message || 'No se pudo cambiar el estado.');
+                                              return;
                                             }
 
                                             await addOportunidadActividad(
@@ -3602,7 +3801,7 @@ export default function PipelineVentasPage() {
                                           <option value="borrador">Borrador</option>
                                           <option value="enviada">Enviada</option>
                                           <option value="aprobada">Aprobada</option>
-                                          <option value="declinada">Declinada</option>
+                                          <option value="rechazada">Rechazada</option>
                                         </select>
 
                                         <button
@@ -3618,20 +3817,11 @@ export default function PipelineVentasPage() {
                                         <button
                                           type="button"
                                           onClick={async () => {
-                                            const updatedCots = allCotizaciones.map((c) =>
-                                              c.id === cot.id ? { ...c, oportunidad_id: undefined } : c
-                                            );
-                                            setAllCotizaciones(updatedCots);
-
-                                            if (isUUID(cot.id)) {
-                                              try {
-                                                await supabase
-                                                  .from('cotizaciones')
-                                                  .update({ oportunidad_id: null })
-                                                  .eq('id', cot.id);
-                                              } catch (err) {
-                                                console.error('Error unlinking quote in Supabase:', err);
-                                              }
+                                            try {
+                                              await guardarCambioCotizacion(cot, { oportunidad_id: null });
+                                            } catch (err: any) {
+                                              setCotizacionErrorMsg(err?.message || 'No se pudo desvincular la cotización.');
+                                              return;
                                             }
 
                                             await addOportunidadActividad(
@@ -3656,7 +3846,7 @@ export default function PipelineVentasPage() {
                               <div>
                                 <span className="text-[#213343] font-extrabold text-sm block">Valor Total de la Oportunidad:</span>
                                 <span className="text-xs text-gray-500">
-                                  Suma de cotizaciones marcadas en estado <strong>Enviada</strong> o <strong>Aprobada</strong>.
+                                  Solo la última versión vinculada en estado <strong>Enviada</strong> o <strong>Aprobada</strong>.
                                 </span>
                               </div>
 
@@ -3691,7 +3881,7 @@ export default function PipelineVentasPage() {
                       {/* Resumen de Saldo */}
                       {(() => {
                         const totalCot = getOportunidadTotalValue(selectedOp);
-                        const abonado = selectedOp.monto_abonado || 0;
+                        const abonado = getOportunidadAbonadoValue(selectedOp);
                         const saldo = Math.max(0, totalCot - abonado);
 
                         return (
@@ -3795,76 +3985,65 @@ export default function PipelineVentasPage() {
                                         return;
                                       }
 
-                                      let publicUrl = '#';
+                                      setAbonoSaving(true);
+                                      let fileName = '';
+                                      const pagoId = crypto.randomUUID();
                                       try {
                                         const cleanFileName = nuevoAbonoFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-                                        const fileName = `abonos/${selectedOp.id}/${Date.now()}_${cleanFileName}`;
-                                        const { data, error } = await supabase.storage.from('documentos').upload(fileName, nuevoAbonoFile, {
+                                        fileName = `abonos/${selectedOp.id}/${crypto.randomUUID()}_${cleanFileName}`;
+                                        const { data: upload, error: uploadError } = await supabase.storage.from('documentos').upload(fileName, nuevoAbonoFile, {
                                           contentType: nuevoAbonoFile.type || undefined,
                                           upsert: false,
                                         });
-                                        if (error || !data) {
-                                          throw new Error(error?.message || 'Supabase Storage no confirmó la subida.');
-                                        }
-                                        const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(fileName);
-                                        if (urlData) publicUrl = urlData.publicUrl;
+                                        if (uploadError || !upload) throw new Error(uploadError?.message || 'Storage no confirmó la subida.');
+                                        await guardarAbono('crear', {
+                                          id: pagoId,
+                                          monto: rawVal,
+                                          fecha: new Date().toLocaleString('es-CL'),
+                                          fecha_iso: new Date().toISOString(),
+                                          nota: nuevoAbonoNota || 'Abono registrado',
+                                          comprobante_nombre: nuevoAbonoFile.name,
+                                          comprobante_url: fileName,
+                                        });
+                                        setNuevoAbonoMonto('');
+                                        setNuevoAbonoNota('');
+                                        setNuevoAbonoFile(null);
+                                        setNuevoAbonoFileName('');
                                       } catch (err: any) {
-                                        console.error('Error uploading abono comprobante:', err);
-                                        setAbonoErrorMsg(`Error al subir comprobante a Supabase: ${err?.message || 'Error al subir.'}`);
-                                        return;
-                                      }
-
-                                      const existingComprobantes = selectedOp.comprobantes_pago || [];
-                                      const newAbonoRecord = {
-                                        id: `abono-${Date.now()}`,
-                                        monto: rawVal,
-                                        fecha: new Date().toLocaleDateString('es-CL') + ' ' + new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
-                                        fecha_iso: new Date().toISOString(),
-                                        nota: nuevoAbonoNota || 'Abono registrado',
-                                        creado_por: currentUser?.nombre || 'Vendedor',
-                                        comprobante_nombre: nuevoAbonoFile.name,
-                                        comprobante_url: publicUrl,
-                                      };
-
-                                      const updatedComprobantes = [...existingComprobantes, newAbonoRecord];
-                                      const updatedAbonado = updatedComprobantes.reduce(
-                                        (sum: number, item: any) => sum + (Number(item.monto) || 0),
-                                        0
-                                      );
-
-                                      updateOportunidadField(selectedOp.id, 'monto_abonado', updatedAbonado);
-                                      updateOportunidadField(selectedOp.id, 'comprobantes_pago', updatedComprobantes);
-
-                                      setNuevoAbonoMonto('');
-                                      setNuevoAbonoNota('');
-                                      setNuevoAbonoFile(null);
-                                      setNuevoAbonoFileName('');
-                                      setAbonoErrorMsg('');
-
-                                      if (isUUID(selectedOp.id)) {
-                                        try {
-                                          await supabase
-                                            .from('oportunidades')
-                                            .update({
-                                              monto_abonado: updatedAbonado,
-                                              comprobantes_pago: updatedComprobantes,
-                                            })
-                                            .eq('id', selectedOp.id);
-                                        } catch (err) {
-                                          console.error('Error updating abono in Supabase:', err);
+                                        if (fileName) {
+                                          // Si se perdió la respuesta tras el commit, conservar el respaldo ya vinculado.
+                                          const { data: persisted } = await supabase.from('oportunidades')
+                                            .select('comprobantes_pago, monto_abonado').eq('id', selectedOp.id).single();
+                                          if (!persisted) {
+                                            setAbonoErrorMsg('No se pudo confirmar el registro. Recarga la oportunidad antes de intentar de nuevo.');
+                                            return;
+                                          }
+                                          const registered = (persisted?.comprobantes_pago || []).some(
+                                            (pago: { id?: string }) => pago.id === pagoId,
+                                          );
+                                          if (registered) {
+                                            setSelectedOp((prev) => prev ? { ...prev, ...persisted } : null);
+                                            setOportunidades((prev) => prev.map((op) => op.id === selectedOp.id ? { ...op, ...persisted } : op));
+                                            setNuevoAbonoMonto('');
+                                            setNuevoAbonoNota('');
+                                            setNuevoAbonoFile(null);
+                                            setNuevoAbonoFileName('');
+                                            setAbonoErrorMsg('');
+                                            return;
+                                          }
+                                          const { error: cleanupError } = await supabase.storage.from('documentos').remove([fileName]);
+                                          if (cleanupError) console.error('No se pudo limpiar el comprobante tras el error:', cleanupError);
                                         }
+                                        setAbonoErrorMsg(err?.message || 'No se pudo registrar el abono.');
+                                      } finally {
+                                        setAbonoSaving(false);
                                       }
-
-                                      await addOportunidadActividad(
-                                        selectedOp.id,
-                                        `Abono de $${rawVal.toLocaleString('es-CL')} ingresado con comprobante "${nuevoAbonoFile.name}". Total acumulado: $${updatedAbonado.toLocaleString('es-CL')}`,
-                                        'abono'
-                                      );
                                     }}
-                                    className="w-full bg-[#f97316] hover:bg-[#ea580c] text-white text-xs font-extrabold px-3.5 py-2 rounded-md transition flex items-center justify-center gap-1.5 shadow-xs"
+                                    disabled={abonoSaving}
+                                    className="w-full bg-[#f97316] hover:bg-[#ea580c] disabled:opacity-50 text-white text-xs font-extrabold px-3.5 py-2 rounded-md transition flex items-center justify-center gap-1.5 shadow-xs"
                                   >
                                     <Plus className="w-4 h-4" />
-                                    <span>Agregar Abono</span>
+                                    <span>{abonoSaving ? 'Guardando...' : 'Agregar Abono'}</span>
                                   </button>
                                 </div>
                               </div>
@@ -3912,36 +4091,15 @@ export default function PipelineVentasPage() {
                                                       const rawNum = Number(editAbonoMonto);
                                                       if (!rawNum || rawNum <= 0) return;
 
-                                                      const updatedComprobantes = (selectedOp.comprobantes_pago || []).map((item: any) =>
-                                                        item.id === ab.id ? { ...item, monto: rawNum, nota: editAbonoNota } : item
-                                                      );
-                                                      const updatedAbonado = updatedComprobantes.reduce(
-                                                        (sum: number, item: any) => sum + (Number(item.monto) || 0),
-                                                        0
-                                                      );
-
-                                                      updateOportunidadField(selectedOp.id, 'monto_abonado', updatedAbonado);
-                                                      updateOportunidadField(selectedOp.id, 'comprobantes_pago', updatedComprobantes);
-                                                      setEditingAbonoId(null);
-
-                                                      if (isUUID(selectedOp.id)) {
-                                                        try {
-                                                          await supabase
-                                                            .from('oportunidades')
-                                                            .update({
-                                                              monto_abonado: updatedAbonado,
-                                                              comprobantes_pago: updatedComprobantes,
-                                                            })
-                                                            .eq('id', selectedOp.id);
-                                                        } catch (err) {
-                                                          console.error('Error updating edited abono in Supabase:', err);
-                                                        }
+                                                      setAbonoSaving(true);
+                                                      try {
+                                                        await guardarAbono('editar', { id: ab.id, monto: rawNum, nota: editAbonoNota });
+                                                        setEditingAbonoId(null);
+                                                      } catch (err: any) {
+                                                        setAbonoErrorMsg(err?.message || 'No se pudo editar el abono.');
+                                                      } finally {
+                                                        setAbonoSaving(false);
                                                       }
-
-                                                      await addOportunidadActividad(
-                                                        selectedOp.id,
-                                                        `Abono editado a $${rawNum.toLocaleString('es-CL')} (${editAbonoNota}). Total acumulado: $${updatedAbonado.toLocaleString('es-CL')}`
-                                                      );
                                                     }}
                                                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg"
                                                   >
@@ -3973,15 +4131,14 @@ export default function PipelineVentasPage() {
                                               </div>
 
                                               {ab.comprobante_url && (
-                                                <a
-                                                  href={ab.comprobante_url}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
+                                                <button
+                                                  type="button"
+                                                  onClick={() => void abrirComprobante(ab.comprobante_url)}
                                                   className="text-[#f97316] hover:underline text-xs font-mono flex items-center gap-1.5 mt-0.5"
                                                 >
                                                   <FileCheck className="w-3.5 h-3.5 text-[#f97316]" />
                                                   <span>Comprobante: {ab.comprobante_nombre || 'Ver archivo'}</span>
-                                                </a>
+                                                </button>
                                               )}
                                             </div>
 
@@ -4007,35 +4164,14 @@ export default function PipelineVentasPage() {
                                               <button
                                                 type="button"
                                                 onClick={async () => {
-                                                  const updatedComprobantes = (selectedOp.comprobantes_pago || []).filter(
-                                                    (item: any) => item.id !== ab.id
-                                                  );
-                                                  const updatedAbonado = updatedComprobantes.reduce(
-                                                    (sum: number, item: any) => sum + (Number(item.monto) || 0),
-                                                    0
-                                                  );
-
-                                                  updateOportunidadField(selectedOp.id, 'monto_abonado', updatedAbonado);
-                                                  updateOportunidadField(selectedOp.id, 'comprobantes_pago', updatedComprobantes);
-
-                                                  if (isUUID(selectedOp.id)) {
-                                                    try {
-                                                      await supabase
-                                                        .from('oportunidades')
-                                                        .update({
-                                                          monto_abonado: updatedAbonado,
-                                                          comprobantes_pago: updatedComprobantes,
-                                                        })
-                                                        .eq('id', selectedOp.id);
-                                                    } catch (err) {
-                                                      console.error('Error deleting abono in Supabase:', err);
-                                                    }
+                                                  setAbonoSaving(true);
+                                                  try {
+                                                    await guardarAbono('eliminar', { id: ab.id });
+                                                  } catch (err: any) {
+                                                    setAbonoErrorMsg(err?.message || 'No se pudo eliminar el abono.');
+                                                  } finally {
+                                                    setAbonoSaving(false);
                                                   }
-
-                                                  await addOportunidadActividad(
-                                                    selectedOp.id,
-                                                    `Abono de $${Number(ab.monto || 0).toLocaleString('es-CL')} eliminado del historial. Total acumulado: $${updatedAbonado.toLocaleString('es-CL')}`
-                                                  );
                                                 }}
                                                 className="p-1.5 bg-white hover:bg-red-50 text-red-600 rounded-lg transition border border-gray-200"
                                                 title="Eliminar Abono"
@@ -4888,7 +5024,7 @@ export default function PipelineVentasPage() {
 	                                <th className="py-2.5 px-3 text-center">Version</th>
 	                                <th className="py-2.5 px-3">Proveedor</th>
                                 <th className="py-2.5 px-3 text-center">Fecha</th>
-                                <th className="py-2.5 px-3 text-right">Total</th>
+                                <th className="py-2.5 px-3 text-right">Costo asignado</th>
                                 <th className="py-2.5 px-3 text-center">Estado</th>
                                 <th className="py-2.5 px-3 text-center">Acciones</th>
                               </tr>
@@ -4909,7 +5045,7 @@ export default function PipelineVentasPage() {
                                     {oc.fecha_emision}
                                   </td>
                                   <td className="py-2.5 px-3 text-right font-mono font-bold text-[#213343]">
-                                    ${(oc.monto_total || 0).toLocaleString('es-CL')}
+                                    ${(oc.asignaciones || []).reduce((sum, a) => sum + Number(a.costo_asignado), 0).toLocaleString('es-CL')}
                                   </td>
                                   <td className="py-2.5 px-3 text-center">
                                     <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded">
@@ -4925,6 +5061,7 @@ export default function PipelineVentasPage() {
                                       <FileText className="w-3 h-3" />
                                       <span>Ver / Imprimir OC</span>
                                     </button>
+                                    <Link href={`/ordenes-compra/${oc.id}/asignaciones`} className="block text-[11px] text-[#f97316] font-bold mt-1">Ver asignaciones</Link>
                                   </td>
                                 </tr>
                               ))}
@@ -5257,7 +5394,7 @@ export default function PipelineVentasPage() {
 	                                <th className="py-2.5 px-3 text-center">Version</th>
 	                                <th className="py-2.5 px-3">Proveedor</th>
                                 <th className="py-2.5 px-3 text-center">Fecha</th>
-                                <th className="py-2.5 px-3 text-right">Total</th>
+                                <th className="py-2.5 px-3 text-right">Costo asignado</th>
                                 <th className="py-2.5 px-3 text-center">Estado</th>
                                 <th className="py-2.5 px-3 text-center">Acciones</th>
                               </tr>
@@ -5278,7 +5415,7 @@ export default function PipelineVentasPage() {
                                     {oc.fecha_emision}
                                   </td>
                                   <td className="py-2.5 px-3 text-right font-mono font-bold text-[#213343]">
-                                    ${(oc.monto_total || 0).toLocaleString('es-CL')}
+                                    ${(oc.asignaciones || []).reduce((sum, a) => sum + Number(a.costo_asignado), 0).toLocaleString('es-CL')}
                                   </td>
                                   <td className="py-2.5 px-3 text-center">
                                     <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">
@@ -5294,6 +5431,7 @@ export default function PipelineVentasPage() {
                                       <FileText className="w-3 h-3" />
                                       <span>Ver / Imprimir OC</span>
                                     </button>
+                                    <Link href={`/ordenes-compra/${oc.id}/asignaciones`} className="block text-[11px] text-[#f97316] font-bold mt-1">Ver asignaciones</Link>
                                   </td>
                                 </tr>
                               ))}
@@ -5489,7 +5627,7 @@ export default function PipelineVentasPage() {
             {/* Columna Derecha: Feed de Actividades (Ancho Resizable) */}
             <div
               style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${100 - modalLeftColRatio}%` : '100%' }}
-              className="flex-1 bg-gray-50 rounded-lg border border-gray-200 p-4 sm:p-5 flex flex-col justify-between h-full overflow-hidden shadow-xs shrink-0"
+              className="flex-1 bg-gray-50 rounded-lg border border-gray-200 p-4 sm:p-5 flex flex-col justify-between h-[45vh] lg:h-full overflow-hidden shadow-xs shrink-0"
             >
               <div className="space-y-3.5 flex-1 flex flex-col overflow-hidden">
                 {/* Header de Actividad con Título e Íconos ClickUp */}
@@ -5952,8 +6090,12 @@ export default function PipelineVentasPage() {
             setAllCotizaciones(cotRes as Cotizacion[]);
           }
           if (selectedOp) {
-            setSelectedOp((prev) => (prev ? { ...prev } : null));
-            setOportunidades((prev) => [...prev]);
+            const { data: opData, error: opError } = await supabase.from('oportunidades')
+              .select('cotizacion_actual_id').eq('id', selectedOp.id).single();
+            if (opError) setCotizacionErrorMsg(opError.message);
+            setSelectedOp((prev) => prev ? { ...prev, cotizacion_actual_id: opData?.cotizacion_actual_id || undefined } : null);
+            setOportunidades((prev) => prev.map((op) => op.id === selectedOp.id
+              ? { ...op, cotizacion_actual_id: opData?.cotizacion_actual_id || undefined } : op));
             await addOportunidadActividad(selectedOp.id, 'Nueva cotización creada y vinculada a la oportunidad');
           }
         }}
@@ -6049,9 +6191,12 @@ export default function PipelineVentasPage() {
                   >
                     <option value="">-- Seleccionar Origen --</option>
                     <option value="WhatsApp">WhatsApp</option>
-                    <option value="Web">Web</option>
-                    <option value="Correo">Correo</option>
+                    <option value="Webmail">Webmail</option>
+                    <option value="Llamado">Llamado</option>
+                    <option value="Visita presencial">Visita presencial</option>
                     <option value="Referido">Referido</option>
+                    <option value="Cliente recurrente">Cliente recurrente</option>
+                    <option value="Manual">Manual</option>
                   </select>
                 </div>
 
@@ -6263,64 +6408,6 @@ export default function PipelineVentasPage() {
         </div>
       )}
 
-      {ramaChangeOcModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[120] ">
-          <div className="bg-white border border-gray-200 rounded-lg max-w-lg w-full p-6 space-y-4 shadow-sm text-[#213343]">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h3 className="text-base font-extrabold flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-[#f97316]" />
-                <span>Resolver OC antes de cambiar de rama</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setRamaChangeOcModal(null)}
-                className="text-gray-400 hover:text-[#213343] font-bold"
-              >
-                x
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs text-gray-700">
-              <p>
-                La oportunidad <strong>{ramaChangeOcModal.op.codigo}</strong> tiene <strong>{ramaChangeOcModal.ocCount}</strong> orden(es) de compra vinculada(s).
-              </p>
-              <p className="bg-orange-50 border border-orange-200 rounded-md p-3 text-orange-950 font-medium">
-                Para moverla a {ramaChangeOcModal.rama === 'produccion' ? 'Produccion e Instalacion' : 'Reventa y Logistica'}, primero debes desvincular o eliminar esas OCs. No pueden quedar asignadas a ambas ramas.
-              </p>
-            </div>
-
-            <div className="pt-2 flex flex-col sm:flex-row justify-end gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => setRamaChangeOcModal(null)}
-                disabled={resolvingRamaChangeOc}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => resolveRamaChangeWithOc('desvincular')}
-                disabled={resolvingRamaChangeOc}
-                className="px-4 py-2 bg-white hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed text-[#213343] border border-gray-300 font-extrabold rounded-md transition"
-              >
-                {resolvingRamaChangeOc ? 'Resolviendo...' : 'Desvincular OC y Cambiar Rama'}
-              </button>
-              {currentUser?.rol === 'admin' && (
-                <button
-                  type="button"
-                  onClick={() => resolveRamaChangeWithOc('eliminar')}
-                  disabled={resolvingRamaChangeOc}
-                  className="px-4 py-2 bg-[#213343] hover:bg-black disabled:opacity-60 disabled:cursor-not-allowed text-white font-extrabold rounded-md transition"
-                >
-                  Eliminar OC y Cambiar Rama
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Floating Status Popover Overlay (Estilo ClickUp de la Imagen) */}
       {stageMenuPos && (
         <div
@@ -6369,7 +6456,7 @@ export default function PipelineVentasPage() {
 
             {/* Listado Agrupado de Estados con Filtro */}
             <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1 scrollbar-thin">
-              {SECCIONES_PIPELINE.map((sec) => {
+              {[SECCION_COMERCIAL].map((sec) => {
                 const filteredEtapas = sec.etapas.filter((st) =>
                   st.label.toLowerCase().includes(statusSearchQuery.toLowerCase())
                 );

@@ -12,6 +12,7 @@ import {
 } from '../lib/types';
 import { useAuth } from '../lib/context/AuthContext';
 import { logSistema } from '../lib/logger';
+import { claveVehiculo, eventosEnConflicto, produccionesPendientesAntesDe } from '../lib/calendario-conflictos';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -82,6 +83,11 @@ export const TIPOS_EVENTO_CONFIG: Record<
   produccion: { label: 'Fabricación Planta', icon: Factory, color: 'text-blue-600' },
   reventa: { label: 'Reventa / Coordinación', icon: ShoppingCart, color: 'text-purple-600' },
   logistica: { label: 'Despacho & Logística', icon: Truck, color: 'text-emerald-600' },
+  retiro_proveedor: { label: 'Retiro de proveedor', icon: Truck, color: 'text-indigo-600' },
+  despacho_cliente: { label: 'Despacho a cliente', icon: Truck, color: 'text-emerald-600' },
+  instalacion: { label: 'Instalación', icon: HardHat, color: 'text-orange-600' },
+  postventa: { label: 'Postventa', icon: HardHat, color: 'text-purple-600' },
+  logistica_interna: { label: 'Logística interna', icon: Truck, color: 'text-gray-600' },
 };
 
 const CALENDARIOS_OPERACIONALES = [
@@ -111,6 +117,9 @@ export function CalendarioEventos({
   const supabase = createClient();
 
   const [eventos, setEventos] = useState<EventoProduccionLogistica[]>([]);
+  const [allEventos, setAllEventos] = useState<EventoProduccionLogistica[]>([]);
+  const [guideOptions, setGuideOptions] = useState<{ id: string; oportunidad_id: string; numero_guia: string }[]>([]);
+  const [ocOptions, setOcOptions] = useState<{ orden_compra_id: string; oportunidad_id: string; ordenes_compra: { numero_oc: string } | null }[]>([]);
   const [personalList, setPersonalList] = useState<Usuario[]>([]);
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,16 +145,21 @@ export function CalendarioEventos({
   const [formResponsableId, setFormResponsableId] = useState<string>('');
   const [formEstado, setFormEstado] = useState<EstadoEventoProduccionLogistica>('por_hacer');
   const [formObservaciones, setFormObservaciones] = useState<string>('');
+  const [formVehiculo, setFormVehiculo] = useState('');
+  const [formGuideId, setFormGuideId] = useState('');
+  const [formOcId, setFormOcId] = useState('');
+  const [formMotivo, setFormMotivo] = useState('');
+  const [reprogramaciones, setReprogramaciones] = useState<{ id: string; fecha_inicio_anterior: string; fecha_inicio_nueva: string; motivo: string; created_at: string; actor_id: string | null }[]>([]);
+  const [historialError, setHistorialError] = useState('');
   const [savingLoading, setSavingLoading] = useState(false);
 
   const fetchEventos = async () => {
     try {
       setLoading(true);
-      const [eventRes, userRes, opRes] = await Promise.all([
+      const [eventRes, userRes, opRes, guideRes, ocRes] = await Promise.all([
         supabase
           .from('eventos_produccion_logistica')
           .select('*, oportunidad:oportunidades(*, cliente:clientes(*)), responsable:usuarios!responsable_id(*)')
-          .eq('contexto', contexto)
           .order('fecha_inicio', { ascending: true }),
         supabase
           .from('usuarios')
@@ -156,10 +170,14 @@ export function CalendarioEventos({
           .from('oportunidades')
           .select('id, codigo, titulo, cliente:clientes(nombre)')
           .order('created_at', { ascending: false }),
+        supabase.from('guias_despacho').select('id, oportunidad_id, numero_guia').neq('estado', 'cancelada'),
+        supabase.from('orden_compra_asignaciones').select('orden_compra_id, oportunidad_id, ordenes_compra(numero_oc)'),
       ]);
 
       if (eventRes.data) {
-        setEventos(eventRes.data as EventoProduccionLogistica[]);
+        const all = eventRes.data as EventoProduccionLogistica[];
+        setAllEventos(all);
+        setEventos(all.filter((event) => event.contexto === contexto));
       }
 
       if (userRes.data) {
@@ -174,6 +192,8 @@ export function CalendarioEventos({
       if (opRes.data) {
         setOportunidades(opRes.data as OportunidadVenta[]);
       }
+      if (guideRes.data) setGuideOptions(guideRes.data);
+      if (ocRes.data) setOcOptions(ocRes.data as typeof ocOptions);
     } catch (err) {
       console.error('Error fetching calendar events:', err);
     } finally {
@@ -228,6 +248,9 @@ export function CalendarioEventos({
     setFormResponsableId('');
     setFormEstado('por_hacer');
     setFormObservaciones('');
+    setFormVehiculo('');
+    setFormGuideId(''); setFormOcId('');
+    setFormMotivo('');
     setIsNewModalOpen(true);
   };
 
@@ -248,8 +271,22 @@ export function CalendarioEventos({
     setFormResponsableId(ev.responsable_id || '');
     setFormEstado((ev.estado as EstadoEventoProduccionLogistica) || 'por_hacer');
     setFormObservaciones(ev.observaciones || '');
+    setFormVehiculo(ev.recurso_vehiculo || '');
+    setFormGuideId(ev.guia_despacho_id || ''); setFormOcId(ev.orden_compra_id || '');
+    // Cada cambio de fecha necesita su propio motivo, nunca reutilizar el anterior.
+    setFormMotivo('');
     setSelectedEvento(ev);
     setIsEditModalOpen(true);
+    setReprogramaciones([]);
+    setHistorialError('');
+    void (async () => {
+      const { data, error } = await supabase.from('evento_reprogramaciones')
+        .select('id, fecha_inicio_anterior, fecha_inicio_nueva, motivo, created_at, actor_id')
+        .eq('evento_id', ev.id)
+        .order('created_at', { ascending: false });
+        if (error) setHistorialError('No se pudo cargar el historial de reprogramaciones.');
+        else setReprogramaciones(data || []);
+    })();
   };
 
   const handleSaveNew = async (e: React.FormEvent) => {
@@ -260,6 +297,18 @@ export function CalendarioEventos({
       setSavingLoading(true);
       const startD = new Date(formFechaInicio);
       const endD = formFechaFin ? new Date(formFechaFin) : new Date(startD.getTime() + 3600000);
+      if (endD <= startD) throw new Error('La hora de término debe ser posterior al inicio.');
+      const conflicts = eventosEnConflicto({ id: 'nuevo', oportunidad_id: formOpId, tipo_evento: formTipo,
+        titulo: formTitulo, fecha_inicio: startD.toISOString(), fecha_fin: endD.toISOString(),
+        responsable_id: formResponsableId || null, recurso_vehiculo: formVehiculo || null, estado: formEstado }, allEventos);
+      const unfinishedProduction = produccionesPendientesAntesDe({ id: 'nuevo', oportunidad_id: formOpId,
+        tipo_evento: formTipo, titulo: formTitulo, fecha_inicio: startD.toISOString(), fecha_fin: endD.toISOString(),
+        estado: formEstado }, allEventos).length > 0;
+      if ((conflicts.length || unfinishedProduction) && (!formMotivo.trim() || !window.confirm(
+        `${conflicts.length ? `Conflicto con ${conflicts.map((item) => item.titulo).join(', ')}. ` : ''}${unfinishedProduction ? 'La producción programada termina después de este evento. ' : ''}¿Confirmar programación?`
+      ))) {
+        throw new Error('Confirma el conflicto e indica el motivo para continuar.');
+      }
 
       const dateOnly = startD.toISOString().split('T')[0];
       const timeOnly = `${String(startD.getHours()).padStart(2, '0')}:${String(startD.getMinutes()).padStart(2, '0')}`;
@@ -278,6 +327,10 @@ export function CalendarioEventos({
           responsable_id: formResponsableId || null,
           estado: formEstado,
           observaciones: formObservaciones.trim() || null,
+          recurso_vehiculo: formVehiculo.trim() || null,
+          guia_despacho_id: formGuideId || null,
+          orden_compra_id: formOcId || null,
+          conflicto_confirmado_motivo: conflicts.length || unfinishedProduction ? formMotivo.trim() : null,
           registrado_por: currentUser?.id || null,
         }])
         .select()
@@ -312,6 +365,27 @@ export function CalendarioEventos({
       setSavingLoading(true);
       const startD = new Date(formFechaInicio);
       const endD = formFechaFin ? new Date(formFechaFin) : new Date(startD.getTime() + 3600000);
+      if (endD <= startD) throw new Error('La hora de término debe ser posterior al inicio.');
+      const reprogramado = startD.toISOString() !== selectedEvento.fecha_inicio ||
+        endD.toISOString() !== selectedEvento.fecha_fin;
+      if (reprogramado && !formMotivo.trim()) throw new Error('Indica el motivo de la reprogramación.');
+      const conflicts = eventosEnConflicto({ ...selectedEvento, fecha_inicio: startD.toISOString(),
+        fecha_fin: endD.toISOString(), responsable_id: formResponsableId || null,
+        recurso_vehiculo: formVehiculo || null }, allEventos);
+      const unfinishedProduction = produccionesPendientesAntesDe({ ...selectedEvento,
+        tipo_evento: formTipo, fecha_inicio: startD.toISOString(), fecha_fin: endD.toISOString() }, allEventos).length > 0;
+      const affected = allEventos.filter((item) => item.id !== selectedEvento.id &&
+        (item.oportunidad_id === selectedEvento.oportunidad_id ||
+         (formOcId && item.orden_compra_id === formOcId) ||
+         (claveVehiculo(formVehiculo) && claveVehiculo(item.recurso_vehiculo) === claveVehiculo(formVehiculo))) &&
+        new Date(item.fecha_inicio).getTime() >= Math.min(new Date(selectedEvento.fecha_inicio).getTime(), startD.getTime()) &&
+        new Date(item.fecha_inicio).getTime() <= Math.max(new Date(selectedEvento.fecha_fin).getTime(), endD.getTime()) + 7 * 86400000);
+      if ((conflicts.length || unfinishedProduction) && !formMotivo.trim()) throw new Error('Indica el motivo del conflicto o dependencia.');
+      if ((reprogramado || conflicts.length || unfinishedProduction) && !window.confirm(
+        `Eventos que podrían verse afectados: ${affected.length ? affected.map((item) => item.titulo).join(', ') : 'ninguno adicional'}.\n` +
+        `Conflictos de recursos: ${conflicts.length ? conflicts.map((item) => item.titulo).join(', ') : 'ninguno'}.\n` +
+        `${unfinishedProduction ? 'La producción termina después del despacho o instalación.\n' : ''}¿Confirmar el cambio?`
+      )) return;
 
       const dateOnly = startD.toISOString().split('T')[0];
       const timeOnly = `${String(startD.getHours()).padStart(2, '0')}:${String(startD.getMinutes()).padStart(2, '0')}`;
@@ -326,13 +400,19 @@ export function CalendarioEventos({
           fecha_evento: dateOnly,
           hora_evento: timeOnly,
           responsable_id: formResponsableId || null,
-          estado: formEstado,
+          estado: reprogramado ? 'reprogramado' : formEstado,
           observaciones: formObservaciones.trim() || null,
+          recurso_vehiculo: formVehiculo.trim() || null,
+          guia_despacho_id: formGuideId || null,
+          orden_compra_id: formOcId || null,
+          conflicto_confirmado_motivo: conflicts.length || unfinishedProduction ? formMotivo.trim() : null,
+          motivo_reprogramacion: reprogramado ? formMotivo.trim() : selectedEvento.motivo_reprogramacion || null,
         })
         .eq('id', selectedEvento.id);
 
       if (error) throw error;
 
+      // El trigger de la base guarda historial y avisos junto con este UPDATE.
       await logSistema({
         tipo_accion: 'actualizacion',
         entidad: 'eventos_produccion_logistica',
@@ -396,6 +476,47 @@ export function CalendarioEventos({
     if (selectedTipo !== 'todos' && ev.tipo_evento !== selectedTipo) return false;
     return true;
   });
+  const dayOf = (value: string) => {
+    const date = new Date(value);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  };
+  const todayKey = dayOf(new Date().toISOString());
+  const upcomingEventos = filteredEventos
+    .filter((event) => dayOf(event.fecha_fin || event.fecha_inicio) >= todayKey)
+    .sort((a, b) => new Date(a.fecha_inicio).getTime() - new Date(b.fecha_inicio).getTime())
+    .slice(0, 6);
+  const alertEventos = filteredEventos.filter((event) =>
+    event.estado === 'reprogramado' || eventosEnConflicto(event, allEventos).length > 0
+  ).slice(0, 6);
+  const conflictosFormulario = eventosEnConflicto({
+    id: selectedEvento?.id || 'nuevo',
+    oportunidad_id: formOpId,
+    tipo_evento: formTipo,
+    titulo: formTitulo,
+    fecha_inicio: formFechaInicio,
+    fecha_fin: formFechaFin,
+    responsable_id: formResponsableId || null,
+    recurso_vehiculo: formVehiculo || null,
+    estado: formEstado,
+  }, allEventos);
+  const produccionPosteriorFormulario = produccionesPendientesAntesDe({
+    id: selectedEvento?.id || 'nuevo', oportunidad_id: formOpId, tipo_evento: formTipo,
+    titulo: formTitulo, fecha_inicio: formFechaInicio, fecha_fin: formFechaFin, estado: formEstado,
+  }, allEventos).length > 0;
+  const linkedOcOptions = Array.from(new Map(ocOptions.filter((item) => item.oportunidad_id === formOpId)
+    .map((item) => [item.orden_compra_id, item])).values());
+  const linkFields = <div className="grid grid-cols-2 gap-2">
+    <label className="font-bold text-gray-700">Orden de compra vinculada
+      <select value={formOcId} onChange={(e) => setFormOcId(e.target.value)} className="block w-full border rounded-md p-2 font-normal">
+        <option value="">Sin OC</option>{linkedOcOptions.map((item) => <option key={item.orden_compra_id} value={item.orden_compra_id}>{item.ordenes_compra?.numero_oc || item.orden_compra_id.slice(0, 8)}</option>)}
+      </select>
+    </label>
+    <label className="font-bold text-gray-700">Guía vinculada
+      <select value={formGuideId} onChange={(e) => setFormGuideId(e.target.value)} className="block w-full border rounded-md p-2 font-normal">
+        <option value="">Sin guía</option>{guideOptions.filter((item) => item.oportunidad_id === formOpId).map((item) => <option key={item.id} value={item.id}>{item.numero_guia}</option>)}
+      </select>
+    </label>
+  </div>;
 
   return (
     <div className="space-y-5 text-[#213343]">
@@ -572,8 +693,10 @@ export function CalendarioEventos({
         </div>
       </div>
 
-      {/* Calendario Grid Mensual */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      {/* Calendario y agenda contextual */}
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="hg-panel overflow-x-auto">
+      <div className="min-w-[720px]">
         {/* Cabecera de días de la semana */}
         <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-xs font-bold text-gray-600">
           {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((d) => (
@@ -598,13 +721,11 @@ export function CalendarioEventos({
             const dayNum = idx + 1;
             const currentDayDate = new Date(year, month, dayNum);
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-            const isToday =
-              new Date().toISOString().split('T')[0] === currentDayDate.toISOString().split('T')[0];
+            const isToday = dayOf(currentDayDate.toISOString()) === todayKey;
 
             // Eventos que caen en este día
             const dayEvents = filteredEventos.filter((ev) => {
-              const evDate = (ev.fecha_inicio || ev.fecha_evento || '').split('T')[0];
-              return evDate === dateStr;
+              return dayOf(ev.fecha_inicio) <= dateStr && dayOf(ev.fecha_fin || ev.fecha_inicio) >= dateStr;
             });
 
             return (
@@ -635,7 +756,7 @@ export function CalendarioEventos({
 
                   {/* Listado de eventos en el día con diseño claro ganador de Visitas a Terreno */}
                   <div className="space-y-1.5">
-                    {dayEvents.map((ev) => {
+                    {dayEvents.slice(0, 3).map((ev) => {
                       const tipoConf = TIPOS_EVENTO_CONFIG[ev.tipo_evento] || TIPOS_EVENTO_CONFIG.obra;
                       const TipoIcon = tipoConf.icon;
                       const estadoConf = ESTADOS_EVENTO_CONFIG[ev.estado] || ESTADOS_EVENTO_CONFIG.por_hacer;
@@ -651,10 +772,10 @@ export function CalendarioEventos({
                       const isHighlighted = highlightedOpId && ev.oportunidad_id === highlightedOpId;
 
                       return (
-                        <div
+                        <button type="button"
                           key={ev.id}
                           onClick={() => handleOpenEditModal(ev)}
-                          className={`p-2 rounded-md border text-[11px] leading-tight cursor-pointer transition shadow-2xs hover:scale-[1.01] space-y-1 bg-orange-50/70 border-orange-200 hover:bg-orange-100/60 ${
+                          className={`block w-full text-left p-2 rounded-md border text-[11px] leading-tight cursor-pointer transition space-y-1 bg-orange-50/70 border-orange-200 hover:bg-orange-100/60 ${
                             isHighlighted ? 'ring-2 ring-[#F7931F]' : ''
                           }`}
                         >
@@ -690,15 +811,38 @@ export function CalendarioEventos({
                               <span>{estadoConf.label}</span>
                             </span>
                           </div>
-                        </div>
+                        </button>
                       );
                     })}
+                    {dayEvents.length > 3 && <span className="block text-[10px] text-gray-500">+{dayEvents.length - 3} eventos</span>}
                   </div>
                 </div>
               </div>
             );
           })}
         </div>
+      </div>
+      </div>
+      <aside className="space-y-4">
+        <section className="hg-panel p-4">
+          <h2 className="text-sm font-bold">Próxima agenda</h2>
+          {upcomingEventos.length === 0 ? <p className="mt-3 text-xs text-gray-500">Sin eventos próximos.</p> : <div className="mt-3 space-y-1">
+            {upcomingEventos.map((event) => <button key={event.id} type="button" onClick={() => handleOpenEditModal(event)} className="block w-full rounded-lg p-2 text-left hover:bg-gray-50">
+              <span className="block truncate text-xs font-bold">{event.titulo}</span>
+              <span className="text-[11px] text-gray-500">{new Date(event.fecha_inicio).toLocaleDateString('es-CL')} · {event.responsable?.nombre || 'Sin responsable'}</span>
+            </button>)}
+          </div>}
+        </section>
+        <section className="hg-panel p-4">
+          <h2 className="text-sm font-bold">Alertas</h2>
+          {alertEventos.length === 0 ? <p className="mt-3 text-xs text-gray-500">Sin conflictos ni reprogramaciones visibles.</p> : <div className="mt-3 space-y-1">
+            {alertEventos.map((event) => <button key={event.id} type="button" onClick={() => handleOpenEditModal(event)} className="block w-full rounded-lg border border-amber-100 bg-amber-50/60 p-2 text-left hover:bg-amber-50">
+              <span className="block truncate text-xs font-bold">{event.titulo}</span>
+              <span className="text-[11px] text-amber-800">{event.estado === 'reprogramado' ? 'Reprogramado' : 'Choque de recurso'}</span>
+            </button>)}
+          </div>}
+        </section>
+      </aside>
       </div>
 
       {/* Modal Nuevo Evento */}
@@ -853,6 +997,18 @@ export function CalendarioEventos({
                   className="w-full bg-gray-50 border border-gray-300 rounded-md p-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 />
               </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Vehículo o recurso</label>
+                <input value={formVehiculo} onChange={(e) => setFormVehiculo(e.target.value)} placeholder="Ej. Camión 1" className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2" />
+              </div>
+              {linkFields}
+              {(conflictosFormulario.length > 0 || produccionPosteriorFormulario) && <label className="block font-bold text-gray-700">Motivo para confirmar conflicto o dependencia<input value={formMotivo} onChange={(e) => setFormMotivo(e.target.value)} className="block w-full border rounded-md p-2 font-normal" /></label>}
+              {conflictosFormulario.length > 0 && <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2 text-xs">
+                Posible choque de responsable o vehículo con: {conflictosFormulario.map((ev) => ev.titulo).join(', ')}.
+              </p>}
+              {produccionPosteriorFormulario && <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2 text-xs">
+                La producción pendiente de esta venta termina después del despacho o instalación. Para continuar, indica un motivo y confirma la dependencia.
+              </p>}
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-200">
                 <button
@@ -986,6 +1142,29 @@ export function CalendarioEventos({
                   className="w-full bg-gray-50 border border-gray-300 rounded-md p-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
                 />
               </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Vehículo o recurso</label>
+                <input value={formVehiculo} onChange={(e) => setFormVehiculo(e.target.value)} placeholder="Ej. Camión 1" className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2" />
+              </div>
+              {linkFields}
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Motivo de reprogramación si cambias la fecha u hora</label>
+                <input value={formMotivo} onChange={(e) => setFormMotivo(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2" />
+              </div>
+              {conflictosFormulario.length > 0 && <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2 text-xs">
+                Posible choque de responsable o vehículo con: {conflictosFormulario.map((ev) => ev.titulo).join(', ')}.
+              </p>}
+              {produccionPosteriorFormulario && <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2 text-xs">
+                La producción pendiente de esta venta termina después del despacho o instalación. Para continuar, indica un motivo y confirma la dependencia.
+              </p>}
+              <section aria-label="Historial de reprogramaciones" className="rounded-md border border-gray-200 p-3 text-xs">
+                <h4 className="font-bold text-gray-700">Historial de reprogramaciones</h4>
+                {historialError && <p role="alert" className="mt-2 text-red-700">{historialError}</p>}
+                {!historialError && reprogramaciones.length === 0 && <p className="mt-2 text-gray-500">Sin reprogramaciones registradas.</p>}
+                {reprogramaciones.map((cambio) => <p key={cambio.id} className="mt-2 border-t border-gray-100 pt-2 text-gray-600">
+                  {new Date(cambio.fecha_inicio_anterior).toLocaleString('es-CL')} → {new Date(cambio.fecha_inicio_nueva).toLocaleString('es-CL')}: {cambio.motivo}
+                </p>)}
+              </section>
 
               <div className="flex items-center justify-between pt-2 border-t border-gray-200">
                 <button

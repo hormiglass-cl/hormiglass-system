@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { createClient } from '../../lib/supabase/client';
 import { useAuth } from '../../lib/context/AuthContext';
+import { esRutaReventa } from '../../lib/pipeline-ruta';
+import { totalAbonado } from '../../lib/oportunidad-finanzas';
 import {
   ProyectoPlanificacion,
   EstadoPlanificacion,
@@ -39,6 +41,18 @@ const ETAPAS_PLANIFICACION: { id: EstadoPlanificacion; label: string; color: str
   { id: 'instalacion', label: '5. En Instalación', color: 'text-orange-800', bg: 'bg-orange-50', border: 'border-orange-200' },
   { id: 'finalizado', label: '6. Finalizado / Entregado', color: 'text-emerald-800', bg: 'bg-emerald-50', border: 'border-emerald-200' },
 ];
+
+const ESTADO_LEGADO_PRODUCCION: Record<string, EstadoPlanificacion> = {
+  en_produccion: 'fabricacion',
+  listo_despacho: 'listo_instalacion',
+  terminada: 'finalizado',
+  prod_pendiente: 'pendiente',
+  prod_cola: 'cola_produccion',
+  prod_fabricacion: 'fabricacion',
+  prod_listo_instalacion: 'listo_instalacion',
+  prod_instalacion: 'instalacion',
+  prod_finalizado: 'finalizado',
+};
 
 function isUUID(id: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
@@ -82,12 +96,14 @@ export default function PlanificacionPage() {
       const [opRes, planRes] = await Promise.all([
         supabase
           .from('oportunidades')
-          .select('*, cliente:clientes(*), cotizaciones(*), abonos(*)')
-          .or('rama_destino.eq.produccion,estado_pipeline.in.(entregada,en_produccion,listo_despacho,terminada)'),
+          .select('*, cliente:clientes(*), cotizaciones!cotizaciones_oportunidad_id_fkey(*)')
+          .or('rama_destino.eq.produccion,estado_pipeline.in.(entregada,en_produccion,listo_despacho,terminada,prod_pendiente,prod_cola,prod_fabricacion,prod_listo_instalacion,prod_instalacion,prod_finalizado)'),
         supabase
           .from('proyectos_planificacion')
           .select('*'),
       ]);
+      if (opRes.error) throw new Error(`Oportunidades: ${opRes.error.message}`);
+      if (planRes.error) throw new Error(`Proyectos: ${planRes.error.message}`);
 
       const planMap = new Map<string, any>();
       (planRes.data || []).forEach((p: any) => {
@@ -97,7 +113,7 @@ export default function PlanificacionPage() {
       const combined: (ProyectoPlanificacion & { oportunidad?: OportunidadVenta })[] = [];
 
       (opRes.data || []).forEach((op: any) => {
-        const isReventa = op.rama_destino === 'reventa' || (!op.rama_destino && (op.tipo_venta === 'Suministro' || op.tipo_venta === 'Reventa de Material'));
+        const isReventa = esRutaReventa(op);
         if (isReventa) return; // Solo produccion/instalacion en esta página
 
         const planRecord = planMap.get(op.id);
@@ -108,7 +124,7 @@ export default function PlanificacionPage() {
           titulo: op.titulo,
           cliente_id: op.cliente_id,
           cliente: op.cliente,
-          estado: (planRecord?.estado as EstadoPlanificacion) || 'pendiente',
+          estado: (planRecord?.estado as EstadoPlanificacion) || ESTADO_LEGADO_PRODUCCION[op.estado_pipeline] || 'pendiente',
           fecha_estimada_produccion: planRecord?.fecha_estimada_produccion || null,
           fecha_estimada_instalacion: planRecord?.fecha_estimada_instalacion || null,
           observaciones: planRecord?.observaciones || 'Vinculado desde Venta Cerrada.',
@@ -273,8 +289,7 @@ export default function PlanificacionPage() {
   };
 
   const getOportunidadAbonadoValue = (op?: OportunidadVenta) => {
-    if (!op || !op.abonos || op.abonos.length === 0) return 0;
-    return op.abonos.reduce((sum, a) => sum + (a.monto || 0), 0);
+    return op ? totalAbonado(op) : 0;
   };
 
   const filteredProyectos = proyectos.filter((p) => {
@@ -345,59 +360,72 @@ export default function PlanificacionPage() {
       </div>
 
       {/* Barra de Búsqueda */}
-      <div className="flex items-center bg-white border border-gray-200 rounded-lg px-4 py-2.5 text-xs shadow-sm">
+      <div className="hg-list-toolbar text-xs">
         <Search className="w-4 h-4 text-gray-400 mr-2" />
         <input
           type="text"
           placeholder="Buscar por código, título de proyecto o cliente..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full bg-transparent text-[#213343] focus:outline-none placeholder-gray-400 font-semibold"
+          className="hg-list-search px-3 text-sm text-[#252b2d] placeholder-gray-400"
         />
       </div>
 
       {/* VISTA 1: LISTA AGRUPADA POR ESTADOS (EXACTO A IMAGEN 1 DE VENTAS) */}
       {activeTab === 'lista' ? (
-        <div className="space-y-6 ">
+        <div className="space-y-4">
           {ETAPAS_PLANIFICACION.map((col) => {
             const isCollapsed = !!collapsedSections[col.id];
             const colProyectos = filteredProyectos.filter((p) => p.estado === col.id);
 
             return (
-              <div key={col.id} className="space-y-2 mb-6">
+              <div key={col.id} className="hg-list-group">
                 {/* Accordion Group Header Estilo ClickUp */}
-                <div
+                <button
+                  type="button"
                   onClick={() =>
                     setCollapsedSections((prev) => ({ ...prev, [col.id]: !prev[col.id] }))
                   }
-                  className="flex items-center justify-between py-2 px-1 border-b border-gray-200/80 cursor-pointer select-none transition group"
+                  aria-expanded={!isCollapsed}
+                  className="hg-list-group-heading w-full justify-between cursor-pointer select-none text-left transition group hover:bg-[#fafaf8]"
                 >
                   <div className="flex items-center gap-2.5">
-                    <button type="button" className="text-gray-400 group-hover:text-[#213343] transition">
+                    <span className="text-gray-400 group-hover:text-[#213343] transition">
                       {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </button>
+                    </span>
 
-                    <span className={`px-3 py-1 rounded-md text-xs font-black uppercase tracking-normal flex items-center gap-2 ${col.bg} ${col.color} border ${col.border} shadow-2xs`}>
-                      <div className="w-2 h-2 rounded-full border border-current shadow-xs" />
+                    <span className="flex items-center gap-2 text-sm font-semibold text-[#252b2d]">
+                      <span className={`h-2.5 w-2.5 rounded-full border ${col.bg} ${col.border}`} />
                       <span>{col.label}</span>
                     </span>
 
-                    <span className="font-mono text-xs text-gray-500 font-extrabold bg-gray-100 px-2 py-0.5 rounded-full border border-gray-200">
-                      {colProyectos.length}
-                    </span>
+                    <span className="hg-list-count">{colProyectos.length}</span>
                   </div>
-                </div>
+                </button>
 
                 {/* Tabla con las Mismas Columnas exactas de Ventas (IMAGEN 1) */}
                 {!isCollapsed && (
-                  <div>
+                  <div className="border-t border-[#eff0ee]">
+                    {colProyectos.map((proy) => <div key={proy.id} className="hg-list-row">
+                      <span className={`h-3 w-3 shrink-0 rounded-full border ${col.bg} ${col.border}`} />
+                      <button type="button" onClick={() => handleOpenProyectoModal(proy)} className="min-w-0 flex-1 text-left">
+                        <span className="block truncate text-sm font-semibold text-[#252b2d]">{proy.titulo}</span>
+                        <span className="block truncate text-xs text-[#8a9390]">{proy.codigo} · {proy.cliente?.nombre || 'Cliente sin asignar'}</span>
+                      </button>
+                      <div className="hidden items-center gap-2 lg:flex">
+                        {proy.oportunidad?.fecha_limite && <span className="hg-list-meta">Límite {proy.oportunidad.fecha_limite}</span>}
+                        <span className="hg-list-meta font-semibold text-[#252b2d]">${getOportunidadTotalValue(proy.oportunidad).toLocaleString('es-CL')}</span>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-[#a8afac]" aria-hidden="true" />
+                    </div>)}
                     {colProyectos.length === 0 ? (
-                      <div className="py-4 px-2 text-xs text-gray-400 italic">
+                      <div className="px-5 py-4 text-xs text-[#8a9390]">
                         No hay oportunidades en esta etapa.
                       </div>
                     ) : (
-                      <div className="overflow-x-auto bg-white rounded-lg border border-gray-200/80 shadow-xs">
-                        <table className="w-full text-left text-xs min-w-[1050px] table-fixed border-collapse">
+                      <details className="border-t border-[#eff0ee]"><summary className="cursor-pointer px-5 py-2.5 text-xs font-semibold text-[#66716f] hover:bg-[#fafaf8]">Mostrar columnas y detalles</summary>
+                      <div className="overflow-x-auto bg-white">
+                        <table className="hg-list-table w-full text-left text-xs min-w-[1050px] table-fixed">
                           <thead className="text-gray-500 uppercase text-xs font-extrabold border-b border-gray-200 bg-gray-50/50">
                             <tr>
                               <th className="py-3 px-3 w-10 text-center"></th>
@@ -428,7 +456,7 @@ export default function PlanificacionPage() {
                                   <td className="py-3 px-3 font-mono font-bold text-[#f97316]">{proy.codigo}</td>
                                   <td className="py-3 px-3 font-bold text-[#213343]">{proy.titulo}</td>
                                   <td className="py-3 px-3 text-[#f97316] font-bold">
-                                    {proy.cliente?.nombre || 'Jesus Rodriguez'}
+                                    {proy.cliente?.nombre || 'Cliente sin asignar'}
                                   </td>
                                   <td className="py-3 px-3">
                                     <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full text-[11px] font-bold">
@@ -437,11 +465,11 @@ export default function PlanificacionPage() {
                                   </td>
                                   <td className="py-3 px-3">
                                     <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-[11px] font-bold">
-                                      {op?.prioridad || 'Alta'}
+                                      {op?.prioridad || 'Sin definir'}
                                     </span>
                                   </td>
-                                  <td className="py-3 px-3 font-mono text-gray-600">{op?.fecha_inicio || '2026-07-21'}</td>
-                                  <td className="py-3 px-3 font-mono font-bold text-amber-800">{op?.fecha_limite || '2026-08-04'}</td>
+                                  <td className="py-3 px-3 font-mono text-gray-600">{op?.fecha_inicio || 'Sin fecha'}</td>
+                                  <td className="py-3 px-3 font-mono font-bold text-amber-800">{op?.fecha_limite || 'Sin fecha'}</td>
                                   <td className="py-3 px-3 text-right font-bold text-[#213343]">
                                     ${monto.toLocaleString('es-CL')}
                                   </td>
@@ -450,7 +478,7 @@ export default function PlanificacionPage() {
                             })}
                           </tbody>
                         </table>
-                      </div>
+                      </div></details>
                     )}
                   </div>
                 )}
@@ -575,25 +603,25 @@ export default function PlanificacionPage() {
             if (e.target === e.currentTarget) setSelectedOp(null);
           }}
         >
-          <div className="bg-[#18181b] text-gray-100 border border-gray-800 rounded-lg max-w-7xl w-full p-4 sm:p-6 shadow-sm h-[95vh] overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="bg-white text-[#252b2d] border border-[#e5e7e4] rounded-lg max-w-7xl w-full p-4 sm:p-6 shadow-sm h-[95vh] overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Columna Izquierda (7/12 Cols) */}
-            <div className="lg:col-span-7 flex flex-col h-full overflow-hidden pr-2 border-r border-gray-800/80">
+            <div className="lg:col-span-7 flex flex-col h-full overflow-hidden pr-2 border-r border-[#e5e7e4]">
               {/* Header Modal */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 pb-3 text-sm shrink-0">
-                <div className="flex items-center gap-2.5 text-gray-300 font-medium">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e5e7e4] pb-3 text-sm shrink-0">
+                <div className="flex items-center gap-2.5 text-gray-600 font-medium">
                   <Building className="w-4 h-4 text-[#f97316]" />
-                  <span className="font-bold text-sm text-white">{selectedOp.cliente?.nombre || 'Jesus Rodriguez'}</span>
+                  <span className="font-bold text-sm text-[#252b2d]">{selectedOp.cliente?.nombre || 'Jesus Rodriguez'}</span>
                   <span className="text-gray-600">/</span>
-                  <span className="text-gray-200 font-bold font-mono text-sm">{selectedOp.codigo}</span>
+                  <span className="text-gray-700 font-bold font-mono text-sm">{selectedOp.codigo}</span>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-amber-400 uppercase bg-amber-950/60 px-3 py-1 rounded-md border border-amber-700/50">
+                  <span className="text-xs font-bold text-amber-800 uppercase bg-amber-50 px-3 py-1 rounded-md border border-amber-200">
                     Etapa: {selectedProyecto?.estado?.toUpperCase() || 'PRODUCCIÓN'}
                   </span>
                   <button
                     onClick={() => setSelectedOp(null)}
-                    className="text-gray-400 hover:text-white font-bold text-xl px-2"
+                    className="text-gray-400 hover:text-[#252b2d] font-bold text-xl px-2"
                   >
                     ✕
                   </button>
@@ -601,18 +629,18 @@ export default function PlanificacionPage() {
               </div>
 
               {/* Título de la Oportunidad */}
-              <div className="py-3 border-b border-gray-800 shrink-0">
-                <h2 className="text-xl font-extrabold text-white">{selectedOp.titulo}</h2>
+              <div className="py-3 border-b border-[#e5e7e4] shrink-0">
+                <h2 className="text-xl font-extrabold text-[#252b2d]">{selectedOp.titulo}</h2>
               </div>
 
               {/* Acordeones (Todos cerrados por defecto) */}
               <div className="flex-1 overflow-y-auto space-y-3.5 pr-2 py-4 scrollbar-thin">
                 {/* Accordion 1: Contacto */}
-                <div className="bg-[#222226] rounded-lg border border-gray-800 overflow-hidden shadow-sm">
+                <div className="bg-white rounded-lg border border-[#e5e7e4] overflow-hidden shadow-sm">
                   <button
                     type="button"
                     onClick={() => setOpenSections({ ...openSections, contacto: !openSections.contacto })}
-                    className="w-full p-4 bg-[#27272a] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-gray-800"
+                    className="w-full p-4 bg-[#f4f5f3] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-[#e5e7e4]"
                   >
                     <div className="flex items-center gap-2.5">
                       <User className="w-4 h-4 text-[#f97316]" />
@@ -621,15 +649,15 @@ export default function PlanificacionPage() {
                     {openSections.contacto ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </button>
                   {openSections.contacto && (
-                    <div className="p-4 space-y-3 text-xs text-gray-300 bg-[#1e1e22]">
+                    <div className="p-4 space-y-3 text-xs text-gray-600 bg-[#fafaf9]">
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <span className="text-gray-500 font-bold uppercase text-[10px]">Nombre</span>
-                          <p className="font-extrabold text-white text-sm">{selectedOp.cliente?.nombre}</p>
+                          <p className="font-extrabold text-[#252b2d] text-sm">{selectedOp.cliente?.nombre}</p>
                         </div>
                         <div>
                           <span className="text-gray-500 font-bold uppercase text-[10px]">RUT</span>
-                          <p className="font-mono text-gray-300">{selectedOp.cliente?.rut || 'N/A'}</p>
+                          <p className="font-mono text-gray-600">{selectedOp.cliente?.rut || 'N/A'}</p>
                         </div>
                       </div>
                     </div>
@@ -637,11 +665,11 @@ export default function PlanificacionPage() {
                 </div>
 
                 {/* Accordion 2: Cotizaciones */}
-                <div className="bg-[#222226] rounded-lg border border-gray-800 overflow-hidden shadow-sm">
+                <div className="bg-white rounded-lg border border-[#e5e7e4] overflow-hidden shadow-sm">
                   <button
                     type="button"
                     onClick={() => setOpenSections({ ...openSections, productos: !openSections.productos })}
-                    className="w-full p-4 bg-[#27272a] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-gray-800"
+                    className="w-full p-4 bg-[#f4f5f3] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-[#e5e7e4]"
                   >
                     <div className="flex items-center gap-2.5">
                       <FileText className="w-4 h-4 text-[#f97316]" />
@@ -650,18 +678,18 @@ export default function PlanificacionPage() {
                     {openSections.productos ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </button>
                   {openSections.productos && (
-                    <div className="p-4 space-y-3 text-xs text-gray-300 bg-[#1e1e22]">
+                    <div className="p-4 space-y-3 text-xs text-gray-600 bg-[#fafaf9]">
                       <p className="italic text-gray-400">Cotización v2 Aprobada ($1.755.250)</p>
                     </div>
                   )}
                 </div>
 
                 {/* Accordion 3: Finanzas & Abonos */}
-                <div className="bg-[#222226] rounded-lg border border-gray-800 overflow-hidden shadow-sm">
+                <div className="bg-white rounded-lg border border-[#e5e7e4] overflow-hidden shadow-sm">
                   <button
                     type="button"
                     onClick={() => setOpenSections({ ...openSections, finanzas: !openSections.finanzas })}
-                    className="w-full p-4 bg-[#27272a] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-gray-800"
+                    className="w-full p-4 bg-[#f4f5f3] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-[#e5e7e4]"
                   >
                     <div className="flex items-center gap-2.5">
                       <DollarSign className="w-4 h-4 text-[#f97316]" />
@@ -670,17 +698,17 @@ export default function PlanificacionPage() {
                     {openSections.finanzas ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </button>
                   {openSections.finanzas && (
-                    <div className="p-4 space-y-3 text-xs text-gray-300 bg-[#1e1e22]">
+                    <div className="p-4 space-y-3 text-xs text-gray-600 bg-[#fafaf9]">
                       <div className="grid grid-cols-3 gap-2 text-center">
-                        <div className="p-2 bg-[#18181b] rounded-md border border-gray-800">
+                        <div className="p-2 bg-white rounded-md border border-[#e5e7e4]">
                           <span className="text-[10px] text-gray-500 font-bold uppercase">Total Venta</span>
-                          <p className="font-extrabold text-white">${getOportunidadTotalValue(selectedOp).toLocaleString('es-CL')}</p>
+                          <p className="font-extrabold text-[#252b2d]">${getOportunidadTotalValue(selectedOp).toLocaleString('es-CL')}</p>
                         </div>
-                        <div className="p-2 bg-[#18181b] rounded-md border border-gray-800">
+                        <div className="p-2 bg-white rounded-md border border-[#e5e7e4]">
                           <span className="text-[10px] text-emerald-400 font-bold uppercase">Abonado</span>
                           <p className="font-extrabold text-emerald-400">${getOportunidadAbonadoValue(selectedOp).toLocaleString('es-CL')}</p>
                         </div>
-                        <div className="p-2 bg-[#18181b] rounded-md border border-gray-800">
+                        <div className="p-2 bg-white rounded-md border border-[#e5e7e4]">
                           <span className="text-[10px] text-[#f97316] font-bold uppercase">Saldo Pendiente</span>
                           <p className="font-extrabold text-[#f97316]">${(getOportunidadTotalValue(selectedOp) - getOportunidadAbonadoValue(selectedOp)).toLocaleString('es-CL')}</p>
                         </div>
@@ -690,11 +718,11 @@ export default function PlanificacionPage() {
                 </div>
 
                 {/* Accordion 4: Visita a Terreno */}
-                <div className="bg-[#222226] rounded-lg border border-gray-800 overflow-hidden shadow-sm">
+                <div className="bg-white rounded-lg border border-[#e5e7e4] overflow-hidden shadow-sm">
                   <button
                     type="button"
                     onClick={() => setOpenSections({ ...openSections, visita: !openSections.visita })}
-                    className="w-full p-4 bg-[#27272a] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-gray-800"
+                    className="w-full p-4 bg-[#f4f5f3] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-[#e5e7e4]"
                   >
                     <div className="flex items-center gap-2.5">
                       <Calendar className="w-4 h-4 text-[#f97316]" />
@@ -703,18 +731,18 @@ export default function PlanificacionPage() {
                     {openSections.visita ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </button>
                   {openSections.visita && (
-                    <div className="p-4 text-xs text-gray-400 italic bg-[#1e1e22]">
+                    <div className="p-4 text-xs text-gray-400 italic bg-[#fafaf9]">
                       Sección de Visita a Terreno asociada.
                     </div>
                   )}
                 </div>
 
                 {/* Accordion 5: Datos de Producción y Logística */}
-                <div className="bg-[#222226] rounded-lg border border-gray-800 overflow-hidden shadow-sm">
+                <div className="bg-white rounded-lg border border-[#e5e7e4] overflow-hidden shadow-sm">
                   <button
                     type="button"
                     onClick={() => setOpenSections({ ...openSections, produccion: !openSections.produccion })}
-                    className="w-full p-4 bg-[#27272a] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-gray-800"
+                    className="w-full p-4 bg-[#f4f5f3] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-[#e5e7e4]"
                   >
                     <div className="flex items-center gap-2.5">
                       <Factory className="w-4 h-4 text-[#f97316]" />
@@ -724,16 +752,16 @@ export default function PlanificacionPage() {
                   </button>
 
                   {openSections.produccion && (
-                    <div className="p-4 space-y-4 text-xs text-gray-300 bg-[#1e1e22]">
+                    <div className="p-4 space-y-4 text-xs text-gray-600 bg-[#fafaf9]">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
-                          <label className="block font-bold text-gray-300 mb-1">Estado de Producción</label>
+                          <label className="block font-bold text-gray-600 mb-1">Estado de Producción</label>
                           <select
                             value={selectedProyecto?.estado || 'pendiente'}
                             onChange={(e) => {
                               if (selectedProyecto) moveProyectoState(selectedProyecto.id, selectedProyecto.oportunidad_id, e.target.value as EstadoPlanificacion);
                             }}
-                            className="w-full bg-[#18181b] border border-gray-700 text-amber-400 font-bold rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
+                            className="w-full bg-white border border-[#e5e7e4] text-amber-800 font-bold rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
                           >
                             {ETAPAS_PLANIFICACION.map((e) => (
                               <option key={e.id} value={e.id}>
@@ -744,7 +772,7 @@ export default function PlanificacionPage() {
                         </div>
 
                         <div>
-                          <label className="block font-bold text-gray-300 mb-1">Estimación Fabricación</label>
+                          <label className="block font-bold text-gray-600 mb-1">Estimación Fabricación</label>
                           <input
                             type="date"
                             value={selectedProyecto?.fecha_estimada_produccion || ''}
@@ -763,14 +791,14 @@ export default function PlanificacionPage() {
                                 }
                               }
                             }}
-                            className="w-full bg-[#18181b] border border-gray-700 text-white font-mono rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
+                            className="w-full bg-white border border-[#e5e7e4] text-[#252b2d] font-mono rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
                           />
                         </div>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
-                          <label className="block font-bold text-gray-300 mb-1">Estimación Instalación</label>
+                          <label className="block font-bold text-gray-600 mb-1">Estimación Instalación</label>
                           <input
                             type="date"
                             value={selectedProyecto?.fecha_estimada_instalacion || ''}
@@ -789,13 +817,13 @@ export default function PlanificacionPage() {
                                 }
                               }
                             }}
-                            className="w-full bg-[#18181b] border border-gray-700 text-white font-mono rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
+                            className="w-full bg-white border border-[#e5e7e4] text-[#252b2d] font-mono rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label className="block font-bold text-gray-300 mb-1">Observaciones Técnicas / Planta</label>
+                        <label className="block font-bold text-gray-600 mb-1">Observaciones Técnicas / Planta</label>
                         <textarea
                           rows={2}
                           placeholder="Instrucciones específicas de corte, templado, armado o logística de instalación..."
@@ -815,7 +843,7 @@ export default function PlanificacionPage() {
                               }
                             }
                           }}
-                          className="w-full bg-[#18181b] border border-gray-700 text-white rounded-md p-2.5 text-xs focus:outline-none focus:border-[#f97316]"
+                          className="w-full bg-white border border-[#e5e7e4] text-[#252b2d] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#f97316]"
                         />
                       </div>
                     </div>
@@ -825,10 +853,10 @@ export default function PlanificacionPage() {
             </div>
 
             {/* Columna Derecha (5/12 Cols): Feed de Actividades & Chat */}
-            <div className="lg:col-span-5 bg-[#222226] rounded-lg border border-gray-800 p-4 flex flex-col justify-between h-full overflow-hidden shadow-sm">
+            <div className="lg:col-span-5 bg-white rounded-lg border border-[#e5e7e4] p-4 flex flex-col justify-between h-full overflow-hidden shadow-sm">
               <div className="space-y-3.5 flex-1 flex flex-col overflow-hidden">
-                <div className="flex items-center justify-between border-b border-gray-800 pb-3">
-                  <h3 className="font-black text-base text-white uppercase tracking-normal flex items-center gap-2">
+                <div className="flex items-center justify-between border-b border-[#e5e7e4] pb-3">
+                  <h3 className="font-black text-base text-[#252b2d] uppercase tracking-normal flex items-center gap-2">
                     <MessageSquare className="w-5 h-5 text-[#f97316]" />
                     <span>Actividad & Chat Feed</span>
                   </h3>
@@ -841,14 +869,14 @@ export default function PlanificacionPage() {
                     </div>
                   ) : (
                     opActivities.map((act) => (
-                      <div key={act.id} className="bg-[#18181b] p-3 rounded-lg border border-gray-800 space-y-1">
+                      <div key={act.id} className="bg-white p-3 rounded-lg border border-[#e5e7e4] space-y-1">
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="font-bold text-[#f97316]">{act.usuario_nombre}</span>
                           <span className="text-[10px] text-gray-500 font-mono">
                             {new Date(act.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
-                        <p className="text-xs text-gray-200">{act.contenido}</p>
+                        <p className="text-xs text-gray-700">{act.contenido}</p>
                       </div>
                     ))
                   )}
@@ -856,14 +884,14 @@ export default function PlanificacionPage() {
               </div>
 
               {/* Chat Input */}
-              <div className="pt-3 border-t border-gray-800 flex items-center gap-2">
+              <div className="pt-3 border-t border-[#e5e7e4] flex items-center gap-2">
                 <input
                   type="text"
                   placeholder="Escribir comentario o mensaje..."
                   value={newChatText}
                   onChange={(e) => setNewChatText(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSendChatMessage()}
-                  className="flex-1 bg-[#18181b] border border-gray-700 text-white rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
+                  className="flex-1 bg-white border border-[#e5e7e4] text-[#252b2d] rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
                 />
                 <button
                   onClick={handleSendChatMessage}

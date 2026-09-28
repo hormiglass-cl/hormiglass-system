@@ -478,15 +478,15 @@ export default function ClientesPage() {
       )}
 
       {/* Barra de Filtros, Búsqueda y Personalización de Columnas */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200 shadow-sm relative">
-        <div className="relative w-full sm:w-80">
+      <div className="hg-list-toolbar relative">
+        <div className="relative min-w-[220px] flex-[2]">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
           <input
             type="text"
             placeholder="Buscar por nombre, razón social o RUT..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-white border border-gray-300 rounded-md pl-9 pr-3 py-2 text-xs text-[#213343] placeholder-gray-400 focus:outline-none focus:border-[#f97316]"
+            className="hg-list-search w-full pl-9 pr-3 py-2 text-sm text-[#252b2d] placeholder-gray-400"
           />
         </div>
 
@@ -578,12 +578,23 @@ export default function ClientesPage() {
         </div>
       </div>
 
+      {nichoFiltro !== 'todos' && <div aria-label="Filtros activos" className="flex flex-wrap gap-2"><button type="button" onClick={() => setNichoFiltro('todos')} className="hg-list-meta hover:bg-[#ecefed]">Nicho: {nichoFiltro} ×</button></div>}
+
       {/* Lista de Clientes (Tabla Incrustada en el Fondo sin Scroll Interno) */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-visible">
-        <div className="overflow-visible">
-          <table className="w-full text-left border-collapse min-w-[900px]">
+      <div className="hg-list-group">
+        <div className="hg-list-group-heading"><span>Clientes</span><span className="hg-list-count">{filteredClientes.length}</span></div>
+        <div className="md:hidden">
+          {loading ? <p className="p-5 text-sm text-[#66716f]">Cargando clientes…</p> : paginatedClientes.length === 0 ? <p className="p-5 text-sm text-[#66716f]">No se encontraron clientes.</p> : paginatedClientes.map((cli) => <div key={cli.id} className="hg-list-row">
+            <input type="checkbox" checked={selectedClientIds.includes(cli.id)} onChange={() => toggleSelectClient(cli.id)} aria-label={`Seleccionar ${cli.nombre}`} className="shrink-0 accent-[#e87622]" />
+            <Link href={`/clientes/${cli.id}`} className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{cli.nombre}</span><span className="block truncate text-xs text-[#8a9390]">{formatRutClean(cli.rut)} · {cli.nicho || 'Sin nicho'}</span></Link>
+            <span className="hg-list-count" title="Oportunidades">{getOportunidadesCount(cli.id)}</span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-[#a8afac]" aria-hidden="true" />
+          </div>)}
+        </div>
+        <div className="hidden overflow-x-auto md:block">
+          <table className="hg-list-table w-full text-left min-w-[900px]">
             <thead>
-              <tr className="bg-[#213343] text-white text-xs font-bold">
+              <tr className="bg-[#f4f5f3] text-[#66716f] text-xs font-bold">
                 <th className="py-4 px-4 w-12 text-center">
                   <input
                     type="checkbox"

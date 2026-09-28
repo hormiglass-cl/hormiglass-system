@@ -510,9 +510,9 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 z-50 ">
-      <div className="bg-[#1e293b] border border-gray-700 rounded-lg max-w-4xl w-full p-4 sm:p-6 space-y-4 shadow-sm text-white max-h-[95vh] flex flex-col">
+      <div className="bg-white border border-gray-200 rounded-xl max-w-4xl w-full p-4 sm:p-6 space-y-4 shadow-sm text-[#252b2d] max-h-[95vh] flex flex-col">
         {/* Header Modal Bar */}
-        <div className="flex items-center justify-between border-b border-gray-700 pb-3 shrink-0">
+        <div className="flex items-center justify-between border-b border-gray-200 pb-3 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-[#f97316]/10 text-[#f97316] rounded-md flex items-center justify-center border border-[#f97316]/20">
               <FileText className="w-5 h-5" />
@@ -522,16 +522,16 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
                 <span className="text-[11px] font-bold text-[#f97316] uppercase font-mono">
                   PLANTILLA OFICIAL HORMIGLASS
                 </span>
-                <span className="text-[10px] font-extrabold uppercase bg-gray-700 text-gray-200 px-2 py-0.5 rounded-md">
+                <span className="text-[10px] font-extrabold uppercase bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md">
                   v{cotizacion.version || 1}
                 </span>
                 {isSpecimen && (
-                  <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-md">
+                  <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md">
                     Borrador / Especimen
                   </span>
                 )}
               </div>
-              <h3 className="text-lg font-bold text-gray-100">
+              <h3 className="text-lg font-bold text-[#252b2d]">
                 Cotización N° {cotizacion.numero_cotizacion}
               </h3>
             </div>
@@ -547,7 +547,7 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
             </button>
             <button
               onClick={onClose}
-              className="p-2 text-gray-400 hover:text-white rounded-md hover:bg-gray-700/60 transition"
+              className="p-2 text-gray-500 hover:text-[#252b2d] rounded-md hover:bg-gray-100 transition"
               title="Cerrar Previsualización"
             >
               <X className="w-5 h-5" />
@@ -556,7 +556,7 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
         </div>
 
         {/* Paper Sheet Preview container */}
-        <div className="flex-1 overflow-y-auto pr-1 bg-gray-900/60 p-3 sm:p-6 rounded-md border border-gray-800 flex justify-center">
+        <div className="flex-1 overflow-y-auto pr-1 bg-gray-100 p-3 sm:p-6 rounded-md border border-gray-200 flex justify-center">
           {/* Exact Paper Sheet */}
           <div className="w-full max-w-[760px] bg-white text-gray-900 shadow-sm p-6 sm:p-8 rounded-sm font-sans text-[11px] leading-relaxed select-text">
             {/* Top Header */}

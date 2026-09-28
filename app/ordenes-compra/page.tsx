@@ -173,8 +173,8 @@ export default function OrdenesCompraPage() {
         </div>
       )}
 
-      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
-        <div className="relative w-full sm:w-96">
+      <div className="hg-list-toolbar">
+        <div className="relative min-w-[220px] flex-[2]">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
           <input
             type="text"
@@ -184,16 +184,25 @@ export default function OrdenesCompraPage() {
               setSearch(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full bg-white border border-gray-300 rounded-md pl-9 pr-3 py-2 text-xs placeholder-gray-400 focus:outline-none focus:border-[#f97316]"
+            className="hg-list-search w-full pl-9 pr-3 py-2 text-sm placeholder-gray-400"
           />
         </div>
         <div className="text-xs text-gray-600 font-semibold">Mostrando {filtered.length} ordenes</div>
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-visible shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs min-w-[980px]">
-            <thead className="bg-[#213343] text-white uppercase text-[10px] tracking-normal">
+      <div className="hg-list-group">
+        <div className="hg-list-group-heading"><span>Órdenes de compra</span><span className="hg-list-count">{filtered.length}</span></div>
+        <div className="md:hidden">
+          {loading ? <p className="p-5 text-sm text-[#66716f]">Cargando órdenes…</p> : paginatedOrdenes.length === 0 ? <p className="p-5 text-sm text-[#66716f]">No se encontraron órdenes.</p> : paginatedOrdenes.map((orden) => <div key={orden.id} className="hg-list-row flex-wrap">
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#e87622]" aria-hidden="true" />
+            <button type="button" onClick={() => setPreviewOrden(orden)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-semibold">{orden.numero_oc} · v{orden.version || 1}</span><span className="block truncate text-xs text-[#8a9390]">{orden.proveedor?.nombre || 'Proveedor'} · {new Date(`${orden.fecha_emision}T00:00:00`).toLocaleDateString('es-CL')}</span></button>
+            <span className="hg-list-meta font-semibold text-[#252b2d]">${Number(orden.monto_total || 0).toLocaleString('es-CL')}</span>
+            <div className="flex basis-full items-center justify-end gap-3 pl-5 text-xs"><span className="capitalize text-[#66716f]">{orden.estado}</span><Link href={`/ordenes-compra/${orden.id}/asignaciones`} className="font-semibold text-[#d4671c]">Asignar</Link><button type="button" onClick={() => setEditingOrden(orden)} className="font-semibold text-[#d4671c]">Editar</button></div>
+          </div>)}
+        </div>
+        <div className="hidden overflow-x-auto md:block">
+          <table className="hg-list-table w-full text-left text-xs min-w-[980px]">
+            <thead className="bg-[#f4f5f3] text-[#66716f] uppercase text-[10px] tracking-normal">
               <tr>
                 <th className="py-3.5 px-4">OC #</th>
                 <th className="py-3.5 px-4">Versión</th>
@@ -208,7 +217,7 @@ export default function OrdenesCompraPage() {
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-gray-500 font-medium">Cargando ordenes de compra desde Supabase...</td>
+                  <td colSpan={8} className="py-8 text-center text-gray-500 font-medium">Cargando órdenes de compra...</td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
@@ -246,6 +255,7 @@ export default function OrdenesCompraPage() {
                     <td className="py-3.5 px-4 text-right font-black text-sm">${Number(orden.monto_total || 0).toLocaleString('es-CL')}</td>
                     <td className="py-3.5 px-4">
                       <div className="flex items-center justify-center gap-2">
+                        <Link href={`/ordenes-compra/${orden.id}/asignaciones`} className="text-[11px] font-bold text-[#f97316] hover:underline" title="Distribuir OC entre ventas">Asignar</Link>
                         <button onClick={() => setPreviewOrden(orden)} className="p-1.5 bg-white hover:bg-[#f97316] text-[#213343] hover:text-white rounded-lg transition border border-gray-300" title="Previsualizar PDF">
                           <Eye className="w-3.5 h-3.5" />
                         </button>

@@ -13,7 +13,7 @@ function CalendarioPlanificacionContent() {
       contexto="produccion_logistica"
       titulo="Calendario de Producción & Logística"
       subtitulo="Planificación integral de obras en terreno, fabricación en planta y despachos logísticos."
-      tiposPermitidos={['obra', 'produccion', 'logistica']}
+      tiposPermitidos={['obra', 'produccion', 'logistica', 'despacho_cliente', 'instalacion', 'postventa', 'logistica_interna']}
       filtroPersonalField="calendario_produccion_logistica"
       highlightedOpId={highlightedOpId}
     />

@@ -13,7 +13,7 @@ function CalendarioReventaContent() {
       contexto="reventa_logistica"
       titulo="Calendario de Reventa & Logística"
       subtitulo="Coordinación de entregas con proveedores externos, retiro de materiales y despachos a clientes."
-      tiposPermitidos={['reventa', 'logistica']}
+      tiposPermitidos={['reventa', 'logistica', 'retiro_proveedor', 'despacho_cliente', 'postventa', 'logistica_interna']}
       filtroPersonalField="calendario_reventa_logistica"
       highlightedOpId={highlightedOpId}
     />

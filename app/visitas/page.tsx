@@ -290,6 +290,11 @@ export default function VisitasTerrenoPage() {
     const matchesEstado = selectedEstado === 'todos' || (op.estado_visita || 'programada') === selectedEstado;
     return matchesTecnico && matchesEstado;
   });
+  const todayLocal = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+  const upcomingVisitas = filteredVisitas
+    .filter((op) => !!op.fecha_visita_terreno && op.fecha_visita_terreno >= todayLocal && op.estado_visita !== 'cancelada')
+    .sort((a, b) => (a.fecha_visita_terreno || '').localeCompare(b.fecha_visita_terreno || ''))
+    .slice(0, 6);
 
   const getTecnicoColor = () => ({
     bg: 'bg-orange-50',
@@ -470,8 +475,10 @@ export default function VisitasTerrenoPage() {
         </div>
       </div>
 
-      {/* Grid del Calendario Mensual */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      {/* Grid del Calendario Mensual y agenda */}
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="hg-panel overflow-x-auto">
+      <div className="min-w-[720px]">
         {/* Días de la semana */}
         <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-xs font-bold text-gray-600">
           {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((d) => (
@@ -493,8 +500,7 @@ export default function VisitasTerrenoPage() {
             const dayNum = dayIdx + 1;
             const formattedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
 
-            const todayStr = new Date().toISOString().split('T')[0];
-            const isToday = formattedDate === todayStr;
+            const isToday = formattedDate === todayLocal;
 
             // Visitas programadas para este día
             const dayVisitas = filteredVisitas.filter(
@@ -581,6 +587,18 @@ export default function VisitasTerrenoPage() {
             );
           })}
         </div>
+      </div>
+      </div>
+      <aside className="hg-panel p-4">
+        <h2 className="text-sm font-bold">Próximas visitas</h2>
+        <p className="mt-1 text-xs text-gray-500">Inspecciones programadas según los filtros activos.</p>
+        {upcomingVisitas.length ? <div className="mt-3 space-y-1">
+          {upcomingVisitas.map((op) => <button key={op.id} type="button" onClick={() => setSelectedVisitaOp(op)} className="block w-full rounded-lg p-2 text-left hover:bg-gray-50">
+            <span className="block truncate text-xs font-bold">{op.codigo} · {op.titulo}</span>
+            <span className="text-[11px] text-gray-500">{op.fecha_visita_terreno} · {getResponsableNombre(op)}</span>
+          </button>)}
+        </div> : <p className="mt-4 text-xs text-gray-500">Sin visitas próximas.</p>}
+      </aside>
       </div>
 
       {/* Modal de Detalle y Edición Directa de Visita */}

@@ -54,46 +54,45 @@ export default function LoginPage() {
     setSuccessMsg('');
 
     if (mode === 'login') {
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
-
-      if (authError || !data.user) {
-        setError('Correo o contraseña incorrectos.');
-        setLoading(false);
-        return;
-      }
-
-      if (data.session) {
-        await supabase.auth.setSession({
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
+      try {
+        const { data, error: authError } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
         });
-      }
 
-      const { data: perfil, error: perfilError } = await supabase
-        .from('usuarios')
-        .select('activo')
-        .eq('auth_id', data.user.id)
-        .maybeSingle();
+        if (authError || !data.user) {
+          setError('Correo o contraseña incorrectos.');
+          return;
+        }
 
-      if (perfilError) {
-        console.error('Error validando perfil de acceso:', perfilError.message);
-        await supabase.auth.signOut();
-        setError('No se pudo validar tu perfil de acceso. Intenta nuevamente.');
+        // signInWithPassword ya guarda la sesión en las cookies del cliente SSR.
+        const { data: perfil, error: perfilError } = await supabase
+          .from('usuarios')
+          .select('activo')
+          .eq('auth_id', data.user.id)
+          .maybeSingle();
+
+        if (perfilError) {
+          console.error('Error validando perfil de acceso:', perfilError.message);
+          await supabase.auth.signOut();
+          setError('No se pudo validar tu perfil de acceso. Intenta nuevamente.');
+          return;
+        }
+
+        if (!perfil || perfil.activo === false) {
+          await supabase.auth.signOut();
+          setError('Tu cuenta no está habilitada para acceder al sistema.');
+          return;
+        }
+
+        router.replace('/');
+        router.refresh();
+      } catch (loginError) {
+        console.error('Error durante el inicio de sesión:', loginError);
+        setError('No se pudo completar el inicio de sesión. Revisa la conexión e intenta nuevamente.');
+      } finally {
         setLoading(false);
-        return;
       }
-
-      if (!perfil || perfil.activo === false) {
-        await supabase.auth.signOut();
-        setError('Tu cuenta no está habilitada para acceder al sistema.');
-        setLoading(false);
-        return;
-      }
-
-      router.replace('/');
     } else {
       // REGISTRO DE NUEVO USUARIO
       if (!nombre.trim()) {
@@ -148,8 +147,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="fixed inset-0 bg-[#213343] z-50 flex items-center justify-center p-4 text-[#213343]">
-      <div className="max-w-md w-full bg-white p-8 rounded-lg border border-gray-200 shadow-sm space-y-6">
+    <div className="fixed inset-0 bg-[#f7f7f5] z-50 flex items-center justify-center p-4 text-[#252b2d]">
+      <div className="max-w-md w-full bg-white p-8 rounded-2xl border border-[#e5e7e4] shadow-[var(--hg-shadow-card)] space-y-6">
         <div className="text-center space-y-3">
           <div className="flex justify-center mb-2">
             <Image

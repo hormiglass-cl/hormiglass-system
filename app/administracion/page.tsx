@@ -1130,7 +1130,7 @@ export default function AdministracionPage() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table className="hg-list-table w-full text-xs">
                     <thead>
                       <tr className="text-left text-gray-400 border-b border-gray-100">
                         <th className="py-2 pr-3 font-black">Urgencia</th>

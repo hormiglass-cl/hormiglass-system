@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { authCookieName } from './lib/supabase/config';
 
 // Rutas accesibles sin sesión activa.
 const PUBLIC_PATHS = ['/login'];
@@ -23,6 +24,7 @@ export async function proxy(request: NextRequest) {
     supabaseUrl,
     supabaseAnonKey,
     {
+      cookieOptions: { name: authCookieName },
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -61,7 +63,7 @@ export async function proxy(request: NextRequest) {
   if (user && !publicPath) {
     const { data: perfil } = await supabase
       .from('usuarios')
-      .select('activo')
+      .select('activo,rol')
       .eq('auth_id', user.id)
       .maybeSingle();
 
@@ -70,6 +72,12 @@ export async function proxy(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = '/login';
       url.searchParams.set('error', 'inactivo');
+      return NextResponse.redirect(url);
+    }
+
+    if (perfil.rol === 'mano_obra' && (pathname === '/caja' || pathname.startsWith('/caja/') || pathname === '/reportes' || pathname.startsWith('/reportes/'))) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/';
       return NextResponse.redirect(url);
     }
   }

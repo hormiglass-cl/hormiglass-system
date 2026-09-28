@@ -1,402 +1,152 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
-import { usePathname, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import {
+  Bell, Boxes, CalendarDays, ChartNoAxesCombined, ChevronLeft, ChevronRight,
+  ClipboardList, ContactRound, FileText, FolderKanban, LayoutDashboard,
+  LogOut, Package, Settings2, ShoppingCart, Truck, Users, Wallet, X,
+} from 'lucide-react';
 import { useAuth } from '../lib/context/AuthContext';
 import { createClient } from '../lib/supabase/client';
-import {
-  LayoutDashboard,
-  Users,
-  FileText,
-  TrendingUp,
-  Bell,
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  ChevronDown,
-  ChevronUp,
-  Settings,
-  LogOut,
-  CalendarDays,
-  ShoppingCart,
-  Truck,
-  UserCheck,
-  Building2,
-} from 'lucide-react';
+import { syncSeguimientoNotificaciones } from '../lib/seguimiento-notificaciones';
 
-export function Sidebar() {
+type NavItem = { label: string; href: string; icon: typeof LayoutDashboard; match?: string };
+type NavGroup = { label: string; items: NavItem[] };
+
+const mainGroups: NavGroup[] = [
+  { label: 'Inicio', items: [{ label: 'Panel operativo', href: '/', icon: LayoutDashboard }] },
+  { label: 'Pipelines', items: [
+    { label: 'Pipeline de ventas', href: '/ventas', icon: FolderKanban, match: '/ventas' },
+    { label: 'Planificación', href: '/planificacion', icon: ClipboardList, match: '/planificacion' },
+    { label: 'Reventa', href: '/reventa', icon: Truck, match: '/reventa' },
+  ] },
+  { label: 'Comercial', items: [
+    { label: 'Clientes', href: '/clientes', icon: ContactRound },
+    { label: 'Cotizaciones', href: '/cotizaciones', icon: FileText },
+  ] },
+  { label: 'Compras y catálogo', items: [
+    { label: 'Órdenes de compra', href: '/ordenes-compra', icon: ShoppingCart },
+    { label: 'Proveedores', href: '/proveedores', icon: Boxes },
+    { label: 'Productos e insumos', href: '/productos', icon: Package },
+  ] },
+];
+
+const calendars: NavGroup = { label: 'Calendarios', items: [
+  { label: 'Vista general', href: '/calendarios/general', icon: CalendarDays },
+  { label: 'Visitas a terreno', href: '/visitas', icon: CalendarDays },
+  { label: 'Producción y logística', href: '/planificacion/calendario', icon: CalendarDays },
+  { label: 'Programa semanal', href: '/planificacion/semana', icon: CalendarDays },
+  { label: 'Reventa y logística', href: '/reventa/calendario', icon: CalendarDays },
+] };
+
+const finance: NavGroup = { label: 'Finanzas', items: [
+  { label: 'Caja', href: '/caja', icon: Wallet },
+  { label: 'Reportes', href: '/reportes', icon: ChartNoAxesCombined },
+] };
+
+const administration: NavGroup = { label: 'Administración', items: [
+  { label: 'Soc. Comercial', href: '/administracion?empresa=comercial&seccion=cuentas_por_cobrar', icon: Wallet },
+  { label: 'Soc. Transportes', href: '/administracion?empresa=transportes&seccion=cuentas_por_cobrar', icon: Truck },
+  { label: 'Soc. Inmobiliaria', href: '/administracion?empresa=inmobiliaria&seccion=cuentas_por_cobrar', icon: Boxes },
+  { label: 'Recursos humanos', href: '/rrhh', icon: Users },
+  { label: 'Recordatorios', href: '/recordatorios', icon: ClipboardList },
+] };
+
+const systemItems: NavItem[] = [
+  { label: 'Notificaciones', href: '/notificaciones', icon: Bell },
+  { label: 'Configuración', href: '/configuracion', icon: Settings2 },
+];
+
+export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { currentUser, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
-  const [unreadCount, setUnreadCount] = useState<number>(0);
-
-  // Mantenemos desplegable para Calendarios solamente
-  const [openCalendars, setOpenCalendars] = useState(
-    ['/visitas', '/planificacion/calendario', '/reventa/calendario'].some((path) => pathname.startsWith(path))
-  );
-  const [openAdministration, setOpenAdministration] = useState(
-    pathname.startsWith('/administracion') || pathname.startsWith('/rrhh')
-  );
-
+  const [unreadCount, setUnreadCount] = useState(0);
   const supabase = useMemo(() => createClient(), []);
+  const isFieldWorker = currentUser?.rol === 'mano_obra';
+  const system: NavGroup = { label: 'Sistema', items: isFieldWorker
+    ? systemItems.slice(0, 1)
+    : [...systemItems, ...(currentUser?.rol === 'admin' ? [{ label: 'Usuarios', href: '/usuarios', icon: Users }] : [])] };
+  const groups = isFieldWorker
+    ? [calendars, { ...administration, items: administration.items.slice(3) }, system]
+    : [...mainGroups, calendars, finance, administration, system];
 
   useEffect(() => {
-    let ignore = false;
-
-    if (!currentUser?.id) {
-      setTimeout(() => {
-        if (!ignore) setUnreadCount(0);
-      }, 0);
-      return;
-    }
-
+    if (!currentUser?.id) return;
+    let active = true;
     const userId = currentUser.id;
-
-    async function fetchUnreadNotifications() {
-      try {
-        const { count, error } = await supabase
-          .from('notificaciones')
-          .select('id', { count: 'exact', head: true })
-          .eq('usuario_id', userId)
-          .eq('leido', false);
-
-        if (!ignore && !error && typeof count === 'number') {
-          setUnreadCount(count);
-        }
-      } catch {
-        // ignore
-      }
+    async function refresh() {
+      await syncSeguimientoNotificaciones(supabase, userId);
+      const { count } = await supabase.from('notificaciones').select('id', { count: 'exact', head: true })
+        .eq('usuario_id', userId).eq('leido', false);
+      if (active) setUnreadCount(count || 0);
     }
-
-    fetchUnreadNotifications();
-
-    const channelName = `sidebar_notifs_${userId}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notificaciones',
-          filter: `usuario_id=eq.${userId}`,
-        },
-        () => {
-          fetchUnreadNotifications();
-        }
-      )
+    void refresh();
+    const interval = window.setInterval(refresh, 60_000);
+    const channel = supabase.channel(`sidebar_notifs_${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notificaciones', filter: `usuario_id=eq.${userId}` }, refresh)
       .subscribe();
-
-    return () => {
-      ignore = true;
-      supabase.removeChannel(channel);
-    };
+    return () => { active = false; window.clearInterval(interval); void supabase.removeChannel(channel); };
   }, [currentUser?.id, supabase]);
 
-  if (pathname === '/login') return null;
+  if (pathname === '/login' || pathname.startsWith('/auth')) return null;
 
-  const calendarsSubItems = [
-    {
-      label: 'Visitas a Terreno',
-      href: '/visitas',
-      icon: Calendar,
-      roles: ['admin', 'ventas', 'finanzas', 'administracion', 'programacion'],
-    },
-    {
-      label: 'Producción y Logística',
-      href: '/planificacion/calendario',
-      icon: CalendarDays,
-      roles: ['admin', 'ventas', 'finanzas', 'administracion', 'programacion'],
-    },
-    {
-      label: 'Reventa y Logística',
-      href: '/reventa/calendario',
-      icon: Truck,
-      roles: ['admin', 'ventas', 'finanzas', 'administracion', 'programacion'],
-    },
-  ];
+  function isActive(item: NavItem) {
+    if (item.href.startsWith('/administracion?')) {
+      return pathname === '/administracion' && item.href.includes(`empresa=${searchParams.get('empresa') || 'comercial'}&`);
+    }
+    if (item.href === '/') return pathname === '/';
+    if (pathname === item.href) return true;
+    if (item.match) return pathname.startsWith(item.match) &&
+      !calendars.items.some((calendar) => calendar.href === pathname);
+    return pathname.startsWith(`${item.href}/`);
+  }
 
-  const empresaSubItems = [
-    { label: 'Soc Comercial', href: '/administracion?empresa=comercial&seccion=cuentas_por_cobrar' },
-    { label: 'Soc Transportes', href: '/administracion?empresa=transportes&seccion=cuentas_por_cobrar' },
-    { label: 'Soc Inmobiliaria', href: '/administracion?empresa=inmobiliaria&seccion=cuentas_por_cobrar' },
-  ];
-
-  const handleLogout = async () => {
+  async function handleLogout() {
     await logout();
     router.replace('/login');
     router.refresh();
-  };
+  }
 
-  return (
-    <aside
-      className={`${
-        collapsed ? 'w-16' : 'w-64'
-      } bg-white text-[#213343] h-screen sticky top-0 border-r border-gray-200 flex flex-col justify-between p-3 shrink-0 transition-all duration-300 z-30 relative overflow-visible`}
-    >
-      {/* Botón para Desplegar / Contraer Barra Lateral */}
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-3 top-6 bg-white text-gray-600 w-6 h-6 rounded-md border border-gray-200 hover:text-[#f97316] hover:border-orange-200 transition z-50 flex items-center justify-center"
-        title={collapsed ? 'Desplegar Menú' : 'Contraer Menú'}
-      >
-        {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-      </button>
-
-      <div className="flex-1 overflow-y-auto scrollbar-thin pr-1 flex flex-col justify-between">
-        <div>
-          {/* Logo de la barra lateral */}
-          <div className="flex items-center justify-center px-2 py-3 mb-3 border-b border-gray-100 min-h-[58px]">
-            {collapsed ? (
-              <Image
-                src="/logo-only-h-removebg-preview.png"
-                alt="Hormiglass H"
-                width={46}
-                height={46}
-                className="h-8 w-auto object-contain"
-              />
-            ) : (
-              <div className="text-left w-full flex items-center justify-start">
-                <Image
-                  src="/logo-completo-hormiglass.webp"
-                  alt="Hormiglass Logo"
-                  width={220}
-                  height={55}
-                  className="h-9 w-auto object-contain"
-                  priority
-                />
-              </div>
-            )}
+  return <>
+    {mobileOpen && <button className="fixed inset-0 z-40 bg-black/35 md:hidden" aria-label="Cerrar menú" onClick={onMobileClose} />}
+    <aside className={`hg-app-sidebar fixed inset-y-0 left-0 z-50 flex flex-col border-r border-[#e5e7e4] bg-[#fbfbfa] transition-all duration-200 md:sticky md:top-0 md:h-screen ${collapsed ? 'w-[76px]' : 'w-[248px]'} ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-[#e5e7e4] px-4">
+        <Link href="/" onClick={onMobileClose} className="flex min-w-0 items-center gap-2.5">
+          <Image src="/logo-only-h-removebg-preview.png" alt="" width={38} height={38} className="h-9 w-9 object-contain" />
+          {!collapsed && <span className="truncate text-[15px] font-extrabold tracking-tight">Hormiglass <span className="font-medium text-[#8a9390]">CRM</span></span>}
+        </Link>
+        <button type="button" onClick={onMobileClose} aria-label="Cerrar menú" className="rounded-lg p-1.5 text-[#66716f] hover:bg-[#f4f5f3] md:hidden"><X size={18} /></button>
+      </div>
+      <nav aria-label="Navegación principal" className="flex-1 overflow-y-auto px-3 py-4">
+        {groups.map((group) => <div key={group.label} className="mb-5">
+          {!collapsed && <h2 className="hg-overline mb-2 px-3">{group.label}</h2>}
+          <div className="space-y-0.5">
+            {group.items.map((item) => {
+              const Icon = item.icon;
+              const active = isActive(item);
+              return <Link key={item.href} href={item.href} onClick={onMobileClose} title={collapsed ? item.label : undefined} aria-current={active ? 'page' : undefined}
+                className={`flex min-h-9 items-center gap-3 rounded-[10px] px-3 py-2 text-[13px] font-semibold transition-colors ${collapsed ? 'justify-center' : ''} ${active ? 'bg-[#f0eee9] text-[#252b2d]' : 'text-[#66716f] hover:bg-[#f4f5f3] hover:text-[#252b2d]'}`}>
+                <Icon size={18} className={active ? 'text-[#e87622]' : 'text-[#7e8885]'} />
+                {!collapsed && <span className="truncate">{item.label}</span>}
+                {!collapsed && item.href === '/notificaciones' && unreadCount > 0 && <span className="ml-auto rounded-full bg-[#fff1e7] px-2 text-xs text-[#b45316]">{unreadCount}</span>}
+              </Link>;
+            })}
           </div>
-
-          {!collapsed && (
-            <div className="px-2 py-1.5 text-[11px] font-extrabold text-gray-400 uppercase">
-              Navegación Principal
-            </div>
-          )}
-
-          <nav className="mt-1 space-y-1">
-            {/* Si es mano_obra, solo ve RRHH, Calendarios y Notificaciones */}
-            {currentUser?.rol !== 'mano_obra' && (
-              <>
-                {/* Dashboard */}
-                <Link
-                  href="/"
-                  title={collapsed ? 'Dashboard' : undefined}
-                  className={`flex items-center gap-3 px-2.5 py-2 rounded-md text-xs font-bold transition ${
-                    pathname === '/' ? 'bg-orange-50 text-[#f97316] border border-orange-200' : 'text-[#213343] hover:bg-gray-50 hover:text-[#f97316]'
-                  } ${collapsed ? 'justify-center px-0' : ''}`}
-                >
-                  <LayoutDashboard className="w-5 h-5 shrink-0" />
-                  {!collapsed && <span>Dashboard</span>}
-                </Link>
-
-                {/* Clientes */}
-                <Link
-                  href="/clientes"
-                  title={collapsed ? 'Clientes' : undefined}
-                  className={`flex items-center gap-3 px-2.5 py-2 rounded-md text-xs font-bold transition ${
-                    pathname === '/clientes' ? 'bg-orange-50 text-[#f97316] border border-orange-200' : 'text-[#213343] hover:bg-gray-50 hover:text-[#f97316]'
-                  } ${collapsed ? 'justify-center px-0' : ''}`}
-                >
-                  <Users className="w-5 h-5 shrink-0" />
-                  {!collapsed && <span>Clientes</span>}
-                </Link>
-
-                {/* Cotizaciones */}
-                <Link
-                  href="/cotizaciones"
-                  title={collapsed ? 'Cotizaciones' : undefined}
-                  className={`flex items-center gap-3 px-2.5 py-2 rounded-md text-xs font-bold transition ${
-                    pathname === '/cotizaciones' ? 'bg-orange-50 text-[#f97316] border border-orange-200' : 'text-[#213343] hover:bg-gray-50 hover:text-[#f97316]'
-                  } ${collapsed ? 'justify-center px-0' : ''}`}
-                >
-                  <FileText className="w-5 h-5 shrink-0" />
-                  {!collapsed && <span>Cotizaciones</span>}
-                </Link>
-
-                <Link
-                  href="/ordenes-compra"
-                  title={collapsed ? 'Ordenes de Compra' : undefined}
-                  className={`flex items-center gap-3 px-2.5 py-2 rounded-md text-xs font-bold transition ${
-                    pathname.startsWith('/ordenes-compra') ? 'bg-orange-50 text-[#f97316] border border-orange-200' : 'text-[#213343] hover:bg-gray-50 hover:text-[#f97316]'
-                  } ${collapsed ? 'justify-center px-0' : ''}`}
-                >
-                  <ShoppingCart className="w-5 h-5 shrink-0" />
-                  {!collapsed && <span>Ordenes de Compra</span>}
-                </Link>
-
-                {/* PIPELINE (Único Pipeline Unificado) */}
-                <Link
-                  href="/ventas"
-                  title={collapsed ? 'Pipeline' : undefined}
-                  className={`flex items-center gap-3 px-2.5 py-2 rounded-md text-xs font-bold transition ${
-                    pathname === '/ventas' ? 'bg-orange-50 text-[#f97316] border border-orange-200' : 'text-[#213343] hover:bg-gray-50 hover:text-[#f97316]'
-                  } ${collapsed ? 'justify-center px-0' : ''}`}
-                >
-                  <TrendingUp className="w-5 h-5 shrink-0" />
-                  {!collapsed && <span>Pipeline</span>}
-                </Link>
-              </>
-            )}
-
-            {/* GRUPO: ADMINISTRACIÓN */}
-            <div className="space-y-1 pt-1">
-              <button
-                type="button"
-                onClick={() => setOpenAdministration(!openAdministration)}
-                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-bold transition ${
-                  pathname.startsWith('/administracion') || pathname.startsWith('/rrhh')
-                    ? 'bg-orange-50 text-[#f97316] border border-orange-200'
-                    : 'text-[#213343] hover:bg-gray-50 hover:text-[#f97316]'
-                } ${collapsed ? 'justify-center px-0' : ''}`}
-                title={collapsed ? 'Administración' : undefined}
-              >
-                <div className="flex items-center gap-3">
-                  <Building2 className="w-5 h-5 shrink-0 text-[#f97316]" />
-                  {!collapsed && <span>Administración</span>}
-                </div>
-                {!collapsed && (
-                  openAdministration ? <ChevronUp className="w-4 h-4 text-[#f97316]" /> : <ChevronDown className="w-4 h-4 text-gray-400" />
-                )}
-              </button>
-
-              {(!collapsed && openAdministration) && (
-                <div className="pl-3 space-y-0.5 border-l border-gray-200 ml-4 my-1">
-                  <Link
-                    href="/administracion/rrhh"
-                    className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs font-bold transition ${
-                      pathname.startsWith('/administracion/rrhh') || pathname.startsWith('/rrhh')
-                        ? 'bg-orange-50 text-[#f97316]'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-[#f97316]'
-                    }`}
-                  >
-                    <UserCheck className="w-4 h-4 shrink-0" />
-                    <span className="truncate">Recursos Humanos</span>
-                  </Link>
-
-                  <div className="pt-1 space-y-1">
-                    <p className="px-2.5 py-1 text-[10px] font-black uppercase text-gray-400">Empresas</p>
-                    {empresaSubItems.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs font-bold transition text-gray-600 hover:bg-gray-50 hover:text-[#f97316]"
-                      >
-                        <Building2 className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{item.label}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* GRUPO: CALENDARIOS (Desplegable Mantenido) */}
-            <div className="space-y-1 pt-1">
-              <button
-                type="button"
-                onClick={() => setOpenCalendars(!openCalendars)}
-                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-bold transition ${
-                  ['/visitas', '/planificacion/calendario'].some((path) => pathname.startsWith(path))
-                    ? 'bg-orange-50 text-[#f97316] border border-orange-200'
-                    : 'text-[#213343] hover:bg-gray-50 hover:text-[#f97316]'
-                } ${collapsed ? 'justify-center px-0' : ''}`}
-                title={collapsed ? 'Calendarios' : undefined}
-              >
-                <div className="flex items-center gap-3.5">
-                  <Calendar className="w-5 h-5 shrink-0 text-[#f97316]" />
-                  {!collapsed && <span>Calendarios</span>}
-                </div>
-                {!collapsed && (
-                  openCalendars ? <ChevronUp className="w-4 h-4 text-[#f97316]" /> : <ChevronDown className="w-4 h-4 text-gray-400" />
-                )}
-              </button>
-
-              {(!collapsed && openCalendars) && (
-                <div className="pl-3 space-y-0.5 border-l border-gray-200 ml-4 my-1">
-                  {calendarsSubItems.map((sub) => {
-                    const SubIcon = sub.icon;
-                    const isSubActive = pathname === sub.href;
-
-                    return (
-                      <Link
-                        key={sub.href}
-                        href={sub.href}
-                        className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs font-bold transition ${
-                          isSubActive
-                            ? 'bg-orange-50 text-[#f97316]'
-                            : 'text-gray-600 hover:bg-gray-50 hover:text-[#f97316]'
-                        }`}
-                      >
-                        <SubIcon className="w-4 h-4 shrink-0" />
-                        <span className="truncate">{sub.label}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </nav>
+        </div>)}
+      </nav>
+      <div className="shrink-0 border-t border-[#e5e7e4] p-3">
+        <div className="mt-2 flex items-center gap-2 border-t border-[#e5e7e4] pt-3">
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#fff1e7] font-bold text-[#bd5b18]">{currentUser?.nombre?.charAt(0) || 'H'}</div>
+          {!collapsed && <><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">{currentUser?.nombre}</p><p className="text-[11px] capitalize text-[#8a9390]">{currentUser?.rol}</p></div><button onClick={handleLogout} title="Cerrar sesión" aria-label="Cerrar sesión" className="rounded-lg p-2 text-[#66716f] hover:bg-[#f4f5f3]"><LogOut size={17} /></button></>}
         </div>
-
-        {/* Pie de Barra Lateral */}
-        <div className="pt-3 border-t border-gray-100 space-y-1 mt-3">
-          <Link
-            href="/notificaciones"
-            className={`flex items-center gap-3 px-2.5 py-2 rounded-md text-xs font-bold transition relative ${
-              pathname === '/notificaciones' ? 'bg-orange-50 text-[#f97316] border border-orange-200' : 'text-[#213343] hover:bg-gray-50 hover:text-[#f97316]'
-            } ${collapsed ? 'justify-center px-0' : ''}`}
-          >
-            <Bell className="w-5 h-5 shrink-0" />
-            {!collapsed && <span>Notificaciones</span>}
-            {unreadCount > 0 && (
-              <span className="ml-auto bg-red-500 text-white font-mono text-[10px] font-black px-1.5 py-0.5 rounded-md">
-                {unreadCount}
-              </span>
-            )}
-          </Link>
-
-          {currentUser?.rol !== 'mano_obra' && (
-            <Link
-              href="/configuracion"
-              className={`flex items-center gap-3 px-2.5 py-2 rounded-md text-xs font-bold transition ${
-                pathname === '/configuracion' ? 'bg-orange-50 text-[#f97316] border border-orange-200' : 'text-[#213343] hover:bg-gray-50 hover:text-[#f97316]'
-              } ${collapsed ? 'justify-center px-0' : ''}`}
-            >
-              <Settings className="w-5 h-5 shrink-0" />
-              {!collapsed && <span>Configuración</span>}
-            </Link>
-          )}
-
-          {currentUser && (
-            <div className={`pt-2 flex items-center gap-2 px-2 ${collapsed ? 'justify-center px-0' : ''}`}>
-              <div className="w-8 h-8 rounded-md bg-orange-50 text-[#f97316] border border-orange-100 flex items-center justify-center font-black text-xs">
-                {currentUser.nombre.charAt(0)}
-              </div>
-              {!collapsed && (
-                <>
-                  <div className="overflow-hidden flex-1 min-w-0">
-                    <p className="text-xs font-extrabold text-[#213343] truncate">{currentUser.nombre}</p>
-                    <p className="text-[10px] text-gray-400 capitalize">{currentUser.rol}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="p-2 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 transition"
-                    title="Cerrar Sesión"
-                  >
-                    <LogOut className="w-4 h-4" />
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </div>
+        <button type="button" onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? 'Expandir menú' : 'Contraer menú'} className="mt-3 hidden w-full justify-center rounded-lg border border-[#e5e7e4] py-1.5 text-[#66716f] hover:bg-white md:flex">{collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button>
       </div>
     </aside>
-  );
+  </>;
 }

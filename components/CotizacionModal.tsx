@@ -215,159 +215,76 @@ export function CotizacionModal({
   const saveQuoteToBackend = async (isNewVersion: boolean) => {
     setLoading(true);
     setErrorMsg('');
-
     try {
-      if (initialCotizacion) {
-        if (isNewVersion) {
-          // Create new version with unique versioned numero_cotizacion
-          const nextVer = (initialCotizacion.version || 1) + 1;
-          const baseNum = (initialCotizacion.numero_cotizacion || '').replace(/-v\d+$/i, '');
-          const versionedCotNum = `${baseNum}-v${nextVer}`;
-
-          const { data: newCot, error: cotErr } = await supabase
-            .from('cotizaciones')
-            .insert([{
-              numero_cotizacion: versionedCotNum,
-              cliente_id: clienteId,
-              usuario_id: isValidUuid(currentUser?.id) ? currentUser?.id : (isValidUuid(initialCotizacion.usuario_id) ? initialCotizacion.usuario_id : null),
-              oportunidad_id: isValidUuid(oportunidadId) ? oportunidadId : null,
-              version: nextVer,
-              estado: 'borrador',
-              referencia_cliente: referenciaCliente || null,
-              fecha_validez: fechaValidez || null,
-              subtotal: totalSinIva,
-              descuento: descuentoTotal,
-              iva_porcentaje: 19,
-              monto_iva: ivaCalculado,
-              monto_total: totalFinal,
-              plazo_entrega: plazoEntrega,
-              condiciones_pago: condicionesPago,
-              observaciones: observaciones,
-              comentario_publico: observaciones,
-            }])
-            .select()
-            .single();
-
-          if (cotErr) throw new Error(cotErr.message);
-
-          if (newCot) {
-            const itemsPayload = items.map((it) => ({
-              cotizacion_id: newCot.id,
-              producto: it.producto,
-              cantidad: Number(it.cantidad),
-              precio_unitario: Number(it.precio_unitario),
-              descuento_porcentaje: Number(it.descuento_porcentaje || 0),
-              total_item: Number(it.total_item),
-            }));
-            await supabase.from('cotizacion_items').insert(itemsPayload);
-
-            await logSistema({
-              tipo_accion: 'creacion',
-              entidad: 'cotizaciones',
-              entidad_id: newCot.id,
-              descripcion: `Nueva versión (v${nextVer}) creada para cotización ${initialCotizacion.numero_cotizacion}`,
-              usuario_id: currentUser?.id,
-              datos_anteriores: initialCotizacion,
-              datos_nuevos: newCot,
-            });
-          }
-        } else {
-          // Overwrite current version
-          const { error: updateErr } = await supabase
-            .from('cotizaciones')
-            .update({
-              cliente_id: clienteId,
-              oportunidad_id: isValidUuid(oportunidadId) ? oportunidadId : null,
-              referencia_cliente: referenciaCliente || null,
-              fecha_validez: fechaValidez || null,
-              subtotal: totalSinIva,
-              descuento: descuentoTotal,
-              monto_iva: ivaCalculado,
-              monto_total: totalFinal,
-              plazo_entrega: plazoEntrega,
-              condiciones_pago: condicionesPago,
-              observaciones: observaciones,
-              comentario_publico: observaciones,
-            })
-            .eq('id', initialCotizacion.id);
-
-          if (updateErr) throw new Error(updateErr.message);
-
-          // Delete & replace items
-          await supabase.from('cotizacion_items').delete().eq('cotizacion_id', initialCotizacion.id);
-          const itemsPayload = items.map((it) => ({
-            cotizacion_id: initialCotizacion.id,
-            producto: it.producto,
-            cantidad: Number(it.cantidad),
-            precio_unitario: Number(it.precio_unitario),
-            descuento_porcentaje: Number(it.descuento_porcentaje || 0),
-            total_item: Number(it.total_item),
-          }));
-          await supabase.from('cotizacion_items').insert(itemsPayload);
-
-          await logSistema({
-            tipo_accion: 'actualizacion',
-            entidad: 'cotizaciones',
-            entidad_id: initialCotizacion.id,
-            descripcion: `Cotización ${initialCotizacion.numero_cotizacion} (v${initialCotizacion.version || 1}) actualizada`,
-            usuario_id: currentUser?.id,
-            datos_anteriores: initialCotizacion,
-            datos_nuevos: { totalFinal, items },
-          });
-        }
-      } else {
-        // Create new quote (default status 'borrador')
-        const cotNum = `COT-2026-${Math.floor(1000 + Math.random() * 9000)}-v1`;
-
-        const { data: cotData, error: cotErr } = await supabase
-          .from('cotizaciones')
-          .insert([{
-            numero_cotizacion: cotNum,
-            cliente_id: clienteId,
-            usuario_id: isValidUuid(currentUser?.id) ? currentUser?.id : null,
-            oportunidad_id: isValidUuid(oportunidadId) ? oportunidadId : null,
-            version: 1,
-            estado: 'borrador',
-            referencia_cliente: referenciaCliente || null,
-            fecha_validez: fechaValidez || null,
-            subtotal: totalSinIva,
-            descuento: descuentoTotal,
-            iva_porcentaje: 19,
-            monto_iva: ivaCalculado,
-            monto_total: totalFinal,
-            plazo_entrega: plazoEntrega,
-            condiciones_pago: condicionesPago,
-            observaciones: observaciones,
-            comentario_publico: observaciones,
-          }])
-          .select()
-          .single();
-
-        if (cotErr) throw new Error(cotErr.message);
-
-        if (cotData) {
-          const itemsPayload = items.map((it) => ({
-            cotizacion_id: cotData.id,
-            producto: it.producto,
-            cantidad: Number(it.cantidad),
-            precio_unitario: Number(it.precio_unitario),
-            descuento_porcentaje: Number(it.descuento_porcentaje || 0),
-            total_item: Number(it.total_item),
-          }));
-          await supabase.from('cotizacion_items').insert(itemsPayload);
-
-          await logSistema({
-            tipo_accion: 'creacion',
-            entidad: 'cotizaciones',
-            entidad_id: cotData.id,
-            descripcion: `Nueva cotización ${cotNum} creada en borrador por $${totalFinal.toLocaleString('es-CL')}`,
-            usuario_id: currentUser?.id,
-            datos_nuevos: cotData,
-          });
-        }
+      if (initialCotizacion && !isNewVersion && initialCotizacion.estado !== 'borrador') {
+        throw new Error('Una cotización enviada o aprobada solo puede modificarse creando una versión nueva.');
       }
-
-      if (onSuccess) onSuccess();
+      const baseNum = initialCotizacion?.numero_cotizacion.replace(/-v\d+$/i, '');
+      const { data: versions, error: versionError } = baseNum
+        ? await supabase.from('cotizaciones').select('version, numero_cotizacion').like('numero_cotizacion', `${baseNum}-v%`)
+        : isValidUuid(oportunidadId)
+          ? await supabase.from('cotizaciones').select('version, numero_cotizacion').eq('oportunidad_id', oportunidadId)
+          : { data: [], error: null };
+      if (versionError) throw versionError;
+      const nextVer = initialCotizacion && isNewVersion
+        ? Math.max(initialCotizacion.version || 1,
+          ...(versions || []).map((quote: Pick<Cotizacion, 'version' | 'numero_cotizacion'>) =>
+            Number(quote.version) || Number(String(quote.numero_cotizacion).match(/-v(\d+)$/i)?.[1]) || 1)) + 1
+        : initialCotizacion?.version || Math.max(0, ...(versions || []).map((quote: Pick<Cotizacion, 'version'>) => Number(quote.version) || 0)) + 1;
+      const cotNum = initialCotizacion
+        ? isNewVersion ? `${baseNum}-v${nextVer}` : initialCotizacion.numero_cotizacion
+        : `COT-2026-${Math.floor(1000 + Math.random() * 9000)}-v${nextVer}`;
+      const payload = {
+        numero_cotizacion: cotNum,
+        cliente_id: clienteId,
+        usuario_id: isValidUuid(currentUser?.id) ? currentUser?.id : null,
+        oportunidad_id: isValidUuid(oportunidadId) ? oportunidadId : null,
+        version: nextVer,
+        estado: 'borrador',
+        referencia_cliente: referenciaCliente || null,
+        fecha_validez: fechaValidez || null,
+        subtotal: totalSinIva,
+        descuento: descuentoTotal,
+        iva_porcentaje: 19,
+        monto_iva: ivaCalculado,
+        monto_total: totalFinal,
+        plazo_entrega: plazoEntrega,
+        condiciones_pago: condicionesPago,
+        observaciones,
+        comentario_publico: observaciones,
+      };
+      const itemsPayload = items.map((it) => ({
+        producto: it.producto,
+        producto_catalogo_id: it.producto_catalogo_id || null,
+        cantidad: Number(it.cantidad),
+        precio_unitario: Number(it.precio_unitario),
+        descuento_porcentaje: Number(it.descuento_porcentaje || 0),
+        total_item: Number(it.total_item),
+      }));
+      const { data: savedId, error: saveError } = await supabase.rpc('guardar_cotizacion_atomica', {
+        p_cotizacion: payload,
+        p_items: itemsPayload,
+        p_cotizacion_id: initialCotizacion && !isNewVersion ? initialCotizacion.id : null,
+      });
+      if (saveError || !savedId) throw new Error(saveError?.message || 'No se confirmó la cotización.');
+      void logSistema({
+        tipo_accion: initialCotizacion && !isNewVersion ? 'actualizacion' : 'creacion',
+        entidad: 'cotizaciones',
+        entidad_id: savedId as string,
+        descripcion: `Cotización ${cotNum} guardada en borrador por $${totalFinal.toLocaleString('es-CL')}`,
+        usuario_id: currentUser?.id,
+      }).catch(console.error);
+      if (isValidUuid(oportunidadId)) {
+        const { error: activityError } = await supabase.from('actividades_op').insert({
+          oportunidad_id: oportunidadId,
+          usuario_id: isValidUuid(currentUser?.id) ? currentUser?.id : null,
+          usuario_nombre: currentUser?.nombre || 'Sistema',
+          contenido: `Cotización ${cotNum} guardada en borrador por $${totalFinal.toLocaleString('es-CL')}.`,
+          tipo: 'actualizacion',
+        });
+        if (activityError) console.error(activityError);
+      }
+      try { await onSuccess?.(); } catch (refreshError) { console.error('No se pudo refrescar la lista:', refreshError); }
       setShowVersionConfirmModal(false);
       onClose();
     } catch (err: any) {
@@ -684,7 +601,7 @@ export function CotizacionModal({
                 <h4 className="font-extrabold text-base text-[#213343]">Confirmar Modificación de Cotización</h4>
               </div>
               <p className="text-xs text-gray-600 leading-relaxed">
-                Estás editando la cotización <strong className="text-[#213343]">{initialCotizacion.numero_cotizacion}</strong>. ¿Deseas crear una <strong>nueva versión (v{(initialCotizacion.version || 1) + 1})</strong> para mantener la trazabilidad histórica o <strong>sobrescribir</strong> la versión actual?
+                Estás editando la cotización <strong className="text-[#213343]">{initialCotizacion.numero_cotizacion}</strong>. Crea una versión nueva para conservar el historial. Solo un borrador puede sobrescribirse.
               </p>
               <div className="flex flex-col gap-2 pt-2">
                 <button
@@ -696,14 +613,14 @@ export function CotizacionModal({
                   <TrendingUp className="w-4 h-4" />
                   <span>Crear Nueva Versión (v{(initialCotizacion.version || 1) + 1}) [Recomendado]</span>
                 </button>
-                <button
+                {initialCotizacion.estado === 'borrador' && <button
                   type="button"
                   onClick={() => saveQuoteToBackend(false)}
                   disabled={loading}
                   className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 rounded-md transition text-xs"
                 >
                   Sobrescribir Versión Actual (v{initialCotizacion.version || 1})
-                </button>
+                </button>}
                 <button
                   type="button"
                   onClick={() => setShowVersionConfirmModal(false)}

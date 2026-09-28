@@ -4,37 +4,44 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '../../lib/supabase/client';
 import { Notificacion } from '../../lib/types';
+import { useAuth } from '../../lib/context/AuthContext';
 import { Bell, Info, Trash2, Calendar, AtSign, ExternalLink, Filter, CheckSquare, Square, CheckCircle2 } from 'lucide-react';
 
 export default function NotificacionesPage() {
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
   const [filterType, setFilterType] = useState<'todas' | 'no_leidas' | 'leidas' | 'menciones' | 'sistema'>('todas');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const router = useRouter();
   const supabase = createClient();
+  const { currentUser } = useAuth();
+  const currentUserId = currentUser?.id;
 
   useEffect(() => {
     let ignore = false;
+    if (!currentUserId) return;
     async function loadNotificaciones() {
       try {
         const { data, error } = await supabase
           .from('notificaciones')
           .select('*')
+          .eq('usuario_id', currentUserId)
           .order('fecha', { ascending: false });
 
         if (!ignore) {
           if (!error && data) {
             setNotificaciones(data as Notificacion[]);
+            setErrorMessage('');
           } else {
-            setNotificaciones([]);
+            setErrorMessage('No se pudieron cargar las notificaciones. Reintenta en unos segundos.');
           }
           setLoading(false);
         }
       } catch (err) {
         console.error('Error fetching notifications from Supabase:', err);
         if (!ignore) {
-          setNotificaciones([]);
+          setErrorMessage('No se pudieron cargar las notificaciones. Reintenta en unos segundos.');
           setLoading(false);
         }
       }
@@ -50,6 +57,7 @@ export default function NotificacionesPage() {
           event: '*',
           schema: 'public',
           table: 'notificaciones',
+          filter: `usuario_id=eq.${currentUserId}`,
         },
         () => {
           loadNotificaciones();
@@ -61,17 +69,17 @@ export default function NotificacionesPage() {
       ignore = true;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentUserId]);
 
   const handleMarkAsReadAndNavigate = async (n: Notificacion) => {
-    setNotificaciones((prev) =>
-      prev.map((item) => (item.id === n.id ? { ...item, leido: true } : item))
-    );
-
     try {
-      await supabase.from('notificaciones').update({ leido: true }).eq('id', n.id);
+      const { error } = await supabase.from('notificaciones').update({ leido: true })
+        .eq('id', n.id).eq('usuario_id', currentUserId);
+      if (error) throw error;
+      setNotificaciones((prev) => prev.map((item) => item.id === n.id ? { ...item, leido: true } : item));
+      setErrorMessage('');
     } catch {
-      // ignore
+      setErrorMessage('No se pudo marcar la notificación como leída.');
     }
 
     if (n.link_url) {
@@ -79,8 +87,13 @@ export default function NotificacionesPage() {
     }
   };
 
-  const handleClearAll = () => {
+  const handleClearAll = async () => {
+    if (!currentUserId || !window.confirm('¿Eliminar todas tus notificaciones?')) return;
+    const { error } = await supabase.from('notificaciones').delete().eq('usuario_id', currentUserId);
+    if (error) { setErrorMessage('No se pudieron eliminar las notificaciones.'); return; }
     setNotificaciones([]);
+    setSelectedIds([]);
+    setErrorMessage('');
   };
 
   // Filter notifications
@@ -122,14 +135,15 @@ export default function NotificacionesPage() {
   const handleBulkMarkAsRead = async () => {
     if (selectedIds.length === 0) return;
 
-    setNotificaciones((prev) =>
-      prev.map((n) => (selectedIds.includes(n.id) ? { ...n, leido: true } : n))
-    );
-
     try {
-      await supabase.from('notificaciones').update({ leido: true }).in('id', selectedIds);
+      const { error } = await supabase.from('notificaciones').update({ leido: true })
+        .in('id', selectedIds).eq('usuario_id', currentUserId);
+      if (error) throw error;
+      setNotificaciones((prev) => prev.map((n) => selectedIds.includes(n.id) ? { ...n, leido: true } : n));
+      setErrorMessage('');
     } catch (err) {
       console.error('Error marking notifications as read:', err);
+      setErrorMessage('No se pudieron marcar las notificaciones.');
     }
     setSelectedIds([]);
   };
@@ -137,29 +151,36 @@ export default function NotificacionesPage() {
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
 
-    setNotificaciones((prev) => prev.filter((n) => !selectedIds.includes(n.id)));
-
     try {
-      await supabase.from('notificaciones').delete().in('id', selectedIds);
+      const { error } = await supabase.from('notificaciones').delete()
+        .in('id', selectedIds).eq('usuario_id', currentUserId);
+      if (error) throw error;
+      setNotificaciones((prev) => prev.filter((n) => !selectedIds.includes(n.id)));
+      setErrorMessage('');
     } catch (err) {
       console.error('Error deleting notifications:', err);
+      setErrorMessage('No se pudieron eliminar las notificaciones.');
     }
     setSelectedIds([]);
   };
 
   const handleMarkAllAsRead = async () => {
-    setNotificaciones((prev) => prev.map((n) => ({ ...n, leido: true })));
-
     try {
-      await supabase.from('notificaciones').update({ leido: true }).eq('leido', false);
+      const { error } = await supabase.from('notificaciones').update({ leido: true })
+        .eq('leido', false).eq('usuario_id', currentUserId);
+      if (error) throw error;
+      setNotificaciones((prev) => prev.map((n) => ({ ...n, leido: true })));
+      setErrorMessage('');
     } catch (err) {
       console.error('Error marking all as read:', err);
+      setErrorMessage('No se pudieron marcar todas las notificaciones.');
     }
     setSelectedIds([]);
   };
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto text-[#213343] relative">
+      {errorMessage && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errorMessage}</p>}
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
@@ -189,7 +210,7 @@ export default function NotificacionesPage() {
               className="text-xs text-red-600 hover:text-red-800 font-bold flex items-center gap-1 bg-red-50 px-3 py-2 rounded-md border border-red-200 transition"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Limpiar</span>
+                <span>Eliminar todas</span>
             </button>
           )}
         </div>
@@ -287,9 +308,9 @@ export default function NotificacionesPage() {
       </div>
 
       {/* Tabla de Notificaciones estructurada por Seleccionar, Tipo, Cliente, Descripción */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden text-xs">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-[#213343] text-white uppercase text-[10px] tracking-normal">
+      <div className="hg-list-group overflow-x-auto text-xs">
+        <table className="hg-list-table w-full min-w-[760px] text-left">
+          <thead className="bg-[#f4f5f3] text-[#66716f] uppercase text-[10px] tracking-normal">
             <tr>
               <th className="py-3.5 px-4 w-10 text-center">
                 <input
@@ -324,7 +345,7 @@ export default function NotificacionesPage() {
             ) : (
               filteredNotifications.map((n) => {
                 const isMention = n.tipo === 'mencion' || n.mensaje.includes('@');
-                const isReminder = n.mensaje.toUpperCase().includes('RECORDATORIO');
+                const isReminder = String(n.tipo) === 'seguimiento' || n.tipo === 'recordatorio' || n.mensaje.toUpperCase().includes('RECORDATORIO');
                 
                 // Extract exact location / context where the mention or notification occurred
                 const opMatch = n.mensaje.match(/oportunidad ([A-Z0-9-]+)/i);
@@ -425,4 +446,3 @@ export default function NotificacionesPage() {
     </div>
   );
 }
-

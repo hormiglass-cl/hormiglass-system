@@ -4,7 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '../../../lib/supabase/client';
-import { Cliente, CotizacionItem, Cotizacion } from '../../../lib/types';
+import { Cliente, CotizacionItem, Cotizacion, ProductoCatalogo } from '../../../lib/types';
 import { useAuth } from '../../../lib/context/AuthContext';
 import { logSistema } from '../../../lib/logger';
 import {
@@ -39,12 +39,14 @@ function NuevaCotizacionForm() {
   const supabase = createClient();
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [catalogo, setCatalogo] = useState<ProductoCatalogo[]>([]);
   const [clienteId, setClienteId] = useState<string>('');
   const [clientSearchQuery, setClientSearchQuery] = useState<string>('');
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
 
   const [oportunidadId, setOportunidadId] = useState<string | undefined>(paramOpId || undefined);
   const [version, setVersion] = useState<number>(1);
+  const [baseCotNumber, setBaseCotNumber] = useState('');
 
   // Reference and dates
   const [referenciaCliente, setReferenciaCliente] = useState('');
@@ -61,6 +63,7 @@ function NuevaCotizacionForm() {
   const [condicionesPago, setCondicionesPago] = useState('Acuse de recibo');
   const [observaciones, setObservaciones] = useState('Garantía oficial Hormiglass en prefabricados.');
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const [items, setItems] = useState<CotizacionItem[]>([
     {
@@ -75,8 +78,12 @@ function NuevaCotizacionForm() {
   useEffect(() => {
     let ignore = false;
     async function loadData() {
-      const { data } = await supabase.from('clientes').select('*').order('nombre');
+      const [{ data }, { data: productos }] = await Promise.all([
+        supabase.from('clientes').select('*').order('nombre'),
+        supabase.from('catalogo_productos').select('*').eq('activo', true).order('nombre'),
+      ]);
       if (!ignore) {
+        setCatalogo((productos || []) as ProductoCatalogo[]);
         const loadedClientes: Cliente[] = data ? (data as Cliente[]) : [];
         setClientes(loadedClientes);
 
@@ -96,9 +103,15 @@ function NuevaCotizacionForm() {
 
           const targetCot = baseCot as Cotizacion | null;
           if (targetCot) {
+            const baseNum = targetCot.numero_cotizacion.replace(/-v\d+$/i, '');
+            setBaseCotNumber(baseNum);
+            const { data: versions } = await supabase.from('cotizaciones')
+              .select('version, numero_cotizacion')
+              .like('numero_cotizacion', `${baseNum}-v%`);
             setClienteId(targetCot.cliente_id);
             setOportunidadId(targetCot.oportunidad_id);
-            setVersion((targetCot.version || 1) + 1);
+            setVersion(Math.max(targetCot.version || 1,
+              ...(versions || []).map((quote: Pick<Cotizacion, 'version' | 'numero_cotizacion'>) => Number(quote.version) || Number(String(quote.numero_cotizacion).match(/-v(\d+)$/i)?.[1]) || 1)) + 1);
             setReferenciaCliente(targetCot.referencia_cliente || '');
             if (targetCot.fecha_validez) {
               setFechaValidez(targetCot.fecha_validez.split('T')[0]);
@@ -141,6 +154,7 @@ function NuevaCotizacionForm() {
   const handleItemChange = (index: number, field: keyof CotizacionItem, value: string | number) => {
     const updated = [...items];
     const item = { ...updated[index], [field]: value };
+    if (field === 'producto') item.producto_catalogo_id = null;
 
     const qty = Number(item.cantidad) || 0;
     const price = Number(item.precio_unitario) || 0;
@@ -149,6 +163,16 @@ function NuevaCotizacionForm() {
 
     updated[index] = item;
     setItems(updated);
+  };
+
+  const selectCatalogItem = (index: number, productId: string) => {
+    const product = catalogo.find((entry) => entry.id === productId);
+    if (!product) return;
+    setItems((previous) => previous.map((item, itemIndex) => itemIndex === index
+      ? { ...item, producto_catalogo_id: product.id, producto: product.nombre,
+          precio_unitario: Number(product.precio_referencia),
+          total_item: Math.round(Number(item.cantidad) * Number(product.precio_referencia) * (1 - Number(item.descuento_porcentaje || 0) / 100)) }
+      : item));
   };
 
   const handleAddItem = () => {
@@ -186,21 +210,28 @@ function NuevaCotizacionForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clienteId) return;
-
+    setErrorMsg('');
+    if (!clienteId) {
+      setErrorMsg('Debes seleccionar un cliente.');
+      return;
+    }
     setLoading(true);
-    const cotNum = generateCotNumber(version);
-
     try {
-      // 1. Insert Cotizacion in Supabase
-      const { data: cotData, error: cotErr } = await supabase
-        .from('cotizaciones')
-        .insert([{
+      const { data: relatedQuotes, error: versionsError } = oportunidadId
+        ? await supabase.from('cotizaciones').select('version').eq('oportunidad_id', oportunidadId)
+        : { data: [], error: null };
+      if (versionsError) throw versionsError;
+      const nextVersion = oportunidadId
+        ? Math.max(0, ...(relatedQuotes || []).map((quote: Pick<Cotizacion, 'version'>) => Number(quote.version) || 0)) + 1
+        : version;
+      const cotNum = baseCotNumber ? `${baseCotNumber}-v${nextVersion}` : generateCotNumber(nextVersion);
+      const { data: savedId, error } = await supabase.rpc('guardar_cotizacion_atomica', {
+        p_cotizacion: {
           numero_cotizacion: cotNum,
           cliente_id: clienteId,
-          usuario_id: (currentUser?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentUser.id)) ? currentUser.id : null,
-          oportunidad_id: (oportunidadId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(oportunidadId)) ? oportunidadId : null,
-          version: version,
+          usuario_id: currentUser?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentUser.id) ? currentUser.id : null,
+          oportunidad_id: oportunidadId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(oportunidadId) ? oportunidadId : null,
+          version: nextVersion,
           estado: 'borrador',
           referencia_cliente: referenciaCliente || null,
           fecha_validez: fechaValidez || null,
@@ -213,40 +244,31 @@ function NuevaCotizacionForm() {
           fecha_inicio_compromiso: fechaInicioCompromiso || null,
           fecha_limite_compromiso: fechaLimiteCompromiso || null,
           condiciones_pago: condicionesPago,
-          observaciones: observaciones,
+          observaciones,
           comentario_publico: observaciones,
-        }])
-        .select()
-        .single();
-
-      if (cotErr || !cotData) {
-        console.error('Error inserting cotizacion in Supabase:', cotErr?.message);
-      } else {
-        // 2. Insert Cotizacion Items in Supabase
-        const itemsPayload = items.map((it) => ({
-          cotizacion_id: cotData.id,
+        },
+        p_items: items.map((it) => ({
           producto: it.producto,
+          producto_catalogo_id: it.producto_catalogo_id || null,
           cantidad: Number(it.cantidad),
           precio_unitario: Number(it.precio_unitario),
           descuento_porcentaje: Number(it.descuento_porcentaje || 0),
           total_item: Number(it.total_item),
-        }));
-
-        await supabase.from('cotizacion_items').insert(itemsPayload);
-
-        await logSistema({
-          tipo_accion: 'creacion',
-          entidad: 'cotizaciones',
-          entidad_id: cotData.id,
-          descripcion: `Cotización ${cotNum} creada en borrador por $${totalFinal.toLocaleString('es-CL')}`,
-          usuario_id: currentUser?.id,
-          datos_nuevos: cotData,
-        });
-      }
-
+        })),
+        p_cotizacion_id: null,
+      });
+      if (error || !savedId) throw new Error(error?.message || 'No se confirmó la cotización.');
+      void logSistema({
+        tipo_accion: 'creacion',
+        entidad: 'cotizaciones',
+        entidad_id: savedId as string,
+        descripcion: `Cotización ${cotNum} creada en borrador por $${totalFinal.toLocaleString('es-CL')}`,
+        usuario_id: currentUser?.id,
+      }).catch(console.error);
       router.push('/cotizaciones');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving quote:', err);
+      setErrorMsg(err?.message || 'No se pudo guardar la cotización.');
     } finally {
       setLoading(false);
     }
@@ -451,6 +473,10 @@ function NuevaCotizacionForm() {
               >
                 <div className="col-span-5">
                   <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Descripción del Producto</label>
+                  <select aria-label={`Producto del catálogo ${idx + 1}`} value={item.producto_catalogo_id || ''} onChange={(e) => selectCatalogItem(idx, e.target.value)} className="w-full mb-1 bg-white border border-gray-300 rounded-lg px-2 py-1 text-[#213343]">
+                    <option value="">Partida libre / seleccionar catálogo</option>
+                    {catalogo.filter((product) => product.categoria !== 'insumo').map((product) => <option key={product.id} value={product.id}>{product.codigo} · {product.nombre} ({product.unidad})</option>)}
+                  </select>
                   <input
                     type="text"
                     required
@@ -465,7 +491,8 @@ function NuevaCotizacionForm() {
                   <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Cantidad</label>
                   <input
                     type="number"
-                    min="1"
+                    min="0.01"
+                    step="0.01"
                     required
                     value={item.cantidad}
                     onChange={(e) => handleItemChange(idx, 'cantidad', Number(e.target.value))}
@@ -545,6 +572,7 @@ function NuevaCotizacionForm() {
         </div>
 
         {/* Botón de Guardar */}
+        {errorMsg && <p role="alert" className="text-red-700 text-sm font-semibold">{errorMsg}</p>}
         <div className="flex items-center justify-end gap-3">
           <Link
             href="/cotizaciones"

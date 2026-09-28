@@ -45,8 +45,8 @@ export default function ActualizarPasswordPage() {
   };
 
   return (
-    <div className="fixed inset-0 bg-[#213343] z-50 flex items-center justify-center p-4 text-[#213343]">
-      <div className="max-w-md w-full bg-white p-8 rounded-lg border border-gray-200 shadow-sm space-y-6">
+    <div className="fixed inset-0 bg-[#f7f7f5] z-50 flex items-center justify-center p-4 text-[#252b2d]">
+      <div className="max-w-md w-full bg-white p-8 rounded-2xl border border-[#e5e7e4] shadow-[var(--hg-shadow-card)] space-y-6">
         <div className="text-center space-y-3">
           <div className="flex justify-center mb-2">
             <Image

@@ -1,25 +1,26 @@
 <!-- BEGIN:nextjs-agent-rules -->
+
 # This is NOT the Next.js you know
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
 <!-- END:nextjs-agent-rules -->
 
 
 <claude-mem-context>
 # Memory Context
 
-# [hormiglass-system] recent context, 2026-08-28 4:51pm GMT-4
+# [hormiglass-system] recent context, 2026-09-28 12:43pm GMT-3
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (18,305t read) | 1,432,621t work | 99% savings
+Stats: 50 obs (20,269t read) | 1,578,607t work | 99% savings
 
 ### Jul 20, 2026
-S152 Crear CRM propio para Hormiglass con Next.js + Supabase + Vercel, incluyendo CLAUDE.md y archivo de memoria del proyecto (Jul 20 at 2:08 PM)
-S153 User provided PDF quotation example and config/ files; session is now setting up the .claude project directory with MCP configs and permissions before plan execution (Jul 20 at 2:09 PM)
-S154 User provided quotation PDF and config files; session completed full Fase 0 documentation setup without executing the implementation plan (Jul 20 at 2:45 PM)
 S155 Install Supabase MCP server for the Hormiglass project pointing to specific project ref jvenwcupdllcqbxixcuo (Jul 20 at 2:47 PM)
 S156 Plan file confirmed moved to plans/crm-hormiglass-plan.md and memory file updated with new path (Jul 20 at 2:50 PM)
 S157 Traer código CRM de la rama execute-crm-hormiglass-plan al proyecto hormiglass-system y dejarlo corriendo localmente (Jul 20 at 2:52 PM)
@@ -28,59 +29,63 @@ S158 Sincronizar archivos del worktree CRM al directorio local hormiglass-system
 S159 Sincronizar archivos CRM del worktree al local hormiglass-system y subir a GitHub repo dedicado — COMPLETADO (Jul 21 at 12:27 PM)
 S174 Security hardening + Supabase single-source-of-truth plan for hormiglass-system CRM (Next.js 15 + Supabase) (Jul 21 at 12:30 PM)
 ### Aug 5, 2026
-S175 Fix Supabase MCP connection error "resource: Resource must be a valid MCP endpoint" in hormiglass-system project (Aug 5 at 10:00 PM)
-### Aug 27, 2026
-972 11:43p 🔴 Duplicate Code Block Removed from app/recordatorios/page.tsx
-973 " 🔄 Dashboard TypeScript Hardening: Eliminated `any` Casts and Inline Magic Arrays
-974 " 🟣 Production Build Passes with /administracion and /recordatorios as Static Routes
-975 " ⚖️ Migration Apply Blocked — Falling Back to execute_sql for Database State Verification
-976 11:45p 🔵 Supabase Install Blocked by Sandbox Network Restriction in hormiglass-system
-977 11:48p 🔵 RLS Policies for recordatorios Table Confirmed Not Yet Applied
-978 11:52p 🔵 Supabase CLI Available via npx but Cannot Link to Remote Project
-979 11:57p 🚨 6 High-Severity npm Vulnerabilities Found in hormiglass-system
-980 " 🟣 Parallel Codex Session Completed: /administracion and /recordatorios Routes
-981 " ⚖️ Upgrade next + eslint-config-next to 16.3.3 to Fix All 6 Audit Vulnerabilities
+S175 Fix Supabase MCP connection error "resource: Resource must be a valid MCP endpoint" in hormiglass-system project (Aug 5 at 8:15 PM)
+S306 Plan de ajustes para el sistema Hormiglass basado en transcripción de reunión con Felipe Valverde (31 ago 2026) — exploración completa del codebase y esquema Supabase en curso (Aug 5 at 10:00 PM)
 ### Aug 28, 2026
-982 12:05a 🟣 Recordatorios table gains empresa column for multi-company scoping
-983 " ⚖️ Administración restructured as top-level nav hub with sub-sections for Empresas and RRHH
-984 12:12a 🟣 Administración restructured as top-level navigation with sub-sections
-985 " 🔴 Fixed synchronous setState inside useEffect in Administración page
-986 " 🔵 Supabase CLI not in shell PATH; npx supabase has telemetry write permission issue
-987 12:29a 🟣 Per-empresa task management added to Administración with 4-state workflow
-988 " 🔄 Administración sidebar navigation simplified — no standalone "Inicio" or "Recordatorios" items
-989 " ✅ Supabase migration 0041 adds empresa and estado columns to recordatorios table
-990 9:54a ⚖️ HubSpot-inspired minimalist redesign planned for entire Hormiglass CRM
-991 " 🔄 Dashboard visually migrated to minimalist operational workspace style
-992 " 🔵 Full lint audit reveals 213 pre-existing problems across untouched modules
-993 10:12a 🔵 Recordatorios Table Schema — Existing Columns and RLS Pattern
-994 " 🔵 Supabase CLI EPERM Telemetry Write Failure in Sandbox
-995 " 🟣 Planned Migration 0042 — Urgency Classification and Activity Timeline for Recordatorios
-996 " ⚖️ Company Isolation in Admin Views — No Cross-Company Navigation Within a Section
-997 11:22a 🟣 Empresa Legal Names and RUTs Added to Hormiglass CRM
-998 " 🔵 @ Mention and File Upload Pattern in ventas/page.tsx
-999 " 🔵 Migration 0042 Already Applied — recordatorio_actividades and urgencia Column Confirmed in Schema
-1000 " ⚖️ Task Attachments Will Reuse Existing 'administracion' Storage Bucket
-1001 3:17p ⚖️ Administrative Sections Architecture: Fixed Per-Company Model Selected
-1002 " 🔵 Supabase CLI: Not in System PATH, npx Available but Blocked by EPERM on Telemetry
-1003 " 🟣 Plan: Add `seccion` Column to `recordatorios` Table for Per-Company Section Classification
-1004 3:26p ⚖️ Sidebar Navigation: Only Company Names Shown, Sections Hidden
-1005 " 🔴 React Compiler Memoization Error Fixed in Dashboard via `currentUserId` Extraction
-1006 " 🟣 Production Build Passes After Admin Section Restructure
-1007 " 🟣 Migration Created: `seccion` Column Added to `recordatorios` Table with Per-Company Constraints
-1008 3:30p 🟣 Migration `20260828191700` Applied to Remote Supabase Database
-1009 3:34p 🟣 ClickUp-Style Administrative Sections Fully Implemented in Hormiglass CRM
-1010 " 🔵 `administracion_documentos` Table Missing `seccion` Column for Per-Section Document Upload
-1011 3:37p 🟣 `administracion_documentos` Extended with `seccion` Column — Documents Now Per-Section
-1012 " ✅ Admin Page UX Redesign: Sections Move to Sidebar, Documents Available on All Sections, "Documentos Varios" Removed
-1013 4:30p ✅ Sidebar Redesigned: Administration Section Collapsible with RRHH and Company Sub-Items
-1014 " ⚖️ Uniform Sections for All Three Companies: New Migration Planned to Replace Per-Company Constraints
-1015 4:34p 🟣 Migration `20260828203012` Applied: Uniform Sections Across All Three Companies
-1016 " 🔵 Supabase `db query --linked` Hangs on Constraint Verification Queries
-1017 4:39p 🔵 Hormiglass CRM Admin Section Data Model
-1018 " 🟣 Unified Admin Sections Across All 3 Companies
-1019 " ⚖️ Promote Legal and Prevención to First-Class Sections
-1020 4:42p 🔴 Supabase CLI db query Syntax Fix
-1021 " 🟣 Migration 20260828203837 Applied to Remote Supabase
+1022 4:51p 🟣 Inline User Role Editor in RRHH Table
+### Sep 16, 2026
+1255 11:52a 🔵 Hormiglass CRM — "Failed to fetch" dev-env error investigation
+1256 12:13p 🔵 Hormiglas System Adjustment Planning Session Initiated
+1257 " 🔵 Hormiglass Three-Area Business Model Confirmed
+1258 " ⚖️ Purchase Orders Redesigned as Independent Multi-Sale Entities
+1259 " 🔵 Full Commercial-to-Delivery Pipeline Flow Mapped
+1260 " ⚖️ Email Integration via SMTP with Per-Vendor Profile Assignment
+1261 " 🔵 Dispatch Guide (Guía de Despacho) Requirements Defined
+1262 " ⚖️ Automatic Dispatch Rescheduling Alerts Are Critical Feature
+1263 " ⚖️ Production Planning Module Postponed; Commercial + Logistics Flow Prioritized
+1264 " 🔵 Sales Team Structure and Activity Log Requirements Defined
+1265 " 🔵 Pending Action Items from Felipe Meeting (September 2026)
+S308 Plan de ajustes para el sistema Hormiglass — exploración continua de schema, caja, cotizaciones, calendarios, OC y tipos TypeScript (Sep 16 at 12:15 PM)
+S307 Plan de ajustes para el sistema Hormiglass basado en transcripción de reunión con Felipe Valverde (31 ago 2026) — inspección adicional del schema de migraciones y políticas RLS (Sep 16 at 12:18 PM)
+1266 7:29p 🔴 RLS Policies Migrated from Legacy Roles to Active Roles
+1267 " 🟣 Supply/Abastecimiento Step Logic Added to Operacion Page
+1268 " 🔵 orden_compra_asignaciones RLS Policy Audit Initiated
+1269 7:33p 🔵 ESLint: 73 Errors Exist but None on Lines Changed by Pilot Work
+1270 " 🔵 Supabase Security Advisor Has Three Open Warnings for Production Handoff
+1271 " 🟣 Dev Server Verified: Auth Guard Active on All Protected Routes
+1272 7:36p ✅ Pilot DB Backup Created in .backups/ with Owner-Only Permissions
+1273 " 🟣 Purchase Cost and Dispatch Cost Summary Cards Added to Operacion Page
+1274 " 🔵 Production Build Passes: 34 Routes Compiled, Full Route Map Confirmed
+1275 7:43p 🔴 Weekly Production Schedule Fix — Active Orders Crossing Week Boundaries
+1276 " ✅ Coverage Plan Updated with Operational Readiness Caveats
+1277 " 🔵 Notification and Follow-up System Already Wired in Sidebar
+1278 7:51p 🔵 Login Hang Traced to Middleware Profile Check on Every Request
+1279 8:01p 🔴 Login Infinite Loop Fixed — Unified Supabase Cookie Name Across All Clients
+1280 " 🔵 Lorena and Katy Accounts Still Not Created in Supabase Auth
+1281 9:49p 🔵 Live Supabase State Confirmed — Only Demo Data, Zero Real Team Accounts
+1282 " ⚖️ Three Architectural Decisions Locked for Phase 2 Implementation Plan
+1283 " 🔵 Complete Gap Analysis: 8 Unimplemented or Partial Features vs September Transcription
+### Sep 17, 2026
+1284 10:28a 🔴 Login Session Cookie Mismatch Fixed
+1285 " 🔵 8-Point System Gap Analysis vs. September Meeting Transcripts
+1286 " ⚖️ 8-Point Closure Plan: Architecture Decisions Confirmed by User
+1287 " 🔵 Supabase Infrastructure Audit for 8-Point Plan Implementation
+1288 10:31a 🟣 Migration cierre_ocho_puntos Created: Full Operational Control Layer
+1289 " 🔵 Supabase CLI Requires Escalated Sandbox Permissions for Migration Creation
+1290 " 🔵 Live Supabase DB Has 6 Delivered Guides Without Signature Enforcement
+1291 10:38a 🟣 Calendar UI Now Links Events to OCs and Guides, Detects Production Dependencies
+1292 " 🔄 Vehicle Conflict Detection Normalized with claveVehiculo() Helper
+1293 " 🟣 mano_obra Role Gets Access to Weekly Plan, General Calendar, and Operacion Pages
+1294 " 🟣 Pipeline "Delivered" State Gating Extended to prod_finalizado and rev_entregado
+1295 " ⚖️ pg_cron Schedule Removed from Migration; Delivery Cost Column Redesigned
+1296 10:41a 🟣 Migration cierre_ocho_puntos Successfully Applied to Supabase Production
+1297 " 🔴 avisar_reprogramacion Trigger Fixed to Use SECURITY DEFINER
+1298 " 🟣 CSV Product Import Parser Implemented with Validation and Tests
+1299 " 🟣 Third Migration: Delivery Evidence Integrity and Closed-Sale Protections
+1300 10:45a 🟣 integridad_entregas_y_auditoria Migration Applied and All Systems Verified
+1301 " 🔐 RLS Helper Functions Exposed as Callable REST Endpoints via Supabase RPC
+1302 " 🟣 Daily Billing Alert Cron Migration Prepared as Separate Approvable Step
+1303 " 🔵 Dev Server Cannot Bind to 0.0.0.0 in Sandbox; 127.0.0.1 Works but Playwright Cannot Connect
 
-Access 1433k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1579k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

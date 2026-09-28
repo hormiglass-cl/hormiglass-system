@@ -48,13 +48,13 @@ export function FinancialBalanceCard({
         {/* 1. Facturación Total Comprometida */}
         <div className="p-4 rounded-lg bg-gray-50 border border-gray-200 space-y-1">
           <span className="text-gray-500 font-bold block">
-            Valor total facturado
+            Valor comercial de ventas
           </span>
           <span className="text-xl font-black text-[#213343] block">
             ${totalVendido.toLocaleString('es-CL')} CLP
           </span>
           <span className="text-[11px] text-gray-400 font-medium block">
-            100% de operaciones en curso
+            Cotizaciones vigentes del período
           </span>
         </div>
 

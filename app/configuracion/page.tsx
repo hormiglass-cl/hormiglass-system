@@ -568,7 +568,7 @@ export default function ConfiguracionPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs min-w-[950px]">
+              <table className="hg-list-table w-full text-left text-xs min-w-[950px]">
                 <thead className="bg-gray-50/80 text-gray-500 font-bold border-b border-gray-200">
                   <tr>
                     <th className="py-3.5 px-4">Usuario / Nombre</th>
@@ -782,7 +782,7 @@ export default function ConfiguracionPage() {
           {/* Tabla de Campos */}
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs min-w-[700px]">
+              <table className="hg-list-table w-full text-left text-xs min-w-[700px]">
                 <thead className="bg-gray-50/80 text-gray-500 font-bold border-b border-gray-200">
                   <tr>
                     <th className="py-3.5 px-4">Etiqueta / Nombre Visible</th>

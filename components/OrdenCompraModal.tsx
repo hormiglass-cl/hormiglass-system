@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createClient } from '../lib/supabase/client';
 import { useAuth } from '../lib/context/AuthContext';
-import { EstadoOrdenCompra, OrdenCompra, OrdenCompraItem, Proveedor, OportunidadVenta } from '../lib/types';
+import { EstadoOrdenCompra, OrdenCompra, OrdenCompraItem, Proveedor, OportunidadVenta, ProductoCatalogo } from '../lib/types';
 import { logSistema } from '../lib/logger';
 import { AlertTriangle, Calculator, Check, ChevronDown, FileText, Plus, Save, Trash2 } from 'lucide-react';
 
@@ -60,6 +60,7 @@ export function OrdenCompraModal({
   const { currentUser } = useAuth();
 
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+  const [catalogo, setCatalogo] = useState<ProductoCatalogo[]>([]);
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
   const [proveedorId, setProveedorId] = useState(proveedorIdInicial || '');
   const [oportunidadId, setOportunidadId] = useState(oportunidadIdInicial || '');
@@ -89,13 +90,15 @@ export function OrdenCompraModal({
     if (!isOpen) return;
 
     async function loadData() {
-      const [provRes, opRes] = await Promise.all([
+      const [provRes, opRes, productRes] = await Promise.all([
         supabase.from('proveedores').select('*').order('nombre'),
         supabase.from('oportunidades').select('*').order('created_at', { ascending: false }),
+        supabase.from('catalogo_productos').select('*').eq('activo', true).order('nombre'),
       ]);
 
       const loadedProveedores = (provRes.data || []) as Proveedor[];
       setProveedores(loadedProveedores);
+      setCatalogo((productRes.data || []) as ProductoCatalogo[]);
       setOportunidades((opRes.data || []) as OportunidadVenta[]);
 
       if (!initialOrden && !proveedorIdInicial && loadedProveedores.length > 0) {
@@ -162,11 +165,22 @@ export function OrdenCompraModal({
   const handleItemChange = (index: number, field: keyof OrdenCompraItem, value: string | number) => {
     const updated = [...items];
     const next = { ...updated[index], [field]: value };
+    if (field === 'descripcion' || field === 'articulo_codigo') next.producto_catalogo_id = null;
     if (field === 'cantidad' || field === 'precio_unitario') {
       next.total_item = Number(next.cantidad || 0) * Number(next.precio_unitario || 0);
     }
     updated[index] = next;
     setItems(updated);
+  };
+
+  const selectCatalogItem = (index: number, productId: string) => {
+    const product = catalogo.find((entry) => entry.id === productId);
+    if (!product) return;
+    setItems((previous) => previous.map((item, itemIndex) => itemIndex === index
+      ? { ...item, producto_catalogo_id: product.id, articulo_codigo: product.codigo,
+          descripcion: product.nombre, precio_unitario: Number(product.costo_referencia),
+          total_item: Number(item.cantidad) * Number(product.costo_referencia) }
+      : item));
   };
 
   const handleAddItem = () => {
@@ -261,6 +275,15 @@ export function OrdenCompraModal({
     try {
       const nextVersion = initialOrden && createNewVersion ? await getNextAvailableVersion() : initialOrden?.version || 1;
       const finalNumeroOc = initialOrden && createNewVersion ? `${baseNumeroOc}-v${nextVersion}` : numeroOc.trim();
+      const originalItems = initialOrden?.items || [];
+      const itemsChanged = originalItems.length !== validItems.length || validItems.some((item, index) => {
+        const original = originalItems[index];
+        return (item.articulo_codigo || '') !== (original?.articulo_codigo || '') ||
+          item.descripcion !== original?.descripcion ||
+          Number(item.cantidad) !== Number(original?.cantidad) ||
+          Number(item.precio_unitario) !== Number(original?.precio_unitario) ||
+          Number(item.total_item) !== Number(original?.total_item);
+      });
       let duplicateQuery = supabase
         .from('ordenes_compra')
         .select('id')
@@ -277,6 +300,13 @@ export function OrdenCompraModal({
         setErrorMsg(`Ya existe una orden de compra con el numero ${finalNumeroOc}.`);
         setLoading(false);
         return;
+      }
+
+      if (initialOrden && !createNewVersion && itemsChanged) {
+        const { count, error: countError } = await supabase.from('orden_compra_asignaciones')
+          .select('id', { count: 'exact', head: true }).eq('orden_compra_id', initialOrden.id);
+        if (countError) throw countError;
+        if (count) throw new Error('Quita las asignaciones antes de modificar los ítems de esta OC.');
       }
 
       const payload = {
@@ -317,7 +347,7 @@ export function OrdenCompraModal({
         insertedOrdenId = ordenData.id;
       }
 
-      if (isEditing) {
+      if (isEditing && itemsChanged) {
         const { error: deleteItemsError } = await supabase
           .from('orden_compra_items')
           .delete()
@@ -328,18 +358,38 @@ export function OrdenCompraModal({
       const itemPayload = validItems.map((item) => ({
         orden_compra_id: ordenData.id,
         articulo_codigo: item.articulo_codigo || null,
+        producto_catalogo_id: item.producto_catalogo_id || null,
         descripcion: item.descripcion,
         cantidad: Number(item.cantidad || 0),
         precio_unitario: Number(item.precio_unitario || 0),
         total_item: Number(item.total_item || 0),
       }));
 
-      const { error: itemsError } = await supabase.from('orden_compra_items').insert(itemPayload);
+      const { data: savedItems, error: itemsError } = isEditing && !itemsChanged
+        ? { data: originalItems, error: null }
+        : await supabase.from('orden_compra_items').insert(itemPayload).select();
       if (itemsError) {
         if (insertedOrdenId) {
           await supabase.from('ordenes_compra').delete().eq('id', insertedOrdenId);
         }
         throw new Error(itemsError.message);
+      }
+
+      const persistedItems = savedItems as OrdenCompraItem[] | null;
+      if (!isEditing && isUUID(oportunidadId) && persistedItems?.length) {
+        const { error: assignmentError } = await supabase.from('orden_compra_asignaciones').insert(
+          persistedItems.filter((item) => Number(item.cantidad) > 0).map((item) => ({
+            orden_compra_id: ordenData.id,
+            orden_compra_item_id: item.id,
+            oportunidad_id: oportunidadId,
+            cantidad: item.cantidad,
+            costo_asignado: item.total_item,
+          }))
+        );
+        if (assignmentError) {
+          if (insertedOrdenId) await supabase.from('ordenes_compra').delete().eq('id', insertedOrdenId);
+          throw assignmentError;
+        }
       }
 
       await logSistema({
@@ -360,7 +410,7 @@ export function OrdenCompraModal({
     } catch (err: unknown) {
       console.error('Error saving orden de compra:', err);
       const message = err instanceof Error ? err.message : 'Revisa los campos.';
-      setErrorMsg(message.startsWith('Ya existe una orden de compra')
+      setErrorMsg(message.startsWith('Ya existe una orden de compra') || message.startsWith('Quita las asignaciones')
         ? message
         : 'No se pudo guardar la orden de compra. Revisa los datos e intenta nuevamente.');
     } finally {
@@ -532,6 +582,7 @@ export function OrdenCompraModal({
               </div>
               {items.map((item, index) => (
                 <div key={index} className="grid grid-cols-12 gap-2 items-center bg-gray-50 p-2.5 rounded-md border border-gray-200">
+                  <select aria-label={`Producto de compra ${index + 1}`} value={item.producto_catalogo_id || ''} onChange={(e) => selectCatalogItem(index, e.target.value)} className="col-span-12 bg-white border border-gray-300 rounded-lg px-2 py-1.5"><option value="">Partida libre / seleccionar catálogo</option>{catalogo.map((product) => <option key={product.id} value={product.id}>{product.codigo} · {product.nombre} ({product.unidad})</option>)}</select>
                   <input value={item.articulo_codigo || ''} onChange={(e) => handleItemChange(index, 'articulo_codigo', e.target.value)} placeholder="Codigo" aria-label="Codigo articulo" className="col-span-12 sm:col-span-2 bg-white border border-gray-300 rounded-lg px-2 py-1.5" />
                   <input value={item.descripcion} onChange={(e) => handleItemChange(index, 'descripcion', e.target.value)} placeholder="Descripcion" aria-label="Descripcion articulo" className="col-span-12 sm:col-span-4 bg-white border border-gray-300 rounded-lg px-2 py-1.5 font-bold" />
                   <input type="number" min="0" step="0.01" value={item.cantidad} onChange={(e) => handleItemChange(index, 'cantidad', e.target.value)} aria-label="Cantidad" className="col-span-6 sm:col-span-2 bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-right font-bold" />

@@ -66,11 +66,25 @@ export interface CotizacionItem {
   id?: string;
   cotizacion_id?: string;
   producto: string;
+  producto_catalogo_id?: string | null;
   descripcion?: string | null;
   cantidad: number;
   precio_unitario: number;
   descuento_porcentaje?: number;
   total_item: number;
+}
+
+export interface ProductoCatalogo {
+  id: string;
+  codigo: string;
+  nombre: string;
+  categoria: 'producto' | 'insumo' | 'servicio';
+  unidad: string;
+  precio_referencia: number;
+  costo_referencia: number;
+  descripcion?: string | null;
+  es_demo: boolean;
+  activo: boolean;
 }
 
 export interface Cotizacion {
@@ -319,8 +333,23 @@ export interface OportunidadVenta {
   prioridad?: PrioridadOportunidad;
   tipo_venta?: 'Instalación' | 'Suministro' | 'Reventa de Material' | string;
   origen?: string | null;
+  seguimiento_resultado?: string | null;
+  proxima_accion?: string | null;
+  proxima_accion_fecha?: string | null;
+  seguimiento_responsable_id?: string | null;
   modalidad_requerimiento?: ModalidadRequerimiento | string;
   rama_destino?: 'produccion' | 'reventa' | null;
+  abastecimiento?: 'fabricar' | 'compra_proveedor' | 'stock' | null;
+  forma_entrega?: 'retiro_cliente' | 'retiro_proveedor' | 'despacho_propio' | 'despacho_subcontratado' | null;
+  fecha_prometida?: string | null;
+  fecha_tentativa_produccion?: string | null;
+  fecha_tentativa_entrega?: string | null;
+  direccion_obra?: string | null;
+  transporte?: string | null;
+  responsable_operativo_id?: string | null;
+  entrega_manual_confirmada?: boolean;
+  entrega_manual_motivo?: string | null;
+  fecha_vencimiento_cobro?: string | null;
   rama_definida_en?: string | null;
   rama_definida_por?: string | null;
   comuna?: string;
@@ -409,10 +438,23 @@ export interface OrdenCompraItem {
   id?: string;
   orden_compra_id?: string;
   articulo_codigo?: string;
+  producto_catalogo_id?: string | null;
   descripcion: string;
   cantidad: number;
   precio_unitario: number;
   total_item: number;
+}
+
+export interface OrdenCompraAsignacion {
+  id: string;
+  orden_compra_id: string;
+  orden_compra_item_id: string;
+  oportunidad_id: string;
+  cantidad: number;
+  costo_asignado: number;
+  unidad?: string | null;
+  notas?: string | null;
+  oportunidad?: OportunidadVenta;
 }
 
 export interface OrdenCompra {
@@ -446,12 +488,15 @@ export interface OrdenCompra {
   updated_at?: string;
   proveedor?: Proveedor;
   oportunidad?: OportunidadVenta;
+  tipo_compra?: 'reventa' | 'insumos_fabricacion';
+  asignaciones?: OrdenCompraAsignacion[];
   items?: OrdenCompraItem[];
 }
 
 export interface ProduccionDiaria {
   id: string;
   oportunidad_id: string;
+  orden_produccion_id?: string | null;
   cotizacion_id?: string | null;
   cotizacion_item_id?: string | null;
   producto: string;
@@ -464,6 +509,100 @@ export interface ProduccionDiaria {
   registrado_por?: string | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface OrdenProduccionItem {
+  id: string;
+  orden_produccion_id: string;
+  cotizacion_item_id?: string | null;
+  producto: string;
+  cantidad_objetivo: number;
+  unidad?: string | null;
+}
+
+export interface OrdenProduccion {
+  id: string;
+  oportunidad_id: string;
+  estado: 'planificada' | 'en_curso' | 'completada' | 'cancelada';
+  fecha_inicio?: string | null;
+  fecha_objetivo?: string | null;
+  responsable_id?: string | null;
+  notas?: string | null;
+  items?: OrdenProduccionItem[];
+}
+
+export interface GuiaDespachoItem {
+  id: string;
+  guia_despacho_id: string;
+  cotizacion_item_id?: string | null;
+  producto: string;
+  cantidad_planificada: number;
+  cantidad_cargada: number;
+  cantidad_recibida: number;
+}
+
+export interface GuiaDespachoDocumento {
+  id: string;
+  guia_despacho_id: string;
+  tipo: 'carga' | 'firma' | 'conformidad' | 'otro';
+  nombre: string;
+  archivo_path: string;
+}
+
+export interface GuiaDespacho {
+  id: string;
+  oportunidad_id: string;
+  numero_guia: string;
+  estado: 'planificada' | 'cargada' | 'entregada' | 'cancelada';
+  fecha_salida?: string | null;
+  origen?: string | null;
+  destino?: string | null;
+  vehiculo?: string | null;
+  chofer?: string | null;
+  tipo_transporte?: 'propio' | 'subcontratado' | 'retiro_cliente' | 'retiro_proveedor';
+  costo_estimado?: number;
+  costo_real?: number;
+  costo_real_confirmado?: boolean;
+  recibido_por?: string | null;
+  carga_verificada_por?: string | null;
+  carga_verificada_at?: string | null;
+  entrega_confirmada_por?: string | null;
+  entrega_confirmada_at?: string | null;
+  carga_verificada: boolean;
+  entrega_conforme: boolean;
+  confirmada_manualmente: boolean;
+  entrega_manual_motivo?: string | null;
+  items?: GuiaDespachoItem[];
+  documentos?: GuiaDespachoDocumento[];
+}
+
+export interface OperacionExcepcion {
+  id: string;
+  tipo: 'exceso_produccion' | 'firma_entrega' | 'entrega_manual';
+  oportunidad_id: string;
+  orden_produccion_id?: string | null;
+  cotizacion_item_id?: string | null;
+  guia_despacho_id?: string | null;
+  cantidad_excedente?: number | null;
+  motivo: string;
+  estado: 'pendiente' | 'aprobada' | 'rechazada';
+  solicitado_por: string;
+  resuelto_por?: string | null;
+  solicitado_at: string;
+  resuelto_at?: string | null;
+}
+
+export interface PostventaCaso {
+  id: string;
+  oportunidad_id: string;
+  tipo: 'faltante' | 'defecto' | 'cantidad_adicional' | 'otro';
+  estado: 'abierto' | 'programado' | 'en_curso' | 'resuelto' | 'cancelado';
+  descripcion: string;
+  cantidad_adicional?: number | null;
+  autorizacion_cliente?: string | null;
+  fecha_compromiso?: string | null;
+  responsable_id?: string | null;
+  evento_id?: string | null;
 }
 
 export type EstadoPedidoProveedor = 'solicitado' | 'oc_generada' | 'esperando_entrega' | 'recibido';
@@ -532,7 +671,8 @@ export interface ProyectoPlanificacion {
   created_at?: string;
 }
 
-export type TipoEventoProduccionLogistica = 'obra' | 'produccion' | 'reventa' | 'logistica';
+export type TipoEventoProduccionLogistica = 'obra' | 'produccion' | 'reventa' | 'logistica' |
+  'retiro_proveedor' | 'despacho_cliente' | 'instalacion' | 'postventa' | 'logistica_interna';
 export type EstadoEventoProduccionLogistica =
   | 'por_hacer'
   | 'en_curso'
@@ -554,6 +694,11 @@ export interface EventoProduccionLogistica {
   fecha_evento?: string;
   hora_evento?: string | null;
   responsable_id?: string | null;
+  recurso_vehiculo?: string | null;
+  orden_compra_id?: string | null;
+  guia_despacho_id?: string | null;
+  conflicto_confirmado_motivo?: string | null;
+  motivo_reprogramacion?: string | null;
   responsable_calendario_id?: string | null;
   responsable?: Usuario;
   responsable_calendario?: ResponsableCalendario;

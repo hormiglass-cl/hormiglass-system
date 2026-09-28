@@ -28,11 +28,14 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
           '/administracion',
           '/visitas',
           '/planificacion/calendario',
+          '/planificacion/semana',
+          '/calendarios/general',
           '/reventa/calendario',
           '/notificaciones',
           '/recordatorios',
         ];
-        const isAllowed = manoObraAllowed.some((route) => pathname.startsWith(route)) || pathname.startsWith('/auth');
+        const isAllowed = manoObraAllowed.some((route) => pathname.startsWith(route)) ||
+          /^\/ventas\/[^/]+\/operacion(?:\/|$)/.test(pathname) || pathname.startsWith('/auth');
         if (!isAllowed) {
           router.replace('/rrhh');
         }
@@ -42,7 +45,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#213343] text-white">
+      <div className="min-h-screen flex items-center justify-center bg-[#f7f7f5] text-[#252b2d]">
         <div className="flex flex-col items-center gap-3">
           <div className="w-10 h-10 border-4 border-[#f97316] border-t-transparent rounded-full animate-spin" />
           <p className="text-xs font-bold text-gray-300">Cargando Hormiglass CRM...</p>

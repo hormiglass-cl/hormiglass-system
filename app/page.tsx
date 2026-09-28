@@ -13,6 +13,7 @@ import {
   Recordatorio,
 } from '../lib/types';
 import { completeRecordatorio } from '../lib/recordatorios';
+import { totalAbonado as calcularAbonado, totalComercial } from '../lib/oportunidad-finanzas';
 import {
   DollarSign,
   Calendar,
@@ -52,8 +53,10 @@ export default function Dashboard() {
   const supabase = useMemo(() => createClient(), []);
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
+  const [deliveryAccreditation, setDeliveryAccreditation] = useState<Record<string, boolean>>({});
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [eventos, setEventos] = useState<EventoProduccionLogistica[]>([]);
@@ -79,12 +82,25 @@ export default function Dashboard() {
 
       const [cotRes, opRes, cliRes, userRes, evRes, recRes] = await Promise.all([
         supabase.from('cotizaciones').select('*, items:cotizacion_items(*), cliente:clientes(*)'),
-        supabase.from('oportunidades').select('*, cliente:clientes(*), cotizaciones(*)'),
+        supabase.from('oportunidades').select('*, cliente:clientes(*), cotizaciones:cotizaciones!cotizaciones_oportunidad_id_fkey(*)'),
         supabase.from('clientes').select('*'),
         supabase.from('usuarios').select('*').eq('activo', true),
         supabase.from('eventos_produccion_logistica').select('*, responsable:usuarios!responsable_id(*)'),
         recordatoriosQuery,
       ]);
+
+      const queryError = [cotRes, opRes, cliRes, userRes, evRes, recRes].find((result) => result.error)?.error;
+      if (queryError) throw queryError;
+      const closedIds = ((opRes.data || []) as OportunidadVenta[])
+        .filter((op) => ['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline))
+        .map((op) => op.id);
+      const { data: accreditationRows, error: accreditationError } = closedIds.length
+        ? await supabase.rpc('estado_entrega_acreditada', { p_ventas: closedIds })
+        : { data: [], error: null };
+      if (accreditationError) throw accreditationError;
+      setDeliveryAccreditation(Object.fromEntries(((accreditationRows || []) as { venta_id: string; acreditada: boolean }[])
+        .map((row) => [row.venta_id, row.acreditada])));
+      setLoadError(null);
 
       if (cotRes.data) setCotizaciones(cotRes.data as Cotizacion[]);
       else setCotizaciones([]);
@@ -107,6 +123,7 @@ export default function Dashboard() {
       setLoading(false);
     } catch (err) {
       console.error('Error loading live dashboard data from Supabase:', err);
+      setLoadError('No se pudieron cargar los datos del panel. Reintenta más tarde.');
       setLoading(false);
     }
   }, [currentUserId, supabase]);
@@ -136,13 +153,7 @@ export default function Dashboard() {
 
   // Helper para obtener el valor monetario real de una oportunidad
   const getOportunidadTrueValue = (op: OportunidadVenta): number => {
-    const aprobada = op.cotizaciones?.find((c) => c.estado === 'aprobada');
-    if (aprobada && aprobada.monto_total) return Number(aprobada.monto_total);
-
-    const enviada = op.cotizaciones?.find((c) => c.estado === 'enviada');
-    if (enviada && enviada.monto_total) return Number(enviada.monto_total);
-
-    return Number(op.monto_estimado || 0);
+    return totalComercial(op, op.cotizaciones || []);
   };
 
   // Manejador de filtros rápidos de tiempo
@@ -236,7 +247,7 @@ export default function Dashboard() {
   }, [filteredOportunidades]);
 
   const totalAbonado = useMemo(() => {
-    return filteredOportunidades.reduce((sum, op) => sum + Number(op.monto_abonado || 0), 0);
+    return filteredOportunidades.reduce((sum, op) => sum + calcularAbonado(op), 0);
   }, [filteredOportunidades]);
 
   const totalPendientePorPagar = useMemo(() => {
@@ -550,6 +561,7 @@ export default function Dashboard() {
       { id: 'prod_fabricacion', label: '4. En fabricación', prob: 80, color: '#6366f1', bg: '#e0e7ff' },
       { id: 'prod_instalacion', label: '5. En instalación & obra', prob: 90, color: '#06b6d4', bg: '#cffafe' },
       { id: 'entregada', label: '6. Entregadas & cierre', prob: 100, color: '#10b981', bg: '#d1fae5' },
+      { id: 'sin_acreditar', label: 'Entregas históricas sin acreditar', prob: 0, color: '#b45309', bg: '#fef3c7' },
     ];
 
     let totalNominal = 0;
@@ -558,7 +570,10 @@ export default function Dashboard() {
     const stages: FunnelStageData[] = stageDefs.map((def) => {
       const opsInStage = filteredOportunidades.filter((o) => {
         if (def.id === 'entregada') {
-          return o.estado_pipeline === 'entregada' || o.estado_pipeline === 'prod_finalizado' || o.estado_pipeline === 'rev_entregado';
+          return ['entregada', 'prod_finalizado', 'rev_entregado'].includes(o.estado_pipeline) && deliveryAccreditation[o.id] === true;
+        }
+        if (def.id === 'sin_acreditar') {
+          return ['entregada', 'prod_finalizado', 'rev_entregado'].includes(o.estado_pipeline) && deliveryAccreditation[o.id] !== true;
         }
         return o.estado_pipeline === def.id;
       });
@@ -586,7 +601,7 @@ export default function Dashboard() {
       totalPipelineNominal: totalNominal,
       totalPipelineWeighted: totalWeighted,
     };
-  }, [filteredOportunidades]);
+  }, [filteredOportunidades, deliveryAccreditation]);
 
   // Eventos activos de producción y obras
   const eventosActivos = useMemo(() => {
@@ -635,6 +650,17 @@ export default function Dashboard() {
     return (
       <div className="p-12 text-center text-gray-500 font-medium animate-pulse">
         Cargando centro de control y métricas en vivo desde Supabase...
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-6 text-sm font-medium text-red-800">
+        {loadError}
+        <button type="button" onClick={() => { setLoading(true); void loadDashboardData(); }} className="ml-3 underline">
+          Reintentar
+        </button>
       </div>
     );
   }
@@ -716,81 +742,17 @@ export default function Dashboard() {
       {/* ========================================================= */}
       {/* 2. FILA DE 4 KPIS EJECUTIVOS DESTACADOS                  */}
       {/* ========================================================= */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* KPI 1: Facturación Total */}
-        <div className="bg-white text-[#213343] p-4 rounded-lg border border-orange-200 shadow-xs flex flex-col justify-between relative overflow-hidden">
-          <div className="flex items-center justify-between z-10">
-            <span className="text-xs font-bold text-gray-500">Ventas totales</span>
-            <div className="w-8 h-8 rounded-md bg-orange-50 text-[#f97316] flex items-center justify-center">
-              <DollarSign className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="my-2 z-10">
-            <span className="text-xl font-black block tracking-normal">
-              ${totalFacturado.toLocaleString('es-CL')} CLP
-            </span>
-            <span className="text-[11px] text-gray-500 block mt-0.5">
-              {filteredOportunidades.length} {filteredOportunidades.length === 1 ? 'oportunidad' : 'oportunidades'} en el período
-            </span>
-          </div>
-        </div>
-
-        {/* KPI 2: Cuánto Falta por Pagar */}
-        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-gray-500">Falta por pagar</span>
-            <div className="w-8 h-8 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-              <Clock className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="my-2">
-            <span className="text-xl font-black text-amber-900 block tracking-normal">
-              ${totalPendientePorPagar.toLocaleString('es-CL')} CLP
-            </span>
-            <span className="text-[11px] text-amber-700 font-semibold block mt-0.5">
-              ${totalAbonado.toLocaleString('es-CL')} recaudados
-            </span>
-          </div>
-        </div>
-
-        {/* KPI 3: Proyección del Pipeline */}
-        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-gray-500">Proyección pipeline</span>
-            <div className="w-8 h-8 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-              <Target className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="my-2">
-            <span className="text-xl font-black text-blue-900 block tracking-normal">
-              ${totalPipelineWeighted.toLocaleString('es-CL')} CLP
-            </span>
-            <span className="text-[11px] text-gray-400 font-medium block mt-0.5">
-              Valor ponderado de cierre estimado
-            </span>
-          </div>
-        </div>
-
-        {/* KPI 4: Clientes & Obras Activas */}
-        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-gray-500">Operación activa</span>
-            <div className="w-8 h-8 rounded-md bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-              <HardHat className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="my-2">
-            <div className="flex items-baseline gap-2">
-              <span className="text-xl font-black text-[#213343]">
-                {eventosActivos.length}
-              </span>
-              <span className="text-xs font-bold text-purple-700">obras & despachos</span>
-            </div>
-            <span className="text-[11px] text-gray-400 font-medium block mt-0.5">
-              {clientes.length} clientes en directorio
-            </span>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: 'Ventas comerciales', value: `$${totalFacturado.toLocaleString('es-CL')}`, note: `${filteredOportunidades.length} oportunidades en el período`, tone: 'text-[#252b2d]' },
+          { label: 'Por cobrar', value: `$${totalPendientePorPagar.toLocaleString('es-CL')}`, note: `$${totalAbonado.toLocaleString('es-CL')} abonados`, tone: 'text-amber-800' },
+          { label: 'Proyección pipeline', value: `$${totalPipelineWeighted.toLocaleString('es-CL')}`, note: 'Valor ponderado estimado', tone: 'text-blue-700' },
+          { label: 'Operación activa', value: String(eventosActivos.length), note: `${clientes.length} clientes en directorio`, tone: 'text-[#252b2d]' },
+        ].map((kpi) => <div key={kpi.label} className="hg-panel flex min-h-[146px] flex-col items-center justify-center p-4 text-center">
+          <p className={`hg-kpi-value tabular-nums ${kpi.tone}`}>{kpi.value}</p>
+          <p className="hg-overline mt-2">{kpi.label}</p>
+          <p className="mt-1 text-[11px] text-[#8a9390]">{kpi.note}</p>
+        </div>)}
       </div>
 
       {/* ========================================================= */}

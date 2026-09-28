@@ -119,8 +119,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error('Por favor ingresa una contraseña para el nuevo usuario.');
     }
 
-    // Intentar creación administrativa directa por RPC para evitar límite de envío de correos
-    const { error: rpcError } = await supabase.rpc('create_user_admin', {
+    // El alta administrativa debe ser atómica en Auth y usuarios. Un signUp desde
+    // este cliente podría reemplazar la sesión del administrador y perder el rol.
+    const { data: createdUser, error: rpcError } = await supabase.rpc('create_user_admin', {
       p_email: userData.email.trim(),
       p_password: userData.password,
       p_nombre: userData.nombre.trim(),
@@ -131,29 +132,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (rpcError.message.includes('ya se encuentra registrado')) {
         throw new Error(`El correo ${userData.email} ya se encuentra registrado.`);
       }
+      throw new Error(`No se pudo crear el usuario: ${rpcError.message}`);
+    }
 
-      // Fallback a signUp tradicional
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: userData.email.trim(),
-        password: userData.password,
-        options: {
-          emailRedirectTo: 'https://hormiglass-system.vercel.app/',
-          data: {
-            nombre: userData.nombre.trim(),
-          },
-        },
-      });
-
-      if (signUpError) {
-        throw new Error(`No se pudo crear el usuario: ${signUpError.message}`);
-      }
-
-      if (signUpData.user && userData.rol && userData.rol !== 'user') {
-        await supabase
-          .from('usuarios')
-          .update({ rol: userData.rol })
-          .eq('auth_id', signUpData.user.id);
-      }
+    if (!createdUser || createdUser.success !== true || !createdUser.user_id) {
+      throw new Error('El alta de usuario no devolvió una confirmación válida.');
     }
 
     await fetchUsers();

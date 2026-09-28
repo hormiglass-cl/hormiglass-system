@@ -621,9 +621,9 @@ export default function RecursosHumanosPage() {
         </div>
       ) : viewMode === 'table' ? (
         /* VISTA DE TABLA */
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+        <div className="hg-list-group">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="hg-list-table w-full min-w-[920px] text-left text-xs">
               <thead>
                 <tr className="bg-gray-50/80 text-gray-500 font-bold border-b border-gray-200">
                   <th className="py-3.5 px-4">Colaborador</th>
