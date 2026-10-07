@@ -451,11 +451,11 @@ export function CotizacionModal({
               {items.map((item, idx) => (
                 <div key={idx} className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
                   <div className="flex gap-2 items-center">
-                    <input
-                      type="text"
+                    <textarea
+                      rows={2}
                       value={item.producto}
                       onChange={(e) => handleItemChange(idx, 'producto', e.target.value)}
-                      placeholder="Descripción del Producto / Servicio"
+                      placeholder="Descripción del Producto / Servicio (soporta saltos de línea)"
                       className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-1.5 text-xs font-bold text-[#213343] focus:outline-none focus:border-[#f97316]"
                     />
                     <button
@@ -562,12 +562,14 @@ export function CotizacionModal({
               />
             </div>
             <div className="sm:col-span-2">
-              <label className="block font-bold text-gray-700 mb-1">Comentario público / Observaciones</label>
+              <label className="block font-bold text-gray-700 mb-1">
+                Condiciones / Incluye (aparece bajo los productos)
+              </label>
               <textarea
                 value={observaciones}
                 onChange={(e) => setObservaciones(e.target.value)}
                 rows={2}
-                placeholder="Observaciones visibles en el PDF..."
+                placeholder="Condiciones comerciales o servicios incluidos visibles bajo los productos en el PDF..."
                 className="w-full bg-white border border-gray-300 rounded-md p-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
               />
             </div>

@@ -437,11 +437,14 @@ function NuevaCotizacionForm() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block font-bold text-gray-700 mb-1">Comentario público / Observaciones</label>
-              <input
-                type="text"
+              <label className="block font-bold text-gray-700 mb-1">
+                Condiciones / Incluye (aparece bajo los productos)
+              </label>
+              <textarea
                 value={observaciones}
                 onChange={(e) => setObservaciones(e.target.value)}
+                rows={2}
+                placeholder="Condiciones comerciales o servicios incluidos visibles bajo los productos en el PDF..."
                 className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
               />
             </div>
@@ -478,10 +481,10 @@ function NuevaCotizacionForm() {
                     <option value="">Partida libre / seleccionar catálogo</option>
                     {catalogo.filter((product) => product.categoria !== 'insumo').map((product) => <option key={product.id} value={product.id}>{product.codigo} · {product.nombre} ({product.unidad})</option>)}
                   </select>
-                  <input
-                    type="text"
+                  <textarea
                     required
-                    placeholder="Descripción de la partida..."
+                    rows={2}
+                    placeholder="Descripción de la partida (soporta saltos de línea)..."
                     value={item.producto}
                     onChange={(e) => handleItemChange(idx, 'producto', e.target.value)}
                     className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-[#213343] focus:outline-none focus:border-[#f97316]"

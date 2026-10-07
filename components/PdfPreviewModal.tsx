@@ -254,10 +254,11 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
               margin-bottom: 2px;
             }
             .comment-section {
-              margin-top: 8px;
+              margin-top: 0px;
               margin-bottom: 8px;
               font-size: 10.5px;
               color: #374151;
+              white-space: pre-line;
             }
             .currency-label {
               text-align: right;
@@ -298,7 +299,7 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
               border-bottom: none;
               height: 22px;
             }
-            .col-desc { text-align: left; width: 44%; }
+            .col-desc { text-align: left; width: 44%; white-space: pre-line; }
             .col-iva { text-align: center; width: 8%; }
             .col-pu { text-align: right; width: 14%; }
             .col-cant { text-align: center; width: 10%; }
@@ -429,9 +430,6 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
               </div>
             </div>
 
-            <!-- Public Comment -->
-            ${commentText ? `<div class="comment-section">${escapeHtml(commentText)}</div>` : '<div class="comment-section"></div>'}
-
             <!-- Currency Indicator -->
             <div class="currency-label">Monto en Chile Peso</div>
 
@@ -456,6 +454,7 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
             <!-- Bottom Section -->
             <div class="bottom-section">
               <div class="bottom-left">
+                ${commentText ? `<div class="comment-section">${escapeHtml(commentText)}</div>` : ''}
                 <div><strong>Retraso disponible:</strong> ${escapeHtml(cotizacion.plazo_entrega || 'Inmediato')}</div>
                 <div style="margin-top: 4px;"><strong>Términos de pago:</strong> ${escapeHtml(cotizacion.condiciones_pago || 'Acuse de recibo')}</div>
               </div>
@@ -626,13 +625,6 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
               </div>
             </div>
 
-            {/* Public Comment / Observations */}
-            {(cotizacion.comentario_publico || cotizacion.observaciones) && (
-              <div className="my-2.5 text-gray-700 text-[10.5px]">
-                {cotizacion.comentario_publico || cotizacion.observaciones}
-              </div>
-            )}
-
             {/* Currency Indicator */}
             <div className="text-right text-[9.5px] text-gray-700 mt-2 mb-1">
               Monto en Chile Peso
@@ -662,7 +654,7 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
 
                     return (
                       <tr key={idx} className="border-b border-dotted border-gray-400">
-                        <td className="p-2 border-r border-gray-400 text-gray-900">{it.producto}</td>
+                        <td className="p-2 border-r border-gray-400 text-gray-900 whitespace-pre-line">{it.producto}</td>
                         <td className="p-2 border-r border-gray-400 text-center">{totals.ivaPercent}%</td>
                         <td className="p-2 border-r border-gray-400 text-right font-mono">{formatCurrency(p)}</td>
                         <td className="p-2 border-r border-gray-400 text-center">{q}</td>
@@ -689,6 +681,11 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
             {/* Bottom Conditions & Totals */}
             <div className="grid grid-cols-2 gap-4 mt-3">
               <div className="text-[10px] space-y-1.5 text-gray-800">
+                {(cotizacion.comentario_publico || cotizacion.observaciones) && (
+                  <div className="mb-2 text-gray-700 text-[10.5px] whitespace-pre-line">
+                    {cotizacion.comentario_publico || cotizacion.observaciones}
+                  </div>
+                )}
                 <div>
                   <span className="font-bold">Retraso disponible:</span>{' '}
                   <span>{cotizacion.plazo_entrega || 'Inmediato'}</span>
