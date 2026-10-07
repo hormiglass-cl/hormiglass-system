@@ -99,6 +99,10 @@ const USER_ROLE_CONFIG: Record<UserRole, { label: string; className: string }> =
     label: ROL_NOMBRE.mano_obra,
     className: 'bg-amber-50 text-amber-800 border-amber-200',
   },
+  finanzas: {
+    label: ROL_NOMBRE.finanzas,
+    className: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  },
 };
 
 export default function RecursosHumanosPage() {
@@ -923,6 +927,7 @@ export default function RecursosHumanosPage() {
                       >
                         <option value="mano_obra">Mano de Obra</option>
                         <option value="user">Ejecutivo Comercial</option>
+                        <option value="finanzas">Finanzas y Caja</option>
                         <option value="admin">Administrador</option>
                       </select>
                     </div>

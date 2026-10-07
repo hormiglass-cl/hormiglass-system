@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Bell, Boxes, CalendarDays, ChartNoAxesCombined, ChevronLeft, ChevronRight,
-  ContactRound, FileText, FolderKanban, LayoutDashboard,
+  ContactRound, FileText, FolderKanban, Landmark, LayoutDashboard,
   LogOut, Package, Settings2, ShoppingCart, Truck, Users, Wallet, X,
 } from 'lucide-react';
 import { useAuth } from '../lib/context/AuthContext';
@@ -67,12 +67,21 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: bo
   const [unreadCount, setUnreadCount] = useState(0);
   const supabase = useMemo(() => createClient(), []);
   const isFieldWorker = currentUser?.rol === 'mano_obra';
+  const isFinanceOrAdmin = currentUser?.rol === 'admin' || currentUser?.rol === 'finanzas';
+  const financeGroup: NavGroup = {
+    label: 'Finanzas',
+    items: [
+      { label: 'Caja', href: '/caja', icon: Wallet },
+      ...(isFinanceOrAdmin ? [{ label: 'Bancos y empresas', href: '/caja/configuracion', icon: Landmark }] : []),
+      { label: 'Reportes', href: '/reportes', icon: ChartNoAxesCombined },
+    ],
+  };
   const system: NavGroup = { label: 'Sistema', items: isFieldWorker
     ? systemItems.slice(0, 1)
     : [...systemItems, ...(currentUser?.rol === 'admin' ? [{ label: 'Usuarios', href: '/usuarios', icon: Users }] : [])] };
   const groups = isFieldWorker
     ? [calendars, { ...administration, items: administration.items.slice(3) }, system]
-    : [...mainGroups, calendars, finance, administration, system];
+    : [...mainGroups, calendars, financeGroup, administration, system];
 
   useEffect(() => {
     if (!currentUser?.id) return;

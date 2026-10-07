@@ -138,9 +138,18 @@ export default function CajaPage() {
         </div>
 
         <div className="flex items-center gap-2">
-        <Link href="/reportes" className="hg-button-secondary">Ver reportes</Link>
-        <button
-          onClick={() => setShowModal(true)}
+          {(currentUser?.rol === 'admin' || currentUser?.rol === 'finanzas') && (
+            <Link
+              href="/caja/configuracion"
+              className="hg-button-secondary flex items-center gap-1.5 text-xs font-bold"
+            >
+              <Building className="w-3.5 h-3.5 text-[#f97316]" />
+              <span>Bancos & Empresas</span>
+            </Link>
+          )}
+          <Link href="/reportes" className="hg-button-secondary">Ver reportes</Link>
+          <button
+            onClick={() => setShowModal(true)}
           className="bg-[#f97316] hover:bg-[#ea580c] text-white font-semibold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2 self-start md:self-auto"
         >
           <Plus className="w-4 h-4" />

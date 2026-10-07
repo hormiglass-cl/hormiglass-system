@@ -1,9 +1,10 @@
-export type UserRole = 'admin' | 'user' | 'mano_obra';
+export type UserRole = 'admin' | 'user' | 'mano_obra' | 'finanzas';
 
 export const ROL_NOMBRE: Record<UserRole, string> = {
   admin: 'Administrador',
   user: 'Ejecutivo Comercial',
   mano_obra: 'Mano de Obra',
+  finanzas: 'Finanzas y Caja',
 };
 
 export interface Usuario {
@@ -206,6 +207,32 @@ export interface AntecedenteDocumento {
 }
 
 export type EmpresaHormiglass = 'comercial' | 'transportes' | 'inmobiliaria';
+
+export interface Empresa {
+  id: string;
+  slug: EmpresaHormiglass | string;
+  razon_social: string;
+  rut: string;
+  activo: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type TipoCuentaBancaria = 'corriente' | 'vista' | 'mercado_pago' | 'efectivo' | 'otro';
+
+export interface CuentaBancaria {
+  id: string;
+  empresa_id: string;
+  banco: string;
+  tipo_cuenta: TipoCuentaBancaria;
+  numero_cuenta?: string;
+  alias: string;
+  saldo_inicial: number;
+  activo: boolean;
+  created_at?: string;
+  updated_at?: string;
+  empresa?: Empresa;
+}
 export type CategoriaDocumentoAdministracion = 'general' | 'prevencion_riesgo' | 'legal';
 export type SeccionAdministracionEmpresa =
   | 'cuentas_por_cobrar'

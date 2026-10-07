@@ -606,6 +606,7 @@ export default function ConfiguracionPage() {
                         >
                           <option value="admin">Administrador</option>
                           <option value="user">Ejecutivo Comercial</option>
+                          <option value="finanzas">Finanzas y Caja</option>
                           <option value="mano_obra">Mano de Obra</option>
                         </select>
                       </td>
@@ -929,6 +930,7 @@ export default function ConfiguracionPage() {
                 >
                   <option value="mano_obra">Mano de Obra</option>
                   <option value="user">Ejecutivo Comercial</option>
+                  <option value="finanzas">Finanzas y Caja</option>
                   <option value="admin">Administrador</option>
                 </select>
               </div>
@@ -1040,6 +1042,7 @@ export default function ConfiguracionPage() {
                 >
                   <option value="admin">Administrador</option>
                   <option value="user">Ejecutivo Comercial</option>
+                  <option value="finanzas">Finanzas y Caja</option>
                   <option value="mano_obra">Mano de Obra</option>
                 </select>
               </div>
