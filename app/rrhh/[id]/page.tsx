@@ -11,6 +11,8 @@ import {
   TrabajadorPermisoAusencia,
   TrabajadorLiquidacion,
   TrabajadorNota,
+  TrabajadorAsistencia,
+  EstadoAsistencia,
   EstadoDisponibilidad,
   CategoriaDocumentoTrabajador,
   TipoPermisoAusencia,
@@ -18,7 +20,13 @@ import {
   AREAS_RRHH_DEFAULT,
   EventoProduccionLogistica,
   VisitaTerreno,
+  Usuario,
+  Recordatorio,
+  UrgenciaRecordatorio,
+  RecurrenciaRecordatorio,
+  SeccionAdministracionEmpresa,
 } from '../../../lib/types';
+import { completeRecordatorio } from '../../../lib/recordatorios';
 import {
   ArrowLeft,
   UserCheck,
@@ -55,6 +63,15 @@ import {
   CreditCard,
   Check,
   UserRound,
+  ListTodo,
+  Fingerprint,
+  Timer,
+  Bell,
+  Link2,
+  Unlink,
+  CheckSquare,
+  Circle,
+  Square,
 } from 'lucide-react';
 import { REGIONES_CHILE, TODAS_COMUNAS_CHILE } from '../../../lib/chile-data';
 import { SearchableSelect } from '../../../components/SearchableSelect';
@@ -95,11 +112,16 @@ export default function TrabajadorDetailPage() {
   const [permisos, setPermisos] = useState<TrabajadorPermisoAusencia[]>([]);
   const [liquidaciones, setLiquidaciones] = useState<TrabajadorLiquidacion[]>([]);
   const [notas, setNotas] = useState<TrabajadorNota[]>([]);
+  const [asistencias, setAsistencias] = useState<TrabajadorAsistencia[]>([]);
+  const [recordatorios, setRecordatorios] = useState<Recordatorio[]>([]);
+  const [usuariosList, setUsuariosList] = useState<Usuario[]>([]);
   const [eventosAsociados, setEventosAsociados] = useState<EventoProduccionLogistica[]>([]);
   const [visitasAsociadas, setVisitasAsociadas] = useState<VisitaTerreno[]>([]);
 
   // Pestaña activa en columna central
-  const [activeTab, setActiveTab] = useState<'documentos' | 'permisos' | 'liquidaciones' | 'bitacora'>('documentos');
+  const [activeTab, setActiveTab] = useState<
+    'documentos' | 'permisos' | 'liquidaciones' | 'recordatorios' | 'asistencia' | 'bitacora'
+  >('documentos');
   const [categoriaDocFiltro, setCategoriaDocFiltro] = useState<string>('todas');
 
   // Acordeones columna izquierda
@@ -111,12 +133,18 @@ export default function TrabajadorDetailPage() {
   const [showNewDocModal, setShowNewDocModal] = useState(false);
   const [showNewPermisoModal, setShowNewPermisoModal] = useState(false);
   const [showNewLiquidacionModal, setShowNewLiquidacionModal] = useState(false);
+  const [showNewRecordatorioModal, setShowNewRecordatorioModal] = useState(false);
+  const [showNewAsistenciaModal, setShowNewAsistenciaModal] = useState(false);
+  const [showLinkUserModal, setShowLinkUserModal] = useState(false);
+  const [selectedLinkUserId, setSelectedLinkUserId] = useState<string>('');
 
   // Estados de formulario
   const [savingEdit, setSavingEdit] = useState(false);
   const [savingDoc, setSavingDoc] = useState(false);
   const [savingPermiso, setSavingPermiso] = useState(false);
   const [savingLiquidacion, setSavingLiquidacion] = useState(false);
+  const [savingRecordatorio, setSavingRecordatorio] = useState(false);
+  const [savingAsistencia, setSavingAsistencia] = useState(false);
   const [newNotaText, setNewNotaText] = useState('');
   const [newNotaTipo, setNewNotaTipo] = useState<'nota' | 'felicitacion' | 'amonestacion' | 'evaluacion'>('nota');
   const [savingNota, setSavingNota] = useState(false);
@@ -185,72 +213,135 @@ export default function TrabajadorDetailPage() {
     comprobante_url: '',
   });
 
+  // Formulario Nuevo Recordatorio
+  const [newRecordatorioData, setNewRecordatorioData] = useState<{
+    titulo: string;
+    descripcion: string;
+    urgencia: UrgenciaRecordatorio;
+    seccion: SeccionAdministracionEmpresa;
+    fecha_vencimiento: string;
+    recurrencia: RecurrenciaRecordatorio;
+  }>({
+    titulo: '',
+    descripcion: '',
+    urgencia: 'alta',
+    seccion: 'sueldos_administrativos',
+    fecha_vencimiento: new Date().toISOString().split('T')[0],
+    recurrencia: 'ninguna',
+  });
+
+  // Formulario Nueva Asistencia
+  const [newAsistenciaData, setNewAsistenciaData] = useState<{
+    fecha: string;
+    hora_entrada: string;
+    hora_salida: string;
+    estado: EstadoAsistencia;
+    minutos_atraso: number;
+    observaciones: string;
+  }>({
+    fecha: new Date().toISOString().split('T')[0],
+    hora_entrada: '08:00',
+    hora_salida: '17:30',
+    estado: 'presente',
+    minutos_atraso: 0,
+    observaciones: '',
+  });
+
   // Carga completa desde Supabase
   const loadWorkerFullData = async () => {
     if (!workerId) return;
 
     try {
-      const [wRes, docRes, permRes, liqRes, notRes, evRes, visRes] = await Promise.all([
-        supabase.from('trabajadores').select('*').eq('id', workerId).single(),
+      // 1. Obtener ficha del trabajador
+      const wRes = await supabase.from('trabajadores').select('*').eq('id', workerId).single();
+      if (!wRes.data) {
+        setLoading(false);
+        return;
+      }
+
+      const w = wRes.data as Trabajador;
+      setTrabajador(w);
+      setSelectedLinkUserId(w.usuario_id || '');
+      setEditFormData({
+        nombre: w.nombre || '',
+        rut: w.rut || '',
+        email: w.email || '',
+        telefono: w.telefono || '',
+        direccion: w.direccion || '',
+        comuna: w.comuna || '',
+        region: w.region || '',
+        cargo: w.cargo || '',
+        area: w.area || '',
+        tipo_contrato: w.tipo_contrato || 'Indefinido',
+        sueldo_base: Number(w.sueldo_base || 0),
+        fecha_ingreso: w.fecha_ingreso || '',
+        contacto_emergencia_nombre: w.contacto_emergencia_nombre || '',
+        contacto_emergencia_telefono: w.contacto_emergencia_telefono || '',
+        banco: w.banco || '',
+        tipo_cuenta: w.tipo_cuenta || '',
+        numero_cuenta: w.numero_cuenta || '',
+        observaciones: w.observaciones || '',
+      });
+
+      setNewLiquidacionData((prev) => ({
+        ...prev,
+        monto_sueldo_base: Number(w.sueldo_base || 0),
+        monto_liquido: Number(w.sueldo_base || 0),
+      }));
+
+      // 2. Consultas en paralelo
+      const [docRes, permRes, liqRes, notRes, asistRes, usrsRes, evRes, visRes, recRes] = await Promise.all([
         supabase.from('trabajador_documentos').select('*').eq('trabajador_id', workerId).order('created_at', { ascending: false }),
         supabase.from('trabajador_permisos_ausencias').select('*').eq('trabajador_id', workerId).order('fecha_inicio', { ascending: false }),
         supabase.from('trabajador_liquidaciones_sueldos').select('*').eq('trabajador_id', workerId).order('anio', { ascending: false }).order('mes', { ascending: false }),
         supabase.from('trabajador_notas').select('*, usuario:usuarios(*)').eq('trabajador_id', workerId).order('created_at', { ascending: false }),
-        supabase.from('eventos_produccion_logistica').select('*').order('created_at', { ascending: false }).limit(20),
-        supabase.from('visitas_terreno').select('*, oportunidad:oportunidades(*)').order('created_at', { ascending: false }).limit(20),
+        supabase.from('trabajador_asistencia').select('*').eq('trabajador_id', workerId).order('fecha', { ascending: false }),
+        supabase.from('usuarios').select('id, nombre, email, rol').order('nombre'),
+        supabase.from('eventos_produccion_logistica').select('*').order('fecha_inicio', { ascending: false }),
+        supabase.from('visitas_terreno').select('*, oportunidad:oportunidades(*)').order('created_at', { ascending: false }),
+        w.usuario_id
+          ? supabase
+              .from('recordatorios')
+              .select('*, asignado_a:usuarios!asignado_a_id(*), creado_por:usuarios!creado_por_id(*)')
+              .eq('asignado_a_id', w.usuario_id)
+              .eq('activo', true)
+              .order('fecha_vencimiento', { ascending: true })
+          : Promise.resolve({ data: [] }),
       ]);
-
-      if (wRes.data) {
-        const w = wRes.data as Trabajador;
-        setTrabajador(w);
-        setEditFormData({
-          nombre: w.nombre || '',
-          rut: w.rut || '',
-          email: w.email || '',
-          telefono: w.telefono || '',
-          direccion: w.direccion || '',
-          comuna: w.comuna || '',
-          region: w.region || '',
-          cargo: w.cargo || '',
-          area: w.area || '',
-          tipo_contrato: w.tipo_contrato || 'Indefinido',
-          sueldo_base: Number(w.sueldo_base || 0),
-          fecha_ingreso: w.fecha_ingreso || '',
-          contacto_emergencia_nombre: w.contacto_emergencia_nombre || '',
-          contacto_emergencia_telefono: w.contacto_emergencia_telefono || '',
-          banco: w.banco || '',
-          tipo_cuenta: w.tipo_cuenta || '',
-          numero_cuenta: w.numero_cuenta || '',
-          observaciones: w.observaciones || '',
-        });
-
-        setNewLiquidacionData((prev) => ({
-          ...prev,
-          monto_sueldo_base: Number(w.sueldo_base || 0),
-          monto_liquido: Number(w.sueldo_base || 0),
-        }));
-
-        // Filtrar eventos donde participe este trabajador (por nombre)
-        if (evRes.data) {
-          const matchedEvs = (evRes.data as EventoProduccionLogistica[]).filter((e) =>
-            (e.titulo || '').toLowerCase().includes(w.nombre.toLowerCase()) ||
-            (e.observaciones || '').toLowerCase().includes(w.nombre.toLowerCase())
-          );
-          setEventosAsociados(matchedEvs);
-        }
-
-        if (visRes.data) {
-          const matchedVis = (visRes.data as VisitaTerreno[]).filter(
-            (v) => (v.tecnico_visita || '').toLowerCase().includes(w.nombre.toLowerCase())
-          );
-          setVisitasAsociadas(matchedVis);
-        }
-      }
 
       if (docRes.data) setDocumentos(docRes.data as TrabajadorDocumento[]);
       if (permRes.data) setPermisos(permRes.data as TrabajadorPermisoAusencia[]);
       if (liqRes.data) setLiquidaciones(liqRes.data as TrabajadorLiquidacion[]);
       if (notRes.data) setNotas(notRes.data as TrabajadorNota[]);
+      if (asistRes.data) setAsistencias(asistRes.data as TrabajadorAsistencia[]);
+      if (usrsRes.data) setUsuariosList(usrsRes.data as Usuario[]);
+      if (recRes.data) setRecordatorios(recRes.data as Recordatorio[]);
+
+      // 3. Filtrar eventos asociados exclusivamente a este trabajador
+      if (evRes.data) {
+        const evList = evRes.data as EventoProduccionLogistica[];
+        const matchedEvs = evList.filter((e) => {
+          if (w.usuario_id && (e.responsable_id === w.usuario_id || e.responsable_calendario_id === w.usuario_id || e.registrado_por === w.usuario_id)) {
+            return true;
+          }
+          const nom = w.nombre.toLowerCase();
+          return (e.titulo || '').toLowerCase().includes(nom) || (e.observaciones || '').toLowerCase().includes(nom);
+        });
+        setEventosAsociados(matchedEvs);
+      }
+
+      // 4. Filtrar visitas técnicas asociadas exclusivamente a este trabajador
+      if (visRes.data) {
+        const visList = visRes.data as VisitaTerreno[];
+        const matchedVis = visList.filter((v) => {
+          if (w.usuario_id && (v.tecnico_id === w.usuario_id || v.responsable_calendario_id === w.usuario_id)) {
+            return true;
+          }
+          const nom = w.nombre.toLowerCase();
+          return (v.tecnico_visita || '').toLowerCase().includes(nom);
+        });
+        setVisitasAsociadas(matchedVis);
+      }
 
       setLoading(false);
     } catch (err) {
@@ -270,12 +361,144 @@ export default function TrabajadorDetailPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'trabajador_permisos_ausencias', filter: `trabajador_id=eq.${workerId}` }, () => loadWorkerFullData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'trabajador_liquidaciones_sueldos', filter: `trabajador_id=eq.${workerId}` }, () => loadWorkerFullData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'trabajador_notas', filter: `trabajador_id=eq.${workerId}` }, () => loadWorkerFullData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trabajador_asistencia', filter: `trabajador_id=eq.${workerId}` }, () => loadWorkerFullData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'recordatorios' }, () => loadWorkerFullData())
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [workerId]);
+
+  // Vincular o desvincular cuenta de usuario del CRM
+  const handleLinkUser = async (newUsuarioId: string | null) => {
+    if (!trabajador) return;
+    const { error } = await supabase
+      .from('trabajadores')
+      .update({ usuario_id: newUsuarioId, updated_at: new Date().toISOString() })
+      .eq('id', trabajador.id);
+
+    if (error) {
+      console.error('Error vinculando usuario:', error);
+    } else {
+      setShowLinkUserModal(false);
+      loadWorkerFullData();
+    }
+  };
+
+  // Completar o reactivar Recordatorio
+  const handleToggleRecordatorio = async (rec: Recordatorio) => {
+    try {
+      await completeRecordatorio(supabase, rec);
+      loadWorkerFullData();
+    } catch (err) {
+      console.error('Error al actualizar recordatorio:', err);
+    }
+  };
+
+  // Guardar nuevo Recordatorio asignado al colaborador
+  const handleSaveRecordatorio = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!trabajador?.usuario_id || !newRecordatorioData.titulo.trim()) return;
+
+    setSavingRecordatorio(true);
+    try {
+      const { error } = await supabase.from('recordatorios').insert([
+        {
+          empresa: 'comercial',
+          seccion: newRecordatorioData.seccion,
+          titulo: newRecordatorioData.titulo.trim(),
+          descripcion: newRecordatorioData.descripcion.trim() || null,
+          urgencia: newRecordatorioData.urgencia,
+          estado: 'por_hacer',
+          fecha_vencimiento: newRecordatorioData.fecha_vencimiento,
+          recurrencia: newRecordatorioData.recurrencia,
+          recurrencia_dia_mes:
+            newRecordatorioData.recurrencia === 'mensual'
+              ? Number(newRecordatorioData.fecha_vencimiento.split('-')[2])
+              : null,
+          asignado_a_id: trabajador.usuario_id,
+          creado_por_id: currentUser?.id || null,
+          completado: false,
+          activo: true,
+          veces_completado: 0,
+        },
+      ]);
+
+      if (error) throw error;
+
+      setShowNewRecordatorioModal(false);
+      setNewRecordatorioData({
+        titulo: '',
+        descripcion: '',
+        urgencia: 'alta',
+        seccion: 'sueldos_administrativos',
+        fecha_vencimiento: new Date().toISOString().split('T')[0],
+        recurrencia: 'ninguna',
+      });
+      loadWorkerFullData();
+    } catch (err) {
+      console.error('Error creando recordatorio:', err);
+    } finally {
+      setSavingRecordatorio(false);
+    }
+  };
+
+  // Desactivar / Eliminar Recordatorio
+  const handleDeleteRecordatorio = async (id: string) => {
+    if (!confirm('¿Seguro que deseas eliminar este recordatorio?')) return;
+    const { error } = await supabase.from('recordatorios').update({ activo: false }).eq('id', id);
+    if (error) console.error(error);
+    else loadWorkerFullData();
+  };
+
+  // Registrar Asistencia Manual
+  const handleSaveAsistencia = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!trabajador) return;
+
+    setSavingAsistencia(true);
+    try {
+      const { error } = await supabase.from('trabajador_asistencia').insert([
+        {
+          trabajador_id: trabajador.id,
+          fecha: newAsistenciaData.fecha,
+          hora_entrada: newAsistenciaData.hora_entrada ? `${newAsistenciaData.hora_entrada}:00` : null,
+          hora_salida: newAsistenciaData.hora_salida ? `${newAsistenciaData.hora_salida}:00` : null,
+          estado: newAsistenciaData.estado,
+          minutos_atraso: Number(newAsistenciaData.minutos_atraso || 0),
+          origen: 'manual',
+          observaciones: newAsistenciaData.observaciones.trim() || null,
+          creado_por: currentUser?.id || null,
+        },
+      ]);
+
+      if (error) throw error;
+
+      setShowNewAsistenciaModal(false);
+      setNewAsistenciaData({
+        fecha: new Date().toISOString().split('T')[0],
+        hora_entrada: '08:00',
+        hora_salida: '17:30',
+        estado: 'presente',
+        minutos_atraso: 0,
+        observaciones: '',
+      });
+      loadWorkerFullData();
+    } catch (err) {
+      console.error('Error registrando asistencia:', err);
+    } finally {
+      setSavingAsistencia(false);
+    }
+  };
+
+  // Eliminar Marcaje de Asistencia
+  const handleDeleteAsistencia = async (id: string) => {
+    if (!confirm('¿Seguro que deseas eliminar este registro de asistencia?')) return;
+    const { error } = await supabase.from('trabajador_asistencia').delete().eq('id', id);
+    if (error) console.error(error);
+    else loadWorkerFullData();
+  };
 
   // Actualizar disponibilidad
   const handleUpdateDisponibilidad = async (nuevoEstado: EstadoDisponibilidad) => {
@@ -501,6 +724,60 @@ export default function TrabajadorDetailPage() {
     if (categoriaDocFiltro === 'todas') return documentos;
     return documentos.filter((d) => d.categoria === categoriaDocFiltro);
   }, [documentos, categoriaDocFiltro]);
+
+  // Resumen anual de permisos (año actual)
+  const resumenPermisos = useMemo(() => {
+    const anioActual = new Date().getFullYear();
+    const permisosAnio = permisos.filter((p) => p.fecha_inicio?.startsWith(String(anioActual)));
+    const diasAusente = permisosAnio.reduce((acc, p) => {
+      const inicio = new Date(p.fecha_inicio).getTime();
+      const fin = new Date(p.fecha_fin).getTime();
+      const diff = Math.max(1, Math.round((fin - inicio) / (1000 * 60 * 60 * 24)) + 1);
+      return acc + diff;
+    }, 0);
+    const vacaciones = permisosAnio.filter((p) => p.tipo === 'vacaciones').length;
+    const licencias = permisosAnio.filter((p) => p.tipo === 'licencia_medica').length;
+    const particulares = permisosAnio.filter((p) => p.tipo === 'permiso').length;
+    return { anioActual, total: permisosAnio.length, diasAusente, vacaciones, licencias, particulares };
+  }, [permisos]);
+
+  // Resumen anual de liquidaciones (año actual)
+  const resumenLiquidaciones = useMemo(() => {
+    const anioActual = new Date().getFullYear();
+    const liqsAnio = liquidaciones.filter((l) => l.anio === anioActual);
+    const totalLiquido = liqsAnio.reduce((acc, l) => acc + Number(l.monto_liquido || 0), 0);
+    const totalBonos = liqsAnio.reduce((acc, l) => acc + Number(l.bonos || 0), 0);
+    const totalDescuentos = liqsAnio.reduce((acc, l) => acc + Number(l.descuentos || 0), 0);
+    const pagadas = liqsAnio.filter((l) => l.estado_pago === 'pagado').length;
+    return { anioActual, total: liqsAnio.length, totalLiquido, totalBonos, totalDescuentos, pagadas };
+  }, [liquidaciones]);
+
+  // Métricas de tareas / recordatorios
+  const statsRecordatorios = useMemo(() => {
+    const total = recordatorios.length;
+    const pendientes = recordatorios.filter((r) => !r.completado).length;
+    const completadas = recordatorios.filter((r) => r.completado).length;
+    const hoy = new Date().toISOString().split('T')[0];
+    const vencidas = recordatorios.filter((r) => !r.completado && r.fecha_vencimiento < hoy).length;
+    const criticas = recordatorios.filter((r) => !r.completado && ['alta', 'critica'].includes(r.urgencia)).length;
+    return { total, pendientes, completadas, vencidas, criticas };
+  }, [recordatorios]);
+
+  // Métricas de asistencia
+  const statsAsistencia = useMemo(() => {
+    const total = asistencias.length;
+    const presentes = asistencias.filter((a) => a.estado === 'presente').length;
+    const atrasos = asistencias.filter((a) => a.estado === 'atraso').length;
+    const minutosAtraso = asistencias.reduce((acc, a) => acc + (a.minutos_atraso || 0), 0);
+    const puntualidad = total > 0 ? Math.round((presentes / total) * 100) : 100;
+    return { total, presentes, atrasos, minutosAtraso, puntualidad };
+  }, [asistencias]);
+
+  // Usuario vinculado en el CRM
+  const linkedUsuario = useMemo(() => {
+    if (!trabajador?.usuario_id) return null;
+    return usuariosList.find((u) => u.id === trabajador.usuario_id) || null;
+  }, [trabajador?.usuario_id, usuariosList]);
 
   if (loading) {
     return (
@@ -804,6 +1081,44 @@ export default function TrabajadorDetailPage() {
             </button>
 
             <button
+              onClick={() => setActiveTab('recordatorios')}
+              className={`px-3 py-2 rounded-md transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                activeTab === 'recordatorios'
+                  ? 'bg-[#f97316] text-white shadow-xs font-black'
+                  : 'text-gray-600 hover:bg-orange-50 hover:text-[#f97316]'
+              }`}
+            >
+              <ListTodo className="w-4 h-4" />
+              <span>Tareas</span>
+              <span
+                className={`ml-1 px-1.5 py-0.2 rounded-full text-[10px] ${
+                  activeTab === 'recordatorios'
+                    ? 'bg-white/20'
+                    : statsRecordatorios.pendientes > 0
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-gray-100 text-gray-500'
+                }`}
+              >
+                {statsRecordatorios.pendientes}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('asistencia')}
+              className={`px-3 py-2 rounded-md transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                activeTab === 'asistencia'
+                  ? 'bg-[#f97316] text-white shadow-xs font-black'
+                  : 'text-gray-600 hover:bg-orange-50 hover:text-[#f97316]'
+              }`}
+            >
+              <Timer className="w-4 h-4" />
+              <span>Asistencia</span>
+              <span className="ml-1 bg-white/20 px-1.5 py-0.2 rounded-full text-[10px]">
+                {statsAsistencia.total}
+              </span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('bitacora')}
               className={`px-3 py-2 rounded-md transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 activeTab === 'bitacora'
@@ -948,6 +1263,26 @@ export default function TrabajadorDetailPage() {
                 </button>
               </div>
 
+              {/* Tarjetas Resumen Anual */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+                  <span className="text-[10px] uppercase font-bold text-amber-700 block">Total Solicitudes</span>
+                  <span className="text-base font-black text-amber-900">{resumenPermisos.total}</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-orange-50 border border-orange-200">
+                  <span className="text-[10px] uppercase font-bold text-[#ea580c] block">Días Ausente {resumenPermisos.anioActual}</span>
+                  <span className="text-base font-black text-[#c2410c]">{resumenPermisos.diasAusente} días</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-blue-50 border border-blue-200">
+                  <span className="text-[10px] uppercase font-bold text-blue-700 block">Vacaciones</span>
+                  <span className="text-base font-black text-blue-900">{resumenPermisos.vacaciones}</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-purple-50 border border-purple-200">
+                  <span className="text-[10px] uppercase font-bold text-purple-700 block">Licencias</span>
+                  <span className="text-base font-black text-purple-900">{resumenPermisos.licencias}</span>
+                </div>
+              </div>
+
               {permisos.length === 0 ? (
                 <div className="p-8 text-center text-gray-400 text-xs italic border border-dashed border-gray-200 rounded-lg">
                   ✓ El colaborador no tiene permisos ni ausencias registradas.
@@ -1024,6 +1359,26 @@ export default function TrabajadorDetailPage() {
                 </button>
               </div>
 
+              {/* Tarjetas Resumen Anual Sueldos */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200">
+                  <span className="text-[10px] uppercase font-bold text-emerald-700 block">Líquido {resumenLiquidaciones.anioActual}</span>
+                  <span className="text-sm font-mono font-black text-emerald-900">${resumenLiquidaciones.totalLiquido.toLocaleString('es-CL')}</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-blue-50 border border-blue-200">
+                  <span className="text-[10px] uppercase font-bold text-blue-700 block">Bonos Totales</span>
+                  <span className="text-sm font-mono font-black text-blue-900">${resumenLiquidaciones.totalBonos.toLocaleString('es-CL')}</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-red-50 border border-red-200">
+                  <span className="text-[10px] uppercase font-bold text-red-700 block">Descuentos</span>
+                  <span className="text-sm font-mono font-black text-red-900">${resumenLiquidaciones.totalDescuentos.toLocaleString('es-CL')}</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-purple-50 border border-purple-200">
+                  <span className="text-[10px] uppercase font-bold text-purple-700 block">Liquidaciones</span>
+                  <span className="text-sm font-black text-purple-900">{resumenLiquidaciones.pagadas} / {resumenLiquidaciones.total}</span>
+                </div>
+              </div>
+
               {liquidaciones.length === 0 ? (
                 <div className="p-8 text-center text-gray-400 text-xs italic border border-dashed border-gray-200 rounded-lg">
                   No hay liquidaciones de sueldo registradas aún.
@@ -1059,7 +1414,289 @@ export default function TrabajadorDetailPage() {
             </div>
           )}
 
-          {/* TAB 4: BITÁCORA Y NOTAS INTERNAS */}
+          {/* TAB 4: RECORDATORIOS Y TAREAS */}
+          {activeTab === 'recordatorios' && (
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm space-y-5">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div>
+                  <h3 className="font-extrabold text-base text-[#213343] flex items-center gap-2">
+                    <ListTodo className="w-4 h-4 text-[#f97316]" />
+                    <span>Recordatorios & Tareas Asignadas</span>
+                  </h3>
+                  <p className="text-xs text-gray-500 font-medium">
+                    Aislamiento estricto de tareas y compromisos operativos asignados al colaborador
+                  </p>
+                </div>
+
+                {trabajador.usuario_id && (
+                  <button
+                    onClick={() => setShowNewRecordatorioModal(true)}
+                    className="px-3 py-1.5 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Nueva tarea</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Tarjetas KPI de Tareas */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+                  <span className="text-[10px] uppercase font-bold text-amber-700 block">Pendientes</span>
+                  <span className="text-base font-black text-amber-900">{statsRecordatorios.pendientes}</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200">
+                  <span className="text-[10px] uppercase font-bold text-emerald-700 block">Completadas</span>
+                  <span className="text-base font-black text-emerald-900">{statsRecordatorios.completadas}</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-red-50 border border-red-200">
+                  <span className="text-[10px] uppercase font-bold text-red-700 block">Vencidas</span>
+                  <span className="text-base font-black text-red-900">{statsRecordatorios.vencidas}</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-purple-50 border border-purple-200">
+                  <span className="text-[10px] uppercase font-bold text-purple-700 block">Alta / Crítica</span>
+                  <span className="text-base font-black text-purple-900">{statsRecordatorios.criticas}</span>
+                </div>
+              </div>
+
+              {!trabajador.usuario_id ? (
+                <div className="p-5 rounded-lg bg-amber-50/70 border border-amber-200 text-amber-900 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-xs">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Colaborador sin cuenta de usuario CRM vinculada</span>
+                  </div>
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    Este trabajador no tiene un usuario del sistema asignado en su ficha. Para poder asignarle recordatorios, tareas operativas y notificaciones en el CRM, vincula su cuenta en la columna derecha.
+                  </p>
+                  <button
+                    onClick={() => setShowLinkUserModal(true)}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md font-bold text-xs transition inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span>Vincular cuenta de usuario ahora</span>
+                  </button>
+                </div>
+              ) : recordatorios.length === 0 ? (
+                <div className="p-8 text-center text-gray-400 text-xs italic border border-dashed border-gray-200 rounded-lg">
+                  ✓ No hay tareas ni recordatorios pendientes para este colaborador.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {recordatorios.map((rec) => {
+                    const esVencido = !rec.completado && rec.fecha_vencimiento < new Date().toISOString().split('T')[0];
+                    return (
+                      <div
+                        key={rec.id}
+                        className={`p-3.5 rounded-lg border transition space-y-2 text-xs ${
+                          rec.completado
+                            ? 'bg-gray-50/80 border-gray-200 opacity-70'
+                            : esVencido
+                            ? 'bg-red-50/50 border-red-200'
+                            : 'bg-white border-gray-200 hover:border-orange-200 shadow-2xs'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-2.5">
+                            <button
+                              onClick={() => handleToggleRecordatorio(rec)}
+                              className="mt-0.5 text-gray-400 hover:text-[#f97316] transition cursor-pointer"
+                              title={rec.completado ? 'Marcar como pendiente' : 'Marcar como completada'}
+                            >
+                              {rec.completado ? (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              ) : (
+                                <Circle className="w-4 h-4 text-gray-400 hover:text-[#f97316]" />
+                              )}
+                            </button>
+                            <div>
+                              <span
+                                className={`font-bold block ${
+                                  rec.completado
+                                    ? 'line-through text-gray-400'
+                                    : 'text-[#213343]'
+                                }`}
+                              >
+                                {rec.titulo}
+                              </span>
+                              {rec.descripcion && (
+                                <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">
+                                  {rec.descripcion}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span
+                              className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                                rec.urgencia === 'critica'
+                                  ? 'bg-red-100 text-red-800 border border-red-200'
+                                  : rec.urgencia === 'alta'
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  : 'bg-blue-100 text-blue-800 border border-blue-200'
+                              }`}
+                            >
+                              {rec.urgencia}
+                            </span>
+                            <button
+                              onClick={() => handleDeleteRecordatorio(rec.id)}
+                              className="p-1 rounded-md text-gray-300 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                              title="Eliminar tarea"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-gray-100 text-[11px] text-gray-400 font-medium">
+                          <span className="flex items-center gap-1 font-mono">
+                            <Clock className="w-3 h-3" />
+                            Vence: <strong className={esVencido ? 'text-red-600' : 'text-gray-700'}>{rec.fecha_vencimiento}</strong>
+                          </span>
+                          <span className="capitalize bg-gray-100 px-2 py-0.2 rounded-md text-gray-600 font-semibold">
+                            {rec.seccion.replace('_', ' ')}
+                          </span>
+                          {rec.recurrencia && rec.recurrencia !== 'ninguna' && (
+                            <span className="text-orange-600 font-bold bg-orange-50 px-2 py-0.2 rounded-md">
+                              ↻ Recurrencia {rec.recurrencia}
+                            </span>
+                          )}
+                          {rec.completado && (
+                            <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.2 rounded-md">
+                              ✓ Completada
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 5: ASISTENCIA Y JORNADA */}
+          {activeTab === 'asistencia' && (
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm space-y-5">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div>
+                  <h3 className="font-extrabold text-base text-[#213343] flex items-center gap-2">
+                    <Timer className="w-4 h-4 text-[#f97316]" />
+                    <span>Control de Asistencia & Jornada</span>
+                  </h3>
+                  <p className="text-xs text-gray-500 font-medium">
+                    Marcajes diarios de entrada/salida y registro de puntualidad
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setShowNewAsistenciaModal(true)}
+                  className="px-3 py-1.5 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Nuevo marcaje</span>
+                </button>
+              </div>
+
+              {/* Banner de Integración Externa */}
+              <div className="p-4 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 space-y-1.5">
+                <div className="flex items-center gap-2 font-bold text-xs">
+                  <AlertCircle className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span>Integración de reloj control biométrico en preparación</span>
+                </div>
+                <p className="text-xs text-blue-800 leading-relaxed">
+                  Conectores compatibles: <strong>GeoVictoria API / ZKTeco Biométrico</strong>.
+                </p>
+                <div className="inline-flex items-center gap-1.5 bg-blue-100 text-blue-900 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold border border-blue-300">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  <span>Estado: Integración externa pendiente de credenciales</span>
+                </div>
+              </div>
+
+              {/* Métricas de Asistencia */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200">
+                  <span className="text-[10px] uppercase font-bold text-emerald-700 block">Puntualidad</span>
+                  <span className="text-base font-black text-emerald-900">{statsAsistencia.puntualidad}%</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-blue-50 border border-blue-200">
+                  <span className="text-[10px] uppercase font-bold text-blue-700 block">Presente</span>
+                  <span className="text-base font-black text-blue-900">{statsAsistencia.presentes}</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+                  <span className="text-[10px] uppercase font-bold text-amber-700 block">Atrasos</span>
+                  <span className="text-base font-black text-amber-900">{statsAsistencia.atrasos}</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-purple-50 border border-purple-200">
+                  <span className="text-[10px] uppercase font-bold text-purple-700 block">Minutos Atraso</span>
+                  <span className="text-base font-black text-purple-900">{statsAsistencia.minutosAtraso} min</span>
+                </div>
+              </div>
+
+              {/* Tabla de Registros */}
+              {asistencias.length === 0 ? (
+                <div className="p-8 text-center text-gray-400 text-xs italic border border-dashed border-gray-200 rounded-lg">
+                  No hay marcajes de asistencia registrados para este colaborador.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {asistencias.map((asist) => {
+                    const badgeColor =
+                      asist.estado === 'presente'
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                        : asist.estado === 'atraso'
+                        ? 'bg-amber-100 text-amber-800 border-amber-200'
+                        : asist.estado === 'en_terreno'
+                        ? 'bg-blue-100 text-blue-800 border-blue-200'
+                        : 'bg-red-100 text-red-800 border-red-200';
+
+                    return (
+                      <div
+                        key={asist.id}
+                        className="p-3.5 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-[#213343]">{asist.fecha}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase border ${badgeColor}`}>
+                              {asist.estado.replace('_', ' ')}
+                            </span>
+                            <span className="text-[10px] text-gray-400 font-mono capitalize">
+                              ({asist.origen})
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-gray-500 font-mono flex items-center gap-3">
+                            <span>Entrada: <strong>{asist.hora_entrada ? asist.hora_entrada.slice(0, 5) : '--:--'}</strong></span>
+                            <span>Salida: <strong>{asist.hora_salida ? asist.hora_salida.slice(0, 5) : '--:--'}</strong></span>
+                            {(asist.minutos_atraso || 0) > 0 && (
+                              <span className="text-amber-700 font-bold">
+                                +{asist.minutos_atraso} min atraso
+                              </span>
+                            )}
+                          </div>
+                          {asist.observaciones && (
+                            <p className="text-[11px] text-gray-600 italic">
+                              &quot;{asist.observaciones}&quot;
+                            </p>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => handleDeleteAsistencia(asist.id)}
+                          className="p-1 rounded-md text-gray-300 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                          title="Eliminar registro"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 6: BITÁCORA Y NOTAS INTERNAS */}
           {activeTab === 'bitacora' && (
             <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm space-y-5">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
@@ -1151,6 +1788,80 @@ export default function TrabajadorDetailPage() {
         {/* COLUMNA DERECHA: ASIGNACIONES OPERATIVAS & CALENDARIO (~26% / 3.5 cols) */}
         {/* ========================================================= */}
         <div className="lg:col-span-3 space-y-5">
+          {/* Tarjeta Cuenta de Usuario CRM */}
+          <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm space-y-3 text-xs">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
+              <h3 className="font-extrabold text-sm text-[#213343] flex items-center gap-1.5">
+                <UserCheck className="w-4 h-4 text-[#f97316]" />
+                <span>Cuenta CRM</span>
+              </h3>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                  linkedUsuario
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                {linkedUsuario ? 'Vinculado' : 'Sin cuenta'}
+              </span>
+            </div>
+
+            {linkedUsuario ? (
+              <div className="space-y-2.5">
+                <div className="bg-gray-50 p-2.5 rounded-md border border-gray-200 space-y-1">
+                  <span className="font-bold text-[#213343] block truncate">
+                    {linkedUsuario.nombre}
+                  </span>
+                  <span className="text-[11px] text-gray-500 block truncate font-mono">
+                    {linkedUsuario.email}
+                  </span>
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <span className="text-[10px] uppercase font-bold bg-orange-100 text-[#f97316] px-1.5 py-0.2 rounded">
+                      {linkedUsuario.rol}
+                    </span>
+                    <span className="text-[10px] text-gray-400 font-mono">
+                      ID: {linkedUsuario.id.slice(0, 8)}...
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setSelectedLinkUserId(linkedUsuario.id);
+                      setShowLinkUserModal(true);
+                    }}
+                    className="flex-1 py-1.5 text-center text-xs font-bold text-gray-600 hover:text-[#f97316] bg-gray-100 hover:bg-orange-50 rounded-md transition cursor-pointer"
+                  >
+                    Cambiar usuario
+                  </button>
+                  <button
+                    onClick={() => handleLinkUser(null)}
+                    className="py-1.5 px-2.5 text-xs font-bold text-red-600 hover:bg-red-50 rounded-md transition cursor-pointer"
+                    title="Desvincular usuario"
+                  >
+                    Desvincular
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  Colaborador operativo sin acceso directo a sesión CRM. Puedes vincularlo a un usuario registrado para activar recordatorios y notificaciones.
+                </p>
+                <button
+                  onClick={() => {
+                    setSelectedLinkUserId('');
+                    setShowLinkUserModal(true);
+                  }}
+                  className="w-full py-2 bg-gray-100 hover:bg-[#f97316] hover:text-white text-gray-700 font-bold rounded-md transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                  <span>Vincular cuenta CRM</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Asignaciones en Faenas & Producción */}
           <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm space-y-4 text-xs">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
@@ -1675,6 +2386,290 @@ export default function TrabajadorDetailPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL 5: REGISTRAR NUEVA TAREA / RECORDATORIO             */}
+      {/* ========================================================= */}
+      {showNewRecordatorioModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full border border-gray-200 shadow-sm p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h2 className="text-lg font-black text-[#213343]">Nueva Tarea / Recordatorio</h2>
+              <button
+                onClick={() => setShowNewRecordatorioModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveRecordatorio} className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-gray-500 block mb-1">Título de la tarea *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej: Renovar examen ocupacional de altura"
+                  value={newRecordatorioData.titulo}
+                  onChange={(e) => setNewRecordatorioData({ ...newRecordatorioData, titulo: e.target.value })}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-gray-500 block mb-1">Descripción / Detalle</label>
+                <textarea
+                  rows={2}
+                  placeholder="Detalles adicionales, requisitos o instrucciones..."
+                  value={newRecordatorioData.descripcion}
+                  onChange={(e) => setNewRecordatorioData({ ...newRecordatorioData, descripcion: e.target.value })}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md p-2.5 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-gray-500 block mb-1">Urgencia</label>
+                  <select
+                    value={newRecordatorioData.urgencia}
+                    onChange={(e) => setNewRecordatorioData({ ...newRecordatorioData, urgencia: e.target.value as any })}
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold cursor-pointer"
+                  >
+                    <option value="baja">Baja</option>
+                    <option value="media">Media</option>
+                    <option value="alta">Alta</option>
+                    <option value="critica">Crítica</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-gray-500 block mb-1">Sección</label>
+                  <select
+                    value={newRecordatorioData.seccion}
+                    onChange={(e) => setNewRecordatorioData({ ...newRecordatorioData, seccion: e.target.value as any })}
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold cursor-pointer"
+                  >
+                    <option value="sueldos_administrativos">Sueldos y RRHH</option>
+                    <option value="prevencion_riesgos">Prevención de riesgos</option>
+                    <option value="documentos">Documentación</option>
+                    <option value="obras_faenas">Obras y faenas</option>
+                    <option value="pendientes_generales">Pendientes generales</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-gray-500 block mb-1">Fecha vencimiento *</label>
+                  <input
+                    type="date"
+                    required
+                    value={newRecordatorioData.fecha_vencimiento}
+                    onChange={(e) => setNewRecordatorioData({ ...newRecordatorioData, fecha_vencimiento: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-gray-500 block mb-1">Recurrencia</label>
+                  <select
+                    value={newRecordatorioData.recurrencia}
+                    onChange={(e) => setNewRecordatorioData({ ...newRecordatorioData, recurrencia: e.target.value as any })}
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold cursor-pointer"
+                  >
+                    <option value="ninguna">Sin recurrencia</option>
+                    <option value="semanal">Semanal</option>
+                    <option value="mensual">Mensual</option>
+                    <option value="anual">Anual</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowNewRecordatorioModal(false)}
+                  className="px-4 py-2 rounded-md text-gray-600 font-bold hover:bg-gray-100 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingRecordatorio || !newRecordatorioData.titulo.trim()}
+                  className="px-5 py-2 rounded-md bg-[#f97316] hover:bg-[#ea580c] text-white font-black cursor-pointer"
+                >
+                  {savingRecordatorio ? 'Guardando...' : 'Asignar tarea'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL 6: REGISTRAR ASISTENCIA MANUAL                      */}
+      {/* ========================================================= */}
+      {showNewAsistenciaModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full border border-gray-200 shadow-sm p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h2 className="text-lg font-black text-[#213343]">Registrar Marcaje de Asistencia</h2>
+              <button
+                onClick={() => setShowNewAsistenciaModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAsistencia} className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-gray-500 block mb-1">Fecha *</label>
+                  <input
+                    type="date"
+                    required
+                    value={newAsistenciaData.fecha}
+                    onChange={(e) => setNewAsistenciaData({ ...newAsistenciaData, fecha: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-gray-500 block mb-1">Estado *</label>
+                  <select
+                    value={newAsistenciaData.estado}
+                    onChange={(e) => setNewAsistenciaData({ ...newAsistenciaData, estado: e.target.value as any })}
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold cursor-pointer"
+                  >
+                    <option value="presente">Presente a tiempo</option>
+                    <option value="atraso">Atraso</option>
+                    <option value="salida_temprana">Salida temprana</option>
+                    <option value="en_terreno">En terreno / faena</option>
+                    <option value="ausente_justificado">Ausente justificado</option>
+                    <option value="ausente_injustificado">Ausente injustificado</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-gray-500 block mb-1">Hora entrada</label>
+                  <input
+                    type="time"
+                    value={newAsistenciaData.hora_entrada}
+                    onChange={(e) => setNewAsistenciaData({ ...newAsistenciaData, hora_entrada: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-gray-500 block mb-1">Hora salida</label>
+                  <input
+                    type="time"
+                    value={newAsistenciaData.hora_salida}
+                    onChange={(e) => setNewAsistenciaData({ ...newAsistenciaData, hora_salida: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-gray-500 block mb-1">Minutos de atraso (opcional)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={newAsistenciaData.minutos_atraso}
+                  onChange={(e) => setNewAsistenciaData({ ...newAsistenciaData, minutos_atraso: Number(e.target.value) })}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-gray-500 block mb-1">Observaciones</label>
+                <textarea
+                  rows={2}
+                  placeholder="Ej: Registro manual autorizado por jefatura de planta..."
+                  value={newAsistenciaData.observaciones}
+                  onChange={(e) => setNewAsistenciaData({ ...newAsistenciaData, observaciones: e.target.value })}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md p-2.5 font-medium"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowNewAsistenciaModal(false)}
+                  className="px-4 py-2 rounded-md text-gray-600 font-bold hover:bg-gray-100 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingAsistencia}
+                  className="px-5 py-2 rounded-md bg-[#f97316] hover:bg-[#ea580c] text-white font-black cursor-pointer"
+                >
+                  {savingAsistencia ? 'Guardando...' : 'Guardar marcaje'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL 7: VINCULAR CUENTA DE USUARIO CRM                   */}
+      {/* ========================================================= */}
+      {showLinkUserModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full border border-gray-200 shadow-sm p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h2 className="text-lg font-black text-[#213343]">Vincular Cuenta CRM</h2>
+              <button
+                onClick={() => setShowLinkUserModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <p className="text-gray-600 leading-relaxed">
+                Selecciona la cuenta de usuario del sistema para vincular a <strong>{trabajador.nombre}</strong>. Al vincularlo, sus recordatorios, tareas y eventos de calendario se sincronizarán directamente con su cuenta.
+              </p>
+
+              <div>
+                <label className="font-bold text-gray-500 block mb-1">Usuario del sistema:</label>
+                <select
+                  value={selectedLinkUserId}
+                  onChange={(e) => setSelectedLinkUserId(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold cursor-pointer"
+                >
+                  <option value="">-- Sin vincular (Colaborador de campo) --</option>
+                  {usuariosList.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.nombre} ({u.email}) - {u.rol}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowLinkUserModal(false)}
+                  className="px-4 py-2 rounded-md text-gray-600 font-bold hover:bg-gray-100 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleLinkUser(selectedLinkUserId || null)}
+                  className="px-5 py-2 rounded-md bg-[#f97316] hover:bg-[#ea580c] text-white font-black cursor-pointer"
+                >
+                  Guardar vinculación
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

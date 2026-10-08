@@ -67,11 +67,23 @@ export default function LoginPage() {
         }
 
         // signInWithPassword ya guarda la sesión en las cookies del cliente SSR.
-        const { data: perfil, error: perfilError } = await supabase
+        let { data: perfil, error: perfilError } = await supabase
           .from('usuarios')
           .select('activo')
           .eq('auth_id', data.user.id)
           .maybeSingle();
+
+        // Manejar desajuste de reloj (clock skew) si el token fue emitido con un iat futuro
+        if (perfilError && (perfilError.message?.includes('future') || perfilError.message?.includes('JWT'))) {
+          await new Promise((resolve) => setTimeout(resolve, 3500));
+          const retry = await supabase
+            .from('usuarios')
+            .select('activo')
+            .eq('auth_id', data.user.id)
+            .maybeSingle();
+          perfil = retry.data;
+          perfilError = retry.error;
+        }
 
         if (perfilError) {
           console.error('Error validando perfil de acceso:', perfilError.message);

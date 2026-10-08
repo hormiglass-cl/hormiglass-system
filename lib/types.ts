@@ -81,17 +81,31 @@ export interface CotizacionItem {
   total_item: number;
 }
 
+export type OrigenProducto = 'fabricacion_propia' | 'reventa';
+
 export interface ProductoCatalogo {
   id: string;
   codigo: string;
+  codigo_proveedor?: string | null;
   nombre: string;
   categoria: 'producto' | 'insumo' | 'servicio';
+  familia?: string | null;
+  subcategoria?: string | null;
+  origen?: OrigenProducto | null;
+  proveedor_id?: string | null;
+  proveedor?: Proveedor | null;
   unidad: string;
+  medidas?: string | null;
+  color?: string | null;
+  peso_kg?: number | null;
   precio_referencia: number;
   costo_referencia: number;
   descripcion?: string | null;
+  observaciones?: string | null;
+  requiere_revision?: boolean;
   es_demo: boolean;
   activo: boolean;
+  created_at?: string;
 }
 
 export interface Cotizacion {
@@ -332,15 +346,41 @@ export interface VisitaTerreno {
   responsable_calendario?: ResponsableCalendario;
 }
 
+export type EstadoAbono = 'pendiente' | 'validado' | 'rechazado' | 'anulado';
+
 export interface Abono {
   id: string;
   oportunidad_id: string;
   monto: number;
-  fecha_pago: string;
-  metodo_pago?: string;
-  comprobante_url?: string;
-  registrado_por?: string;
+  fecha: string;
+  nota?: string | null;
+  comprobante_url?: string | null;
+  comprobante_nombre?: string | null;
+  estado: EstadoAbono;
+  motivo_rechazo?: string | null;
+  cuenta_bancaria_id?: string | null;
+  caja_movimiento_id?: string | null;
+  creado_por_id?: string | null;
+  creado_por_nombre?: string | null;
+  validado_por_id?: string | null;
+  validado_por_nombre?: string | null;
+  validado_at?: string | null;
   created_at?: string;
+  updated_at?: string;
+  cuenta_bancaria?: CuentaBancaria;
+  oportunidad?: {
+    id: string;
+    codigo: string;
+    titulo: string;
+    cliente?: {
+      id: string;
+      nombre?: string;
+      apellido_razon_social?: string;
+      nombre_completo?: string;
+      razon_social?: string;
+      rut?: string;
+    };
+  };
 }
 
 export interface ComprobantePago {
@@ -349,9 +389,15 @@ export interface ComprobantePago {
   fecha?: string;
   fecha_iso?: string;
   nota?: string;
+  estado?: EstadoAbono;
+  motivo_rechazo?: string;
+  cuenta_bancaria_id?: string;
+  banco_alias?: string;
   creado_por?: string;
   comprobante_nombre?: string;
   comprobante_url?: string;
+  validado_por?: string;
+  validado_at?: string;
 }
 
 export interface OportunidadVenta {
@@ -465,7 +511,7 @@ export interface Proveedor {
   created_at?: string;
 }
 
-export type EstadoOrdenCompra = 'borrador' | 'emitida' | 'aprobada' | 'recibida' | 'cancelada';
+export type EstadoOrdenCompra = 'borrador' | 'emitida' | 'aprobada' | 'recibida' | 'pagada' | 'cancelada';
 
 export interface OrdenCompraItem {
   id?: string;
@@ -517,6 +563,9 @@ export interface OrdenCompra {
   otros_cargos: number;
   monto_total: number;
   pdf_url?: string;
+  caja_movimiento_id?: string | null;
+  fecha_pago?: string | null;
+  pagado_por_id?: string | null;
   created_at?: string;
   updated_at?: string;
   proveedor?: Proveedor;
@@ -654,6 +703,65 @@ export interface PedidoProveedor {
 
 export type TipoMovimientoCaja = 'ingreso' | 'egreso';
 
+export type CajaClasificacion =
+  | 'costo_directo'
+  | 'gasto_operacional'
+  | 'gasto_administrativo'
+  | 'gasto_financiero'
+  | 'ingreso_operacional'
+  | 'ingreso_no_operacional';
+
+export interface CajaCategoria {
+  id: string;
+  nombre: string;
+  tipo: TipoMovimientoCaja;
+  clasificacion: CajaClasificacion;
+  descripcion?: string | null;
+  activo: boolean;
+  orden: number;
+  created_at?: string;
+  updated_at?: string;
+  subcategorias?: CajaSubcategoria[];
+}
+
+export interface CajaSubcategoria {
+  id: string;
+  categoria_id: string;
+  nombre: string;
+  descripcion?: string | null;
+  activo: boolean;
+  orden: number;
+  created_at?: string;
+  updated_at?: string;
+  categoria?: CajaCategoria;
+}
+
+export interface MargenPorNV {
+  oportunidad_id: string;
+  codigo: string;
+  titulo: string;
+  cliente_id?: string | null;
+  cliente_nombre?: string | null;
+  cliente_rut?: string | null;
+  vendedor_id?: string | null;
+  vendedor_nombre?: string | null;
+  estado_pipeline: string;
+  fecha_creacion: string;
+  numero_cotizacion?: string | null;
+  valor_cotizado_neto: number;
+  valor_cotizado_total: number;
+  total_ingresos_validados: number;
+  costo_compras_asignadas: number;
+  costo_fletes_despacho: number;
+  costo_caja_directo: number;
+  costo_postventa?: number;
+  costo_directo_total: number;
+  margen_bruto_real: number;
+  margen_bruto_proyectado: number;
+  porcentaje_margen_proyectado: number;
+  porcentaje_margen_real: number;
+}
+
 export interface MovimientoCaja {
   id: string;
   tipo: TipoMovimientoCaja;
@@ -663,8 +771,22 @@ export interface MovimientoCaja {
   venta_id?: string;
   pedido_proveedor_id?: string;
   usuario_id: string;
+  cuenta_bancaria_id?: string | null;
+  oportunidad_id?: string | null;
+  empresa_id?: string | null;
+  categoria_id?: string | null;
+  subcategoria_id?: string | null;
+  orden_compra_id?: string | null;
+  proveedor_id?: string | null;
   fecha: string;
   usuario?: Usuario;
+  cuenta_bancaria?: CuentaBancaria;
+  empresa?: Empresa;
+  categoria_rel?: CajaCategoria;
+  subcategoria?: CajaSubcategoria;
+  orden_compra?: OrdenCompra;
+  proveedor?: Proveedor;
+  oportunidad?: OportunidadVenta;
 }
 
 export interface Notificacion {
@@ -860,6 +982,7 @@ export interface Trabajador {
   permisos?: TrabajadorPermisoAusencia[];
   liquidaciones?: TrabajadorLiquidacion[];
   notas?: TrabajadorNota[];
+  asistencias?: TrabajadorAsistencia[];
 }
 
 export interface TrabajadorDocumento {
@@ -917,4 +1040,165 @@ export interface TrabajadorNota {
   contenido: string;
   usuario?: Usuario;
   created_at?: string;
+}
+
+export type EstadoAsistencia =
+  | 'presente'
+  | 'atraso'
+  | 'salida_temprana'
+  | 'ausente_justificado'
+  | 'ausente_injustificado'
+  | 'en_terreno';
+
+export type OrigenAsistencia = 'manual' | 'geovictoria' | 'zkteco' | 'app_movil';
+
+export interface TrabajadorAsistencia {
+  id: string;
+  trabajador_id: string;
+  fecha: string;
+  hora_entrada?: string | null;
+  hora_salida?: string | null;
+  estado: EstadoAsistencia;
+  minutos_atraso?: number;
+  origen: OrigenAsistencia;
+  observaciones?: string | null;
+  creado_por?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// ==============================================================================
+// TIPOS MÓDULO INTEGRAL DE POSTVENTA Y GARANTÍAS
+// ==============================================================================
+
+export type EstadoPostventa =
+  | 'recibido'
+  | 'en_revision'
+  | 'visita_programada'
+  | 'reparacion_programada'
+  | 'cerrado'
+  | 'abierto'
+  | 'programado'
+  | 'en_curso'
+  | 'resuelto'
+  | 'cancelado';
+
+export type CausaRaizPostventa =
+  | 'Fabricacion'
+  | 'Instalacion'
+  | 'Despacho'
+  | 'Terreno'
+  | 'Cliente'
+  | 'Proveedor'
+  | 'Transportista'
+  | 'Sin determinar';
+
+export type ResolucionPostventa =
+  | 'garantia'
+  | 'responsabilidad_parcial'
+  | 'no_garantia'
+  | 'transportista'
+  | 'en_evaluacion';
+
+export type TipoProblemaPostventa =
+  | 'producto_defectuoso'
+  | 'problema_fabricacion'
+  | 'problema_instalacion'
+  | 'dano_transporte'
+  | 'uso_incorrecto'
+  | 'movimiento_terreno'
+  | 'trabajo_adicional'
+  | 'dano_terceros'
+  | 'faltante'
+  | 'defecto'
+  | 'cantidad_adicional'
+  | 'otro';
+
+export type TipoEvidenciaPostventa =
+  | 'antes'
+  | 'durante'
+  | 'despues'
+  | 'conformidad'
+  | 'diagnostico'
+  | 'otro';
+
+export type TipoCostoPostventa =
+  | 'materiales'
+  | 'flete'
+  | 'mano_obra'
+  | 'reposicion'
+  | 'traslado'
+  | 'otro';
+
+export interface AntecedentesVentaPostventa {
+  cotizado_verificado: boolean;
+  contratado_verificado: boolean;
+  entregado_verificado: boolean;
+  condiciones_terreno?: string;
+  observaciones_instalacion?: string;
+  guia_recepcion_verificada?: boolean;
+  pagos_al_dia?: boolean;
+}
+
+export interface EvidenciaPostventa {
+  id: string;
+  caso_id: string;
+  tipo_evidencia: TipoEvidenciaPostventa;
+  archivo_url: string;
+  nombre_archivo?: string | null;
+  descripcion?: string | null;
+  usuario_id?: string | null;
+  created_at: string;
+}
+
+export interface CostoPostventa {
+  id: string;
+  caso_id: string;
+  tipo_costo: TipoCostoPostventa;
+  descripcion: string;
+  monto: number;
+  proveedor_o_maestro?: string | null;
+  fecha: string;
+  created_at: string;
+}
+
+export interface CasoPostventa {
+  id: string;
+  folio: string;
+  oportunidad_id: string;
+  vendedor_id?: string | null;
+  cuadrilla_id?: string | null;
+  cliente_id?: string | null;
+  obra?: string | null;
+  producto_id?: string | null;
+  producto_texto?: string | null;
+  tipo: TipoProblemaPostventa;
+  tipo_problema?: string | null;
+  estado: EstadoPostventa;
+  descripcion: string;
+  causa_raiz?: CausaRaizPostventa | null;
+  resolucion?: ResolucionPostventa | null;
+  antecedentes_venta?: AntecedentesVentaPostventa | null;
+  cobertura_garantia_doc?: string | null;
+  cantidad_adicional?: number | null;
+  autorizacion_cliente?: string | null;
+  fecha_compromiso?: string | null;
+  fecha_reclamo?: string;
+  fecha_cierre?: string | null;
+  cerrado_por?: string | null;
+  conformidad_cliente: boolean;
+  conformidad_observaciones?: string | null;
+  costo_total: number;
+  responsable_id?: string | null;
+  evento_id?: string | null;
+  created_at: string;
+
+  // Relaciones
+  oportunidad?: OportunidadVenta | null;
+  cliente?: Cliente | null;
+  vendedor?: Usuario | null;
+  cuadrilla?: Trabajador | null;
+  producto?: ProductoCatalogo | null;
+  evidencias?: EvidenciaPostventa[];
+  costos?: CostoPostventa[];
 }

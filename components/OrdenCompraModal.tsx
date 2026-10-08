@@ -583,7 +583,20 @@ export function OrdenCompraModal({
               </div>
               {items.map((item, index) => (
                 <div key={index} className="grid grid-cols-12 gap-2 items-center bg-gray-50 p-2.5 rounded-md border border-gray-200">
-                  <select aria-label={`Producto de compra ${index + 1}`} value={item.producto_catalogo_id || ''} onChange={(e) => selectCatalogItem(index, e.target.value)} className="col-span-12 bg-white border border-gray-300 rounded-lg px-2 py-1.5"><option value="">Partida libre / seleccionar catálogo</option>{catalogo.map((product) => <option key={product.id} value={product.id}>{product.codigo} · {product.nombre} ({product.unidad})</option>)}</select>
+                  <select aria-label={`Producto de compra ${index + 1}`} value={item.producto_catalogo_id || ''} onChange={(e) => selectCatalogItem(index, e.target.value)} className="col-span-12 bg-white border border-gray-300 rounded-lg px-2 py-1.5">
+                    <option value="">Partida libre / seleccionar catálogo</option>
+                    {catalogo.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.requiere_revision ? '⚠️ ' : ''}{product.codigo} · {product.nombre} ({product.unidad}){product.requiere_revision ? ' [Revisar costo]' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {catalogo.find((p) => p.id === item.producto_catalogo_id)?.requiere_revision && (
+                    <div className="col-span-12 text-[10px] text-amber-800 bg-amber-50 border border-amber-300 rounded px-2 py-1 font-semibold flex items-center gap-1.5">
+                      <span>⚠️</span>
+                      <span>Producto con costo referencial / OCR. Confirmar costo con la cotización oficial del proveedor antes de emitir la OC.</span>
+                    </div>
+                  )}
                   <input value={item.articulo_codigo || ''} onChange={(e) => handleItemChange(index, 'articulo_codigo', e.target.value)} placeholder="Codigo" aria-label="Codigo articulo" className="col-span-12 sm:col-span-2 bg-white border border-gray-300 rounded-lg px-2 py-1.5" />
                   <input value={item.descripcion} onChange={(e) => handleItemChange(index, 'descripcion', e.target.value)} placeholder="Descripcion" aria-label="Descripcion articulo" className="col-span-12 sm:col-span-4 bg-white border border-gray-300 rounded-lg px-2 py-1.5 font-bold" />
                   <input type="number" min="0" step="0.01" value={item.cantidad} onChange={(e) => handleItemChange(index, 'cantidad', e.target.value)} aria-label="Cantidad" className="col-span-6 sm:col-span-2 bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-right font-bold" />

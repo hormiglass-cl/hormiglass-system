@@ -8,7 +8,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Bell, Boxes, CalendarDays, ChartNoAxesCombined, ChevronLeft, ChevronRight,
   ContactRound, FileText, FolderKanban, Landmark, LayoutDashboard,
-  LogOut, Package, Settings2, ShoppingCart, Truck, Users, Wallet, X,
+  LogOut, Package, Settings2, ShieldAlert, ShoppingCart, Truck, Users, Wallet, X,
 } from 'lucide-react';
 import { useAuth } from '../lib/context/AuthContext';
 import { createClient } from '../lib/supabase/client';
@@ -25,6 +25,7 @@ const mainGroups: NavGroup[] = [
   { label: 'Comercial', items: [
     { label: 'Clientes', href: '/clientes', icon: ContactRound },
     { label: 'Cotizaciones', href: '/cotizaciones', icon: FileText },
+    { label: 'Postventa y Garantías', href: '/postventa', icon: ShieldAlert },
   ] },
   { label: 'Compras y catálogo', items: [
     { label: 'Órdenes de compra', href: '/ordenes-compra', icon: ShoppingCart },

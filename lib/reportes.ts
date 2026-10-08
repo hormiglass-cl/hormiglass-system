@@ -1,6 +1,6 @@
 import type { MovimientoCaja } from './types';
 
-export type ReportTab = 'flujo' | 'ingresos' | 'egresos';
+export type ReportTab = 'flujo' | 'ingresos' | 'egresos' | 'margen_nv';
 export type ReportGrouping = 'periodo' | 'categoria';
 export type ReportViewConfig = {
   tab: ReportTab;
@@ -8,6 +8,7 @@ export type ReportViewConfig = {
   hasta: string;
   categoria: string;
   agrupacion: ReportGrouping;
+  cuentaBancariaId?: string;
 };
 
 export function reportTotals(rows: Pick<MovimientoCaja, 'tipo' | 'monto'>[]) {
@@ -33,7 +34,7 @@ export function reportSeries(rows: Pick<MovimientoCaja, 'tipo' | 'monto' | 'fech
 export function parseReportConfig(value: unknown): ReportViewConfig | null {
   if (!value || typeof value !== 'object') return null;
   const config = value as Partial<ReportViewConfig>;
-  if (!['flujo', 'ingresos', 'egresos'].includes(config.tab || '') ||
+  if (!['flujo', 'ingresos', 'egresos', 'margen_nv'].includes(config.tab || '') ||
     !['periodo', 'categoria'].includes(config.agrupacion || '') ||
     typeof config.desde !== 'string' || typeof config.hasta !== 'string' || typeof config.categoria !== 'string') return null;
   return config as ReportViewConfig;

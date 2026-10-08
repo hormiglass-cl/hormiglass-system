@@ -24,6 +24,7 @@ import {
   EstadoEventoProduccionLogistica,
   TipoEventoProduccionLogistica,
   ROL_NOMBRE,
+  MargenPorNV,
 } from '../../lib/types';
 import { useAuth } from '../../lib/context/AuthContext';
 import { PdfPreviewModal } from '../../components/PdfPreviewModal';
@@ -61,6 +62,7 @@ import {
   Search,
   Trash2,
   CheckCircle2,
+  XCircle,
   AlertTriangle,
   X,
   Bell,
@@ -235,6 +237,10 @@ export default function PipelineVentasPage() {
   const [loadingOpOrdenes, setLoadingOpOrdenes] = useState(false);
   const [showCreateOcModal, setShowCreateOcModal] = useState(false);
   const [pdfPreviewOc, setPdfPreviewOc] = useState<OrdenCompra | null>(null);
+
+  // Matriz de Costos y Margen por NV (Fase 3)
+  const [margenOp, setMargenOp] = useState<MargenPorNV | null>(null);
+  const [loadingMargenOp, setLoadingMargenOp] = useState(false);
 
   // Bitácora de Producción Diaria y Stock de la Oportunidad
   const [opProduccionDiaria, setOpProduccionDiaria] = useState<ProduccionDiaria[]>([]);
@@ -572,6 +578,33 @@ export default function PipelineVentasPage() {
     }
   };
 
+  const loadMargenOportunidad = async (opId: string) => {
+    if (!isUUID(opId)) {
+      setMargenOp(null);
+      return;
+    }
+    setLoadingMargenOp(true);
+    try {
+      const { data, error } = await supabase
+        .from('v_margen_por_nv')
+        .select('*')
+        .eq('oportunidad_id', opId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching margen de oportunidad:', error);
+        setMargenOp(null);
+      } else {
+        setMargenOp((data as MargenPorNV) || null);
+      }
+    } catch (err) {
+      console.error('Error loading margen:', err);
+      setMargenOp(null);
+    } finally {
+      setLoadingMargenOp(false);
+    }
+  };
+
   const mapAntecedenteRecord = (record: any): AntecedenteDocumento => ({
     id: record.id,
     oportunidad_id: record.oportunidad_id,
@@ -657,6 +690,7 @@ export default function PipelineVentasPage() {
     loadVisitasOportunidad(op);
     loadEventosProduccionLogistica(op.id);
     loadOrdenesCompraOportunidad(op.id);
+    loadMargenOportunidad(op.id);
     loadAntecedentesOportunidad(op);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -668,6 +702,7 @@ export default function PipelineVentasPage() {
   // Helper to close opportunity and clear URL parameter
   const handleCloseOportunidad = () => {
     setSelectedOp(null);
+    setMargenOp(null);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       url.searchParams.delete('oportunidad');
@@ -859,6 +894,7 @@ export default function PipelineVentasPage() {
               loadVisitasOportunidad(found);
               loadEventosProduccionLogistica(found.id);
               loadOrdenesCompraOportunidad(found.id);
+              loadMargenOportunidad(found.id);
               loadAntecedentesOportunidad(found);
             }
           }
@@ -1532,6 +1568,7 @@ export default function PipelineVentasPage() {
     setSelectedOp((prev) => prev ? { ...prev, ...updated } : null);
     setOportunidades((prev) => prev.map((op) => op.id === selectedOp.id ? { ...op, ...updated } : op));
     setAbonoErrorMsg('');
+    void loadMargenOportunidad(selectedOp.id);
     return updated;
   };
 
@@ -3485,24 +3522,132 @@ export default function PipelineVentasPage() {
                       {(() => {
                         const totalCot = getOportunidadTotalValue(selectedOp);
                         const abonado = getOportunidadAbonadoValue(selectedOp);
+                        const abonosPendientes = (selectedOp.comprobantes_pago || [])
+                          .filter((item: any) => typeof item === 'object' && item !== null && item.estado === 'pendiente')
+                          .reduce((sum: number, p: any) => sum + (Number(p.monto) || 0), 0);
                         const saldo = Math.max(0, totalCot - abonado);
 
                         return (
                           <div className="space-y-4">
                             {/* Resumen Financiero Calculado */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200 text-center">
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200 text-center">
                               <div>
                                 <span className="text-gray-500 block text-xs font-semibold mb-1">Valor Total Cotizado:</span>
                                 <strong className="text-[#213343] text-lg font-black">${totalCot.toLocaleString('es-CL')}</strong>
                               </div>
                               <div>
-                                <span className="text-gray-500 block text-xs font-semibold mb-1">Monto Abonado Acumulado:</span>
+                                <span className="text-gray-500 block text-xs font-semibold mb-1">Total Validado en Caja:</span>
                                 <strong className="text-emerald-600 text-lg font-black">${abonado.toLocaleString('es-CL')}</strong>
                               </div>
                               <div>
-                                <span className="text-gray-500 block text-xs font-semibold mb-1">Saldo Pendiente:</span>
+                                <span className="text-gray-500 block text-xs font-semibold mb-1">Pendiente de Validación:</span>
+                                <strong className={`text-lg font-black ${abonosPendientes > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                                  ${abonosPendientes.toLocaleString('es-CL')}
+                                </strong>
+                              </div>
+                              <div>
+                                <span className="text-gray-500 block text-xs font-semibold mb-1">Saldo por Cobrar:</span>
                                 <strong className="text-amber-700 text-lg font-black">${saldo.toLocaleString('es-CL')}</strong>
                               </div>
+                            </div>
+                            {abonosPendientes > 0 && (
+                              <div className="p-2.5 bg-amber-50/70 border border-amber-200 rounded-md text-amber-800 text-xs flex items-center gap-2">
+                                <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                                <span>Hay <strong>${abonosPendientes.toLocaleString('es-CL')}</strong> en comprobantes pendientes de validación por finanzas en Caja.</span>
+                              </div>
+                            )}
+
+                            {/* Matriz Operacional de Costos y Margen por NV (Fase 3) */}
+                            <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-4 rounded-lg border border-slate-700 space-y-3 shadow-xs">
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/80 pb-2.5">
+                                <div className="flex items-center gap-2">
+                                  <TrendingUp className="w-4 h-4 text-[#f97316]" />
+                                  <span className="text-xs font-black uppercase tracking-wider text-white">
+                                    Matriz de Costos y Margen Operacional de la NV
+                                  </span>
+                                </div>
+                                {margenOp && (
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`text-[11px] font-black px-2.5 py-0.5 rounded-full border ${
+                                        (margenOp.porcentaje_margen_proyectado ?? 0) >= 35
+                                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                          : (margenOp.porcentaje_margen_proyectado ?? 0) >= 20
+                                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                          : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                                      }`}
+                                    >
+                                      Margen Proyectado: {(margenOp.porcentaje_margen_proyectado ?? 0).toFixed(1)}%
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {loadingMargenOp ? (
+                                <div className="py-3 text-center text-xs text-slate-400 animate-pulse">
+                                  Calculando costos directos y rentabilidad en tiempo real...
+                                </div>
+                              ) : margenOp ? (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                                  {/* Compras OC */}
+                                  <div className="bg-slate-800/90 border border-slate-700/70 p-2.5 rounded-md">
+                                    <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
+                                      <ShoppingCart className="w-3 h-3 text-sky-400" />
+                                      <span>Compras OC Asignadas</span>
+                                    </span>
+                                    <strong className="text-white text-sm font-black block mt-0.5">
+                                      ${(margenOp.costo_compras_asignadas ?? 0).toLocaleString('es-CL')}
+                                    </strong>
+                                  </div>
+
+                                  {/* Fletes & Guías */}
+                                  <div className="bg-slate-800/90 border border-slate-700/70 p-2.5 rounded-md">
+                                    <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
+                                      <Truck className="w-3 h-3 text-purple-400" />
+                                      <span>Fletes Despacho</span>
+                                    </span>
+                                    <strong className="text-white text-sm font-black block mt-0.5">
+                                      ${(margenOp.costo_fletes_despacho ?? 0).toLocaleString('es-CL')}
+                                    </strong>
+                                  </div>
+
+                                  {/* Costo Directo Total */}
+                                  <div className="bg-slate-800/90 border border-slate-700/70 p-2.5 rounded-md">
+                                    <span className="text-[10px] text-slate-400 uppercase font-bold block">
+                                      Costo Directo Total
+                                    </span>
+                                    <strong className="text-rose-300 text-sm font-black block mt-0.5">
+                                      ${(margenOp.costo_directo_total ?? 0).toLocaleString('es-CL')}
+                                    </strong>
+                                    {margenOp.costo_caja_directo > 0 && (
+                                      <span className="text-[9px] text-slate-400 block">
+                                        +${(margenOp.costo_caja_directo).toLocaleString('es-CL')} caja
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Margen Bruto Real / Proyectado */}
+                                  <div className="bg-slate-800/90 border border-slate-700/70 p-2.5 rounded-md">
+                                    <span className="text-[10px] text-slate-400 uppercase font-bold block">
+                                      Margen Bruto Real (Cobrado)
+                                    </span>
+                                    <strong
+                                      className={`text-sm font-black block mt-0.5 ${
+                                        (margenOp.margen_bruto_real ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                      }`}
+                                    >
+                                      ${(margenOp.margen_bruto_real ?? 0).toLocaleString('es-CL')}
+                                    </strong>
+                                    <span className="text-[10px] text-slate-300 block truncate">
+                                      Real: {(margenOp.porcentaje_margen_real ?? 0).toFixed(1)}% | Proy: ${(margenOp.margen_bruto_proyectado ?? 0).toLocaleString('es-CL')}
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="py-2 text-center text-xs text-slate-400">
+                                  Sin costos directos registrados para esta nota de venta.
+                                </div>
+                              )}
                             </div>
 
                             {/* Registro de Abonos e Historial Acumulativo */}
@@ -3723,14 +3868,34 @@ export default function PipelineVentasPage() {
 
                                         return (
                                           <div key={ab.id || idx} className="bg-white p-3 rounded-md border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs shadow-xs">
-                                            <div className="space-y-1">
-                                              <div className="flex items-center gap-2">
+                                            <div className="space-y-1.5">
+                                              <div className="flex flex-wrap items-center gap-2">
                                                 <span className="font-bold text-emerald-700 text-sm">
                                                   ${Number(ab.monto || 0).toLocaleString('es-CL')} CLP
                                                 </span>
                                                 <span className="text-gray-700 text-xs font-semibold">
                                                   — {ab.nota || 'Abono'}
                                                 </span>
+
+                                                {/* Estado del Abono */}
+                                                {(!ab.estado || ab.estado === 'validado') && (
+                                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1">
+                                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                                    <span>Validado en Caja {ab.banco_alias ? `(${ab.banco_alias})` : ''}</span>
+                                                  </span>
+                                                )}
+                                                {ab.estado === 'pendiente' && (
+                                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-1">
+                                                    <Clock className="w-3 h-3 text-amber-600" />
+                                                    <span>Pendiente de validación en Caja</span>
+                                                  </span>
+                                                )}
+                                                {ab.estado === 'rechazado' && (
+                                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 inline-flex items-center gap-1" title={ab.motivo_rechazo}>
+                                                    <XCircle className="w-3 h-3 text-red-600" />
+                                                    <span>Rechazado: {ab.motivo_rechazo || 'Comprobante no válido'}</span>
+                                                  </span>
+                                                )}
                                               </div>
 
                                               {ab.comprobante_url && (
@@ -6006,6 +6171,7 @@ export default function PipelineVentasPage() {
             setOportunidades((prev) => prev.map((op) => op.id === selectedOp.id
               ? { ...op, cotizacion_actual_id: opData?.cotizacion_actual_id || undefined } : op));
             await addOportunidadActividad(selectedOp.id, 'Nueva cotización creada y vinculada a la oportunidad');
+            void loadMargenOportunidad(selectedOp.id);
           }
         }}
       />
@@ -6024,6 +6190,7 @@ export default function PipelineVentasPage() {
           if (!selectedOp) return;
           delete ordenesCompraCacheRef.current[selectedOp.id];
           await loadOrdenesCompraOportunidad(selectedOp.id);
+          await loadMargenOportunidad(selectedOp.id);
           await addOportunidadActividad(selectedOp.id, 'Nueva orden de compra vinculada a esta oportunidad.');
         }}
       />

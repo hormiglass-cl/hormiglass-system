@@ -479,7 +479,11 @@ function NuevaCotizacionForm() {
                   <label className="block text-[10px] font-bold text-gray-600 mb-0.5">Descripción del Producto</label>
                   <select aria-label={`Producto del catálogo ${idx + 1}`} value={item.producto_catalogo_id || ''} onChange={(e) => selectCatalogItem(idx, e.target.value)} className="w-full mb-1 bg-white border border-gray-300 rounded-lg px-2 py-1 text-[#213343]">
                     <option value="">Partida libre / seleccionar catálogo</option>
-                    {catalogo.filter((product) => product.categoria !== 'insumo').map((product) => <option key={product.id} value={product.id}>{product.codigo} · {product.nombre} ({product.unidad})</option>)}
+                    {catalogo.filter((product) => product.categoria !== 'insumo').map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.requiere_revision ? '⚠️ ' : ''}{product.codigo} · {product.nombre} ({product.unidad}){product.requiere_revision ? ' [Revisar precio]' : ''}
+                      </option>
+                    ))}
                   </select>
                   <textarea
                     required
@@ -489,6 +493,12 @@ function NuevaCotizacionForm() {
                     onChange={(e) => handleItemChange(idx, 'producto', e.target.value)}
                     className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-[#213343] focus:outline-none focus:border-[#f97316]"
                   />
+                  {catalogo.find((p) => p.id === item.producto_catalogo_id)?.requiere_revision && (
+                    <div className="mt-1 flex items-center gap-1.5 text-[10px] text-amber-800 bg-amber-50 border border-amber-300 rounded px-2 py-1 font-semibold">
+                      <span>⚠️</span>
+                      <span>Precio referencial OCR (Bottai) — Verificar con lista oficial antes de emitir.</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="col-span-2">
