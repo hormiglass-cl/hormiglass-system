@@ -37,58 +37,69 @@ export function DonutChart({
 
   // SVG Geometry for Donut
   const size = 200;
-  const strokeWidth = 28;
+  const strokeWidth = 26;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const center = size / 2;
 
-  let cumulativePercent = 0;
+  const segmentsWithGeometry = React.useMemo(() => {
+    return segments.reduce<{
+      items: (DonutSegment & { percent: number; strokeDashoffset: number; rotation: number })[];
+      cumulative: number;
+    }>(
+      (acc, seg) => {
+        const percent = totalValue > 0 ? (seg.value / totalValue) * 100 : 0;
+        const strokeDashoffset = circumference - (percent / 100) * circumference;
+        const rotation = (acc.cumulative / 100) * 360;
+        return {
+          cumulative: acc.cumulative + percent,
+          items: [...acc.items, { ...seg, percent, strokeDashoffset, rotation }],
+        };
+      },
+      { items: [], cumulative: 0 }
+    ).items;
+  }, [segments, totalValue, circumference]);
 
   return (
-    <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-4 flex flex-col justify-between">
+    <div className="flex flex-col justify-between rounded-panel border border-line bg-surface p-5">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+      <div className="flex items-center justify-between border-b border-line-subtle pb-3">
         <div>
-          <h3 className="font-extrabold text-base text-[#213343] flex items-center gap-2">
+          <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
             {IconComponent && (
-              <div className="p-1.5 rounded-md bg-orange-50 text-[#f97316]">
-                <IconComponent className="w-4 h-4" />
-              </div>
+              <span className="grid h-7 w-7 place-items-center rounded-control bg-surface-muted text-accent-ink">
+                <IconComponent className="h-4 w-4" aria-hidden />
+              </span>
             )}
             <span>{title}</span>
           </h3>
           {subtitle && (
-            <p className="text-xs text-gray-500 font-medium mt-0.5">{subtitle}</p>
+            <p className="t-caption mt-0.5 text-ink-muted">{subtitle}</p>
           )}
         </div>
       </div>
 
       {totalValue === 0 ? (
-        <div className="h-44 flex items-center justify-center text-xs text-gray-400 italic">
+        <div className="flex h-44 items-center justify-center text-xs italic text-ink-muted">
           No hay datos registrados en este período.
         </div>
       ) : (
-        <div className="flex flex-col sm:flex-row items-center gap-6 py-1">
+        <div className="flex flex-col items-center gap-6 py-2 sm:flex-row">
           {/* Donut SVG con Centro */}
-          <div className="relative shrink-0 flex items-center justify-center">
-            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="transform -rotate-90">
+          <div className="relative flex shrink-0 items-center justify-center">
+            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90 transform">
               {/* Círculo Base */}
               <circle
                 cx={center}
                 cy={center}
                 r={radius}
                 fill="transparent"
-                stroke="#f1f5f9"
+                stroke="var(--hg-surface-muted)"
                 strokeWidth={strokeWidth}
               />
 
               {/* Segmentos de Donut */}
-              {segments.map((seg) => {
-                const percent = (seg.value / totalValue) * 100;
-                const strokeDashoffset = circumference - (percent / 100) * circumference;
-                const currentRotation = (cumulativePercent / 100) * 360;
-                cumulativePercent += percent;
-
+              {segmentsWithGeometry.map((seg) => {
                 const isHovered = hoveredId === seg.id;
 
                 return (
@@ -101,9 +112,9 @@ export function DonutChart({
                     stroke={seg.color}
                     strokeWidth={isHovered ? strokeWidth + 4 : strokeWidth}
                     strokeDasharray={circumference}
-                    strokeDashoffset={strokeDashoffset}
-                    transform={`rotate(${currentRotation} ${center} ${center})`}
-                    className="transition-all duration-300 cursor-pointer"
+                    strokeDashoffset={seg.strokeDashoffset}
+                    transform={`rotate(${seg.rotation} ${center} ${center})`}
+                    className="cursor-pointer transition-all duration-300"
                     onMouseEnter={() => setHoveredId(seg.id)}
                     onMouseLeave={() => setHoveredId(null)}
                   />
@@ -112,18 +123,18 @@ export function DonutChart({
             </svg>
 
             {/* Centro Informativo */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4">
-              <span className="text-xs text-gray-400 font-bold uppercase tracking-normal">
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-4 text-center">
+              <span className="t-micro font-medium uppercase text-ink-muted">
                 {centerLabel || 'Total'}
               </span>
-              <span className="text-xl font-black text-[#213343] leading-tight">
+              <span className="t-figure text-ink">
                 {centerValue || totalValue.toLocaleString('es-CL')}
               </span>
             </div>
           </div>
 
           {/* Leyenda y Desglose */}
-          <div className="flex-1 w-full space-y-2.5 text-xs">
+          <div className="w-full flex-1 space-y-2 text-xs">
             {segments.map((seg) => {
               const pct = totalValue > 0 ? Math.round((seg.value / totalValue) * 100) : 0;
               const isHovered = hoveredId === seg.id;
@@ -133,27 +144,27 @@ export function DonutChart({
                   key={seg.id}
                   onMouseEnter={() => setHoveredId(seg.id)}
                   onMouseLeave={() => setHoveredId(null)}
-                  className={`p-2 rounded-md transition cursor-pointer border ${
-                    isHovered ? 'bg-gray-50 border-gray-300 shadow-xs' : 'border-transparent'
+                  className={`cursor-pointer rounded-control border p-2 transition ${
+                    isHovered ? 'border-line bg-surface-muted' : 'border-transparent'
                   }`}
                 >
-                  <div className="flex items-center justify-between font-bold">
+                  <div className="flex items-center justify-between font-medium">
                     <div className="flex items-center gap-2 truncate">
                       <span
-                        className="w-3 h-3 rounded-full shrink-0"
+                        className="h-3 w-3 shrink-0 rounded-full"
                         style={{ backgroundColor: seg.color }}
                       />
-                      <span className="text-[#213343] truncate">{seg.label}</span>
+                      <span className="truncate text-ink">{seg.label}</span>
                     </div>
-                    <span className="text-gray-500 font-mono shrink-0 ml-2">{pct}%</span>
+                    <span className="t-num shrink-0 text-ink-muted">{pct}%</span>
                   </div>
 
-                  <div className="flex items-center justify-between text-[11px] text-gray-400 pl-5 pt-0.5">
+                  <div className="flex items-center justify-between pt-0.5 text-[11px] text-ink-muted">
                     <span>
                       {seg.value} {seg.sublabel || 'registros'}
                     </span>
                     {showAmountInLegend && seg.monto !== undefined && (
-                      <span className="font-bold text-[#f97316]">
+                      <span className="t-num font-semibold text-accent-ink">
                         ${seg.monto.toLocaleString('es-CL')}
                       </span>
                     )}

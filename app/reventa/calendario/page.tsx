@@ -9,20 +9,22 @@ function CalendarioReventaContent() {
   const highlightedOpId = searchParams.get('opId');
 
   return (
-    <CalendarioEventos
-      contexto="reventa_logistica"
-      titulo="Calendario de Reventa & Logística"
-      subtitulo="Coordinación de entregas con proveedores externos, retiro de materiales y despachos a clientes."
-      tiposPermitidos={['reventa', 'logistica', 'retiro_proveedor', 'despacho_cliente', 'postventa', 'logistica_interna']}
-      filtroPersonalField="calendario_reventa_logistica"
-      highlightedOpId={highlightedOpId}
-    />
+    <div className="hg-page">
+      <CalendarioEventos
+        contexto="reventa_logistica"
+        titulo="Calendario de Reventa & Logística"
+        subtitulo="Coordinación de entregas con proveedores externos, retiro de materiales y despachos a clientes."
+        tiposPermitidos={['reventa', 'logistica', 'retiro_proveedor', 'despacho_cliente', 'postventa', 'logistica_interna']}
+        filtroPersonalField="calendario_reventa_logistica"
+        highlightedOpId={highlightedOpId}
+      />
+    </div>
   );
 }
 
 export default function CalendarioReventaPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-center text-xs font-bold text-gray-500">Cargando Calendario de Reventa...</div>}>
+    <Suspense fallback={<div className="p-8 text-center text-xs text-ink-muted font-medium">Cargando Calendario de Reventa...</div>}>
       <CalendarioReventaContent />
     </Suspense>
   );

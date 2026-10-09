@@ -3,13 +3,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
 import { createClient } from '../../../../lib/supabase/client';
 import type { OrdenCompra, OrdenCompraAsignacion, OportunidadVenta } from '../../../../lib/types';
 import { mensajeError } from '../../../../lib/errores';
+import { Button, CodeStamp, PageHeader, Panel } from '../../../../components/ui/crm';
+import { useConfirm, useToast } from '../../../../components/ui/feedback';
 
 export default function AsignacionesOrdenCompraPage() {
   const { id } = useParams<{ id: string }>();
   const supabase = useMemo(() => createClient(), []);
+  const confirm = useConfirm();
+  const toast = useToast();
+
   const [orden, setOrden] = useState<OrdenCompra | null>(null);
   const [asignaciones, setAsignaciones] = useState<OrdenCompraAsignacion[]>([]);
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
@@ -71,72 +77,224 @@ export default function AsignacionesOrdenCompraPage() {
       setError(mensajeError(insertError));
       return;
     }
-    setCantidad(''); setCosto(''); setUnidad(''); setNotas('');
+    toast({ message: 'Asignación guardada correctamente.', tone: 'success' });
+    setCantidad('');
+    setCosto('');
+    setUnidad('');
+    setNotas('');
     await load();
   }
 
-  async function removeAsignacion(asignacionId: string) {
+  async function handleRemoveAsignacion(asignacionId: string) {
+    const ok = await confirm({
+      title: 'Quitar asignación',
+      message: '¿Deseas quitar esta asignación de la venta asociada?',
+      confirmLabel: 'Quitar',
+      destructive: true,
+    });
+    if (!ok) return;
+
     const { error: deleteError } = await supabase.from('orden_compra_asignaciones').delete().eq('id', asignacionId);
-    if (deleteError) setError(mensajeError(deleteError));
-    else await load();
+    if (deleteError) {
+      toast({ message: mensajeError(deleteError), tone: 'danger' });
+    } else {
+      toast({ message: 'Asignación quitada.', tone: 'success' });
+      await load();
+    }
   }
 
   return (
-    <div className="space-y-5 text-[#213343]">
-      <Link href="/ordenes-compra" className="text-xs font-semibold text-[#f97316]">← Órdenes de compra</Link>
+    <div className="hg-page space-y-5">
       <div>
-        <h1 className="text-2xl font-bold">Asignaciones de {orden?.numero_oc || 'OC'}</h1>
-        <p className="text-sm text-gray-600">Distribuye cada ítem entre ventas. La suma asignada no puede superar lo comprado.</p>
-      </div>
-      {error && <p role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3">{error}</p>}
-      {orden && <label className="block text-sm font-semibold">Tipo de compra
-        <select
-          className="block mt-1 border border-gray-300 rounded-md p-2"
-          value={orden.tipo_compra || 'reventa'}
-          onChange={async (e) => {
-            const tipo_compra = e.target.value as 'reventa' | 'insumos_fabricacion';
-            const { error: updateError } = await supabase.from('ordenes_compra').update({ tipo_compra }).eq('id', id);
-            if (updateError) setError(mensajeError(updateError)); else setOrden({ ...orden, tipo_compra });
-          }}
+        <Link
+          href="/ordenes-compra"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-accent-ink transition mb-3"
         >
-          <option value="reventa">Compra para reventa</option>
-          <option value="insumos_fabricacion">Insumos de fabricación</option>
-        </select>
-      </label>}
+          <ArrowLeft size={14} aria-hidden />
+          <span>Volver a Órdenes de Compra</span>
+        </Link>
+        <PageHeader
+          title={
+            <span>
+              Asignaciones de {orden ? <CodeStamp>{orden.numero_oc}</CodeStamp> : 'OC'}
+            </span>
+          }
+          description="Distribuye cada ítem entre ventas (NV). La suma asignada no puede superar lo comprado."
+        />
+      </div>
+
+      {error && (
+        <p role="alert" className="t-caption rounded-md border border-danger-line bg-danger-soft p-3 text-danger font-medium">
+          {error}
+        </p>
+      )}
+
+      {orden && (
+        <Panel className="p-4">
+          <label className="block text-xs font-semibold text-ink">
+            Tipo de compra
+            <select
+              className="hg-field mt-1 max-w-xs"
+              value={orden.tipo_compra || 'reventa'}
+              onChange={async (e) => {
+                const tipo_compra = e.target.value as 'reventa' | 'insumos_fabricacion';
+                const { error: updateError } = await supabase.from('ordenes_compra').update({ tipo_compra }).eq('id', id);
+                if (updateError) {
+                  setError(mensajeError(updateError));
+                } else {
+                  setOrden({ ...orden, tipo_compra });
+                  toast({ message: 'Tipo de compra actualizado.', tone: 'success' });
+                }
+              }}
+            >
+              <option value="reventa">Compra para reventa</option>
+              <option value="insumos_fabricacion">Insumos de fabricación</option>
+            </select>
+          </label>
+        </Panel>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <section className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
-          <h2 className="font-bold">Nueva asignación</h2>
-          <select aria-label="Ítem de la OC" value={itemId} onChange={(e) => { setItemId(e.target.value); setCantidad(''); setCosto(''); }} className="w-full border border-gray-300 rounded-md p-2 text-sm">
-            <option value="">Seleccionar ítem</option>
-            {orden?.items?.map((item) => <option key={item.id} value={item.id}>{item.descripcion} · {item.cantidad} unidades</option>)}
-          </select>
-          {itemId && <p className="text-xs text-gray-600">Disponible: {remainingQty.toLocaleString('es-CL')} unidades · ${remainingCost.toLocaleString('es-CL')}</p>}
-          <select aria-label="Venta destino" value={opId} onChange={(e) => setOpId(e.target.value)} className="w-full border border-gray-300 rounded-md p-2 text-sm">
-            <option value="">Seleccionar venta</option>
-            {oportunidades.map((op) => <option key={op.id} value={op.id}>{op.codigo} · {op.titulo}</option>)}
-          </select>
-          <div className="grid grid-cols-2 gap-2">
-            <input aria-label="Cantidad asignada" type="number" min="0.01" step="0.01" placeholder="Cantidad" value={cantidad} onChange={(e) => setCantidad(e.target.value)} className="border border-gray-300 rounded-md p-2 text-sm" />
-            <input aria-label="Costo asignado" type="number" min="0" step="0.01" placeholder="Costo $" value={costo} onChange={(e) => setCosto(e.target.value)} className="border border-gray-300 rounded-md p-2 text-sm" />
+        <Panel title="Nueva asignación" className="p-4 space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-ink mb-1">Ítem de la OC *</label>
+            <select
+              aria-label="Ítem de la OC"
+              value={itemId}
+              onChange={(e) => {
+                setItemId(e.target.value);
+                setCantidad('');
+                setCosto('');
+              }}
+              className="hg-field"
+            >
+              <option value="">Seleccionar ítem...</option>
+              {orden?.items?.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.descripcion} · {item.cantidad} unidades
+                </option>
+              ))}
+            </select>
           </div>
-          <input aria-label="Unidad" placeholder="Unidad (opcional)" value={unidad} onChange={(e) => setUnidad(e.target.value)} className="w-full border border-gray-300 rounded-md p-2 text-sm" />
-          <input aria-label="Notas" placeholder="Notas (opcional)" value={notas} onChange={(e) => setNotas(e.target.value)} className="w-full border border-gray-300 rounded-md p-2 text-sm" />
-          <button disabled={saving} onClick={saveAsignacion} className="bg-[#f97316] disabled:opacity-50 text-white rounded-md px-4 py-2 text-sm font-bold">Guardar asignación</button>
-        </section>
-        <section className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
-          <h2 className="font-bold">Distribución actual</h2>
-          {asignaciones.length === 0 && <p className="text-sm text-gray-500">Sin asignaciones.</p>}
-          {asignaciones.map((a) => (
-            <div key={a.id} className="border-b border-gray-100 pb-2 flex justify-between gap-2 text-sm">
-              <div>
-                <strong>{oportunidades.find((op) => op.id === a.oportunidad_id)?.codigo || a.oportunidad_id}</strong>
-                <p>{orden?.items?.find((item) => item.id === a.orden_compra_item_id)?.descripcion || 'Ítem'}</p>
-                <p className="text-gray-600">{Number(a.cantidad).toLocaleString('es-CL')} {a.unidad || 'unidades'} · ${Number(a.costo_asignado).toLocaleString('es-CL')}</p>
-              </div>
-              <button onClick={() => removeAsignacion(a.id)} className="text-red-600 text-xs font-bold">Quitar</button>
+
+          {itemId && (
+            <p className="t-caption text-ink-muted">
+              Disponible: <strong className="t-num text-ink">{remainingQty.toLocaleString('es-CL')}</strong> unidades ·{' '}
+              <strong className="t-num text-ink">${remainingCost.toLocaleString('es-CL')}</strong>
+            </p>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-ink mb-1">Venta destino (NV) *</label>
+            <select
+              aria-label="Venta destino"
+              value={opId}
+              onChange={(e) => setOpId(e.target.value)}
+              className="hg-field"
+            >
+              <option value="">Seleccionar venta...</option>
+              {oportunidades.map((op) => (
+                <option key={op.id} value={op.id}>
+                  {op.codigo} · {op.titulo}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-semibold text-ink mb-1">Cantidad *</label>
+              <input
+                aria-label="Cantidad asignada"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="Cantidad"
+                value={cantidad}
+                onChange={(e) => setCantidad(e.target.value)}
+                className="hg-field t-num"
+              />
             </div>
-          ))}
-        </section>
+            <div>
+              <label className="block text-xs font-semibold text-ink mb-1">Costo ($) *</label>
+              <input
+                aria-label="Costo asignado"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Costo $"
+                value={costo}
+                onChange={(e) => setCosto(e.target.value)}
+                className="hg-field t-num"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-ink mb-1">Unidad (opcional)</label>
+            <input
+              aria-label="Unidad"
+              placeholder="Ej. m², unidad, pallet"
+              value={unidad}
+              onChange={(e) => setUnidad(e.target.value)}
+              className="hg-field"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-ink mb-1">Notas (opcional)</label>
+            <input
+              aria-label="Notas"
+              placeholder="Detalle o instrucción"
+              value={notas}
+              onChange={(e) => setNotas(e.target.value)}
+              className="hg-field"
+            />
+          </div>
+
+          <div className="pt-2">
+            <Button
+              variant="primary"
+              disabled={saving}
+              onClick={saveAsignacion}
+            >
+              {saving ? 'Guardando...' : 'Guardar asignación'}
+            </Button>
+          </div>
+        </Panel>
+
+        <Panel title="Distribución actual" className="p-4 space-y-3">
+          {asignaciones.length === 0 && (
+            <p className="t-caption text-ink-muted">Sin asignaciones registradas.</p>
+          )}
+          {asignaciones.map((a) => {
+            const op = oportunidades.find((item) => item.id === a.oportunidad_id);
+            const ocItem = orden?.items?.find((item) => item.id === a.orden_compra_item_id);
+            return (
+              <div key={a.id} className="border-b border-line-subtle pb-3 flex items-start justify-between gap-3 text-xs">
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <CodeStamp>{op?.codigo || a.oportunidad_id}</CodeStamp>
+                    {op && <span className="font-semibold text-ink truncate">{op.titulo}</span>}
+                  </div>
+                  <p className="text-ink-muted">{ocItem?.descripcion || 'Ítem'}</p>
+                  <p className="t-num font-semibold text-ink">
+                    {Number(a.cantidad).toLocaleString('es-CL')} {a.unidad || 'unidades'} · ${Number(a.costo_asignado).toLocaleString('es-CL')}
+                  </p>
+                  {a.notas && <p className="text-ink-muted italic">{a.notas}</p>}
+                </div>
+                <Button
+                  variant="subtle"
+                  size="sm"
+                  onClick={() => handleRemoveAsignacion(a.id)}
+                  className="text-danger hover:bg-danger-soft shrink-0"
+                >
+                  Quitar
+                </Button>
+              </div>
+            );
+          })}
+        </Panel>
       </div>
     </div>
   );

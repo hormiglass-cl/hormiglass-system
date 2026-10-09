@@ -1,50 +1,95 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f7f7f5;
-  --foreground: #252b2d;
-  --primary-orange: #f7931f;
-  --text-dark: #252b2d;
-  --hg-app-bg: #f7f7f5;
-  --hg-surface: #fff;
-  --hg-surface-muted: #f4f5f3;
-  --hg-border: #e5e7e4;
-  --hg-border-subtle: #eff0ee;
-  --hg-text: #252b2d;
-  --hg-text-muted: #66716f;
-  --hg-text-soft: #8a9390;
-  --hg-accent: #e87622;
-  --hg-accent-soft: #fff1e7;
-  --hg-accent-border: #f7d3b8;
-  --hg-success: #18815b;
-  --hg-warning: #a76714;
-  --hg-danger: #b83d46;
-  --hg-info: #386fbc;
-  --hg-radius-sm: 8px;
-  --hg-radius: 11px;
-  --hg-radius-lg: 16px;
-  --hg-shadow-card: 0 1px 3px rgb(25 35 32 / 5%), 0 10px 24px rgb(25 35 32 / 2%);
-  --hg-shadow-popover: 0 18px 50px rgb(25 35 32 / 14%);
+  /* Hormiglass — tokens de diseño (plans/plan-rediseno-hig.md). Solo modo claro. */
+  /* Superficies: gris cemento */
+  --hg-app-bg: #f6f5f2;
+  --hg-surface: #ffffff;
+  --hg-surface-muted: #eeede8;
+  --hg-border: #e3e1db;
+  --hg-border-subtle: #eeede8;
+  /* Texto: carbón de marca */
+  --hg-text: #363636;          /* 12,1:1 sobre blanco */
+  --hg-text-muted: #5c5a55;    /* 6,9:1 sobre blanco */
+  --hg-text-soft: #5c5a55;     /* legado: ya no existe un gris más claro para texto */
+  /* Acento: naranja de marca, solo acción primaria, selección y progreso */
+  --hg-accent: #f7931f;
+  --hg-accent-hover: #eb8a1e;  /* texto #363636 encima: 4,7:1 */
+  --hg-accent-ink: #a14a06;    /* texto o link naranja: 6,0:1 sobre blanco */
+  --hg-accent-soft: #fff3e6;
+  --hg-accent-border: #f8cfa0;
+  --hg-on-accent: #363636;     /* texto sobre naranja: 5,3:1 */
+  /* Señales: un significado cada una, siempre con ícono o texto */
+  --hg-success: #1e6b45;  --hg-success-soft: #e8f3ec;  --hg-success-border: #b9dcc6;
+  --hg-warning: #8a5300;  --hg-warning-soft: #fff4dc;  --hg-warning-border: #f1d79c;
+  --hg-danger: #a8261f;   --hg-danger-soft: #fdecea;   --hg-danger-border: #f3c1bc;
+  --hg-info: #2c5a94;     --hg-info-soft: #eaf1fa;     --hg-info-border: #bfd3ec;
+  /* Forma */
+  --hg-radius-sm: 6px;
+  --hg-radius: 8px;
+  --hg-radius-lg: 10px;
+  --hg-shadow-card: 0 1px 2px rgb(54 54 54 / 5%);
+  --hg-shadow-popover: 0 12px 32px rgb(54 54 54 / 14%);
+  /* Legado (se elimina en la fase 8) */
+  --background: var(--hg-app-bg);
+  --foreground: var(--hg-text);
+  --primary-orange: var(--hg-accent);
+  --text-dark: var(--hg-text);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-brand-orange: var(--hg-accent);
+  /* Utilidades semánticas: bg-surface, text-ink, text-ink-muted, bg-accent, text-success… */
+  --color-app: var(--hg-app-bg);
+  --color-surface: var(--hg-surface);
+  --color-surface-muted: var(--hg-surface-muted);
+  --color-line: var(--hg-border);
+  --color-line-subtle: var(--hg-border-subtle);
+  --color-ink: var(--hg-text);
+  --color-ink-muted: var(--hg-text-muted);
+  --color-accent: var(--hg-accent);
+  --color-accent-hover: var(--hg-accent-hover);
+  --color-accent-ink: var(--hg-accent-ink);
+  --color-accent-soft: var(--hg-accent-soft);
+  --color-accent-line: var(--hg-accent-border);
+  --color-on-accent: var(--hg-on-accent);
+  --color-success: var(--hg-success);
+  --color-success-soft: var(--hg-success-soft);
+  --color-success-line: var(--hg-success-border);
+  --color-warning: var(--hg-warning);
+  --color-warning-soft: var(--hg-warning-soft);
+  --color-warning-line: var(--hg-warning-border);
+  --color-danger: var(--hg-danger);
+  --color-danger-soft: var(--hg-danger-soft);
+  --color-danger-line: var(--hg-danger-border);
+  --color-info: var(--hg-info);
+  --color-info-soft: var(--hg-info-soft);
+  --color-info-line: var(--hg-info-border);
+  --radius-control: var(--hg-radius-sm);
+  --radius-panel: var(--hg-radius-lg);
 }
 
 body {
   background: var(--hg-app-bg);
   color: var(--hg-text);
-  font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font: 14px/1.43 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
-button, input, select, textarea { font: inherit; }
-button { cursor: pointer; }
-button:disabled { cursor: not-allowed; opacity: .6; }
+/* En @layer base para que las utilidades (text-sm, font-semibold…) de cada botón sí se apliquen.
+   Fuera de capa, `font: inherit` anulaba el tamaño y el peso declarados en todos los botones. */
+@layer base {
+  button, input, select, textarea { font: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: .6; }
+}
+/* Fuera de capa a propósito: el anillo de foco gana incluso sobre `outline-none` heredados. */
 :where(button, a, input, select, textarea, [tabindex]):focus-visible {
-  outline: 2px solid var(--hg-accent);
+  /* accent-ink y no accent: el anillo necesita 3:1 contra el fondo (6,0:1) */
+  outline: 2px solid var(--hg-accent-ink);
   outline-offset: 2px;
 }
+
 
 @layer components {
   .hg-page { color: var(--hg-text); }
@@ -67,11 +112,11 @@ button:disabled { cursor: not-allowed; opacity: .6; }
     min-height: 36px;
     padding: .5rem .9rem;
     border-radius: var(--hg-radius);
-    font-weight: 700;
+    font-weight: 600;
     transition: background-color .15s, border-color .15s, color .15s;
   }
-  .hg-button-primary { background: var(--hg-accent); color: white; border: 1px solid var(--hg-accent); }
-  .hg-button-primary:hover { background: #cb6119; }
+  .hg-button-primary { background: var(--hg-accent); color: var(--hg-on-accent); border: 1px solid var(--hg-accent); }
+  .hg-button-primary:hover { background: var(--hg-accent-hover); border-color: var(--hg-accent-hover); }
   .hg-button-secondary { background: white; color: var(--hg-text); border: 1px solid var(--hg-border); }
   .hg-button-secondary:hover { background: var(--hg-surface-muted); }
   .hg-field {
@@ -84,23 +129,22 @@ button:disabled { cursor: not-allowed; opacity: .6; }
     color: var(--hg-text);
   }
   .hg-field:focus { border-color: var(--hg-accent); outline: 2px solid var(--hg-accent-soft); }
+  .hg-field::placeholder { color: var(--hg-text-muted); }
   .hg-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .82rem; }
   .hg-table th {
     background: var(--hg-surface-muted);
     color: var(--hg-text-muted);
-    font-size: .7rem;
-    font-weight: 750;
-    letter-spacing: .035em;
-    text-transform: uppercase;
+    font-size: .75rem;
+    font-weight: 600;
     border-bottom: 1px solid var(--hg-border);
   }
   .hg-table th, .hg-table td { padding: .8rem 1rem; text-align: left; }
   .hg-table td { border-bottom: 1px solid var(--hg-border-subtle); }
   .hg-table tbody tr:last-child td { border-bottom: 0; }
-  .hg-table tbody tr:hover { background: #fafaf8; }
-  .hg-section-title { font-size: 1rem; font-weight: 750; letter-spacing: -.02em; }
-  .hg-overline { color: var(--hg-text-muted); font-size: .68rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
-  .hg-kpi-value { font-size: clamp(1.3rem, 2vw, 1.85rem); font-weight: 760; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+  .hg-table tbody tr:hover { background: var(--hg-app-bg); }
+  .hg-section-title { font-size: 1rem; line-height: 1.375rem; font-weight: 600; letter-spacing: -.01em; }
+  .hg-overline { color: var(--hg-text-muted); font-size: .75rem; font-weight: 600; }
+  .hg-kpi-value { font-size: clamp(1.3rem, 2vw, 1.625rem); font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
   .hg-list-toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -124,22 +168,49 @@ button:disabled { cursor: not-allowed; opacity: .6; }
   .hg-list-group-heading { display: flex; align-items: center; gap: .65rem; min-height: 52px; padding: .8rem 1rem; font-weight: 700; }
   .hg-list-count { min-width: 1.6rem; padding: .15rem .45rem; border-radius: 999px; background: var(--hg-surface-muted); color: var(--hg-text-muted); font-size: .72rem; text-align: center; font-variant-numeric: tabular-nums; }
   .hg-list-row { display: flex; align-items: center; gap: .85rem; min-height: 60px; padding: .7rem 1rem; border-top: 1px solid var(--hg-border-subtle); background: white; }
-  .hg-list-row:hover { background: #fafaf8; }
+  .hg-list-row:hover { background: var(--hg-app-bg); }
   .hg-list-meta { display: inline-flex; align-items: center; gap: .35rem; max-width: 100%; border-radius: 999px; background: var(--hg-surface-muted); padding: .3rem .55rem; color: var(--hg-text-muted); font-size: .73rem; white-space: nowrap; }
   .hg-list-table { width: 100%; border-collapse: separate; border-spacing: 0; }
-  .hg-list-table thead { background: #fafaf8; color: var(--hg-text-muted); }
-  .hg-list-table thead th { border-bottom: 1px solid var(--hg-border); font-size: .68rem; font-weight: 700; letter-spacing: .025em; }
+  .hg-list-table thead { background: var(--hg-app-bg); color: var(--hg-text-muted); }
+  .hg-list-table thead th { border-bottom: 1px solid var(--hg-border); font-size: .75rem; font-weight: 600; }
   .hg-list-table tbody tr { background: white; }
-  .hg-list-table tbody tr:hover { background: #fafaf8; }
+  .hg-list-table tbody tr:hover { background: var(--hg-app-bg); }
   .hg-list-table tbody td { border-bottom: 1px solid var(--hg-border-subtle); }
+
+  /* Escala tipográfica — mínimo 11 px, pesos 400/500/600/700 */
+  .t-page { font-size: 1.375rem; line-height: 1.75rem; font-weight: 700; letter-spacing: -.02em; color: var(--hg-text); }
+  .t-section { font-size: 1rem; line-height: 1.375rem; font-weight: 600; letter-spacing: -.01em; color: var(--hg-text); }
+  .t-body { font-size: .875rem; line-height: 1.25rem; }
+  .t-table { font-size: .8125rem; line-height: 1.125rem; }
+  .t-caption { font-size: .75rem; line-height: 1rem; font-weight: 500; color: var(--hg-text-muted); }
+  .t-micro { font-size: .6875rem; line-height: .875rem; font-weight: 600; }
+  .t-figure { font-size: 1.625rem; line-height: 2rem; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .t-num { font-variant-numeric: tabular-nums; }
+  /* Código estampado: folios OP-, OC-, PV-, NV-, SKU. Nunca para fechas. */
+  .code-stamp {
+    display: inline-flex; align-items: center; white-space: nowrap;
+    padding: .0625rem .375rem; border: 1px solid var(--hg-border); border-radius: 4px;
+    background: var(--hg-surface); color: var(--hg-text);
+    font: 500 .75rem/1rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums; letter-spacing: .01em;
+  }
 }
 
+/* Barandas globales mientras las pantallas se migran (se eliminan en la fase 8):
+   ningún texto bajo 11 px (accessibility.md: mínimo 10 pt en escritorio) y pesos hasta 700. */
+.hg-app-main :is([class*="text-[9px]"], [class*="text-[9.5px]"], [class*="text-[10px]"], [class*="text-[10.5px]"]) { font-size: 11px; }
+.hg-app-main :is(.font-black, .font-extrabold) { font-weight: 700; }
+
 /* Gradual page migration: common chrome without overriding each feature's semantics. */
-.hg-app-main :where(h1) { letter-spacing: -.035em; }
+.hg-app-main :where(h1) { letter-spacing: -.02em; }
 .hg-app-main :where(h2, h3) { letter-spacing: -.02em; }
 .hg-app-main :where(table) { border-collapse: separate; border-spacing: 0; }
 .hg-app-main :where(input, select, textarea) { accent-color: var(--hg-accent); }
 .hg-app-main :where(.bg-white.border, .bg-white.rounded-lg) { box-shadow: var(--hg-shadow-card); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
 
 @media (max-width: 767px) {
   .hg-app-main { padding: 1rem; }

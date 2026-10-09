@@ -1,28 +1,31 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '../../lib/supabase/client';
-import { OportunidadVenta, Cliente, Usuario } from '../../lib/types';
-import { useAuth } from '../../lib/context/AuthContext';
+import { OportunidadVenta, Usuario } from '../../lib/types';
 import {
-  Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
   Clock,
-  User,
   Building,
   MapPin,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
   Plus,
   ExternalLink,
-  Filter,
-  Search,
   Trash2,
+  Calendar as CalendarIcon,
 } from 'lucide-react';
+import {
+  PageHeader,
+  Panel,
+  Button,
+  IconButton,
+  CodeStamp,
+  StatusBadge,
+  Dialog,
+} from '../../components/ui/crm';
+import { useConfirm, useToast } from '../../components/ui/feedback';
 
 const isUUID = (str: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
@@ -40,23 +43,23 @@ type VisitaTerrenoRow = {
 };
 
 export default function VisitasTerrenoPage() {
-  const { currentUser } = useAuth();
   const searchParams = useSearchParams();
   const highlightedOpId = searchParams.get('opId');
+  const confirm = useConfirm();
+  const toast = useToast();
 
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
   const [personalVisitas, setPersonalVisitas] = useState<Usuario[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedTecnico, setSelectedTecnico] = useState<string>('todos');
+  const [, setLoading] = useState(true);
   const [selectedEstado, setSelectedEstado] = useState<string>('todos');
   const [currentDate, setCurrentDate] = useState(new Date());
 
   // Modal para ver/editar visita seleccionada
   const [selectedVisitaOp, setSelectedVisitaOp] = useState<OportunidadVenta | null>(null);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
-  const fetchOportunidades = async () => {
+  const fetchOportunidades = React.useCallback(async () => {
     try {
       const [opRes, visRes, respRes] = await Promise.all([
         supabase
@@ -82,12 +85,9 @@ export default function VisitasTerrenoPage() {
 
       const combinedOps: OportunidadVenta[] = [];
 
-      // Add visits from visitas_terreno table (only for active opportunities where requiere_visita_terreno !== false)
       if (visRes.data) {
         for (const v of visRes.data as VisitaTerrenoRow[]) {
           const parentOp = v.oportunidad;
-
-          // Skip visit if parent opportunity is turned off (requiere_visita_terreno === false)
           if (!parentOp || parentOp.requiere_visita_terreno === false) {
             continue;
           }
@@ -112,7 +112,6 @@ export default function VisitasTerrenoPage() {
         }
       }
 
-      // Add legacy single visits from oportunidades if not already in combinedOps
       if (opRes.data) {
         for (const o of opRes.data) {
           if (o.fecha_visita_terreno && !combinedOps.some((c) => c.id === o.id)) {
@@ -128,15 +127,16 @@ export default function VisitasTerrenoPage() {
       }
     } catch (err) {
       console.error('Error fetching field visits:', err);
+      toast({ message: 'No se pudieron cargar las visitas a terreno', tone: 'danger' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase, highlightedOpId, toast]);
 
   useEffect(() => {
     let ignore = false;
     const loadTimer = window.setTimeout(() => {
-      if (!ignore) fetchOportunidades();
+      if (!ignore) void fetchOportunidades();
     }, 0);
 
     const channel1 = supabase
@@ -145,7 +145,7 @@ export default function VisitasTerrenoPage() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'visitas_terreno' },
         () => {
-          if (!ignore) fetchOportunidades();
+          if (!ignore) void fetchOportunidades();
         }
       )
       .subscribe();
@@ -156,7 +156,7 @@ export default function VisitasTerrenoPage() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'oportunidades' },
         () => {
-          if (!ignore) fetchOportunidades();
+          if (!ignore) void fetchOportunidades();
         }
       )
       .subscribe();
@@ -167,7 +167,7 @@ export default function VisitasTerrenoPage() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'usuarios' },
         () => {
-          if (!ignore) fetchOportunidades();
+          if (!ignore) void fetchOportunidades();
         }
       )
       .subscribe();
@@ -175,13 +175,12 @@ export default function VisitasTerrenoPage() {
     return () => {
       ignore = true;
       window.clearTimeout(loadTimer);
-      supabase.removeChannel(channel1);
-      supabase.removeChannel(channel2);
-      supabase.removeChannel(channel3);
+      void supabase.removeChannel(channel1);
+      void supabase.removeChannel(channel2);
+      void supabase.removeChannel(channel3);
     };
-  }, []);
+  }, [supabase, fetchOportunidades]);
 
-  // Update field visit in Supabase
   const updateVisitaField = async (opId: string, field: keyof OportunidadVenta, value: string | null) => {
     try {
       const parentOpId = selectedVisitaOp?.id === opId
@@ -197,8 +196,10 @@ export default function VisitasTerrenoPage() {
         supabase.from('visitas_terreno').update({ [field]: value }).eq('id', opId),
         supabase.from('oportunidades').update({ [field]: value }).eq('id', parentOpId),
       ]);
+      toast({ message: 'Visita actualizada', tone: 'success' });
     } catch (err) {
       console.error(`Error updating ${field} for visita:`, err);
+      toast({ message: 'Error al actualizar la visita', tone: 'danger' });
     }
   };
 
@@ -222,19 +223,33 @@ export default function VisitasTerrenoPage() {
         : prev
     );
 
-    await Promise.all([
-      supabase
-        .from('visitas_terreno')
-        .update({ tecnico_id: personalId, tecnico_visita: nombre })
-        .eq('id', opId),
-      supabase
-        .from('oportunidades')
-        .update({ tecnico_id: personalId, tecnico_visita: nombre })
-        .eq('id', parentOpId),
-    ]);
+    try {
+      await Promise.all([
+        supabase
+          .from('visitas_terreno')
+          .update({ tecnico_id: personalId, tecnico_visita: nombre })
+          .eq('id', opId),
+        supabase
+          .from('oportunidades')
+          .update({ tecnico_id: personalId, tecnico_visita: nombre })
+          .eq('id', parentOpId),
+      ]);
+      toast({ message: 'Técnico asignado', tone: 'success' });
+    } catch (err) {
+      console.error('Error updating tecnico:', err);
+      toast({ message: 'Error al asignar técnico', tone: 'danger' });
+    }
   };
 
   const deleteVisita = async (visita: OportunidadVenta) => {
+    const ok = await confirm({
+      title: 'Eliminar visita a terreno',
+      message: `¿Estás seguro de eliminar la visita para ${visita.codigo}? Esta acción desvinculará la programación.`,
+      confirmLabel: 'Eliminar visita',
+      destructive: true,
+    });
+    if (!ok) return;
+
     try {
       const visId = visita.id;
       const parentOpId = visita.cotizacion_actual_id || visita.id;
@@ -257,9 +272,11 @@ export default function VisitasTerrenoPage() {
 
       setOportunidades((prev) => prev.filter((o) => o.id !== visId && o.id !== parentOpId));
       setSelectedVisitaOp((prev) => (prev?.id === visId ? null : prev));
+      toast({ message: 'Visita eliminada correctamente', tone: 'success' });
     } catch (err) {
       console.error('Error deleting visita from calendar:', err);
-      fetchOportunidades();
+      toast({ message: 'No se pudo eliminar la visita', tone: 'danger' });
+      void fetchOportunidades();
     }
   };
 
@@ -272,7 +289,7 @@ export default function VisitasTerrenoPage() {
 
   const monthNames = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
   ];
 
   const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
@@ -282,6 +299,21 @@ export default function VisitasTerrenoPage() {
   // Filter visits
   const [selectedTecnicos, setSelectedTecnicos] = useState<string[]>([]);
   const [showTecnicoMenu, setShowTecnicoMenu] = useState(false);
+  const filterMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) {
+        setShowTecnicoMenu(false);
+      }
+    }
+    if (showTecnicoMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showTecnicoMenu]);
 
   const filteredVisitas = oportunidades.filter((op) => {
     const matchesTecnico =
@@ -290,467 +322,513 @@ export default function VisitasTerrenoPage() {
     const matchesEstado = selectedEstado === 'todos' || (op.estado_visita || 'programada') === selectedEstado;
     return matchesTecnico && matchesEstado;
   });
+
   const todayLocal = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
   const upcomingVisitas = filteredVisitas
     .filter((op) => !!op.fecha_visita_terreno && op.fecha_visita_terreno >= todayLocal && op.estado_visita !== 'cancelada')
     .sort((a, b) => (a.fecha_visita_terreno || '').localeCompare(b.fecha_visita_terreno || ''))
     .slice(0, 6);
 
-  const getTecnicoColor = () => ({
-    bg: 'bg-orange-50',
-    text: 'text-[#f97316]',
-    border: 'border-orange-200',
-    dot: 'bg-[#f97316]',
-  });
-
   const getResponsableNombre = (op: OportunidadVenta) =>
     op.tecnico?.nombre || op.tecnico_visita || 'Responsable';
 
-  const getEstadoBadge = (est?: string) => {
+  const tonoEstado = (est?: string): 'neutral' | 'success' | 'danger' | 'warning' => {
     switch (est) {
       case 'realizada':
-        return { label: 'Realizada', bg: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
+        return 'success';
       case 'cancelada':
-        return { label: 'Cancelada', bg: 'bg-red-100 text-red-800 border-red-300' };
+        return 'danger';
+      case 'programada':
       default:
-        return { label: 'Programada', bg: 'bg-amber-100 text-amber-800 border-amber-300' };
+        return 'warning';
+    }
+  };
+
+  const labelEstado = (est?: string): string => {
+    switch (est) {
+      case 'realizada':
+        return 'Realizada';
+      case 'cancelada':
+        return 'Cancelada';
+      case 'programada':
+      default:
+        return 'Programada';
     }
   };
 
   return (
-    <div className="space-y-5 text-[#213343] ">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-4">
-        <div>
-          <h1 className="text-2xl font-extrabold text-[#213343] flex items-center gap-2.5">
-            <CalendarIcon className="w-6 h-6 text-[#f97316]" />
-            <span>Calendario de visitas a terreno</span>
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Planificación y asignación de inspecciones en terreno asociadas a oportunidades.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <Link
-            href="/ventas"
-            className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold text-xs px-4 py-2 rounded-md transition flex items-center gap-2 shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Programar visita desde pipeline</span>
+    <div className="space-y-6">
+      <PageHeader
+        title="Calendario de visitas a terreno"
+        description="Planificación y asignación de inspecciones en terreno asociadas a oportunidades."
+        actions={
+          <Link href="/ventas">
+            <Button variant="primary" icon={Plus}>
+              Programar visita desde pipeline
+            </Button>
           </Link>
-        </div>
-      </div>
+        }
+      />
 
       {/* Control Bar: Mes + Filtros */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-4 text-xs">
-        {/* Navegación de Mes */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center bg-gray-100 rounded-md p-1 border border-gray-200">
-            <button
-              onClick={prevMonth}
-              className="p-1.5 hover:bg-white text-gray-700 rounded-lg transition"
-              title="Mes anterior"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="font-extrabold text-[#213343] px-3 font-mono text-sm">
-              {monthNames[month]} {year}
-            </span>
-            <button
-              onClick={nextMonth}
-              className="p-1.5 hover:bg-white text-gray-700 rounded-lg transition"
-              title="Mes siguiente"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-
-          <button
-            onClick={goToToday}
-            className="px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-[#f97316] font-bold rounded-md border border-orange-200 transition"
-          >
-            Hoy
-          </button>
-        </div>
-
-        {/* Filtros */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Técnico (Multi-Selección Desplegable) */}
-          <div className="relative">
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-gray-500">Técnico:</span>
-              <button
-                type="button"
-                onClick={() => setShowTecnicoMenu(!showTecnicoMenu)}
-                className="bg-gray-50 hover:bg-gray-100 border border-gray-300 rounded-md px-3 py-1.5 text-[#213343] font-bold text-xs flex items-center justify-between gap-2 min-w-[170px] cursor-pointer"
-              >
-                <span className="truncate">
-                  {selectedTecnicos.length === 0
-                    ? 'Todos los técnicos'
-                    : selectedTecnicos.length === 1
-                    ? personalVisitas.find((p) => p.id === selectedTecnicos[0])?.nombre || '1 seleccionado'
-                    : `${selectedTecnicos.length} seleccionados`}
-                </span>
-                <ChevronRight className={`w-3.5 h-3.5 text-gray-500 transition-transform ${showTecnicoMenu ? 'rotate-90' : ''}`} />
-              </button>
+      <Panel className="p-3">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          {/* Navegación de Mes */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 rounded-lg border border-border bg-surface p-1">
+              <IconButton
+                label="Mes anterior"
+                onClick={prevMonth}
+                icon={ChevronLeft}
+              />
+              <span className="t-body font-semibold text-ink px-2 t-num">
+                {monthNames[month]} {year}
+              </span>
+              <IconButton
+                label="Mes siguiente"
+                onClick={nextMonth}
+                icon={ChevronRight}
+              />
             </div>
 
-            {showTecnicoMenu && (
-              <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-sm p-3 z-30 space-y-2 text-xs">
-                <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
-                  <span className="font-extrabold text-[#213343] text-[11px] uppercase tracking-normal">
-                    Filtrar técnicos
-                  </span>
-                  {selectedTecnicos.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTecnicos([])}
-                      className="text-[10px] text-[#f97316] font-bold hover:underline"
-                    >
-                      Limpiar filtro
-                    </button>
-                  )}
-                </div>
-
-                <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
-                  <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-bold text-[#213343]">
-                    <input
-                      type="checkbox"
-                      checked={selectedTecnicos.length === 0}
-                      onChange={() => setSelectedTecnicos([])}
-                      className="rounded text-[#f97316] focus:ring-[#F7931F]"
-                    />
-                    <span>Todos los técnicos</span>
-                  </label>
-
-                  {personalVisitas.map((p) => {
-                    const isChecked = selectedTecnicos.includes(p.id);
-                    const count = oportunidades.filter((o) => o.tecnico_id === p.id).length;
-                    return (
-                      <label
-                        key={p.id}
-                        className="flex items-center justify-between p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-medium text-gray-700"
-                      >
-                        <div className="flex items-center gap-2 truncate">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => {
-                              if (isChecked) {
-                                setSelectedTecnicos(selectedTecnicos.filter((id) => id !== p.id));
-                              } else {
-                                setSelectedTecnicos([...selectedTecnicos, p.id]);
-                              }
-                            }}
-                            className="rounded text-[#f97316] focus:ring-[#F7931F]"
-                          />
-                          <span className="truncate">{p.nombre}</span>
-                        </div>
-                        <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded-full font-mono text-gray-600 font-bold shrink-0">
-                          {count}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            <Button variant="secondary" size="sm" onClick={goToToday}>
+              Hoy
+            </Button>
           </div>
 
-          {/* Estado */}
-          <div className="flex items-center gap-1.5">
-            <span className="font-bold text-gray-500">Estado:</span>
-            <select
-              value={selectedEstado}
-              onChange={(e) => setSelectedEstado(e.target.value)}
-              className="bg-gray-50 border border-gray-300 rounded-md px-2.5 py-1.5 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
-            >
-              <option value="todos">Todos los estados</option>
-              <option value="programada">Programadas</option>
-              <option value="realizada">Realizadas</option>
-              <option value="cancelada">Canceladas</option>
-            </select>
+          {/* Filtros */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Técnico (Multi-Selección Desplegable) */}
+            <div className="relative" ref={filterMenuRef}>
+              <div className="flex items-center gap-2">
+                <span className="t-micro font-medium text-ink-muted">Técnico:</span>
+                <button
+                  type="button"
+                  onClick={() => setShowTecnicoMenu(!showTecnicoMenu)}
+                  className="rounded-lg border border-border bg-surface px-3 py-1.5 t-micro font-semibold text-ink flex items-center justify-between gap-2 min-w-[170px] hover:border-border-strong transition-colors"
+                >
+                  <span className="truncate">
+                    {selectedTecnicos.length === 0
+                      ? 'Todos los técnicos'
+                      : selectedTecnicos.length === 1
+                      ? personalVisitas.find((p) => p.id === selectedTecnicos[0])?.nombre || '1 seleccionado'
+                      : `${selectedTecnicos.length} seleccionados`}
+                  </span>
+                  <ChevronRight
+                    size={14}
+                    className={`text-ink-muted transition-transform ${showTecnicoMenu ? 'rotate-90' : ''}`}
+                  />
+                </button>
+              </div>
+
+              {showTecnicoMenu && (
+                <div className="absolute right-0 mt-2 w-64 rounded-xl border border-border bg-surface shadow-md p-3 z-30 space-y-2 t-micro">
+                  <div className="flex items-center justify-between border-b border-border pb-1.5">
+                    <span className="font-semibold text-ink uppercase tracking-normal">
+                      Filtrar técnicos
+                    </span>
+                    {selectedTecnicos.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTecnicos([])}
+                        className="text-accent font-semibold hover:underline"
+                      >
+                        Limpiar filtro
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
+                    <label className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-surface-muted cursor-pointer font-semibold text-ink">
+                      <input
+                        type="checkbox"
+                        checked={selectedTecnicos.length === 0}
+                        onChange={() => setSelectedTecnicos([])}
+                        className="rounded border-border text-accent focus:ring-accent"
+                      />
+                      <span>Todos los técnicos</span>
+                    </label>
+
+                    {personalVisitas.map((p) => {
+                      const isChecked = selectedTecnicos.includes(p.id);
+                      const count = oportunidades.filter((o) => o.tecnico_id === p.id).length;
+                      return (
+                        <label
+                          key={p.id}
+                          className="flex items-center justify-between p-1.5 rounded-lg hover:bg-surface-muted cursor-pointer font-medium text-ink"
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                if (isChecked) {
+                                  setSelectedTecnicos(selectedTecnicos.filter((id) => id !== p.id));
+                                } else {
+                                  setSelectedTecnicos([...selectedTecnicos, p.id]);
+                                }
+                              }}
+                              className="rounded border-border text-accent focus:ring-accent"
+                            />
+                            <span className="truncate">{p.nombre}</span>
+                          </div>
+                          <span className="rounded-full bg-surface-muted px-1.5 py-0.5 t-micro t-num text-ink-muted font-semibold shrink-0">
+                            {count}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Estado */}
+            <div className="flex items-center gap-2">
+              <span className="t-micro font-medium text-ink-muted">Estado:</span>
+              <select
+                value={selectedEstado}
+                onChange={(e) => setSelectedEstado(e.target.value)}
+                className="rounded-lg border border-border bg-surface px-2.5 py-1.5 t-micro font-semibold text-ink outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+              >
+                <option value="todos">Todos los estados</option>
+                <option value="programada">Programadas</option>
+                <option value="realizada">Realizadas</option>
+                <option value="cancelada">Canceladas</option>
+              </select>
+            </div>
           </div>
         </div>
-      </div>
+      </Panel>
 
       {/* Grid del Calendario Mensual y agenda */}
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-      <div className="hg-panel overflow-x-auto">
-      <div className="min-w-[720px]">
-        {/* Días de la semana */}
-        <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-xs font-bold text-gray-600">
-          {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((d) => (
-            <div key={d} className="py-2.5 border-r last:border-r-0 border-gray-200">
-              {d}
-            </div>
-          ))}
-        </div>
-
-        {/* Celdas de Dias */}
-        <div className="grid grid-cols-7 divide-x divide-y divide-gray-200/80 bg-gray-50/30">
-          {/* Celdas vacías del mes anterior */}
-          {Array.from({ length: firstDayOfWeek }).map((_, idx) => (
-            <div key={`empty-${idx}`} className="min-h-[130px] bg-gray-50/50 p-2 text-gray-300 text-xs font-mono select-none" />
-          ))}
-
-          {/* Días del mes actual */}
-          {Array.from({ length: daysInMonth }).map((_, dayIdx) => {
-            const dayNum = dayIdx + 1;
-            const formattedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-
-            const isToday = formattedDate === todayLocal;
-
-            // Visitas programadas para este día
-            const dayVisitas = filteredVisitas.filter(
-              (o) => o.fecha_visita_terreno === formattedDate
-            );
-
-            return (
-              <div
-                key={dayNum}
-                className={`min-h-[130px] p-2 transition flex flex-col justify-start gap-1 bg-white hover:bg-orange-50/20 ${
-                  isToday ? 'bg-orange-50/40 ring-1 ring-[#F7931F]/30 inset-0' : ''
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span
-                    className={`text-xs font-mono font-bold w-6 h-6 rounded-full flex items-center justify-center ${
-                      isToday ? 'bg-[#f97316] text-white font-extrabold shadow-2xs' : 'text-gray-700'
-                    }`}
-                  >
-                    {dayNum}
-                  </span>
-                  {dayVisitas.length > 0 && (
-                    <span className="text-[10px] font-extrabold text-[#f97316] bg-orange-100 px-1.5 py-0.5 rounded-full">
-                      {dayVisitas.length} {dayVisitas.length === 1 ? 'visita' : 'visitas'}
-                    </span>
-                  )}
-                </div>
-
-                {/* Tarjetas de visitas en el día */}
-                <div className="space-y-1.5 overflow-y-auto max-h-[110px] pr-0.5">
-                  {dayVisitas.map((op) => {
-                    const color = getTecnicoColor();
-                    const est = getEstadoBadge(op.estado_visita);
-                    const responsableNombre = getResponsableNombre(op);
-
-                    return (
-                      <div
-                        key={op.id}
-                        onClick={() => setSelectedVisitaOp(op)}
-                        className={`p-2 rounded-md border text-[11px] cursor-pointer transition shadow-2xs hover:scale-[1.02] ${color.bg} ${color.border}`}
-                      >
-                        <div className="flex items-center justify-between gap-1 mb-1">
-                          <span className={`font-black uppercase tracking-normal text-[9px] px-1.5 py-0.5 rounded-md ${color.text} bg-white/80 border`}>
-                            {responsableNombre}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <span className="font-mono text-[9px] text-gray-500 font-bold flex items-center gap-0.5">
-                              <Clock className="w-3 h-3 text-gray-400" />
-                              {op.hora_visita_terreno || '09:00'}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deleteVisita(op);
-                              }}
-                              className="p-1 bg-white/80 hover:bg-red-50 text-red-600 border border-red-100 rounded-md shrink-0"
-                              title="Eliminar visita"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="font-bold text-[#213343] truncate leading-tight" title={op.titulo}>
-                          {op.codigo} — {op.titulo}
-                        </div>
-
-                        <div className="text-[10px] text-gray-500 truncate flex items-center gap-1 mt-0.5">
-                          <Building className="w-3 h-3 text-gray-400 shrink-0" />
-                          <span className="truncate">{op.cliente?.nombre || 'Cliente'}</span>
-                        </div>
-
-                        <div className="mt-1 flex items-center justify-between">
-                          <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-md border ${est.bg}`}>
-                            {est.label}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <section aria-label="Calendario mensual">
+          <Panel className="overflow-x-auto p-0">
+            <div className="min-w-[720px]">
+              {/* Días de la semana */}
+              <div className="grid grid-cols-7 border-b border-border bg-surface-muted text-center t-caption font-semibold text-ink-muted">
+                {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((d) => (
+                  <div key={d} className="py-2.5 border-r last:border-r-0 border-border">
+                    {d}
+                  </div>
+                ))}
               </div>
-            );
-          })}
-        </div>
-      </div>
-      </div>
-      <aside className="hg-panel p-4">
-        <h2 className="text-sm font-bold">Próximas visitas</h2>
-        <p className="mt-1 text-xs text-gray-500">Inspecciones programadas según los filtros activos.</p>
-        {upcomingVisitas.length ? <div className="mt-3 space-y-1">
-          {upcomingVisitas.map((op) => <button key={op.id} type="button" onClick={() => setSelectedVisitaOp(op)} className="block w-full rounded-lg p-2 text-left hover:bg-gray-50">
-            <span className="block truncate text-xs font-bold">{op.codigo} · {op.titulo}</span>
-            <span className="text-[11px] text-gray-500">{op.fecha_visita_terreno} · {getResponsableNombre(op)}</span>
-          </button>)}
-        </div> : <p className="mt-4 text-xs text-gray-500">Sin visitas próximas.</p>}
-      </aside>
+
+              {/* Celdas de Días */}
+              <div className="grid grid-cols-7 divide-x divide-border bg-surface">
+                {/* Celdas vacías del mes anterior */}
+                {Array.from({ length: firstDayOfWeek }).map((_, idx) => (
+                  <div
+                    key={`empty-${idx}`}
+                    className="min-h-[130px] bg-surface-muted/40 p-2 text-ink-subtle t-micro t-num select-none"
+                  />
+                ))}
+
+                {/* Días del mes actual */}
+                {Array.from({ length: daysInMonth }).map((_, dayIdx) => {
+                  const dayNum = dayIdx + 1;
+                  const formattedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                  const isToday = formattedDate === todayLocal;
+
+                  const dayVisitas = filteredVisitas.filter(
+                    (o) => o.fecha_visita_terreno === formattedDate
+                  );
+
+                  return (
+                    <div
+                      key={dayNum}
+                      className={`min-h-[130px] p-2 transition-colors flex flex-col justify-start gap-1 ${
+                        isToday ? 'bg-accent/5 ring-1 ring-accent/30' : 'hover:bg-surface-muted/40'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span
+                          className={`t-caption t-num font-semibold w-6 h-6 rounded-full flex items-center justify-center ${
+                            isToday ? 'bg-accent text-on-accent' : 'text-ink'
+                          }`}
+                        >
+                          {dayNum}
+                        </span>
+                        {dayVisitas.length > 0 && (
+                          <span className="rounded-full bg-accent/15 px-1.5 py-0.5 t-micro t-num font-semibold text-accent-strong">
+                            {dayVisitas.length} {dayVisitas.length === 1 ? 'visita' : 'visitas'}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Tarjetas de visitas en el día */}
+                      <div className="space-y-1.5 overflow-y-auto max-h-[110px] pr-0.5">
+                        {dayVisitas.map((op) => {
+                          const responsableNombre = getResponsableNombre(op);
+
+                          return (
+                            <div
+                              key={op.id}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => setSelectedVisitaOp(op)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  setSelectedVisitaOp(op);
+                                }
+                              }}
+                              className="p-2 rounded-lg border border-border bg-surface text-left cursor-pointer transition-colors hover:border-accent/40 hover:bg-surface-muted space-y-1"
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="t-micro font-semibold text-ink-muted truncate">
+                                  {responsableNombre}
+                                </span>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <span className="t-micro t-num text-ink-muted font-medium flex items-center gap-0.5">
+                                    <Clock size={11} className="text-ink-subtle" />
+                                    {op.hora_visita_terreno || '09:00'}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void deleteVisita(op);
+                                    }}
+                                    className="p-0.5 rounded text-ink-subtle hover:text-danger hover:bg-danger/10 transition-colors"
+                                    title="Eliminar visita"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1">
+                                <CodeStamp>{op.codigo}</CodeStamp>
+                                <span className="truncate t-micro font-medium text-ink" title={op.titulo}>
+                                  {op.titulo}
+                                </span>
+                              </div>
+
+                              {op.cliente?.nombre && (
+                                <div className="t-micro text-ink-muted truncate flex items-center gap-1">
+                                  <Building size={11} className="text-ink-subtle shrink-0" />
+                                  <span className="truncate">{op.cliente.nombre}</span>
+                                </div>
+                              )}
+
+                              <div className="pt-0.5">
+                                <StatusBadge tone={tonoEstado(op.estado_visita)}>
+                                  {labelEstado(op.estado_visita)}
+                                </StatusBadge>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Panel>
+        </section>
+
+        {/* Sidebar próximas visitas */}
+        <aside className="space-y-4">
+          <Panel className="p-4">
+            <h2 className="t-body font-semibold text-ink">Próximas visitas</h2>
+            <p className="mt-1 t-micro text-ink-muted">
+              Inspecciones programadas según los filtros activos.
+            </p>
+            {upcomingVisitas.length ? (
+              <div className="mt-3 space-y-1.5">
+                {upcomingVisitas.map((op) => (
+                  <button
+                    key={op.id}
+                    type="button"
+                    onClick={() => setSelectedVisitaOp(op)}
+                    className="block w-full rounded-lg p-2.5 text-left border border-border bg-surface hover:bg-surface-muted hover:border-border-strong transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <CodeStamp>{op.codigo}</CodeStamp>
+                      <StatusBadge tone={tonoEstado(op.estado_visita)}>
+                        {labelEstado(op.estado_visita)}
+                      </StatusBadge>
+                    </div>
+                    <span className="block truncate t-caption font-medium text-ink">
+                      {op.titulo}
+                    </span>
+                    <span className="mt-1 block t-micro text-ink-muted t-num">
+                      {op.fecha_visita_terreno} · {getResponsableNombre(op)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-4 t-micro text-ink-muted">Sin visitas próximas.</p>
+            )}
+          </Panel>
+        </aside>
       </div>
 
       {/* Modal de Detalle y Edición Directa de Visita */}
       {selectedVisitaOp && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
-          <div className="bg-white border border-gray-200 rounded-lg max-w-lg w-full p-6 space-y-5 shadow-sm text-[#213343]">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-orange-50 rounded-md border border-orange-200 text-[#f97316]">
-                  <CalendarIcon className="w-5 h-5" />
-                </div>
-                <div>
-                  <span className="text-[10px] font-mono font-bold text-gray-500 uppercase">{selectedVisitaOp.codigo}</span>
-                  <h3 className="text-base font-extrabold text-[#213343] leading-tight">{selectedVisitaOp.titulo}</h3>
-                </div>
+        <Dialog
+          open={Boolean(selectedVisitaOp)}
+          onClose={() => setSelectedVisitaOp(null)}
+          title="Detalle de visita a terreno"
+          description={selectedVisitaOp.codigo}
+          footer={
+            <div className="flex flex-wrap items-center justify-between gap-2 w-full">
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/ventas?oportunidad=${selectedVisitaOp.cotizacion_actual_id || selectedVisitaOp.id}`}
+                >
+                  <Button variant="secondary" size="sm" icon={ExternalLink}>
+                    Abrir en Pipeline
+                  </Button>
+                </Link>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  icon={Trash2}
+                  onClick={() => {
+                    if (selectedVisitaOp) {
+                      void deleteVisita(selectedVisitaOp);
+                    }
+                  }}
+                >
+                  Eliminar Visita
+                </Button>
               </div>
-              <button
-                onClick={() => setSelectedVisitaOp(null)}
-                className="text-gray-400 hover:text-[#213343] text-lg font-bold p-1"
-              >
-                ✕
-              </button>
+              <Button variant="secondary" size="sm" onClick={() => setSelectedVisitaOp(null)}>
+                Cerrar
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            {/* Header info */}
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-surface-muted">
+              <div className="p-2 rounded-lg bg-accent/15 text-accent-strong shrink-0">
+                <CalendarIcon size={18} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <CodeStamp>{selectedVisitaOp.codigo}</CodeStamp>
+                  <StatusBadge tone={tonoEstado(selectedVisitaOp.estado_visita)}>
+                    {labelEstado(selectedVisitaOp.estado_visita)}
+                  </StatusBadge>
+                </div>
+                <h3 className="t-body font-semibold text-ink truncate mt-1">
+                  {selectedVisitaOp.titulo}
+                </h3>
+              </div>
             </div>
 
-            {/* Información del Cliente */}
-            <div className="bg-gray-50 p-3.5 rounded-lg border border-gray-200 text-xs space-y-1">
+            {/* Datos del Cliente */}
+            <div className="rounded-lg border border-border bg-surface p-3 space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-[#f97316] flex items-center gap-1.5">
-                  <Building className="w-4 h-4 text-[#f97316]" />
+                <span className="t-caption font-semibold text-ink flex items-center gap-1.5">
+                  <Building size={14} className="text-ink-muted" />
                   <span>{selectedVisitaOp.cliente?.nombre || 'Cliente General'}</span>
                 </span>
-                <span className="font-mono text-gray-500 font-bold">{selectedVisitaOp.cliente?.rut}</span>
+                {selectedVisitaOp.cliente?.rut && (
+                  <span className="t-micro t-num text-ink-muted">
+                    {selectedVisitaOp.cliente.rut}
+                  </span>
+                )}
               </div>
               {(selectedVisitaOp.cliente?.direccion || selectedVisitaOp.cliente?.comuna) && (
-                <div className="text-gray-600 text-[11px] flex items-center gap-1 pt-1">
-                  <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                  <span>{selectedVisitaOp.cliente?.direccion}, {selectedVisitaOp.cliente?.comuna}</span>
+                <div className="t-micro text-ink-muted flex items-center gap-1 pt-1">
+                  <MapPin size={13} className="text-ink-subtle shrink-0" />
+                  <span>
+                    {selectedVisitaOp.cliente?.direccion}
+                    {selectedVisitaOp.cliente?.comuna ? `, ${selectedVisitaOp.cliente.comuna}` : ''}
+                  </span>
                 </div>
               )}
             </div>
 
             {/* Formulario de Modificación de Visita */}
-            <div className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Técnico Asignado</label>
-                  <select
-                    value={
-                      selectedVisitaOp.tecnico_id ||
-                      personalVisitas.find((p) => p.nombre === selectedVisitaOp.tecnico_visita)?.id ||
-                      ''
-                    }
-                    onChange={(e) => {
-                      updateVisitaResponsable(selectedVisitaOp.id, e.target.value);
-                    }}
-                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316] cursor-pointer"
-                  >
-                    <option value="">Selecciona responsable</option>
-                    {personalVisitas.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.nombre}{t.rut ? ` - ${t.rut}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Estado de Visita</label>
-                  <select
-                    value={selectedVisitaOp.estado_visita || 'programada'}
-                    onChange={(e) => updateVisitaField(selectedVisitaOp.id, 'estado_visita', e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-black uppercase focus:outline-none focus:border-[#f97316]"
-                  >
-                    <option value="programada">Programada</option>
-                    <option value="realizada">Realizada</option>
-                    <option value="cancelada">Cancelada</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Fecha de Visita</label>
-                  <input
-                    type="date"
-                    value={selectedVisitaOp.fecha_visita_terreno || ''}
-                    onChange={(e) => updateVisitaField(selectedVisitaOp.id, 'fecha_visita_terreno', e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-mono focus:outline-none focus:border-[#f97316]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Hora de Visita</label>
-                  <input
-                    type="time"
-                    value={selectedVisitaOp.hora_visita_terreno || '09:00'}
-                    onChange={(e) => updateVisitaField(selectedVisitaOp.id, 'hora_visita_terreno', e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-mono focus:outline-none focus:border-[#f97316]"
-                  />
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block t-caption font-semibold text-ink mb-1">
+                  Técnico Asignado
+                </label>
+                <select
+                  value={
+                    selectedVisitaOp.tecnico_id ||
+                    personalVisitas.find((p) => p.nombre === selectedVisitaOp.tecnico_visita)?.id ||
+                    ''
+                  }
+                  onChange={(e) => {
+                    void updateVisitaResponsable(selectedVisitaOp.id, e.target.value);
+                  }}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 t-body text-ink font-medium outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                >
+                  <option value="">Selecciona responsable</option>
+                  {personalVisitas.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nombre}{t.rut ? ` - ${t.rut}` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Observaciones / Notas de Terreno</label>
-                <textarea
-                  rows={2}
-                  placeholder="Instrucciones específicas para el técnico en terreno..."
-                  value={selectedVisitaOp.observaciones_visita || ''}
-                  onChange={(e) => updateVisitaField(selectedVisitaOp.id, 'observaciones_visita', e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316]"
+                <label className="block t-caption font-semibold text-ink mb-1">
+                  Estado de Visita
+                </label>
+                <select
+                  value={selectedVisitaOp.estado_visita || 'programada'}
+                  onChange={(e) => void updateVisitaField(selectedVisitaOp.id, 'estado_visita', e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 t-body text-ink font-medium outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                >
+                  <option value="programada">Programada</option>
+                  <option value="realizada">Realizada</option>
+                  <option value="cancelada">Cancelada</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block t-caption font-semibold text-ink mb-1">
+                  Fecha de Visita
+                </label>
+                <input
+                  type="date"
+                  value={selectedVisitaOp.fecha_visita_terreno || ''}
+                  onChange={(e) => void updateVisitaField(selectedVisitaOp.id, 'fecha_visita_terreno', e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 t-body t-num text-ink outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                />
+              </div>
+
+              <div>
+                <label className="block t-caption font-semibold text-ink mb-1">
+                  Hora de Visita
+                </label>
+                <input
+                  type="time"
+                  value={selectedVisitaOp.hora_visita_terreno || '09:00'}
+                  onChange={(e) => void updateVisitaField(selectedVisitaOp.id, 'hora_visita_terreno', e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 t-body t-num text-ink outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                 />
               </div>
             </div>
 
-            <div className="pt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-200">
-              <div className="flex items-center gap-2">
-                <Link
-                  href={`/ventas?oportunidad=${selectedVisitaOp.cotizacion_actual_id || selectedVisitaOp.id}`}
-                  className="px-3.5 py-2 bg-orange-50 hover:bg-orange-100 text-[#f97316] border border-orange-200 rounded-md font-extrabold text-xs flex items-center gap-1.5 transition"
-                >
-                  <span>Abrir en Pipeline</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </Link>
-
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!selectedVisitaOp) return;
-                    try {
-                      await deleteVisita(selectedVisitaOp);
-                    } catch (err) {
-                      console.error('Error deleting visita from calendar:', err);
-                    }
-                  }}
-                  className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-md font-extrabold text-xs flex items-center gap-1.5 transition"
-                  title="Eliminar esta visita a terreno del sistema"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Eliminar Visita</span>
-                </button>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSelectedVisitaOp(null)}
-                className="px-4 py-2 bg-[#213343] hover:bg-black text-white rounded-md font-bold text-xs transition"
-              >
-                Cerrar
-              </button>
+            <div>
+              <label className="block t-caption font-semibold text-ink mb-1">
+                Observaciones / Notas de Terreno
+              </label>
+              <textarea
+                rows={3}
+                placeholder="Instrucciones específicas para el técnico en terreno..."
+                value={selectedVisitaOp.observaciones_visita || ''}
+                onChange={(e) => void updateVisitaField(selectedVisitaOp.id, 'observaciones_visita', e.target.value)}
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 t-body text-ink outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none"
+              />
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

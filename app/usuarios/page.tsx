@@ -11,7 +11,7 @@ export default function UsuariosPage() {
   }, [router]);
 
   return (
-    <div className="p-8 text-center text-xs text-gray-500 font-medium">
+    <div className="p-8 text-center t-caption">
       Redirigiendo a Configuración...
     </div>
   );

@@ -305,7 +305,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading || cooldownSeconds > 0}
-            className="w-full bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold py-3 rounded-lg transition shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 text-sm mt-2 cursor-pointer disabled:cursor-not-allowed"
+            className="w-full bg-accent hover:bg-accent-hover text-on-accent font-extrabold py-3 rounded-lg transition shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 text-sm mt-2 cursor-pointer disabled:cursor-not-allowed"
           >
             {cooldownSeconds > 0 ? (
               <>

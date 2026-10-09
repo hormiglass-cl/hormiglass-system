@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '../../../lib/supabase/client';
 import { useAuth } from '../../../lib/context/AuthContext';
@@ -14,25 +13,33 @@ import {
   CajaClasificacion,
 } from '../../../lib/types';
 import {
-  Landmark,
   Building2,
   Plus,
   ArrowLeft,
-  CheckCircle2,
-  AlertCircle,
   Edit2,
-  Trash2,
   Wallet,
   ShieldCheck,
   CreditCard,
   FolderTree,
   Tag,
-  Layers,
-  Check,
-  X,
   TrendingDown,
   TrendingUp,
+  AlertCircle,
 } from 'lucide-react';
+import {
+  PageHeader,
+  Panel,
+  Button,
+  IconButton,
+  Tabs,
+  StatusBadge,
+  CodeStamp,
+  Dialog,
+  Field,
+  TextInput,
+  Select,
+} from '../../../components/ui/crm';
+import { useToast } from '../../../components/ui/feedback';
 
 const TIPOS_CUENTA: { id: TipoCuentaBancaria; label: string }[] = [
   { id: 'corriente', label: 'Cuenta Corriente' },
@@ -55,49 +62,38 @@ const BANCOS_SUGERIDOS = [
 
 const CLASIFICACIONES_INFO: Record<
   CajaClasificacion,
-  { label: string; tipo: 'ingreso' | 'egreso'; color: string; bg: string }
+  { label: string; tipo: 'ingreso' | 'egreso' }
 > = {
   costo_directo: {
     label: 'Costos Directos de Venta',
     tipo: 'egreso',
-    color: 'text-amber-800',
-    bg: 'bg-amber-50 border-amber-200',
   },
   gasto_operacional: {
     label: 'Gastos Operacionales Planta',
     tipo: 'egreso',
-    color: 'text-blue-800',
-    bg: 'bg-blue-50 border-blue-200',
   },
   gasto_administrativo: {
     label: 'Gastos Administrativos',
     tipo: 'egreso',
-    color: 'text-purple-800',
-    bg: 'bg-purple-50 border-purple-200',
   },
   gasto_financiero: {
     label: 'Gastos Financieros',
     tipo: 'egreso',
-    color: 'text-rose-800',
-    bg: 'bg-rose-50 border-rose-200',
   },
   ingreso_operacional: {
     label: 'Ingresos Operacionales (Ventas)',
     tipo: 'ingreso',
-    color: 'text-emerald-800',
-    bg: 'bg-emerald-50 border-emerald-200',
   },
   ingreso_no_operacional: {
     label: 'Otros Ingresos',
     tipo: 'ingreso',
-    color: 'text-teal-800',
-    bg: 'bg-teal-50 border-teal-200',
   },
 };
 
 export default function CajaConfiguracionPage() {
   const { currentUser } = useAuth();
   const router = useRouter();
+  const toast = useToast();
   const supabase = useMemo(() => createClient(), []);
 
   // Tabs
@@ -108,8 +104,6 @@ export default function CajaConfiguracionPage() {
   const [cuentas, setCuentas] = useState<CuentaBancaria[]>([]);
   const [categorias, setCategorias] = useState<CajaCategoria[]>([]);
   const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
 
   // Modal Cuenta State
   const [showModal, setShowModal] = useState(false);
@@ -146,7 +140,6 @@ export default function CajaConfiguracionPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      setErrorMsg('');
 
       const [resEmpresas, resCuentas, resCategorias] = await Promise.all([
         supabase.from('empresas').select('*').order('slug'),
@@ -169,14 +162,17 @@ export default function CajaConfiguracionPage() {
     } catch (err: unknown) {
       console.error('Error cargando configuración bancaria:', err);
       const message = err instanceof Error ? err.message : 'Error desconocido al cargar datos';
-      setErrorMsg(`No se pudieron cargar los datos de bancos: ${message}`);
+      toast({ message: `No se pudieron cargar los datos de bancos: ${message}`, tone: 'danger' });
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, [supabase, toast]);
 
   useEffect(() => {
-    void loadData();
+    const timer = setTimeout(() => {
+      void loadData();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [loadData]);
 
   const handleOpenCreateModal = () => {
@@ -206,13 +202,12 @@ export default function CajaConfiguracionPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formAlias.trim() || !formEmpresaId) {
-      setErrorMsg('El alias identificador y la empresa asociada son obligatorios.');
+      toast({ message: 'El alias identificador y la empresa asociada son obligatorios.', tone: 'warning' });
       return;
     }
 
     try {
       setSaving(true);
-      setErrorMsg('');
 
       const payload = {
         empresa_id: formEmpresaId,
@@ -231,22 +226,21 @@ export default function CajaConfiguracionPage() {
           .update(payload)
           .eq('id', editingCuenta.id);
         if (error) throw error;
-        setSuccessMsg(`Cuenta "${payload.alias}" actualizada correctamente.`);
+        toast({ message: `Cuenta "${payload.alias}" actualizada correctamente.`, tone: 'success' });
       } else {
         const { error } = await supabase
           .from('cuentas_bancarias')
           .insert([payload]);
         if (error) throw error;
-        setSuccessMsg(`Cuenta "${payload.alias}" registrada exitosamente.`);
+        toast({ message: `Cuenta "${payload.alias}" registrada exitosamente.`, tone: 'success' });
       }
 
       setShowModal(false);
       await loadData();
-      setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err: unknown) {
       console.error('Error guardando cuenta:', err);
       const message = err instanceof Error ? err.message : 'Error al guardar la cuenta';
-      setErrorMsg(message);
+      toast({ message, tone: 'danger' });
     } finally {
       setSaving(false);
     }
@@ -263,12 +257,14 @@ export default function CajaConfiguracionPage() {
       setCuentas((prev) =>
         prev.map((c) => (c.id === cuenta.id ? { ...c, activo: nuevoEstado } : c))
       );
-      setSuccessMsg(`Cuenta "${cuenta.alias}" ${nuevoEstado ? 'activada' : 'desactivada'}.`);
-      setTimeout(() => setSuccessMsg(''), 3000);
+      toast({
+        message: `Cuenta "${cuenta.alias}" ${nuevoEstado ? 'activada' : 'desactivada'}.`,
+        tone: 'info',
+      });
     } catch (err: unknown) {
       console.error('Error cambiando estado:', err);
       const message = err instanceof Error ? err.message : 'Error al cambiar estado';
-      setErrorMsg(message);
+      toast({ message, tone: 'danger' });
     }
   };
 
@@ -294,13 +290,12 @@ export default function CajaConfiguracionPage() {
   const handleSubmitSubcat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!subcatNombre.trim() || !subcatCategoriaId) {
-      setErrorMsg('El nombre y la categoría principal son requeridos.');
+      toast({ message: 'El nombre y la categoría principal son requeridos.', tone: 'warning' });
       return;
     }
 
     try {
       setSavingSubcat(true);
-      setErrorMsg('');
 
       const payload = {
         categoria_id: subcatCategoriaId,
@@ -316,22 +311,21 @@ export default function CajaConfiguracionPage() {
           .update(payload)
           .eq('id', editingSubcat.id);
         if (error) throw error;
-        setSuccessMsg(`Subcategoría "${payload.nombre}" actualizada.`);
+        toast({ message: `Subcategoría "${payload.nombre}" actualizada.`, tone: 'success' });
       } else {
         const { error } = await supabase
           .from('caja_subcategorias')
           .insert([payload]);
         if (error) throw error;
-        setSuccessMsg(`Subcategoría "${payload.nombre}" creada exitosamente.`);
+        toast({ message: `Subcategoría "${payload.nombre}" creada exitosamente.`, tone: 'success' });
       }
 
       setShowSubcatModal(false);
       await loadData();
-      setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err: unknown) {
       console.error('Error guardando subcategoría:', err);
       const message = err instanceof Error ? err.message : 'Error al guardar la subcategoría';
-      setErrorMsg(message);
+      toast({ message, tone: 'danger' });
     } finally {
       setSavingSubcat(false);
     }
@@ -353,221 +347,171 @@ export default function CajaConfiguracionPage() {
           ),
         }))
       );
-      setSuccessMsg(`Subcategoría "${subcat.nombre}" ${nuevoEstado ? 'activada' : 'desactivada'}.`);
-      setTimeout(() => setSuccessMsg(''), 3000);
+      toast({
+        message: `Subcategoría "${subcat.nombre}" ${nuevoEstado ? 'activada' : 'desactivada'}.`,
+        tone: 'info',
+      });
     } catch (err: unknown) {
       console.error('Error actualizando subcategoría:', err);
-      setErrorMsg('No se pudo actualizar el estado de la subcategoría.');
+      toast({ message: 'No se pudo actualizar el estado de la subcategoría.', tone: 'danger' });
     }
   };
 
   if (!isAuthorized && !loading) {
     return (
-      <div className="p-8 text-center text-gray-600">
-        <AlertCircle className="w-10 h-10 text-amber-500 mx-auto mb-2" />
-        <h2 className="text-base font-bold text-gray-800">Acceso Restringido</h2>
-        <p className="text-xs text-gray-500 mt-1">Esta sección está reservada para administración y finanzas.</p>
+      <div className="p-8 text-center text-ink-muted">
+        <AlertCircle className="w-10 h-10 text-warning mx-auto mb-2" />
+        <h2 className="t-section text-ink">Acceso restringido</h2>
+        <p className="t-caption mt-1">Esta sección está reservada para administración y finanzas.</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="hg-page space-y-5">
       {/* Encabezado y Navegación */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200 pb-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Link
-              href="/caja"
-              className="text-xs font-bold text-gray-500 hover:text-[#f97316] flex items-center gap-1 transition"
+      <PageHeader
+        title="Configuración financiera y estructura de costos"
+        description="Administra cuentas bancarias operativas, sociedades del grupo y la matriz de categorización de costos y gastos."
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              icon={ArrowLeft}
+              onClick={() => router.push('/caja')}
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Volver a Caja</span>
-            </Link>
-          </div>
-          <h1 className="text-xl font-extrabold text-[#213343] flex items-center gap-2">
-            <Landmark className="w-6 h-6 text-[#f97316]" />
-            <span>Configuración Financiera y Estructura de Costos</span>
-          </h1>
-          <p className="text-xs text-gray-500">
-            Administra cuentas bancarias operativas, sociedades del grupo y la matriz de categorización de costos y gastos.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          {activeTab === 'cuentas' ? (
-            <button
-              onClick={handleOpenCreateModal}
-              className="bg-[#f97316] hover:bg-[#ea580c] text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-sm cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Nueva Cuenta Bancaria</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => handleOpenCreateSubcatModal()}
-              className="bg-[#f97316] hover:bg-[#ea580c] text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-sm cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Nueva Subcategoría</span>
-            </button>
-          )}
-        </div>
-      </div>
+              Volver a Caja
+            </Button>
+            {activeTab === 'cuentas' ? (
+              <Button
+                variant="primary"
+                icon={Plus}
+                onClick={handleOpenCreateModal}
+              >
+                Nueva cuenta bancaria
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                icon={Plus}
+                onClick={() => handleOpenCreateSubcatModal()}
+              >
+                Nueva subcategoría
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {/* Tabs Principales */}
-      <div className="flex border-b border-gray-200 gap-4">
-        <button
-          onClick={() => setActiveTab('cuentas')}
-          className={`pb-3 text-xs font-bold border-b-2 flex items-center gap-2 transition cursor-pointer ${
-            activeTab === 'cuentas'
-              ? 'border-[#f97316] text-[#f97316]'
-              : 'border-transparent text-gray-500 hover:text-gray-800'
-          }`}
-        >
-          <CreditCard className="w-4 h-4" />
-          <span>Cuentas Bancarias & Empresas ({cuentas.length})</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('categorias')}
-          className={`pb-3 text-xs font-bold border-b-2 flex items-center gap-2 transition cursor-pointer ${
-            activeTab === 'categorias'
-              ? 'border-[#f97316] text-[#f97316]'
-              : 'border-transparent text-gray-500 hover:text-gray-800'
-          }`}
-        >
-          <FolderTree className="w-4 h-4" />
-          <span>Categorías de Costos y Gastos ({categorias.length})</span>
-        </button>
-      </div>
-
-      {/* Alertas */}
-      {successMsg && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>{successMsg}</span>
-        </div>
-      )}
-
-      {errorMsg && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs font-semibold flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-          <span>{errorMsg}</span>
-        </div>
-      )}
+      <Tabs
+        items={[
+          { id: 'cuentas', label: 'Cuentas bancarias y empresas', count: cuentas.length },
+          { id: 'categorias', label: 'Categorías de costos y gastos', count: categorias.length },
+        ]}
+        active={activeTab}
+        onChange={(id) => setActiveTab(id as 'cuentas' | 'categorias')}
+      />
 
       {/* CONTENIDO TAB 1: Cuentas y Empresas */}
       {activeTab === 'cuentas' && (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {/* Resumen de Sociedades */}
-          <div>
-            <h2 className="text-xs font-extrabold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-              <Building2 className="w-4 h-4 text-gray-400" />
-              <span>Empresas del Grupo (3 Razones Sociales)</span>
+          <div className="space-y-3">
+            <h2 className="t-caption font-semibold uppercase tracking-wider flex items-center gap-1.5 text-ink-muted">
+              <Building2 className="w-4 h-4 text-ink-muted" />
+              <span>Empresas del grupo (3 razones sociales)</span>
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {empresas.map((emp) => {
                 const cuentasEmpresa = cuentas.filter((c) => c.empresa_id === emp.id);
                 return (
-                  <div
-                    key={emp.id}
-                    className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs space-y-2 relative overflow-hidden"
-                  >
+                  <Panel key={emp.id} className="p-4 space-y-2">
                     <div className="flex items-start justify-between">
                       <div>
-                        <span className="text-[10px] font-extrabold font-mono uppercase bg-orange-100 text-[#f97316] px-2 py-0.5 rounded">
-                          {emp.slug}
-                        </span>
-                        <h3 className="font-extrabold text-sm text-[#213343] mt-1">{emp.razon_social}</h3>
+                        <CodeStamp>{emp.slug}</CodeStamp>
+                        <h3 className="font-semibold text-sm text-ink mt-1.5">{emp.razon_social}</h3>
                       </div>
-                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <ShieldCheck className="w-4 h-4 text-success" />
                     </div>
-                    <div className="text-xs text-gray-500 space-y-0.5 pt-1">
-                      <div>RUT: <span className="font-mono font-bold text-gray-700">{emp.rut}</span></div>
-                      <div>Cuentas activas: <span className="font-bold text-gray-800">{cuentasEmpresa.filter(c => c.activo).length} de {cuentasEmpresa.length}</span></div>
+                    <div className="t-caption space-y-0.5 pt-1">
+                      <div>RUT: <span className="font-mono font-semibold text-ink">{emp.rut}</span></div>
+                      <div>Cuentas activas: <span className="font-semibold text-ink">{cuentasEmpresa.filter((c) => c.activo).length} de {cuentasEmpresa.length}</span></div>
                     </div>
-                  </div>
+                  </Panel>
                 );
               })}
             </div>
           </div>
 
           {/* Catálogo de Cuentas Bancarias */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-sm font-extrabold text-[#213343] flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-[#f97316]" />
-                <span>Cuentas Bancarias Operativas ({cuentas.length})</span>
-              </h2>
-              <span className="text-xs text-gray-500 font-medium">
-                Operando en las 3 empresas del grupo
+          <Panel
+            title={
+              <span className="flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-accent-ink" />
+                <span>Cuentas bancarias operativas ({cuentas.length})</span>
               </span>
-            </div>
-
+            }
+          >
             {loading ? (
-              <div className="p-8 text-center text-xs text-gray-500">Cargando cuentas bancarias...</div>
+              <div className="p-8 text-center t-caption">Cargando cuentas bancarias…</div>
             ) : cuentas.length === 0 ? (
-              <div className="p-8 text-center text-xs text-gray-500">No hay cuentas bancarias registradas.</div>
+              <div className="p-8 text-center t-caption">No hay cuentas bancarias registradas.</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
+                <table className="hg-table w-full text-left text-xs min-w-[700px]">
                   <thead>
-                    <tr className="bg-gray-50 text-gray-600 font-bold border-b border-gray-200 text-[11px] uppercase">
-                      <th className="py-3 px-4">Alias / Identificador</th>
-                      <th className="py-3 px-4">Empresa</th>
-                      <th className="py-3 px-4">Banco</th>
-                      <th className="py-3 px-4">Tipo</th>
-                      <th className="py-3 px-4">N° Cuenta</th>
-                      <th className="py-3 px-4 text-right">Saldo Inicial</th>
-                      <th className="py-3 px-4 text-center">Estado</th>
-                      <th className="py-3 px-4 text-right">Acciones</th>
+                    <tr>
+                      <th className="p-3">Alias / Identificador</th>
+                      <th className="p-3">Empresa</th>
+                      <th className="p-3">Banco</th>
+                      <th className="p-3">Tipo</th>
+                      <th className="p-3">N° Cuenta</th>
+                      <th className="p-3 text-right">Saldo Inicial</th>
+                      <th className="p-3 text-center">Estado</th>
+                      <th className="p-3 text-right">Acciones</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody>
                     {cuentas.map((c) => {
                       const emp = c.empresa || empresas.find((e) => e.id === c.empresa_id);
                       return (
-                        <tr key={c.id} className="hover:bg-gray-50/70 transition">
-                          <td className="py-3 px-4 font-extrabold text-[#213343] flex items-center gap-2">
-                            <Wallet className="w-3.5 h-3.5 text-[#f97316] shrink-0" />
+                        <tr key={c.id}>
+                          <td className="p-3 font-semibold text-ink flex items-center gap-2">
+                            <Wallet className="w-3.5 h-3.5 text-accent-ink shrink-0" />
                             <span>{c.alias}</span>
                           </td>
-                          <td className="py-3 px-4">
-                            <span className="text-[10px] font-bold uppercase bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
-                              {emp?.slug || 'Sin empresa'}
-                            </span>
+                          <td className="p-3">
+                            <CodeStamp>{emp?.slug || 'S/E'}</CodeStamp>
                           </td>
-                          <td className="py-3 px-4 font-medium text-gray-700">{c.banco}</td>
-                          <td className="py-3 px-4 text-gray-600 capitalize">
+                          <td className="p-3 font-medium text-ink">{c.banco}</td>
+                          <td className="p-3 text-ink-muted capitalize">
                             {TIPOS_CUENTA.find((t) => t.id === c.tipo_cuenta)?.label || c.tipo_cuenta}
                           </td>
-                          <td className="py-3 px-4 font-mono text-gray-600">
+                          <td className="p-3 font-mono text-ink-muted t-micro">
                             {c.numero_cuenta || '—'}
                           </td>
-                          <td className="py-3 px-4 text-right font-mono font-bold text-gray-800">
+                          <td className="p-3 text-right font-mono font-semibold text-ink t-num">
                             ${Number(c.saldo_inicial || 0).toLocaleString('es-CL')}
                           </td>
-                          <td className="py-3 px-4 text-center">
+                          <td className="p-3 text-center">
                             <button
                               type="button"
-                              onClick={() => handleToggleActivo(c)}
-                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition cursor-pointer ${
-                                c.activo
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                  : 'bg-gray-100 text-gray-500 border-gray-300 hover:bg-gray-200'
-                              }`}
+                              onClick={() => void handleToggleActivo(c)}
+                              className="cursor-pointer"
+                              title="Cambiar estado"
                             >
-                              {c.activo ? 'Activa' : 'Inactiva'}
+                              <StatusBadge tone={c.activo ? 'success' : 'neutral'}>
+                                {c.activo ? 'Activa' : 'Inactiva'}
+                              </StatusBadge>
                             </button>
                           </td>
-                          <td className="py-3 px-4 text-right">
-                            <button
+                          <td className="p-3 text-right">
+                            <IconButton
+                              icon={Edit2}
+                              label="Editar cuenta"
                               onClick={() => handleOpenEditModal(c)}
-                              className="p-1.5 text-gray-500 hover:text-[#f97316] hover:bg-orange-50 rounded transition"
-                              title="Editar cuenta"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
+                            />
                           </td>
                         </tr>
                       );
@@ -576,132 +520,115 @@ export default function CajaConfiguracionPage() {
                 </table>
               </div>
             )}
-          </div>
+          </Panel>
         </div>
       )}
 
       {/* CONTENIDO TAB 2: Categorías y Subcategorías */}
       {activeTab === 'categorias' && (
-        <div className="space-y-6">
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-extrabold text-[#213343] flex items-center gap-2">
-                <FolderTree className="w-4 h-4 text-[#f97316]" />
-                <span>Estructura del Estado de Resultados (EE.RR)</span>
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Clasificación contable para costeo por Nota de Venta (NV), control de planta y gastos operacionales.
-              </p>
-            </div>
-          </div>
+        <div className="space-y-5">
+          <Panel className="p-4">
+            <h2 className="t-section flex items-center gap-2">
+              <FolderTree className="w-4 h-4 text-accent-ink" />
+              <span>Estructura del Estado de Resultados (EE.RR)</span>
+            </h2>
+            <p className="t-caption mt-1">
+              Clasificación contable para costeo por Nota de Venta (NV), control de planta y gastos operacionales.
+            </p>
+          </Panel>
 
           {loading ? (
-            <div className="p-8 text-center text-xs text-gray-500">Cargando categorías...</div>
+            <div className="p-8 text-center t-caption">Cargando categorías…</div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {categorias.map((cat) => {
                 const info = CLASIFICACIONES_INFO[cat.clasificacion] || {
                   label: cat.nombre,
                   tipo: cat.tipo,
-                  color: 'text-gray-800',
-                  bg: 'bg-gray-50 border-gray-200',
                 };
                 const subcats = cat.subcategorias || [];
 
                 return (
-                  <div
-                    key={cat.id}
-                    className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden flex flex-col"
-                  >
+                  <Panel key={cat.id} className="overflow-hidden flex flex-col">
                     {/* Header Categoría */}
-                    <div className={`p-4 border-b ${info.bg} flex items-start justify-between`}>
+                    <div className="p-4 border-b border-line-subtle flex items-start justify-between bg-surface-muted">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span
-                            className={`text-[10px] font-black uppercase px-2 py-0.5 rounded font-mono ${
-                              cat.tipo === 'ingreso'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}
-                          >
+                          <StatusBadge tone={cat.tipo === 'ingreso' ? 'success' : 'danger'}>
                             {cat.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}
-                          </span>
-                          <span className="text-[10px] font-bold text-gray-500 uppercase">
+                          </StatusBadge>
+                          <span className="t-micro text-ink-muted uppercase font-semibold">
                             {info.label}
                           </span>
                         </div>
-                        <h3 className="text-base font-extrabold text-[#213343] mt-1 flex items-center gap-2">
+                        <h3 className="t-section text-ink mt-1 flex items-center gap-2">
                           {cat.tipo === 'ingreso' ? (
-                            <TrendingUp className="w-4 h-4 text-emerald-600" />
+                            <TrendingUp className="w-4 h-4 text-success" />
                           ) : (
-                            <TrendingDown className="w-4 h-4 text-amber-600" />
+                            <TrendingDown className="w-4 h-4 text-warning" />
                           )}
                           <span>{cat.nombre}</span>
                         </h3>
                         {cat.descripcion && (
-                          <p className="text-xs text-gray-500 mt-0.5">{cat.descripcion}</p>
+                          <p className="t-caption mt-0.5">{cat.descripcion}</p>
                         )}
                       </div>
 
-                      <button
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        icon={Plus}
                         onClick={() => handleOpenCreateSubcatModal(cat.id)}
-                        className="text-xs font-bold text-[#f97316] hover:bg-white/80 p-1.5 rounded transition flex items-center gap-1 border border-orange-200 shrink-0"
-                        title="Agregar subcategoría"
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Subcategoría</span>
-                      </button>
+                        Subcategoría
+                      </Button>
                     </div>
 
                     {/* Lista de Subcategorías */}
                     <div className="p-4 flex-1">
                       {subcats.length === 0 ? (
-                        <p className="text-xs text-gray-400 italic">Sin subcategorías registradas.</p>
+                        <p className="t-caption italic">Sin subcategorías registradas.</p>
                       ) : (
-                        <div className="divide-y divide-gray-100">
+                        <div className="divide-y divide-line-subtle">
                           {subcats.map((sub) => (
                             <div
                               key={sub.id}
                               className="py-2.5 flex items-center justify-between gap-3 text-xs"
                             >
                               <div className="flex-1">
-                                <div className="font-extrabold text-[#213343] flex items-center gap-1.5">
-                                  <Tag className="w-3 h-3 text-gray-400" />
+                                <div className="font-semibold text-ink flex items-center gap-1.5">
+                                  <Tag className="w-3 h-3 text-ink-muted" />
                                   <span>{sub.nombre}</span>
                                 </div>
                                 {sub.descripcion && (
-                                  <p className="text-[11px] text-gray-500 pl-4">{sub.descripcion}</p>
+                                  <p className="t-micro text-ink-muted pl-4">{sub.descripcion}</p>
                                 )}
                               </div>
 
                               <div className="flex items-center gap-2 shrink-0">
                                 <button
                                   type="button"
-                                  onClick={() => handleToggleSubcatActivo(sub)}
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border transition cursor-pointer ${
-                                    sub.activo
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                      : 'bg-gray-100 text-gray-500 border-gray-300 hover:bg-gray-200'
-                                  }`}
+                                  onClick={() => void handleToggleSubcatActivo(sub)}
+                                  className="cursor-pointer"
+                                  title="Cambiar estado"
                                 >
-                                  {sub.activo ? 'Activa' : 'Inactiva'}
+                                  <StatusBadge tone={sub.activo ? 'success' : 'neutral'}>
+                                    {sub.activo ? 'Activa' : 'Inactiva'}
+                                  </StatusBadge>
                                 </button>
 
-                                <button
-                                  type="button"
+                                <IconButton
+                                  icon={Edit2}
+                                  label="Editar subcategoría"
                                   onClick={() => handleOpenEditSubcatModal(sub)}
-                                  className="p-1 text-gray-400 hover:text-[#f97316] rounded"
-                                  title="Editar subcategoría"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
+                                />
                               </div>
                             </div>
                           ))}
                         </div>
                       )}
                     </div>
-                  </div>
+                  </Panel>
                 );
               })}
             </div>
@@ -710,249 +637,215 @@ export default function CajaConfiguracionPage() {
       )}
 
       {/* Modal Cuenta Bancaria */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 space-y-5 animate-in fade-in duration-150">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="text-base font-extrabold text-[#213343] flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-[#f97316]" />
-                <span>{editingCuenta ? 'Editar Cuenta Bancaria' : 'Nueva Cuenta Bancaria'}</span>
-              </h3>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition font-bold"
+      <Dialog
+        open={showModal}
+        title={editingCuenta ? 'Editar cuenta bancaria' : 'Nueva cuenta bancaria'}
+        onClose={() => setShowModal(false)}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setShowModal(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              disabled={saving}
+              onClick={(e) => void handleSubmit(e)}
+            >
+              {saving ? 'Guardando…' : editingCuenta ? 'Actualizar cuenta' : 'Crear cuenta'}
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={handleSubmit} className="space-y-3 text-xs">
+          <Field label="Empresa / Razón social" required>
+            {({ id }) => (
+              <Select
+                id={id}
+                value={formEmpresaId}
+                onChange={(e) => setFormEmpresaId(e.target.value)}
               >
-                ✕
-              </button>
-            </div>
+                {empresas.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.razon_social} ({emp.slug}) - RUT: {emp.rut}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-gray-700 block mb-1">
-                  Empresa / Razón Social *
-                </label>
-                <select
-                  value={formEmpresaId}
-                  onChange={(e) => setFormEmpresaId(e.target.value)}
-                  className="w-full bg-[#f4f5f3] border border-gray-300 rounded-lg p-2.5 text-xs text-[#213343] font-semibold"
-                  required
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Banco / Entidad" required>
+              {({ id }) => (
+                <Select
+                  id={id}
+                  value={formBanco}
+                  onChange={(e) => setFormBanco(e.target.value)}
                 >
-                  {empresas.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.razon_social} ({emp.slug}) - RUT: {emp.rut}
+                  {BANCOS_SUGERIDOS.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
                     </option>
                   ))}
-                </select>
-              </div>
+                </Select>
+              )}
+            </Field>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1">Banco / Entidad *</label>
-                  <select
-                    value={formBanco}
-                    onChange={(e) => setFormBanco(e.target.value)}
-                    className="w-full bg-[#f4f5f3] border border-gray-300 rounded-lg p-2.5 text-xs text-[#213343] font-semibold"
-                  >
-                    {BANCOS_SUGERIDOS.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1">Tipo de Cuenta *</label>
-                  <select
-                    value={formTipo}
-                    onChange={(e) => setFormTipo(e.target.value as TipoCuentaBancaria)}
-                    className="w-full bg-[#f4f5f3] border border-gray-300 rounded-lg p-2.5 text-xs text-[#213343] font-semibold"
-                  >
-                    {TIPOS_CUENTA.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-gray-700 block mb-1">
-                  Alias / Identificador para Caja *
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej: Santander Comercial, Scotiabank Operaciones"
-                  value={formAlias}
-                  onChange={(e) => setFormAlias(e.target.value)}
-                  className="w-full bg-[#f4f5f3] border border-gray-300 rounded-lg p-2.5 text-xs text-[#213343] font-semibold"
-                  required
-                />
-                <span className="text-[11px] text-gray-400 mt-0.5 block">
-                  Este es el nombre visible en la bandeja de validación y selectores de caja.
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1">
-                    Número de Cuenta (Opcional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ej: 000-12345678-9"
-                    value={formNumero}
-                    onChange={(e) => setFormNumero(e.target.value)}
-                    className="w-full bg-[#f4f5f3] border border-gray-300 rounded-lg p-2.5 text-xs text-[#213343] font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1">Saldo Inicial ($ CLP)</label>
-                  <input
-                    type="number"
-                    value={formSaldoInicial}
-                    onChange={(e) => setFormSaldoInicial(Number(e.target.value))}
-                    className="w-full bg-[#f4f5f3] border border-gray-300 rounded-lg p-2.5 text-xs text-[#213343] font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="cuentaActiva"
-                  checked={formActivo}
-                  onChange={(e) => setFormActivo(e.target.checked)}
-                  className="rounded text-[#f97316] focus:ring-[#f97316]"
-                />
-                <label htmlFor="cuentaActiva" className="text-xs font-bold text-gray-700 cursor-pointer">
-                  Cuenta activa para operaciones de caja y tesorería
-                </label>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-100 transition cursor-pointer"
+            <Field label="Tipo de cuenta" required>
+              {({ id }) => (
+                <Select
+                  id={id}
+                  value={formTipo}
+                  onChange={(e) => setFormTipo(e.target.value as TipoCuentaBancaria)}
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-4 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  {saving ? 'Guardando...' : editingCuenta ? 'Actualizar Cuenta' : 'Crear Cuenta'}
-                </button>
-              </div>
-            </form>
+                  {TIPOS_CUENTA.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
           </div>
-        </div>
-      )}
+
+          <Field
+            label="Alias / Identificador para caja"
+            required
+            hint="Este es el nombre visible en la bandeja de validación y selectores de caja."
+          >
+            {({ id, 'aria-describedby': ariaDescribedBy }) => (
+              <TextInput
+                id={id}
+                type="text"
+                placeholder="Ej: Santander Comercial, Scotiabank Operaciones"
+                value={formAlias}
+                aria-describedby={ariaDescribedBy}
+                onChange={(e) => setFormAlias(e.target.value)}
+              />
+            )}
+          </Field>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Número de cuenta (opcional)">
+              {({ id }) => (
+                <TextInput
+                  id={id}
+                  type="text"
+                  placeholder="Ej: 000-12345678-9"
+                  value={formNumero}
+                  onChange={(e) => setFormNumero(e.target.value)}
+                />
+              )}
+            </Field>
+
+            <Field label="Saldo inicial ($ CLP)">
+              {({ id }) => (
+                <TextInput
+                  id={id}
+                  type="number"
+                  value={formSaldoInicial}
+                  onChange={(e) => setFormSaldoInicial(Number(e.target.value))}
+                />
+              )}
+            </Field>
+          </div>
+
+          <div className="flex items-center gap-2 pt-2">
+            <input
+              type="checkbox"
+              id="cuentaActiva"
+              checked={formActivo}
+              onChange={(e) => setFormActivo(e.target.checked)}
+              className="rounded-control"
+            />
+            <label htmlFor="cuentaActiva" className="text-xs font-semibold text-ink cursor-pointer">
+              Cuenta activa para operaciones de caja y tesorería
+            </label>
+          </div>
+        </form>
+      </Dialog>
 
       {/* Modal Subcategoría */}
-      {showSubcatModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-100 space-y-5 animate-in fade-in duration-150">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="text-base font-extrabold text-[#213343] flex items-center gap-2">
-                <Tag className="w-5 h-5 text-[#f97316]" />
-                <span>{editingSubcat ? 'Editar Subcategoría' : 'Nueva Subcategoría'}</span>
-              </h3>
-              <button
-                onClick={() => setShowSubcatModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition font-bold"
+      <Dialog
+        open={showSubcatModal}
+        title={editingSubcat ? 'Editar subcategoría' : 'Nueva subcategoría'}
+        onClose={() => setShowSubcatModal(false)}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setShowSubcatModal(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              disabled={savingSubcat}
+              onClick={(e) => void handleSubmitSubcat(e)}
+            >
+              {savingSubcat ? 'Guardando…' : editingSubcat ? 'Actualizar subcategoría' : 'Crear subcategoría'}
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={handleSubmitSubcat} className="space-y-3 text-xs">
+          <Field label="Categoría principal" required>
+            {({ id }) => (
+              <Select
+                id={id}
+                value={subcatCategoriaId}
+                onChange={(e) => setSubcatCategoriaId(e.target.value)}
               >
-                ✕
-              </button>
-            </div>
+                {categorias.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.nombre} ({cat.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'})
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
 
-            <form onSubmit={handleSubmitSubcat} className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-gray-700 block mb-1">
-                  Categoría Principal *
-                </label>
-                <select
-                  value={subcatCategoriaId}
-                  onChange={(e) => setSubcatCategoriaId(e.target.value)}
-                  className="w-full bg-[#f4f5f3] border border-gray-300 rounded-lg p-2.5 text-xs text-[#213343] font-semibold"
-                  required
-                >
-                  {categorias.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.nombre} ({cat.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'})
-                    </option>
-                  ))}
-                </select>
-              </div>
+          <Field label="Nombre de la subcategoría" required>
+            {({ id }) => (
+              <TextInput
+                id={id}
+                type="text"
+                placeholder="Ej: Materiales e Insumos, Fletes y Despachos"
+                value={subcatNombre}
+                onChange={(e) => setSubcatNombre(e.target.value)}
+              />
+            )}
+          </Field>
 
-              <div>
-                <label className="text-xs font-bold text-gray-700 block mb-1">
-                  Nombre de la Subcategoría *
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej: Materiales e Insumos, Fletes y Despachos"
-                  value={subcatNombre}
-                  onChange={(e) => setSubcatNombre(e.target.value)}
-                  className="w-full bg-[#f4f5f3] border border-gray-300 rounded-lg p-2.5 text-xs text-[#213343] font-semibold"
-                  required
-                />
-              </div>
+          <Field label="Descripción / Propósito (opcional)">
+            {({ id }) => (
+              <textarea
+                id={id}
+                rows={2}
+                placeholder="Explica qué tipo de gastos o ingresos se agrupan aquí..."
+                value={subcatDescripcion}
+                onChange={(e) => setSubcatDescripcion(e.target.value)}
+                className="hg-field w-full p-2.5"
+              />
+            )}
+          </Field>
 
-              <div>
-                <label className="text-xs font-bold text-gray-700 block mb-1">
-                  Descripción / Propósito (Opcional)
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Explica qué tipo de gastos o ingresos se agrupan aquí..."
-                  value={subcatDescripcion}
-                  onChange={(e) => setSubcatDescripcion(e.target.value)}
-                  className="w-full bg-[#f4f5f3] border border-gray-300 rounded-lg p-2.5 text-xs text-[#213343]"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="subcatActiva"
-                  checked={subcatActivo}
-                  onChange={(e) => setSubcatActivo(e.target.checked)}
-                  className="rounded text-[#f97316] focus:ring-[#f97316]"
-                />
-                <label htmlFor="subcatActiva" className="text-xs font-bold text-gray-700 cursor-pointer">
-                  Subcategoría activa para imputación en Caja
-                </label>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
-                <button
-                  type="button"
-                  onClick={() => setShowSubcatModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-100 transition cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingSubcat}
-                  className="px-4 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  {savingSubcat
-                    ? 'Guardando...'
-                    : editingSubcat
-                    ? 'Actualizar Subcategoría'
-                    : 'Crear Subcategoría'}
-                </button>
-              </div>
-            </form>
+          <div className="flex items-center gap-2 pt-2">
+            <input
+              type="checkbox"
+              id="subcatActiva"
+              checked={subcatActivo}
+              onChange={(e) => setSubcatActivo(e.target.checked)}
+              className="rounded-control"
+            />
+            <label htmlFor="subcatActiva" className="text-xs font-semibold text-ink cursor-pointer">
+              Subcategoría activa para imputación en caja
+            </label>
           </div>
-        </div>
-      )}
+        </form>
+      </Dialog>
     </div>
   );
 }

@@ -8,10 +8,8 @@ import {
   AtSign,
   Building2,
   Calendar,
-  Clock,
   Download,
   FileText,
-  Flag,
   FolderOpen,
   ListChecks,
   Loader2,
@@ -22,7 +20,6 @@ import {
   Trash2,
   Upload,
   User,
-  X,
 } from 'lucide-react';
 import { createClient } from '../../lib/supabase/client';
 import { useAuth } from '../../lib/context/AuthContext';
@@ -39,6 +36,19 @@ import type {
   UrgenciaRecordatorio,
 } from '../../lib/types';
 import { mensajeError } from '../../lib/errores';
+import {
+  PageHeader,
+  Panel,
+  Button,
+  IconButton,
+  StatusBadge,
+  CodeStamp,
+  Dialog,
+  Field,
+  TextInput,
+  Select,
+} from '../../components/ui/crm';
+import { useToast, useConfirm } from '../../components/ui/feedback';
 
 const DOCUMENTOS_SECCION: SeccionAdministracionEmpresa = 'documentos';
 const LEGAL_SECCION: SeccionAdministracionEmpresa = 'legal';
@@ -75,23 +85,23 @@ const SECCIONES_ADMINISTRACION: Record<
 const ESTADOS_RECORDATORIO: {
   id: EstadoRecordatorio;
   label: string;
-  className: string;
+  tone: 'neutral' | 'info' | 'warning' | 'success';
 }[] = [
-  { id: 'por_hacer', label: 'Por hacer', className: 'bg-slate-100 text-slate-700 border-slate-200' },
-  { id: 'en_curso', label: 'En curso', className: 'bg-blue-50 text-blue-700 border-blue-200' },
-  { id: 'requiere_actualizacion', label: 'Requiere actualización', className: 'bg-amber-50 text-amber-700 border-amber-200' },
-  { id: 'completada', label: 'Completadas', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  { id: 'por_hacer', label: 'Por hacer', tone: 'neutral' },
+  { id: 'en_curso', label: 'En curso', tone: 'info' },
+  { id: 'requiere_actualizacion', label: 'Requiere actualización', tone: 'warning' },
+  { id: 'completada', label: 'Completadas', tone: 'success' },
 ];
 
 const URGENCIAS_RECORDATORIO: {
   id: UrgenciaRecordatorio;
   label: string;
-  className: string;
+  tone: 'neutral' | 'info' | 'warning' | 'danger';
 }[] = [
-  { id: 'baja', label: 'Baja', className: 'bg-gray-100 text-gray-600 border-gray-200' },
-  { id: 'media', label: 'Media', className: 'bg-sky-50 text-sky-700 border-sky-200' },
-  { id: 'alta', label: 'Alta', className: 'bg-orange-50 text-orange-700 border-orange-200' },
-  { id: 'critica', label: 'Crítica', className: 'bg-red-50 text-red-700 border-red-200' },
+  { id: 'baja', label: 'Baja', tone: 'neutral' },
+  { id: 'media', label: 'Media', tone: 'info' },
+  { id: 'alta', label: 'Alta', tone: 'warning' },
+  { id: 'critica', label: 'Crítica', tone: 'danger' },
 ];
 
 function formatBytes(bytes?: number | null) {
@@ -109,7 +119,7 @@ function renderMessageContentWithMentions(content?: string) {
       return (
         <span
           key={idx}
-          className="text-[#f97316] font-extrabold bg-orange-50 px-1.5 py-0.5 rounded-md border border-orange-200 inline-block mx-0.5"
+          className="text-accent-ink font-semibold bg-accent-soft px-1.5 py-0.5 rounded-control border border-accent-line inline-block mx-0.5"
         >
           {part}
         </span>
@@ -213,6 +223,8 @@ export default function AdministracionPage() {
   const { currentUser, usersList, loading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const toast = useToast();
+  const confirm = useConfirm();
   const supabase = useMemo(() => createClient(), []);
 
   const [documentos, setDocumentos] = useState<AdministracionDocumento[]>([]);
@@ -311,11 +323,11 @@ export default function AdministracionPage() {
     const canonicalHref = getAdminHref(parsedEmpresa, parsedSeccion);
     const currentHref = `/administracion?${searchParams.toString()}`;
 
-    const loadTimeout = window.setTimeout(() => {
+    const loadTimeout = setTimeout(() => {
       setActiveEmpresa(parsedEmpresa);
       setActiveSeccion(parsedSeccion);
-      loadDocumentos();
-      loadRecordatorios();
+      void loadDocumentos();
+      void loadRecordatorios();
     }, 0);
 
     if (currentHref !== canonicalHref) {
@@ -324,13 +336,13 @@ export default function AdministracionPage() {
 
     const channel = supabase
       .channel('administracion_documentos_live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'administracion_documentos' }, () => loadDocumentos())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'recordatorios' }, () => loadRecordatorios())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'administracion_documentos' }, () => void loadDocumentos())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'recordatorios' }, () => void loadRecordatorios())
       .subscribe();
 
     return () => {
-      window.clearTimeout(loadTimeout);
-      supabase.removeChannel(channel);
+      clearTimeout(loadTimeout);
+      void supabase.removeChannel(channel);
     };
   }, [authLoading, loadDocumentos, loadRecordatorios, router, searchParams, supabase]);
 
@@ -348,63 +360,76 @@ export default function AdministracionPage() {
     if (lastAtIndex === -1) return activeUsers.slice(0, 6);
 
     const query = activityMessage.slice(lastAtIndex + 1).toLowerCase();
-    if (query.includes('\n')) return [];
-
-    const completedMention = activeUsers.some((user) =>
-      query.startsWith(`${user.nombre.toLowerCase()} `)
-    );
-    if (completedMention) return [];
-
     return activeUsers
-      .filter((user) =>
-        user.nombre.toLowerCase().includes(query) ||
-        user.rol.toLowerCase().includes(query)
-      )
+      .filter((user) => user.nombre.toLowerCase().includes(query))
       .slice(0, 6);
   }, [activityMessage, activeUsers]);
 
-  const filteredDocs = useMemo(() => {
-    if (activeSeccion === DOCUMENTOS_SECCION) return empresaDocs;
-    return empresaDocs.filter((doc) => getDocumentoSeccion(doc) === activeSeccion);
-  }, [empresaDocs, activeSeccion]);
-  const currentEmpresaRecordatorios = useMemo(
-    () => recordatorios.filter((recordatorio) => recordatorio.empresa === activeEmpresa),
-    [recordatorios, activeEmpresa]
-  );
-  const currentSectionRecordatorios = useMemo(
-    () => currentEmpresaRecordatorios.filter((recordatorio) => (recordatorio.seccion || DEFAULT_SECCION_ADMINISTRACION) === activeSeccion),
-    [currentEmpresaRecordatorios, activeSeccion]
-  );
-  const empresaRecordatoriosPendientes = currentEmpresaRecordatorios.filter((recordatorio) => !recordatorio.completado && recordatorio.estado !== 'completada').length;
-  const recordatoriosPendientes = currentSectionRecordatorios.filter((recordatorio) => !recordatorio.completado && recordatorio.estado !== 'completada').length;
-  const recordatoriosVencidos = currentSectionRecordatorios.filter(
-    (recordatorio) => !recordatorio.completado && recordatorio.estado !== 'completada' && recordatorio.fecha_vencimiento < todayISO()
-  ).length;
-  const taskStatsByStatus = ESTADOS_RECORDATORIO.map((estado) => ({
-    ...estado,
-    count: currentSectionRecordatorios.filter((recordatorio) => {
-      const recordatorioEstado = recordatorio.estado || (recordatorio.completado ? 'completada' : 'por_hacer');
-      return recordatorioEstado === estado.id;
-    }).length,
-  }));
+  const getUserName = useCallback((userId?: string | null) => {
+    if (!userId) return 'Sin asignar';
+    return usersList.find((u) => u.id === userId)?.nombre || 'Usuario';
+  }, [usersList]);
 
-  const getUserName = (id?: string | null) => {
-    if (!id) return 'Sin responsable';
-    return usersList.find((user) => user.id === id)?.nombre || 'Sin responsable';
-  };
-
-  const getEstadoConfig = (estado?: EstadoRecordatorio | null, completado = false) => {
-    const resolved = estado || (completado ? 'completada' : 'por_hacer');
-    return ESTADOS_RECORDATORIO.find((item) => item.id === resolved) || ESTADOS_RECORDATORIO[0];
+  const getEstadoConfig = (estado?: EstadoRecordatorio | null, completado?: boolean) => {
+    if (completado) return ESTADOS_RECORDATORIO.find((e) => e.id === 'completada') || ESTADOS_RECORDATORIO[3];
+    return ESTADOS_RECORDATORIO.find((e) => e.id === estado) || ESTADOS_RECORDATORIO[0];
   };
 
   const getUrgenciaConfig = (urgencia?: UrgenciaRecordatorio | null) => {
-    return URGENCIAS_RECORDATORIO.find((item) => item.id === (urgencia || 'media')) || URGENCIAS_RECORDATORIO[1];
+    return URGENCIAS_RECORDATORIO.find((u) => u.id === urgencia) || URGENCIAS_RECORDATORIO[1];
   };
 
   const canDeleteTask = (recordatorio: Recordatorio) => {
-    return !!currentUser?.id && (currentUser.rol === 'admin' || recordatorio.creado_por_id === currentUser.id);
+    if (currentUser?.rol === 'admin') return true;
+    return recordatorio.creado_por_id === currentUser?.id;
   };
+
+  const currentEmpresaRecordatorios = useMemo(
+    () => recordatorios.filter((r) => r.empresa === activeEmpresa),
+    [recordatorios, activeEmpresa]
+  );
+
+  const currentSectionRecordatorios = useMemo(
+    () =>
+      currentEmpresaRecordatorios.filter(
+        (r) => (r.seccion || DEFAULT_SECCION_ADMINISTRACION) === activeSeccion
+      ),
+    [currentEmpresaRecordatorios, activeSeccion]
+  );
+
+  const filteredDocs = useMemo(() => {
+    if (activeSeccion === DOCUMENTOS_SECCION) {
+      return empresaDocs;
+    }
+    return empresaDocs.filter((doc) => getDocumentoSeccion(doc) === activeSeccion);
+  }, [empresaDocs, activeSeccion]);
+
+  const recordatoriosPendientes = useMemo(
+    () => currentSectionRecordatorios.filter((r) => !r.completado && r.estado !== 'completada').length,
+    [currentSectionRecordatorios]
+  );
+
+  const empresaRecordatoriosPendientes = useMemo(
+    () => currentEmpresaRecordatorios.filter((r) => !r.completado && r.estado !== 'completada').length,
+    [currentEmpresaRecordatorios]
+  );
+
+  const recordatoriosVencidos = useMemo(() => {
+    const today = todayISO();
+    return currentSectionRecordatorios.filter(
+      (r) => !r.completado && r.estado !== 'completada' && r.fecha_vencimiento && r.fecha_vencimiento < today
+    ).length;
+  }, [currentSectionRecordatorios]);
+
+  const taskStatsByStatus = useMemo(() => {
+    return ESTADOS_RECORDATORIO.map((item) => {
+      const count = currentSectionRecordatorios.filter((r) => {
+        const est = r.estado || (r.completado ? 'completada' : 'por_hacer');
+        return est === item.id;
+      }).length;
+      return { ...item, count };
+    });
+  }, [currentSectionRecordatorios]);
 
   const loadTaskActivities = async (recordatorioId: string) => {
     setLoadingActivities(true);
@@ -418,7 +443,7 @@ export default function AdministracionPage() {
       if (error) throw error;
       setTaskActivities((data || []) as RecordatorioActividad[]);
     } catch (err) {
-      console.error('Error cargando actividad de task:', err);
+      console.error('Error cargando actividades:', err);
       setTaskActivities([]);
     } finally {
       setLoadingActivities(false);
@@ -428,72 +453,186 @@ export default function AdministracionPage() {
   const insertTaskActivity = async (
     recordatorioId: string,
     contenido: string,
-    tipo: TipoRecordatorioActividad = 'actualizacion',
-    archivo?: Pick<
-      RecordatorioActividad,
-      'archivo_bucket' | 'archivo_path' | 'archivo_nombre' | 'archivo_mime_type' | 'archivo_size_bytes'
-    >
+    tipo: TipoRecordatorioActividad,
+    archivoMeta?: {
+      archivo_nombre?: string | null;
+      archivo_path?: string | null;
+      archivo_bucket?: string | null;
+      archivo_mime_type?: string | null;
+      archivo_size_bytes?: number | null;
+    }
   ) => {
+    const payload = {
+      recordatorio_id: recordatorioId,
+      usuario_id: currentUser?.id || null,
+      usuario_nombre: currentUser?.nombre || 'Usuario',
+      tipo,
+      contenido,
+      archivo_nombre: archivoMeta?.archivo_nombre || null,
+      archivo_path: archivoMeta?.archivo_path || null,
+      archivo_bucket: archivoMeta?.archivo_bucket || null,
+      archivo_mime_type: archivoMeta?.archivo_mime_type || null,
+      archivo_size_bytes: archivoMeta?.archivo_size_bytes || null,
+    };
+
     const { data, error } = await supabase
       .from('recordatorio_actividades')
-      .insert({
-        recordatorio_id: recordatorioId,
-        tipo,
-        contenido,
-        usuario_id: isUUID(currentUser?.id) ? currentUser?.id : null,
-        usuario_nombre: currentUser?.nombre || 'Sistema',
-        ...archivo,
-      })
+      .insert([payload])
       .select()
       .single();
 
-    if (error || !data) throw error || new Error('No se pudo registrar la actividad.');
+    if (error) throw error;
 
-    if (selectedTask?.id === recordatorioId) {
-      setTaskActivities((prev) => [...prev, data as RecordatorioActividad]);
+    setTaskActivities((prev) => [...prev, data as RecordatorioActividad]);
+    return data as RecordatorioActividad;
+  };
+
+  const notifyTaskMentions = async (recordatorio: Recordatorio, message: string) => {
+    const mentionRegex = /@([a-zA-Z0-9_áéíóúÁÉÍÓÚñÑ]+)/g;
+    const matches = Array.from(message.matchAll(mentionRegex), (m) => m[1].toLowerCase());
+    if (matches.length === 0) return;
+
+    const mentionedUsers = activeUsers.filter(
+      (user) =>
+        matches.includes(user.nombre.toLowerCase().split(' ')[0]) ||
+        matches.includes(user.nombre.toLowerCase().replaceAll(' ', '_'))
+    );
+
+    const now = new Date().toISOString();
+    const notifications = mentionedUsers
+      .filter((user) => user.id !== currentUser?.id)
+      .map((user) => ({
+        usuario_id: user.id,
+        titulo: `${currentUser?.nombre || 'Alguien'} te mencionó en una task`,
+        mensaje: `En la task "${recordatorio.titulo}": "${message.slice(0, 140)}"`,
+        tipo: 'mencion_task',
+        entidad_tipo: 'recordatorio',
+        entidad_id: recordatorio.id,
+        leido: false,
+        created_at: now,
+      }));
+
+    if (notifications.length > 0) {
+      await supabase.from('notificaciones').insert(notifications);
+    }
+  };
+
+  const resetUploadForm = () => {
+    setSelectedFile(null);
+    setFormData({ nombre: '', descripcion: '' });
+    setErrorMsg('');
+  };
+
+  const handleUploadDocumento = async () => {
+    if (!selectedFile) {
+      setErrorMsg('Debes seleccionar un archivo.');
+      return;
     }
 
-    return data as RecordatorioActividad;
+    setUploading(true);
+    setErrorMsg('');
+
+    try {
+      const ext = selectedFile.name.split('.').pop();
+      const sanitizedName = selectedFile.name
+        .replace(/\.[^/.]+$/, '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9_-]/g, '_');
+      const storagePath = `empresa/${activeEmpresa}/${Date.now()}_${sanitizedName}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('administracion')
+        .upload(storagePath, selectedFile, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const seccionGuardar = activeSeccion === DOCUMENTOS_SECCION ? 'administracion_documentos' : activeSeccion;
+      const categoriaGuardar = getCategoriaForSeccion(activeSeccion);
+
+      const nuevoDocPayload = {
+        empresa: activeEmpresa,
+        seccion: seccionGuardar,
+        categoria: categoriaGuardar,
+        nombre: formData.nombre.trim() || selectedFile.name,
+        descripcion: formData.descripcion.trim() || null,
+        storage_path: storagePath,
+        mime_type: selectedFile.type || null,
+        size_bytes: selectedFile.size,
+        subido_por: isUUID(currentUser?.id) ? currentUser?.id : null,
+      };
+
+      const { data: insertedDoc, error: insertError } = await supabase
+        .from('administracion_documentos')
+        .insert([nuevoDocPayload])
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      await logSistema({
+        tipo_accion: 'creacion',
+        entidad: 'administracion_documentos',
+        entidad_id: insertedDoc.id,
+        descripcion: `Documento administrativo subido: "${insertedDoc.nombre}".`,
+        usuario_id: currentUser?.id || null,
+        datos_nuevos: insertedDoc,
+      });
+
+      setShowUploadModal(false);
+      resetUploadForm();
+      toast({ message: 'Documento guardado con éxito.', tone: 'success' });
+      await loadDocumentos();
+    } catch (err) {
+      console.error('Error subiendo documento:', err);
+      setErrorMsg(mensajeError(err, 'No se pudo subir el archivo.'));
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleUploadTaskAttachment = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    event.target.value = '';
-
     if (!file || !selectedTask) return;
-    const canUpdate = currentUser?.rol === 'admin' || selectedTask.asignado_a_id === currentUser?.id;
-    if (!canUpdate) return;
 
     setUploadingTaskAttachment(true);
     try {
-      const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const storagePath = `recordatorios/${selectedTask.id}/${Date.now()}_${cleanFileName}`;
-      const { data, error } = await supabase.storage
+      const ext = file.name.split('.').pop();
+      const sanitizedName = file.name
+        .replace(/\.[^/.]+$/, '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9_-]/g, '_');
+      const storagePath = `tasks/${selectedTask.id}/${Date.now()}_${sanitizedName}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
         .from('administracion')
         .upload(storagePath, file, {
-          contentType: file.type || undefined,
+          cacheControl: '3600',
           upsert: false,
         });
 
-      if (error || !data) {
-        throw new Error(mensajeError(error, 'No se pudo subir el archivo.'));
-      }
+      if (uploadError) throw uploadError;
 
       await insertTaskActivity(
         selectedTask.id,
-        `Documento adjuntado: "${file.name}".`,
+        `Documento adjunto: "${file.name}".`,
         'archivo',
         {
-          archivo_bucket: 'administracion',
-          archivo_path: storagePath,
           archivo_nombre: file.name,
+          archivo_path: storagePath,
+          archivo_bucket: 'administracion',
           archivo_mime_type: file.type || null,
           archivo_size_bytes: file.size,
         }
       );
+      toast({ message: 'Documento adjuntado.', tone: 'success' });
     } catch (err) {
       console.error('Error adjuntando documento a task:', err);
-      alert(mensajeError(err, 'No se pudo adjuntar el documento.'));
+      toast({ message: mensajeError(err, 'No se pudo adjuntar el documento.'), tone: 'danger' });
     } finally {
       setUploadingTaskAttachment(false);
     }
@@ -514,7 +653,7 @@ export default function AdministracionPage() {
       window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
     } catch (err) {
       console.error('Error abriendo adjunto de task:', err);
-      alert(mensajeError(err, 'No se pudo abrir el documento.'));
+      toast({ message: mensajeError(err, 'No se pudo abrir el documento.'), tone: 'danger' });
     }
   };
 
@@ -522,7 +661,7 @@ export default function AdministracionPage() {
     setSelectedTask(recordatorio);
     setActivityMessage('');
     setTaskMentionMenuOpen(false);
-    loadTaskActivities(recordatorio.id);
+    void loadTaskActivities(recordatorio.id);
   };
 
   const handleActivityMessageChange = (value: string) => {
@@ -539,46 +678,23 @@ export default function AdministracionPage() {
       query.toLowerCase().startsWith(`${user.nombre.toLowerCase()} `)
     );
 
-    setTaskMentionMenuOpen(!query.includes('\n') && !completedMention);
+    if (completedMention) {
+      setTaskMentionMenuOpen(false);
+      return;
+    }
+
+    setTaskMentionMenuOpen(true);
     setSelectedTaskMentionIndex(0);
   };
 
   const handleInsertTaskMention = (userName: string) => {
     const lastAtIndex = activityMessage.lastIndexOf('@');
-    if (lastAtIndex >= 0) {
-      const prefix = activityMessage.slice(0, lastAtIndex);
-      setActivityMessage(`${prefix}@${userName} `);
-    } else {
-      setActivityMessage((prev) => `${prev}@${userName} `);
-    }
+    if (lastAtIndex === -1) return;
+
+    const beforeMention = activityMessage.slice(0, lastAtIndex);
+    const updated = `${beforeMention}@${userName} `;
+    setActivityMessage(updated);
     setTaskMentionMenuOpen(false);
-  };
-
-  const notifyTaskMentions = async (recordatorio: Recordatorio, content: string) => {
-    const mentionsFound = activeUsers.filter((user) =>
-      content.toLowerCase().includes(`@${user.nombre.toLowerCase()}`)
-    );
-
-    const uniqueMentions = mentionsFound.filter(
-      (user, index, list) => list.findIndex((item) => item.id === user.id) === index
-    );
-
-    for (const user of uniqueMentions) {
-      if (!isUUID(user.id) || user.id === currentUser?.id) continue;
-
-      try {
-        await supabase.from('notificaciones').insert({
-          usuario_id: user.id,
-          tipo: 'mencion',
-          mensaje: `@${currentUser?.nombre || 'Usuario'} te mencionó en la task "${recordatorio.titulo}": "${content}"`,
-          link_url: getAdminHref(recordatorio.empresa, recordatorio.seccion || DEFAULT_SECCION_ADMINISTRACION),
-          leido: false,
-          fecha: new Date().toISOString(),
-        });
-      } catch (err) {
-        console.error('Error creando notificación de mención en task:', err);
-      }
-    }
   };
 
   const handleAddTaskActivity = async () => {
@@ -593,7 +709,7 @@ export default function AdministracionPage() {
       setTaskMentionMenuOpen(false);
     } catch (err) {
       console.error('Error agregando comentario de task:', err);
-      alert(mensajeError(err, 'No se pudo guardar el comentario.'));
+      toast({ message: mensajeError(err, 'No se pudo guardar el comentario.'), tone: 'danger' });
     } finally {
       setSendingActivity(false);
     }
@@ -621,87 +737,15 @@ export default function AdministracionPage() {
       }
 
       if (event.key === 'Escape') {
+        event.preventDefault();
         setTaskMentionMenuOpen(false);
         return;
       }
     }
 
-    if (event.key === 'Enter' && !event.shiftKey && !taskMentionMenuOpen) {
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
-      handleAddTaskActivity();
-    }
-  };
-
-  const resetUploadForm = () => {
-    setSelectedFile(null);
-    setFormData({ nombre: '', descripcion: '' });
-    setErrorMsg('');
-  };
-
-  const handleUploadDocumento = async () => {
-    if (!selectedFile) {
-      setErrorMsg('Debes seleccionar un archivo para subir.');
-      return;
-    }
-
-    setUploading(true);
-    setErrorMsg('');
-
-    try {
-      const documentCategory = getCategoriaForSeccion(activeSeccion);
-      const cleanFileName = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const storagePath = `administracion/${activeEmpresa}/${activeSeccion}/${documentCategory}/${Date.now()}_${cleanFileName}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('administracion')
-        .upload(storagePath, selectedFile, {
-          contentType: selectedFile.type || undefined,
-          upsert: false,
-        });
-
-      if (uploadError || !uploadData) {
-        throw new Error(mensajeError(uploadError, 'No se pudo subir el archivo.'));
-      }
-
-      const { data: inserted, error: insertError } = await supabase
-        .from('administracion_documentos')
-        .insert({
-          empresa: activeEmpresa,
-          seccion: activeSeccion,
-          categoria: documentCategory,
-          nombre: formData.nombre.trim() || selectedFile.name,
-          descripcion: formData.descripcion.trim() || null,
-          bucket_id: 'administracion',
-          storage_path: storagePath,
-          mime_type: selectedFile.type || null,
-          size_bytes: selectedFile.size,
-          subido_por_id: isUUID(currentUser?.id) ? currentUser?.id : null,
-          subido_por_nombre: currentUser?.nombre || 'Administración',
-        })
-        .select()
-        .single();
-
-      if (insertError || !inserted) {
-        await supabase.storage.from('administracion').remove([storagePath]);
-        throw new Error(mensajeError(insertError, 'No se pudo registrar la metadata del documento.'));
-      }
-
-      await logSistema({
-        tipo_accion: 'creacion',
-        entidad: 'administracion_documentos',
-        entidad_id: inserted.id,
-        descripcion: `Documento administrativo subido: "${inserted.nombre}" (${activeEmpresa}/${activeSeccion}/${documentCategory}).`,
-        usuario_id: currentUser?.id || null,
-        datos_nuevos: inserted,
-      });
-
-      setDocumentos((prev) => [inserted as AdministracionDocumento, ...prev]);
-      resetUploadForm();
-      setShowUploadModal(false);
-    } catch (err) {
-      console.error('Error subiendo documento administrativo:', err);
-      setErrorMsg(mensajeError(err, 'Error al subir el documento.'));
-    } finally {
-      setUploading(false);
+      void handleAddTaskActivity();
     }
   };
 
@@ -718,12 +762,18 @@ export default function AdministracionPage() {
       window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
     } catch (err) {
       console.error('Error generando signed URL:', err);
-      alert(mensajeError(err, 'No se pudo abrir el documento.'));
+      toast({ message: mensajeError(err, 'No se pudo abrir el documento.'), tone: 'danger' });
     }
   };
 
   const handleDeleteDocumento = async (doc: AdministracionDocumento) => {
-    if (!confirm(`¿Eliminar "${doc.nombre}" de Administración?`)) return;
+    const ok = await confirm({
+      title: 'Eliminar documento',
+      message: `¿Estás seguro de eliminar "${doc.nombre}" de Administración?`,
+      confirmLabel: 'Eliminar documento',
+      destructive: true,
+    });
+    if (!ok) return;
 
     const now = new Date().toISOString();
     const previousDocs = documentos;
@@ -749,10 +799,11 @@ export default function AdministracionPage() {
         usuario_id: currentUser?.id || null,
         datos_anteriores: doc,
       });
+      toast({ message: 'Documento eliminado.', tone: 'info' });
     } catch (err) {
       console.error('Error eliminando documento administrativo:', err);
       setDocumentos(previousDocs);
-      alert(mensajeError(err, 'No se pudo eliminar el documento.'));
+      toast({ message: mensajeError(err, 'No se pudo eliminar el documento.'), tone: 'danger' });
     }
   };
 
@@ -763,17 +814,8 @@ export default function AdministracionPage() {
   };
 
   const handleSaveTask = async () => {
-    if (currentUser?.rol !== 'admin') return;
     if (!taskForm.titulo.trim()) {
-      setTaskErrorMsg('El título es obligatorio.');
-      return;
-    }
-    if (!taskForm.asignado_a_id) {
-      setTaskErrorMsg('Debes seleccionar una persona responsable.');
-      return;
-    }
-    if (!isSeccionForEmpresa(activeEmpresa, taskForm.seccion)) {
-      setTaskErrorMsg('La sección seleccionada no corresponde a esta empresa.');
+      setTaskErrorMsg('El título de la task es obligatorio.');
       return;
     }
 
@@ -781,48 +823,56 @@ export default function AdministracionPage() {
     setTaskErrorMsg('');
 
     try {
-      const completed = taskForm.estado === 'completada';
+      const now = new Date().toISOString();
       const payload = {
-        empresa: activeEmpresa,
-        seccion: taskForm.seccion,
-        estado: taskForm.estado,
-        urgencia: taskForm.urgencia,
         titulo: taskForm.titulo.trim(),
         descripcion: taskForm.descripcion.trim() || null,
-        asignado_a_id: taskForm.asignado_a_id,
-        creado_por_id: currentUser?.id || null,
-        fecha_vencimiento: taskForm.fecha_vencimiento,
-        recurrencia: 'ninguna',
-        completado: completed,
-        completado_en: completed ? new Date().toISOString() : null,
+        empresa: activeEmpresa,
+        seccion: taskForm.seccion,
+        asignado_a_id: isUUID(taskForm.asignado_a_id) ? taskForm.asignado_a_id : null,
+        creado_por_id: isUUID(currentUser?.id) ? currentUser?.id : null,
+        fecha_vencimiento: taskForm.fecha_vencimiento || todayISO(),
+        estado: taskForm.estado,
+        urgencia: taskForm.urgencia,
+        completado: taskForm.estado === 'completada',
+        activo: true,
+        updated_at: now,
       };
 
       const { data, error } = await supabase
         .from('recordatorios')
-        .insert(payload)
+        .insert([payload])
         .select()
         .single();
 
-      if (error || !data) throw error || new Error('No se pudo crear la task.');
+      if (error) throw error;
 
-      await insertTaskActivity(data.id, `Task creada en ${getSeccionLabel(activeEmpresa, taskForm.seccion)} con urgencia ${taskForm.urgencia}.`, 'creacion').catch((activityError) => {
-        console.error('Error registrando actividad inicial de task:', activityError);
+      const created = data as Recordatorio;
+      setRecordatorios((prev) => [created, ...prev]);
+
+      await insertTaskActivity(
+        created.id,
+        `Task creada por ${currentUser?.nombre || 'usuario'} en sección "${getSeccionLabel(activeEmpresa, created.seccion)}".`,
+        'actualizacion'
+      ).catch((activityError) => {
+        console.error('Error registrando actividad inicial:', activityError);
       });
 
       await logSistema({
         tipo_accion: 'creacion',
         entidad: 'recordatorios',
-        entidad_id: data.id,
-        descripcion: `Task administrativa creada: "${payload.titulo}" (${activeEmpresaConfig.label} / ${getSeccionLabel(activeEmpresa, taskForm.seccion)}).`,
+        entidad_id: created.id,
+        descripcion: `Task administrativa creada: "${created.titulo}".`,
         usuario_id: currentUser?.id || null,
-        datos_nuevos: data,
+        datos_nuevos: created,
       });
 
-      setRecordatorios((prev) => [data as Recordatorio, ...prev]);
       setShowTaskModal(false);
+      toast({ message: 'Task creada exitosamente.', tone: 'success' });
+      await loadRecordatorios();
     } catch (err) {
-      console.error('Error creando task administrativa:', err);
-      setTaskErrorMsg(mensajeError(err, 'No se pudo crear la task.'));
+      console.error('Error guardando task administrativa:', err);
+      setTaskErrorMsg(mensajeError(err, 'No se pudo guardar la task.'));
     } finally {
       setSavingTask(false);
     }
@@ -833,25 +883,21 @@ export default function AdministracionPage() {
     if (!canUpdate) return;
 
     const previous = recordatorios;
-    const completed = estado === 'completada';
-    const completadoEn = completed ? (recordatorio.completado_en || new Date().toISOString()) : null;
+    const completado = estado === 'completada';
 
     setRecordatorios((prev) =>
       prev.map((item) =>
         item.id === recordatorio.id
-          ? { ...item, estado, completado: completed, completado_en: completadoEn }
+          ? { ...item, estado, completado }
           : item
       )
     );
+    setSelectedTask((prev) => (prev?.id === recordatorio.id ? { ...prev, estado, completado } : prev));
 
     try {
       const { data, error } = await supabase
         .from('recordatorios')
-        .update({
-          estado,
-          completado: completed,
-          completado_en: completadoEn,
-        })
+        .update({ estado, completado, updated_at: new Date().toISOString() })
         .eq('id', recordatorio.id)
         .select()
         .single();
@@ -871,10 +917,10 @@ export default function AdministracionPage() {
       });
 
       await logSistema({
-        tipo_accion: 'estado_cambiado',
+        tipo_accion: 'actualizacion',
         entidad: 'recordatorios',
         entidad_id: recordatorio.id,
-        descripcion: `Task administrativa actualizada a estado "${estado}": "${recordatorio.titulo}".`,
+        descripcion: `Estado de task administrativa actualizado a "${estado}": "${recordatorio.titulo}".`,
         usuario_id: currentUser?.id || null,
         datos_anteriores: recordatorio,
         datos_nuevos: data,
@@ -883,7 +929,7 @@ export default function AdministracionPage() {
       console.error('Error actualizando estado de task:', err);
       setRecordatorios(previous);
       setSelectedTask((prev) => (prev?.id === recordatorio.id ? recordatorio : prev));
-      alert(mensajeError(err, 'No se pudo actualizar el estado.'));
+      toast({ message: mensajeError(err, 'No se pudo actualizar el estado.'), tone: 'danger' });
     }
   };
 
@@ -937,13 +983,19 @@ export default function AdministracionPage() {
       console.error('Error actualizando urgencia de task:', err);
       setRecordatorios(previous);
       setSelectedTask((prev) => (prev?.id === recordatorio.id ? recordatorio : prev));
-      alert(mensajeError(err, 'No se pudo actualizar la urgencia.'));
+      toast({ message: mensajeError(err, 'No se pudo actualizar la urgencia.'), tone: 'danger' });
     }
   };
 
   const handleDeleteTask = async (recordatorio: Recordatorio) => {
     if (!canDeleteTask(recordatorio)) return;
-    if (!confirm(`¿Eliminar la task "${recordatorio.titulo}"?`)) return;
+    const ok = await confirm({
+      title: 'Eliminar task',
+      message: `¿Estás seguro de eliminar la task "${recordatorio.titulo}"?`,
+      confirmLabel: 'Eliminar task',
+      destructive: true,
+    });
+    if (!ok) return;
 
     const previous = recordatorios;
     const previousSelectedTask = selectedTask;
@@ -983,50 +1035,103 @@ export default function AdministracionPage() {
         datos_anteriores: recordatorio,
         datos_nuevos: data,
       });
+      toast({ message: 'Task eliminada.', tone: 'info' });
     } catch (err) {
       console.error('Error eliminando task administrativa:', err);
       setRecordatorios(previous);
       if (previousSelectedTask?.id === recordatorio.id) setSelectedTask(previousSelectedTask);
-      alert(mensajeError(err, 'No se pudo eliminar la task.'));
+      toast({ message: mensajeError(err, 'No se pudo eliminar la task.'), tone: 'danger' });
     }
   };
 
   if (authLoading || loading) {
     return (
-      <div className="p-12 text-center text-gray-500 font-medium animate-pulse">
-        Cargando biblioteca de administración...
+      <div className="p-12 text-center t-caption font-medium">
+        Cargando biblioteca de administración…
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 text-[#213343]  pb-10">
+    <div className="hg-page space-y-5 pb-10">
+      {/* Header con Selector Estándar de Sociedad */}
+      <PageHeader
+        title="Administración y carpetas societarias"
+        description="Gestión documental, carpetas legales y seguimiento de tareas administrativas por empresa."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
+              <label htmlFor="empresa-select" className="t-caption font-semibold text-ink">
+                Empresa:
+              </label>
+              <Select
+                id="empresa-select"
+                value={activeEmpresa}
+                onChange={(e) => {
+                  const emp = e.target.value as EmpresaHormiglass;
+                  setActiveEmpresa(emp);
+                  router.push(getAdminHref(emp, activeSeccion), { scroll: false });
+                }}
+                className="w-48 text-xs font-semibold"
+              >
+                {EMPRESAS.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.label} ({emp.rut})
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            {currentUser?.rol === 'admin' && (
+              <>
+                <Button
+                  variant="secondary"
+                  icon={Upload}
+                  onClick={() => {
+                    resetUploadForm();
+                    setShowUploadModal(true);
+                  }}
+                >
+                  Subir documento
+                </Button>
+                <Button
+                  variant="primary"
+                  icon={Plus}
+                  onClick={openTaskModal}
+                >
+                  Nueva task
+                </Button>
+              </>
+            )}
+          </div>
+        }
+      />
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Panel Lateral: Identidad de Empresa y Secciones */}
         <aside className="lg:col-span-3 space-y-4">
-          <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm space-y-4">
-            <div className="flex flex-col items-center text-center space-y-2 pt-2">
-              <div className="w-16 h-16 rounded-full bg-orange-50 text-[#f97316] border border-orange-100 flex items-center justify-center shadow-sm">
-                <Building2 className="w-8 h-8" />
-              </div>
+          <Panel className="p-4 space-y-3">
+            <div className="flex items-start justify-between">
               <div>
-                <h1 className="text-lg font-black leading-tight">{activeEmpresaConfig.label}</h1>
-                <p className="text-xs text-gray-500 mt-0.5">RUT {activeEmpresaConfig.rut}</p>
-                <p className="text-xs font-mono font-bold text-gray-600 mt-0.5">Grupo Hormiglass</p>
+                <CodeStamp>{activeEmpresaConfig.rut}</CodeStamp>
+                <h2 className="t-section text-ink mt-1.5">{activeEmpresaConfig.label}</h2>
+                <p className="t-caption mt-0.5">{activeEmpresaConfig.subtitle}</p>
+              </div>
+              <Building2 className="w-5 h-5 text-accent-ink shrink-0" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-3 border-t border-line-subtle text-center">
+              <div className="bg-surface-muted rounded-control border border-line p-2">
+                <p className="t-num font-semibold text-base text-ink">{empresaDocs.length}</p>
+                <p className="t-micro text-ink-muted">Docs empresa</p>
+              </div>
+              <div className="bg-surface-muted rounded-control border border-line p-2">
+                <p className="t-num font-semibold text-base text-ink">{empresaRecordatoriosPendientes}</p>
+                <p className="t-micro text-ink-muted">Tasks abiertas</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 pt-3 border-t border-gray-100 text-center">
-              <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
-                <p className="text-xl font-black">{empresaDocs.length}</p>
-                <p className="text-[10px] font-bold text-gray-500">Docs empresa</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
-                <p className="text-xl font-black">{empresaRecordatoriosPendientes}</p>
-                <p className="text-[10px] font-bold text-gray-500">Tasks abiertas</p>
-              </div>
-            </div>
-
-            <div className="space-y-2 pt-3 border-t border-gray-100 text-xs">
+            <div className="space-y-1 pt-3 border-t border-line-subtle text-xs">
               {activeSecciones.map((seccion) => {
                 const taskCount = currentEmpresaRecordatorios.filter(
                   (recordatorio) => (recordatorio.seccion || DEFAULT_SECCION_ADMINISTRACION) === seccion.id
@@ -1036,6 +1141,8 @@ export default function AdministracionPage() {
                     ? empresaDocs.length
                     : empresaDocs.filter((doc) => getDocumentoSeccion(doc) === seccion.id).length;
 
+                const isSelected = activeSeccion === seccion.id;
+
                 return (
                   <button
                     key={seccion.id}
@@ -1044,760 +1151,646 @@ export default function AdministracionPage() {
                       setActiveSeccion(seccion.id);
                       router.push(getAdminHref(activeEmpresa, seccion.id), { scroll: false });
                     }}
-                    className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg font-extrabold text-left transition ${
-                      activeSeccion === seccion.id ? 'bg-orange-50 text-[#f97316]' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-control font-semibold text-left transition cursor-pointer ${
+                      isSelected
+                        ? 'bg-accent-soft text-accent-ink border border-accent-line'
+                        : 'text-ink hover:bg-surface-muted border border-transparent'
                     }`}
                   >
                     <span className="flex min-w-0 items-center gap-2">
-                      <FolderOpen className="w-4 h-4 shrink-0" />
+                      <FolderOpen className="w-3.5 h-3.5 shrink-0" />
                       <span className="truncate">{seccion.label}</span>
                     </span>
-                    <span className="shrink-0 text-[10px] font-black text-gray-400">
+                    <span className="shrink-0 t-micro text-ink-muted">
                       {taskCount} / {docCount}
                     </span>
                   </button>
                 );
               })}
             </div>
-          </div>
+          </Panel>
         </aside>
 
-        <main className="lg:col-span-9 space-y-5">
-          <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Contenido Principal */}
+        <main className="lg:col-span-9 space-y-4">
+          <Panel
+            title={
               <div>
-                <h2 className="text-xl font-black flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-[#f97316]" />
+                <h2 className="t-section flex items-center gap-2">
+                  <FolderOpen className="w-4 h-4 text-accent-ink" />
                   <span>{activeSeccionConfig.label}</span>
                 </h2>
-                <p className="text-xs text-gray-500 font-medium mt-1">
+                <p className="t-caption font-normal mt-0.5">
                   {activeEmpresaConfig.label} · {activeSeccionConfig.description}
                 </p>
               </div>
-
-              <div className="flex items-center gap-2 self-start md:self-auto">
-                {currentUser?.rol === 'admin' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      resetUploadForm();
-                      setShowUploadModal(true);
-                    }}
-                    className="px-4 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-lg font-extrabold text-xs transition flex items-center gap-2 shadow-sm"
+            }
+          >
+            <div className="p-4 space-y-4">
+              {/* Contadores de estado de tareas */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                {taskStatsByStatus.map((estado) => (
+                  <div
+                    key={estado.id}
+                    className="rounded-control border border-line bg-surface p-3 space-y-1"
                   >
-                    <Upload className="w-4 h-4" />
-                    <span>Subir documento</span>
-                  </button>
-                )}
-                {currentUser?.rol === 'admin' && (
-                  <button
-                    type="button"
-                    onClick={openTaskModal}
-                    className="px-4 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-lg font-extrabold text-xs transition flex items-center gap-2 shadow-sm"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Nueva task</span>
-                  </button>
-                )}
+                    <StatusBadge tone={estado.tone}>{estado.label}</StatusBadge>
+                    <p className="t-num text-xl font-bold text-ink">{estado.count}</p>
+                  </div>
+                ))}
               </div>
-            </div>
-          </div>
 
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {taskStatsByStatus.map((estado) => (
-                <div key={estado.id} className={`rounded-lg border p-4 ${estado.className}`}>
-                  <p className="text-[11px] font-black uppercase">{estado.label}</p>
-                  <p className="text-2xl font-black mt-1">{estado.count}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm space-y-5">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-gray-100 pb-3">
-                <div>
-                  <h3 className="font-black text-base flex items-center gap-2">
-                    <ListChecks className="w-4 h-4 text-[#f97316]" />
+              {/* Tasks y recordatorios */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between border-b border-line-subtle pb-2">
+                  <h3 className="t-section text-sm flex items-center gap-2">
+                    <ListChecks className="w-4 h-4 text-accent-ink" />
                     <span>Tasks y recordatorios</span>
                   </h3>
-                  <p className="text-xs text-gray-500 font-medium">
-                    {recordatoriosPendientes} abiertas · {recordatoriosVencidos} requieren atención por fecha.
-                  </p>
+                  <span className="t-caption">
+                    {recordatoriosPendientes} abiertas · {recordatoriosVencidos} vencidas
+                  </span>
                 </div>
+
+                {currentSectionRecordatorios.length === 0 ? (
+                  <div className="p-8 text-center text-ink-muted t-caption border border-dashed border-line rounded-control">
+                    No hay tasks activas en esta sección.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="hg-table w-full text-xs">
+                      <thead>
+                        <tr>
+                          <th className="p-3">Urgencia</th>
+                          <th className="p-3">Estado</th>
+                          <th className="p-3">Task</th>
+                          <th className="p-3">Responsable</th>
+                          <th className="p-3">Recordatorio</th>
+                          <th className="p-3">Última actividad</th>
+                          <th className="p-3 text-right">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {currentSectionRecordatorios.map((recordatorio) => {
+                          const estado = recordatorio.estado || (recordatorio.completado ? 'completada' : 'por_hacer');
+                          const urgencia = recordatorio.urgencia || 'media';
+                          const canUpdate = currentUser?.rol === 'admin' || recordatorio.asignado_a_id === currentUser?.id;
+
+                          return (
+                            <tr
+                              key={recordatorio.id}
+                              onClick={() => openTaskDetail(recordatorio)}
+                              className="cursor-pointer"
+                            >
+                              <td className="p-3 align-top min-w-32">
+                                {canUpdate ? (
+                                  <select
+                                    value={urgencia}
+                                    onClick={(event) => event.stopPropagation()}
+                                    onChange={(event) => void handleUpdateTaskUrgencia(recordatorio, event.target.value as UrgenciaRecordatorio)}
+                                    className="hg-field py-1 text-xs"
+                                  >
+                                    {URGENCIAS_RECORDATORIO.map((option) => (
+                                      <option key={option.id} value={option.id}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <StatusBadge tone={getUrgenciaConfig(urgencia).tone}>
+                                    {getUrgenciaConfig(urgencia).label}
+                                  </StatusBadge>
+                                )}
+                              </td>
+
+                              <td className="p-3 align-top min-w-36">
+                                {canUpdate ? (
+                                  <select
+                                    value={estado}
+                                    onClick={(event) => event.stopPropagation()}
+                                    onChange={(event) => void handleUpdateTaskStatus(recordatorio, event.target.value as EstadoRecordatorio)}
+                                    className="hg-field py-1 text-xs"
+                                  >
+                                    {ESTADOS_RECORDATORIO.map((option) => (
+                                      <option key={option.id} value={option.id}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <StatusBadge tone={getEstadoConfig(estado).tone}>
+                                    {getEstadoConfig(estado).label}
+                                  </StatusBadge>
+                                )}
+                              </td>
+
+                              <td className="p-3 align-top min-w-56">
+                                <p className="font-semibold text-ink">{recordatorio.titulo}</p>
+                                {recordatorio.descripcion && (
+                                  <p className="t-micro text-ink-muted mt-0.5 line-clamp-2">{recordatorio.descripcion}</p>
+                                )}
+                              </td>
+
+                              <td className="p-3 align-top text-ink-muted">
+                                <span className="inline-flex items-center gap-1.5">
+                                  <User className="w-3.5 h-3.5" />
+                                  <span>{getUserName(recordatorio.asignado_a_id)}</span>
+                                </span>
+                              </td>
+
+                              <td className="p-3 align-top text-ink-muted t-num">
+                                <span className="inline-flex items-center gap-1.5">
+                                  <Calendar className="w-3.5 h-3.5" />
+                                  <span>{formatDate(recordatorio.fecha_vencimiento)}</span>
+                                </span>
+                              </td>
+
+                              <td className="p-3 align-top text-ink-muted t-num t-micro">
+                                {formatDateTime(recordatorio.updated_at || recordatorio.created_at)}
+                              </td>
+
+                              <td className="p-3 align-top text-right">
+                                {canDeleteTask(recordatorio) && (
+                                  <IconButton
+                                    icon={Trash2}
+                                    label="Eliminar task"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void handleDeleteTask(recordatorio);
+                                    }}
+                                  />
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
-              {currentSectionRecordatorios.length === 0 ? (
-                <div className="p-10 text-center text-gray-400 text-xs italic border border-dashed border-gray-200 rounded-lg">
-                  No hay tasks activas en esta sección.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="hg-list-table w-full text-xs">
-                    <thead>
-                      <tr className="text-left text-gray-400 border-b border-gray-100">
-                        <th className="py-2 pr-3 font-black">Urgencia</th>
-                        <th className="py-2 pr-3 font-black">Estado</th>
-                        <th className="py-2 pr-3 font-black">Task</th>
-                        <th className="py-2 pr-3 font-black">Responsable</th>
-                        <th className="py-2 pr-3 font-black">Recordatorio</th>
-                        <th className="py-2 pr-3 font-black">Última actividad</th>
-                        <th className="py-2 pl-3 font-black text-right">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {currentSectionRecordatorios.map((recordatorio) => {
-                        const estado = recordatorio.estado || (recordatorio.completado ? 'completada' : 'por_hacer');
-                        const estadoConfig = getEstadoConfig(estado, recordatorio.completado);
-                        const urgencia = recordatorio.urgencia || 'media';
-                        const urgenciaConfig = getUrgenciaConfig(urgencia);
-                        const canUpdate = currentUser?.rol === 'admin' || recordatorio.asignado_a_id === currentUser?.id;
-
-                        return (
-                          <tr
-                            key={recordatorio.id}
-                            onClick={() => openTaskDetail(recordatorio)}
-                            className="align-top cursor-pointer hover:bg-gray-50 transition"
-                          >
-                            <td className="py-3 pr-3 min-w-36">
-                              {canUpdate ? (
-                                <select
-                                  value={urgencia}
-                                  onClick={(event) => event.stopPropagation()}
-                                  onChange={(event) => handleUpdateTaskUrgencia(recordatorio, event.target.value as UrgenciaRecordatorio)}
-                                  className={`w-full px-2.5 py-1.5 rounded-md border text-[11px] font-black ${urgenciaConfig.className}`}
-                                >
-                                  {URGENCIAS_RECORDATORIO.map((option) => (
-                                    <option key={option.id} value={option.id}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <span className={`inline-flex px-2.5 py-1 rounded-md border text-[11px] font-black ${urgenciaConfig.className}`}>
-                                  {urgenciaConfig.label}
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-3 pr-3 min-w-48">
-                              {canUpdate ? (
-                                <select
-                                  value={estado}
-                                  onClick={(event) => event.stopPropagation()}
-                                  onChange={(event) => handleUpdateTaskStatus(recordatorio, event.target.value as EstadoRecordatorio)}
-                                  className={`w-full px-2.5 py-1.5 rounded-md border text-[11px] font-black ${estadoConfig.className}`}
-                                >
-                                  {ESTADOS_RECORDATORIO.map((option) => (
-                                    <option key={option.id} value={option.id}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <span className={`inline-flex px-2.5 py-1 rounded-md border text-[11px] font-black ${estadoConfig.className}`}>
-                                  {estadoConfig.label}
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-3 pr-3 min-w-64">
-                              <p className="font-extrabold text-[#213343]">{recordatorio.titulo}</p>
-                              {recordatorio.descripcion && (
-                                <p className="text-[11px] text-gray-500 mt-1 line-clamp-2">{recordatorio.descripcion}</p>
-                              )}
-                            </td>
-                            <td className="py-3 pr-3 min-w-44 font-bold text-gray-600">
-                              <span className="inline-flex items-center gap-1.5">
-                                <User className="w-3.5 h-3.5 text-gray-400" />
-                                {getUserName(recordatorio.asignado_a_id)}
-                              </span>
-                            </td>
-                            <td className="py-3 pr-3 min-w-36 font-bold text-gray-600">
-                              <span className="inline-flex items-center gap-1.5">
-                                <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                                {formatDate(recordatorio.fecha_vencimiento)}
-                              </span>
-                            </td>
-                            <td className="py-3 pr-3 min-w-40 font-bold text-gray-600">
-                              {formatDateTime(recordatorio.updated_at || recordatorio.created_at)}
-                            </td>
-                            <td className="py-3 pl-3 text-right">
-                              {canDeleteTask(recordatorio) && (
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleDeleteTask(recordatorio);
-                                  }}
-                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-red-50 text-red-600 hover:bg-red-100 transition"
-                                  title="Eliminar task"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm space-y-5">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-gray-100 pb-4">
-                <div>
-                  <h3 className="font-extrabold text-base flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-[#f97316]" />
-                    <span>Documentos</span>
+              {/* Documentos de la sección */}
+              <div className="space-y-3 pt-4 border-t border-line-subtle">
+                <div className="flex items-center justify-between">
+                  <h3 className="t-section text-sm flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-accent-ink" />
+                    <span>Documentos ({filteredDocs.length})</span>
                   </h3>
-                  <p className="text-xs text-gray-500 font-medium mt-0.5">
-                    {activeSeccion === DOCUMENTOS_SECCION
-                      ? 'Todos los documentos adjuntos de la empresa.'
-                      : `${activeSeccionConfig.label} · Adjuntos asociados a esta carpeta.`}
-                  </p>
                 </div>
-                <div className="flex items-center gap-2 text-xs font-bold text-gray-500">
-                  <FolderOpen className="w-4 h-4 text-[#f97316]" />
-                  <span>{filteredDocs.length} documentos</span>
-                </div>
+
+                {currentUser?.rol !== 'admin' ? (
+                  <div className="p-6 text-center">
+                    <AlertTriangle className="w-6 h-6 text-warning mx-auto mb-2" />
+                    <h4 className="t-section text-sm">Documentos restringidos</h4>
+                    <p className="t-caption mt-1">Las carpetas de empresa son exclusivas del rol administrador.</p>
+                  </div>
+                ) : filteredDocs.length === 0 ? (
+                  <div className="p-8 text-center text-ink-muted t-caption border border-dashed border-line rounded-control">
+                    No hay documentos en esta sección.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-line-subtle">
+                    {filteredDocs.map((doc) => (
+                      <div key={doc.id} className="py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-control bg-accent-soft text-accent-ink flex items-center justify-center shrink-0">
+                            <FileText className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm text-ink truncate">{doc.nombre}</p>
+                            <p className="t-micro text-ink-muted mt-0.5">
+                              {getSeccionLabel(doc.empresa, getDocumentoSeccion(doc))} · {getCategoriaLabel(doc.categoria)} · {formatBytes(doc.size_bytes)} · {formatDate(doc.created_at)}
+                            </p>
+                            {doc.descripcion && (
+                              <p className="t-caption mt-0.5 line-clamp-2">{doc.descripcion}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            icon={Download}
+                            onClick={() => void handleOpenDocumento(doc)}
+                          >
+                            Ver / Descargar
+                          </Button>
+                          <IconButton
+                            icon={Trash2}
+                            label="Eliminar documento"
+                            onClick={() => void handleDeleteDocumento(doc)}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-
-              {currentUser?.rol !== 'admin' ? (
-                <div className="p-8 text-center">
-                  <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto mb-3" />
-                  <h3 className="text-lg font-black">Documentos restringidos</h3>
-                  <p className="text-sm text-gray-500 mt-1">Las carpetas de empresa son exclusivas del rol admin.</p>
-                </div>
-              ) : filteredDocs.length === 0 ? (
-                <div className="p-10 text-center text-gray-400 text-xs italic border border-dashed border-gray-200 rounded-lg">
-                  No hay documentos en esta sección.
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-100">
-                  {filteredDocs.map((doc) => (
-                    <div key={doc.id} className="py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                      <div className="flex items-start gap-3 min-w-0">
-                        <div className="w-9 h-9 rounded-md bg-orange-50 text-[#f97316] flex items-center justify-center shrink-0">
-                          <FileText className="w-4 h-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-extrabold text-sm truncate">{doc.nombre}</p>
-                          <p className="text-[11px] text-gray-500 font-semibold mt-0.5">
-                            {getSeccionLabel(doc.empresa, getDocumentoSeccion(doc))} · {getCategoriaLabel(doc.categoria)} · {formatBytes(doc.size_bytes)} · {formatDate(doc.created_at)}
-                          </p>
-                          {doc.descripcion && (
-                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{doc.descripcion}</p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenDocumento(doc)}
-                          className="px-3 py-1.5 rounded-md border border-gray-200 bg-white text-xs font-extrabold hover:border-orange-200 hover:text-[#f97316] transition flex items-center gap-1.5"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>Ver/Descargar</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteDocumento(doc)}
-                          className="p-2 rounded-md bg-red-50 text-red-600 hover:bg-red-100 transition"
-                          title="Eliminar documento"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
-          </div>
+          </Panel>
         </main>
       </div>
 
-      {showUploadModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 w-full max-w-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <div>
-                <h3 className="font-black text-lg">Subir documento</h3>
-                <p className="text-xs text-gray-500 font-medium">{activeEmpresaConfig.label}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowUploadModal(false)}
-                className="p-2 rounded-md hover:bg-gray-100 text-gray-500 transition"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      {/* Modal Subir Documento */}
+      <Dialog
+        open={showUploadModal}
+        title="Subir documento"
+        description={activeEmpresaConfig.label}
+        onClose={() => setShowUploadModal(false)}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setShowUploadModal(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              disabled={uploading}
+              onClick={() => void handleUploadDocumento()}
+            >
+              {uploading ? 'Subiendo…' : 'Guardar documento'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3 text-xs">
+          {errorMsg && (
+            <p role="alert" className="p-2.5 rounded-control bg-danger-soft border border-danger-line text-danger font-semibold">
+              {errorMsg}
+            </p>
+          )}
 
-            <div className="p-6 space-y-4">
-              {errorMsg && (
-                <div className="text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
-                  {errorMsg}
-                </div>
+          <Field label="Archivo" required>
+            {({ id }) => (
+              <input
+                id={id}
+                type="file"
+                onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
+                className="hg-field p-2 w-full"
+              />
+            )}
+          </Field>
+
+          <Field label="Nombre">
+            {({ id }) => (
+              <TextInput
+                id={id}
+                type="text"
+                value={formData.nombre}
+                onChange={(event) => setFormData((prev) => ({ ...prev, nombre: event.target.value }))}
+                placeholder={selectedFile?.name || 'Nombre visible del documento'}
+              />
+            )}
+          </Field>
+
+          <Field label="Descripción">
+            {({ id }) => (
+              <textarea
+                id={id}
+                rows={3}
+                value={formData.descripcion}
+                onChange={(event) => setFormData((prev) => ({ ...prev, descripcion: event.target.value }))}
+                className="hg-field w-full p-2.5"
+              />
+            )}
+          </Field>
+        </div>
+      </Dialog>
+
+      {/* Modal Nueva Task */}
+      <Dialog
+        open={showTaskModal && currentUser?.rol === 'admin'}
+        title="Nueva task"
+        description={activeEmpresaConfig.label}
+        onClose={() => setShowTaskModal(false)}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setShowTaskModal(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              disabled={savingTask}
+              onClick={() => void handleSaveTask()}
+            >
+              {savingTask ? 'Guardando…' : 'Guardar task'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3 text-xs">
+          {taskErrorMsg && (
+            <p role="alert" className="p-2.5 rounded-control bg-danger-soft border border-danger-line text-danger font-semibold">
+              {taskErrorMsg}
+            </p>
+          )}
+
+          <Field label="Título" required>
+            {({ id }) => (
+              <TextInput
+                id={id}
+                type="text"
+                value={taskForm.titulo}
+                onChange={(event) => setTaskForm((prev) => ({ ...prev, titulo: event.target.value }))}
+              />
+            )}
+          </Field>
+
+          <Field label="Descripción">
+            {({ id }) => (
+              <textarea
+                id={id}
+                rows={3}
+                value={taskForm.descripcion}
+                onChange={(event) => setTaskForm((prev) => ({ ...prev, descripcion: event.target.value }))}
+                className="hg-field w-full p-2.5"
+              />
+            )}
+          </Field>
+
+          <Field label="Sección" required>
+            {({ id }) => (
+              <Select
+                id={id}
+                value={taskForm.seccion}
+                onChange={(event) =>
+                  setTaskForm((prev) => ({
+                    ...prev,
+                    seccion: event.target.value as SeccionAdministracionEmpresa,
+                  }))
+                }
+              >
+                {activeSecciones.map((seccion) => (
+                  <option key={seccion.id} value={seccion.id}>
+                    {seccion.label}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Responsable">
+              {({ id }) => (
+                <Select
+                  id={id}
+                  value={taskForm.asignado_a_id}
+                  onChange={(event) => setTaskForm((prev) => ({ ...prev, asignado_a_id: event.target.value }))}
+                >
+                  <option value="">Seleccionar persona</option>
+                  {activeUsers.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.nombre}
+                    </option>
+                  ))}
+                </Select>
               )}
+            </Field>
 
-              <label className="block">
-                <span className="text-xs font-extrabold text-gray-600">Archivo</span>
-                <input
-                  type="file"
-                  onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
-                  className="mt-1.5 w-full text-xs font-semibold border border-gray-200 rounded-lg p-3"
+            <Field label="Fecha recordatorio">
+              {({ id }) => (
+                <TextInput
+                  id={id}
+                  type="date"
+                  value={taskForm.fecha_vencimiento}
+                  onChange={(event) => setTaskForm((prev) => ({ ...prev, fecha_vencimiento: event.target.value }))}
                 />
-              </label>
+              )}
+            </Field>
+          </div>
 
-              <label className="block">
-                <span className="text-xs font-extrabold text-gray-600">Nombre</span>
-                <input
-                  type="text"
-                  value={formData.nombre}
-                  onChange={(event) => setFormData((prev) => ({ ...prev, nombre: event.target.value }))}
-                  placeholder={selectedFile?.name || 'Nombre visible del documento'}
-                  className="mt-1.5 w-full px-3 py-2 rounded-lg border border-gray-200 text-sm font-semibold focus:outline-none focus:border-[#f97316]"
-                />
-              </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Estado">
+              {({ id }) => (
+                <Select
+                  id={id}
+                  value={taskForm.estado}
+                  onChange={(event) => setTaskForm((prev) => ({ ...prev, estado: event.target.value as EstadoRecordatorio }))}
+                >
+                  {ESTADOS_RECORDATORIO.map((estado) => (
+                    <option key={estado.id} value={estado.id}>
+                      {estado.label}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
 
-              <label className="block">
-                <span className="text-xs font-extrabold text-gray-600">Descripción</span>
-                <textarea
-                  value={formData.descripcion}
-                  onChange={(event) => setFormData((prev) => ({ ...prev, descripcion: event.target.value }))}
-                  rows={3}
-                  className="mt-1.5 w-full px-3 py-2 rounded-lg border border-gray-200 text-sm font-semibold resize-none focus:outline-none focus:border-[#f97316]"
-                />
-              </label>
-            </div>
-
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowUploadModal(false)}
-                className="px-4 py-2 rounded-lg text-xs font-extrabold text-gray-600 hover:bg-gray-100 transition"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleUploadDocumento}
-                disabled={uploading}
-                className="px-4 py-2 rounded-lg bg-[#f97316] text-white text-xs font-extrabold hover:bg-[#ea580c] disabled:opacity-60 transition flex items-center gap-2"
-              >
-                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                <span>{uploading ? 'Subiendo...' : 'Guardar documento'}</span>
-              </button>
-            </div>
+            <Field label="Urgencia">
+              {({ id }) => (
+                <Select
+                  id={id}
+                  value={taskForm.urgencia}
+                  onChange={(event) => setTaskForm((prev) => ({ ...prev, urgencia: event.target.value as UrgenciaRecordatorio }))}
+                >
+                  {URGENCIAS_RECORDATORIO.map((urgencia) => (
+                    <option key={urgencia.id} value={urgencia.id}>
+                      {urgencia.label}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
           </div>
         </div>
-      )}
+      </Dialog>
 
+      {/* Detalle de Task */}
       {selectedTask && (() => {
         const estado = selectedTask.estado || (selectedTask.completado ? 'completada' : 'por_hacer');
-        const estadoConfig = getEstadoConfig(estado, selectedTask.completado);
         const urgencia = selectedTask.urgencia || 'media';
-        const urgenciaConfig = getUrgenciaConfig(urgencia);
         const canUpdate = currentUser?.rol === 'admin' || selectedTask.asignado_a_id === currentUser?.id;
 
         return (
-          <div className="fixed inset-0 z-50 bg-black/40 flex justify-end">
-            <div className="bg-white w-full max-w-6xl h-full shadow-sm border-l border-gray-200 flex flex-col">
-              <div className="px-6 py-4 border-b border-gray-100 flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-black text-gray-500 uppercase">{activeEmpresaConfig.label}</p>
-                  <h3 className="text-xl font-black mt-1 leading-tight">{selectedTask.titulo}</h3>
-                  {selectedTask.descripcion && (
-                    <p className="text-sm text-gray-500 mt-1 line-clamp-2">{selectedTask.descripcion}</p>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  {canDeleteTask(selectedTask) && (
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteTask(selectedTask)}
-                      className="px-3 py-2 rounded-md bg-red-50 text-red-600 hover:bg-red-100 text-xs font-black transition flex items-center gap-2"
-                      title="Eliminar task"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      <span>Eliminar</span>
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setSelectedTask(null)}
-                    className="p-2 rounded-md hover:bg-gray-100 text-gray-500 transition"
-                    title="Cerrar detalle"
+          <Dialog
+            open={!!selectedTask}
+            title={selectedTask.titulo}
+            description={`${activeEmpresaConfig.label} · ${getSeccionLabel(selectedTask.empresa, selectedTask.seccion || DEFAULT_SECCION_ADMINISTRACION)}`}
+            onClose={() => setSelectedTask(null)}
+            size="lg"
+            footer={
+              <div className="flex items-center justify-between w-full">
+                {canDeleteTask(selectedTask) ? (
+                  <Button
+                    variant="destructive"
+                    icon={Trash2}
+                    onClick={() => void handleDeleteTask(selectedTask)}
                   >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
+                    Eliminar task
+                  </Button>
+                ) : <span />}
+                <Button
+                  variant="secondary"
+                  onClick={() => setSelectedTask(null)}
+                >
+                  Cerrar
+                </Button>
               </div>
-
-              <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
-                <aside className="lg:col-span-4 border-r border-gray-100 p-6 space-y-4 overflow-y-auto bg-gray-50">
+            }
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              {/* Propiedades */}
+              <div className="lg:col-span-5 space-y-3 bg-surface-muted p-3.5 rounded-control border border-line t-caption">
+                {selectedTask.descripcion && (
                   <div>
-                    <h4 className="text-sm font-black flex items-center gap-2">
-                      <ListChecks className="w-4 h-4 text-[#f97316]" />
-                      Datos de la task
-                    </h4>
-                    <p className="text-xs text-gray-500 font-medium mt-1">
-                      Propiedades administrativas de seguimiento.
-                    </p>
+                    <span className="font-semibold text-ink block mb-0.5">Descripción</span>
+                    <p className="text-ink-muted">{selectedTask.descripcion}</p>
                   </div>
+                )}
 
-                  <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100">
-                    <div className="p-4 flex items-start justify-between gap-3">
-                      <span className="text-xs font-bold text-gray-500">Sección</span>
-                      <span className="text-xs font-black text-right">
-                        {getSeccionLabel(selectedTask.empresa, selectedTask.seccion || DEFAULT_SECCION_ADMINISTRACION)}
-                      </span>
-                    </div>
-                    <div className="p-4 flex items-start justify-between gap-3">
-                      <span className="text-xs font-bold text-gray-500">Responsable</span>
-                      <span className="text-xs font-black text-right">{getUserName(selectedTask.asignado_a_id)}</span>
-                    </div>
-                    <div className="p-4 flex items-start justify-between gap-3">
-                      <span className="text-xs font-bold text-gray-500">Recordatorio</span>
-                      <span className="text-xs font-black text-right">{formatDate(selectedTask.fecha_vencimiento)}</span>
-                    </div>
-                    <div className="p-4 flex items-start justify-between gap-3">
-                      <span className="text-xs font-bold text-gray-500">Creada</span>
-                      <span className="text-xs font-black text-right">{formatDateTime(selectedTask.created_at)}</span>
-                    </div>
-                    <div className="p-4 flex items-start justify-between gap-3">
-                      <span className="text-xs font-bold text-gray-500">Empresa</span>
-                      <span className="text-xs font-black text-right">{activeEmpresaConfig.label}</span>
-                    </div>
-                    <div className="p-4 flex items-start justify-between gap-3">
-                      <span className="text-xs font-bold text-gray-500">RUT</span>
-                      <span className="text-xs font-black text-right">{activeEmpresaConfig.rut}</span>
-                    </div>
+                <div className="space-y-2 pt-2 border-t border-line-subtle">
+                  <div className="flex items-center justify-between">
+                    <span className="text-ink-muted">Responsable</span>
+                    <span className="font-semibold text-ink">{getUserName(selectedTask.asignado_a_id)}</span>
                   </div>
-
-                  <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-gray-500 flex items-center gap-1.5">
-                        <Flag className="w-3.5 h-3.5" />
-                        Urgencia
-                      </span>
-                      {canUpdate ? (
-                        <select
-                          value={urgencia}
-                          onChange={(event) => handleUpdateTaskUrgencia(selectedTask, event.target.value as UrgenciaRecordatorio)}
-                          className={`px-2.5 py-1 rounded-md border text-[11px] font-black ${urgenciaConfig.className}`}
-                        >
-                          {URGENCIAS_RECORDATORIO.map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className={`px-2.5 py-1 rounded-md border text-[11px] font-black ${urgenciaConfig.className}`}>
-                          {urgenciaConfig.label}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-gray-500 flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5" />
-                        Estado
-                      </span>
-                      {canUpdate ? (
-                        <select
-                          value={estado}
-                          onChange={(event) => handleUpdateTaskStatus(selectedTask, event.target.value as EstadoRecordatorio)}
-                          className={`px-2.5 py-1 rounded-md border text-[11px] font-black ${estadoConfig.className}`}
-                        >
-                          {ESTADOS_RECORDATORIO.map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className={`px-2.5 py-1 rounded-md border text-[11px] font-black ${estadoConfig.className}`}>
-                          {estadoConfig.label}
-                        </span>
-                      )}
-                    </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-ink-muted">Fecha límite</span>
+                    <span className="font-semibold text-ink t-num">{formatDate(selectedTask.fecha_vencimiento)}</span>
                   </div>
-                </aside>
-
-                <section className="lg:col-span-8 flex flex-col min-h-0 bg-white">
-                  <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-black flex items-center gap-2">
-                        <MessageSquare className="w-4 h-4 text-[#f97316]" />
-                        Actividad
-                      </h4>
-                      <p className="text-xs text-gray-500 font-medium">
-                        Comentarios y cambios registrados automáticamente.
-                      </p>
-                    </div>
-                    <span className="text-[11px] font-black text-gray-400">{taskActivities.length} eventos</span>
-                  </div>
-
-                  <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-3 bg-gray-50">
-                    {loadingActivities ? (
-                      <div className="p-8 text-center text-xs font-bold text-gray-400">Cargando actividad...</div>
-                    ) : taskActivities.length === 0 ? (
-                      <div className="p-8 text-center text-xs italic text-gray-400 border border-dashed border-gray-200 rounded-lg bg-white">
-                        Esta task aún no tiene actividad registrada.
-                      </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-ink-muted">Urgencia</span>
+                    {canUpdate ? (
+                      <select
+                        value={urgencia}
+                        onChange={(event) => void handleUpdateTaskUrgencia(selectedTask, event.target.value as UrgenciaRecordatorio)}
+                        className="hg-field py-1 text-xs"
+                      >
+                        {URGENCIAS_RECORDATORIO.map((option) => (
+                          <option key={option.id} value={option.id}>{option.label}</option>
+                        ))}
+                      </select>
                     ) : (
-                      taskActivities.map((activity) => (
-                        <div key={activity.id} className="bg-white rounded-lg border border-gray-200 p-4">
-                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                            <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 rounded-full bg-[#213343] text-white text-[10px] font-black flex items-center justify-center">
-                                {(activity.usuario_nombre || 'HG').slice(0, 2).toUpperCase()}
-                              </div>
-                              <div>
-                                <p className="text-xs font-black">{activity.usuario_nombre || 'Sistema'}</p>
-                                <p className="text-[10px] font-bold text-gray-400">{formatDateTime(activity.created_at)}</p>
-                              </div>
-                            </div>
-                          <span className="px-2 py-0.5 rounded-md bg-gray-100 text-[10px] font-black text-gray-500">
-                              {activity.tipo.replaceAll('_', ' ')}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                            {renderMessageContentWithMentions(activity.contenido)}
-                          </p>
-                          {activity.archivo_path && (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenTaskAttachment(activity)}
-                              className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-md border border-gray-200 bg-gray-50 text-xs font-black text-[#213343] hover:border-orange-200 hover:text-[#f97316] transition"
-                            >
-                              <FileText className="w-4 h-4" />
-                              <span className="truncate max-w-72">{activity.archivo_nombre || 'Documento adjunto'}</span>
-                              <span className="text-[10px] text-gray-400">{formatBytes(activity.archivo_size_bytes)}</span>
-                            </button>
-                          )}
-                        </div>
-                      ))
+                      <StatusBadge tone={getUrgenciaConfig(urgencia).tone}>
+                        {getUrgenciaConfig(urgencia).label}
+                      </StatusBadge>
                     )}
                   </div>
-
-                  <div className="p-4 border-t border-gray-100 bg-white">
-                    <div className="relative">
-                      {taskMentionMenuOpen && filteredMentionUsers.length > 0 && (
-                        <div className="absolute bottom-full left-0 mb-2 w-72 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden z-10">
-                          {filteredMentionUsers.map((user, idx) => (
-                            <button
-                              key={user.id}
-                              type="button"
-                              onClick={() => handleInsertTaskMention(user.nombre)}
-                              className={`w-full text-left px-3 py-2 text-xs transition flex items-center justify-between ${
-                                idx === selectedTaskMentionIndex ? 'bg-[#f97316] text-white' : 'text-gray-700 hover:bg-orange-50 hover:text-[#f97316]'
-                              }`}
-                            >
-                              <span className="font-black">{user.nombre}</span>
-                              <span className="text-[10px] uppercase font-mono opacity-75">{ROL_NOMBRE[user.rol] ?? user.rol}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-stretch gap-2">
-                        <label className="h-11 w-11 rounded-lg border border-gray-200 bg-white text-gray-500 hover:text-[#f97316] hover:border-orange-200 transition flex items-center justify-center cursor-pointer" title="Adjuntar documento">
-                          {uploadingTaskAttachment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
-                          <input type="file" className="hidden" onChange={handleUploadTaskAttachment} disabled={uploadingTaskAttachment} />
-                        </label>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTaskMentionMenuOpen((prev) => !prev);
-                            setSelectedTaskMentionIndex(0);
-                          }}
-                          className="h-11 w-11 rounded-lg border border-gray-200 bg-white text-gray-500 hover:text-[#f97316] hover:border-orange-200 transition flex items-center justify-center"
-                          title="Mencionar persona"
-                        >
-                          <AtSign className="w-4 h-4" />
-                        </button>
-
-                        <textarea
-                          value={activityMessage}
-                          onChange={(event) => handleActivityMessageChange(event.target.value)}
-                          onKeyDown={handleTaskActivityKeyDown}
-                          rows={1}
-                          placeholder="Escribe un comentario..."
-                          className="h-11 min-h-11 max-h-28 px-3 py-2.5 rounded-lg border border-gray-200 text-sm font-medium resize-y focus:outline-none focus:border-[#f97316]"
-                        />
-
-                      <button
-                        type="button"
-                        onClick={handleAddTaskActivity}
-                        disabled={sendingActivity || !activityMessage.trim()}
-                          className="h-11 px-4 rounded-lg bg-[#f97316] text-white text-xs font-black hover:bg-[#ea580c] disabled:opacity-50 transition flex items-center justify-center gap-2"
+                  <div className="flex items-center justify-between">
+                    <span className="text-ink-muted">Estado</span>
+                    {canUpdate ? (
+                      <select
+                        value={estado}
+                        onChange={(event) => void handleUpdateTaskStatus(selectedTask, event.target.value as EstadoRecordatorio)}
+                        className="hg-field py-1 text-xs"
                       >
-                        {sendingActivity ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                        <span>Enviar</span>
-                      </button>
-                      </div>
-                    </div>
+                        {ESTADOS_RECORDATORIO.map((option) => (
+                          <option key={option.id} value={option.id}>{option.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <StatusBadge tone={getEstadoConfig(estado).tone}>
+                        {getEstadoConfig(estado).label}
+                      </StatusBadge>
+                    )}
                   </div>
-                </section>
+                </div>
+              </div>
+
+              {/* Actividad / Comentarios */}
+              <div className="lg:col-span-7 flex flex-col min-h-0 space-y-3">
+                <div className="flex items-center justify-between border-b border-line-subtle pb-2">
+                  <span className="font-semibold text-ink flex items-center gap-1.5 t-caption">
+                    <MessageSquare className="w-3.5 h-3.5 text-accent-ink" />
+                    <span>Actividad ({taskActivities.length})</span>
+                  </span>
+                </div>
+
+                <div className="max-h-60 overflow-y-auto space-y-2.5 p-2 bg-surface-muted rounded-control border border-line">
+                  {loadingActivities ? (
+                    <p className="t-caption text-center py-4 text-ink-muted">Cargando actividad…</p>
+                  ) : taskActivities.length === 0 ? (
+                    <p className="t-caption text-center py-4 text-ink-muted">Sin comentarios registrados.</p>
+                  ) : (
+                    taskActivities.map((act) => (
+                      <div key={act.id} className="bg-surface p-2.5 rounded-control border border-line space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-ink">{act.usuario_nombre || 'Sistema'}</span>
+                          <span className="t-micro text-ink-muted t-num">{formatDateTime(act.created_at)}</span>
+                        </div>
+                        <p className="t-caption whitespace-pre-wrap">{renderMessageContentWithMentions(act.contenido)}</p>
+                        {act.archivo_path && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            icon={FileText}
+                            onClick={() => void handleOpenTaskAttachment(act)}
+                          >
+                            <span className="truncate max-w-48">{act.archivo_nombre || 'Documento'}</span>
+                          </Button>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Input de comentario */}
+                <div className="relative space-y-2">
+                  {taskMentionMenuOpen && filteredMentionUsers.length > 0 && (
+                    <div className="absolute bottom-full left-0 mb-1 w-64 bg-surface border border-line rounded-control shadow-md overflow-hidden z-10">
+                      {filteredMentionUsers.map((user, idx) => (
+                        <button
+                          key={user.id}
+                          type="button"
+                          onClick={() => handleInsertTaskMention(user.nombre)}
+                          className={`w-full text-left px-3 py-1.5 text-xs transition flex items-center justify-between cursor-pointer ${
+                            idx === selectedTaskMentionIndex ? 'bg-accent-soft text-accent-ink font-semibold' : 'text-ink hover:bg-surface-muted'
+                          }`}
+                        >
+                          <span>{user.nombre}</span>
+                          <span className="t-micro uppercase text-ink-muted">{ROL_NOMBRE[user.rol] ?? user.rol}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <textarea
+                    value={activityMessage}
+                    onChange={(event) => handleActivityMessageChange(event.target.value)}
+                    onKeyDown={handleTaskActivityKeyDown}
+                    rows={2}
+                    placeholder="Escribe un comentario (@ para mencionar)..."
+                    className="hg-field w-full p-2.5 text-xs"
+                  />
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      <label className="p-1.5 rounded-control border border-line text-ink-muted hover:text-ink hover:bg-surface-muted cursor-pointer transition" title="Adjuntar documento">
+                        {uploadingTaskAttachment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+                        <input type="file" className="hidden" onChange={handleUploadTaskAttachment} disabled={uploadingTaskAttachment} />
+                      </label>
+                      <IconButton
+                        icon={AtSign}
+                        label="Mencionar usuario"
+                        onClick={() => {
+                          setTaskMentionMenuOpen((prev) => !prev);
+                          setSelectedTaskMentionIndex(0);
+                        }}
+                      />
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      icon={Send}
+                      disabled={sendingActivity || !activityMessage.trim()}
+                      onClick={() => void handleAddTaskActivity()}
+                    >
+                      {sendingActivity ? 'Enviando…' : 'Comentar'}
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          </Dialog>
         );
       })()}
-
-      {showTaskModal && currentUser?.rol === 'admin' && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 w-full max-w-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <div>
-                <h3 className="font-black text-lg">Nueva task</h3>
-                <p className="text-xs text-gray-500 font-medium">{activeEmpresaConfig.label}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowTaskModal(false)}
-                className="p-2 rounded-md hover:bg-gray-100 text-gray-500 transition"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              {taskErrorMsg && (
-                <div className="text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4" />
-                  <span>{taskErrorMsg}</span>
-                </div>
-              )}
-
-              <label className="block">
-                <span className="text-xs font-extrabold text-gray-600">Título</span>
-                <input
-                  type="text"
-                  value={taskForm.titulo}
-                  onChange={(event) => setTaskForm((prev) => ({ ...prev, titulo: event.target.value }))}
-                  className="mt-1.5 w-full px-3 py-2 rounded-lg border border-gray-200 text-sm font-semibold focus:outline-none focus:border-[#f97316]"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-extrabold text-gray-600">Descripción</span>
-                <textarea
-                  value={taskForm.descripcion}
-                  onChange={(event) => setTaskForm((prev) => ({ ...prev, descripcion: event.target.value }))}
-                  rows={3}
-                  className="mt-1.5 w-full px-3 py-2 rounded-lg border border-gray-200 text-sm font-semibold resize-none focus:outline-none focus:border-[#f97316]"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-extrabold text-gray-600">Sección</span>
-                <select
-                  value={taskForm.seccion}
-                  onChange={(event) =>
-                    setTaskForm((prev) => ({
-                      ...prev,
-                      seccion: event.target.value as SeccionAdministracionEmpresa,
-                    }))
-                  }
-                  className="mt-1.5 w-full px-3 py-2 rounded-lg border border-gray-200 text-sm font-bold bg-white focus:outline-none focus:border-[#f97316]"
-                >
-                  {activeSecciones.map((seccion) => (
-                    <option key={seccion.id} value={seccion.id}>
-                      {seccion.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="text-xs font-extrabold text-gray-600">Responsable</span>
-                  <select
-                    value={taskForm.asignado_a_id}
-                    onChange={(event) => setTaskForm((prev) => ({ ...prev, asignado_a_id: event.target.value }))}
-                    className="mt-1.5 w-full px-3 py-2 rounded-lg border border-gray-200 text-sm font-bold bg-white focus:outline-none focus:border-[#f97316]"
-                  >
-                    <option value="">Seleccionar persona</option>
-                    {activeUsers.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block">
-                  <span className="text-xs font-extrabold text-gray-600">Fecha recordatorio</span>
-                  <input
-                    type="date"
-                    value={taskForm.fecha_vencimiento}
-                    onChange={(event) => setTaskForm((prev) => ({ ...prev, fecha_vencimiento: event.target.value }))}
-                    className="mt-1.5 w-full px-3 py-2 rounded-lg border border-gray-200 text-sm font-bold focus:outline-none focus:border-[#f97316]"
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="text-xs font-extrabold text-gray-600">Estado</span>
-                  <select
-                    value={taskForm.estado}
-                    onChange={(event) => setTaskForm((prev) => ({ ...prev, estado: event.target.value as EstadoRecordatorio }))}
-                    className="mt-1.5 w-full px-3 py-2 rounded-lg border border-gray-200 text-sm font-bold bg-white focus:outline-none focus:border-[#f97316]"
-                  >
-                    {ESTADOS_RECORDATORIO.map((estado) => (
-                      <option key={estado.id} value={estado.id}>
-                        {estado.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block">
-                  <span className="text-xs font-extrabold text-gray-600">Urgencia</span>
-                  <select
-                    value={taskForm.urgencia}
-                    onChange={(event) => setTaskForm((prev) => ({ ...prev, urgencia: event.target.value as UrgenciaRecordatorio }))}
-                    className="mt-1.5 w-full px-3 py-2 rounded-lg border border-gray-200 text-sm font-bold bg-white focus:outline-none focus:border-[#f97316]"
-                  >
-                    {URGENCIAS_RECORDATORIO.map((urgencia) => (
-                      <option key={urgencia.id} value={urgencia.id}>
-                        {urgencia.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            </div>
-
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowTaskModal(false)}
-                className="px-4 py-2 rounded-lg text-xs font-extrabold text-gray-600 hover:bg-gray-100 transition"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveTask}
-                disabled={savingTask}
-                className="px-4 py-2 rounded-lg bg-[#f97316] text-white text-xs font-extrabold hover:bg-[#ea580c] disabled:opacity-60 transition flex items-center gap-2"
-              >
-                {savingTask ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                <span>{savingTask ? 'Guardando...' : 'Guardar task'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { createClient } from '../../lib/supabase/client';
 import { useAuth } from '../../lib/context/AuthContext';
@@ -12,7 +12,6 @@ import {
   OportunidadVenta,
   Cotizacion,
   ChatMensaje,
-  VisitaTerreno,
 } from '../../lib/types';
 import { PdfPreviewModal } from '../../components/PdfPreviewModal';
 import {
@@ -21,7 +20,6 @@ import {
   User,
   LayoutGrid,
   List as ListIcon,
-  Search,
   ChevronRight,
   ChevronDown,
   ChevronUp,
@@ -30,16 +28,32 @@ import {
   FileText,
   MessageSquare,
   Send,
-  GripVertical,
+  ExternalLink,
+  X,
 } from 'lucide-react';
+import {
+  PageHeader,
+  Panel,
+  Button,
+  SearchField,
+  CodeStamp,
+  StatusBadge,
+} from '../../components/ui/crm';
+import { useToast } from '../../components/ui/feedback';
 
-const ETAPAS_REVENTA: { id: EstadoReventa; label: string; color: string; bg: string; border: string }[] = [
-  { id: 'coordinacion_proveedor', label: '1. Coordinación Proveedor', color: 'text-blue-800', bg: 'bg-blue-50', border: 'border-blue-200' },
-  { id: 'confirmacion_stock', label: '2. Confirmación Stock', color: 'text-indigo-800', bg: 'bg-indigo-50', border: 'border-indigo-200' },
-  { id: 'listo_retiro', label: '3. Listo para Retiro', color: 'text-amber-800', bg: 'bg-amber-50', border: 'border-amber-200' },
-  { id: 'listo_despacho', label: '4. Listo para Despacho', color: 'text-orange-800', bg: 'bg-orange-50', border: 'border-orange-200' },
-  { id: 'entregado', label: '5. Entregado al Cliente', color: 'text-emerald-800', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-  { id: 'postventa', label: '6. Postventa & Seguimiento', color: 'text-purple-800', bg: 'bg-purple-50', border: 'border-purple-200' },
+type ReventaStageMeta = {
+  id: EstadoReventa;
+  label: string;
+  tone: 'neutral' | 'info' | 'warning' | 'success' | 'accent';
+};
+
+const ETAPAS_REVENTA: ReventaStageMeta[] = [
+  { id: 'coordinacion_proveedor', label: '1. Coordinación Proveedor', tone: 'info' },
+  { id: 'confirmacion_stock', label: '2. Confirmación Stock', tone: 'info' },
+  { id: 'listo_retiro', label: '3. Listo para Retiro', tone: 'warning' },
+  { id: 'listo_despacho', label: '4. Listo para Despacho', tone: 'accent' },
+  { id: 'entregado', label: '5. Entregado al Cliente', tone: 'success' },
+  { id: 'postventa', label: '6. Postventa & Seguimiento', tone: 'neutral' },
 ];
 
 const ESTADO_LEGADO_REVENTA: Record<string, EstadoReventa> = {
@@ -63,19 +77,17 @@ function isUUID(id: string): boolean {
 
 export default function ReventaPage() {
   const { currentUser } = useAuth();
+  const toast = useToast();
   const [ordenes, setOrdenes] = useState<(OrdenReventa & { oportunidad?: OportunidadVenta })[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
-  // Vista de Lista primero siempre por defecto
   const [activeTab, setActiveTab] = useState<'lista' | 'tablero'>('lista');
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
-  // Modal Full Oportunidad
   const [selectedOp, setSelectedOp] = useState<OportunidadVenta | null>(null);
   const [selectedOrden, setSelectedOrden] = useState<OrdenReventa | null>(null);
 
-  // Accordion state (Todas cerradas por defecto)
   const [openSections, setOpenSections] = useState({
     contacto: false,
     productos: false,
@@ -84,39 +96,39 @@ export default function ReventaPage() {
     reventa: false,
   });
 
-  // Full Opportunity Chat / Activities
   const [opActivities, setOpActivities] = useState<ChatMensaje[]>([]);
   const [newChatText, setNewChatText] = useState('');
+  const [pdfPreviewCotizacion, setPdfPreviewCotizacion] = useState<Cotizacion | null>(null);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
-  const loadOrdenes = async () => {
+  const loadOrdenes = React.useCallback(async () => {
     try {
       setLoading(true);
 
-      // Cargar todas las oportunidades de reventa y las órdenes de reventa
       const [opRes, revRes] = await Promise.all([
         supabase
           .from('oportunidades')
           .select('*, cliente:clientes(*), cotizaciones!cotizaciones_oportunidad_id_fkey(*)')
-          .or('rama_destino.eq.reventa,estado_pipeline.in.(entregada,reventa_coordinacion,reventa_stock,reventa_retiro,reventa_despacho,reventa_entregado,reventa_postventa,rev_coordinacion,rev_stock,rev_listo_retiro,rev_listo_despacho,rev_entregado,rev_postventa)'),
-        supabase
-          .from('ordenes_reventa')
-          .select('*'),
+          .or(
+            'rama_destino.eq.reventa,estado_pipeline.in.(entregada,reventa_coordinacion,reventa_stock,reventa_retiro,reventa_despacho,reventa_entregado,reventa_postventa,rev_coordinacion,rev_stock,rev_listo_retiro,rev_listo_despacho,rev_entregado,rev_postventa)'
+          ),
+        supabase.from('ordenes_reventa').select('*'),
       ]);
+
       if (opRes.error) throw new Error(`Oportunidades: ${opRes.error.message}`);
       if (revRes.error) throw new Error(`Órdenes: ${revRes.error.message}`);
 
-      const revMap = new Map<string, any>();
-      (revRes.data || []).forEach((r: any) => {
+      const revMap = new Map<string, OrdenReventa>();
+      ((revRes.data || []) as OrdenReventa[]).forEach((r) => {
         if (r.oportunidad_id) revMap.set(r.oportunidad_id, r);
       });
 
       const combined: (OrdenReventa & { oportunidad?: OportunidadVenta })[] = [];
 
-      (opRes.data || []).forEach((op: any) => {
+      ((opRes.data || []) as OportunidadVenta[]).forEach((op) => {
         const isReventa = esRutaReventa(op);
-        if (!isReventa) return; // Solo reventa en esta página
+        if (!isReventa) return;
 
         const revRecord = revMap.get(op.id);
         combined.push({
@@ -126,11 +138,14 @@ export default function ReventaPage() {
           titulo: op.titulo,
           cliente_id: op.cliente_id,
           cliente: op.cliente,
-          estado: (revRecord?.estado as EstadoReventa) || ESTADO_LEGADO_REVENTA[op.estado_pipeline] || 'coordinacion_proveedor',
-          proveedor_nombre: revRecord?.proveedor_nombre || null,
-          fecha_despacho: revRecord?.fecha_despacho || null,
+          estado:
+            (revRecord?.estado as EstadoReventa) ||
+            ESTADO_LEGADO_REVENTA[op.estado_pipeline] ||
+            'coordinacion_proveedor',
+          proveedor_nombre: revRecord?.proveedor_nombre || undefined,
+          fecha_despacho: revRecord?.fecha_despacho || undefined,
           observaciones: revRecord?.observaciones || 'Vinculado desde Venta Cerrada.',
-          notas_postventa: revRecord?.notas_postventa || null,
+          notas_postventa: revRecord?.notas_postventa || undefined,
           oportunidad: op,
         });
       });
@@ -138,43 +153,39 @@ export default function ReventaPage() {
       setOrdenes(combined);
     } catch (err) {
       console.error('Error cargando órdenes de reventa:', err);
+      toast({ message: 'Error al cargar órdenes de reventa', tone: 'danger' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase, toast]);
 
   useEffect(() => {
     let ignore = false;
-    loadOrdenes();
+    const timer = window.setTimeout(() => {
+      if (!ignore) void loadOrdenes();
+    }, 0);
 
     const channel1 = supabase
       .channel('realtime_rev_table')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'ordenes_reventa' },
-        () => {
-          if (!ignore) loadOrdenes();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes_reventa' }, () => {
+        if (!ignore) void loadOrdenes();
+      })
       .subscribe();
 
     const channel2 = supabase
       .channel('realtime_rev_ops')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'oportunidades' },
-        () => {
-          if (!ignore) loadOrdenes();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'oportunidades' }, () => {
+        if (!ignore) void loadOrdenes();
+      })
       .subscribe();
 
     return () => {
       ignore = true;
-      supabase.removeChannel(channel1);
-      supabase.removeChannel(channel2);
+      window.clearTimeout(timer);
+      void supabase.removeChannel(channel1);
+      void supabase.removeChannel(channel2);
     };
-  }, []);
+  }, [supabase, loadOrdenes]);
 
   const moveOrdenState = async (id: string, opId: string, targetEstado: EstadoReventa) => {
     setOrdenes((prev) =>
@@ -187,32 +198,38 @@ export default function ReventaPage() {
 
     if (isUUID(opId)) {
       try {
-        await supabase.from('ordenes_reventa').upsert([
-          {
-            oportunidad_id: opId,
-            codigo: selectedOrden?.codigo || 'OP-2790',
-            titulo: selectedOrden?.titulo || 'Orden Reventa',
-            cliente_id: selectedOrden?.cliente_id,
-            estado: targetEstado,
-          },
-        ], { onConflict: 'oportunidad_id' });
+        await supabase.from('ordenes_reventa').upsert(
+          [
+            {
+              oportunidad_id: opId,
+              codigo: selectedOrden?.codigo || 'OP-2790',
+              titulo: selectedOrden?.titulo || 'Orden Reventa',
+              cliente_id: selectedOrden?.cliente_id,
+              estado: targetEstado,
+            },
+          ],
+          { onConflict: 'oportunidad_id' }
+        );
+        toast({ message: 'Estado de reventa actualizado', tone: 'success' });
       } catch (err) {
         console.error('Error moviendo orden de reventa:', err);
+        toast({ message: 'Error al actualizar estado', tone: 'danger' });
       }
     }
   };
 
-  // Helper to open Full Opportunity Modal inside Reventa
   const handleOpenOrdenModal = async (ord: OrdenReventa & { oportunidad?: OportunidadVenta }) => {
     setSelectedOrden(ord);
-    const op = ord.oportunidad || {
-      id: ord.oportunidad_id,
-      codigo: ord.codigo,
-      titulo: ord.titulo,
-      cliente_id: ord.cliente_id,
-      cliente: ord.cliente,
-      estado_pipeline: 'entregada',
-    } as OportunidadVenta;
+    const op =
+      ord.oportunidad ||
+      ({
+        id: ord.oportunidad_id,
+        codigo: ord.codigo,
+        titulo: ord.titulo,
+        cliente_id: ord.cliente_id,
+        cliente: ord.cliente,
+        estado_pipeline: 'entregada',
+      } as OportunidadVenta);
 
     setSelectedOp(op);
     setOpenSections({
@@ -224,7 +241,7 @@ export default function ReventaPage() {
     });
 
     if (isUUID(op.id)) {
-      loadActivitiesForOp(op.id);
+      void loadActivitiesForOp(op.id);
     }
   };
 
@@ -238,7 +255,7 @@ export default function ReventaPage() {
 
       if (data) {
         setOpActivities(
-          data.map((a: any) => ({
+          (data as (ChatMensaje & { usuario_nombre?: string })[]).map((a) => ({
             id: a.id,
             usuario_id: a.usuario_id || 'sistema',
             usuario_nombre: a.usuario_nombre || 'Sistema',
@@ -307,133 +324,156 @@ export default function ReventaPage() {
   });
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6 ">
-      {/* Top Header Estilo Ventas 100% Idéntico */}
-      <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-black uppercase text-[#f97316] bg-orange-50 px-2.5 py-0.5 rounded-full border border-orange-200">
-              Gestión Logística & Proveedores
-            </span>
-          </div>
-          <h1 className="text-2xl font-extrabold text-[#213343] flex items-center gap-2.5">
-            <Truck className="w-7 h-7 text-[#f97316]" />
-            <span>Reventa y Proveedores</span>
-          </h1>
-          <p className="text-xs text-gray-500 mt-1">
-            Misma oportunidad de venta vinculada para la coordinación de compras con proveedores, stock y despachos.
-          </p>
-        </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Reventa y proveedores"
+        description="Control logístico de compras con proveedores, stock y despachos vinculados a ventas."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center rounded-lg border border-border bg-surface p-1">
+              <button
+                type="button"
+                onClick={() => setActiveTab('lista')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md t-micro font-semibold transition-colors ${
+                  activeTab === 'lista'
+                    ? 'bg-accent text-on-accent'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                <ListIcon size={14} />
+                <span>Lista</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('tablero')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md t-micro font-semibold transition-colors ${
+                  activeTab === 'tablero'
+                    ? 'bg-accent text-on-accent'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                <LayoutGrid size={14} />
+                <span>Tablero</span>
+              </button>
+            </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Toggle Vista Lista vs Tablero */}
-          <div className="flex items-center bg-gray-100 p-1 rounded-lg border border-gray-200">
-            <button
-              onClick={() => setActiveTab('lista')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-bold text-xs transition ${
-                activeTab === 'lista'
-                  ? 'bg-[#f97316] text-white shadow-sm'
-                  : 'text-gray-600 hover:text-black'
-              }`}
-            >
-              <ListIcon className="w-4 h-4" />
-              <span>Lista</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('tablero')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-bold text-xs transition ${
-                activeTab === 'tablero'
-                  ? 'bg-[#f97316] text-white shadow-sm'
-                  : 'text-gray-600 hover:text-black'
-              }`}
-            >
-              <LayoutGrid className="w-4 h-4" />
-              <span>Tablero</span>
-            </button>
-            <Link
-              href="/reventa/calendario"
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-bold text-xs transition text-gray-600 hover:text-[#213343] hover:bg-white"
-            >
-              <Calendar className="w-4 h-4 text-[#f97316]" />
-              <span>Calendario Reventa</span>
+            <Link href="/reventa/calendario">
+              <Button variant="secondary" icon={Calendar}>
+                Calendario de reventa
+              </Button>
             </Link>
           </div>
-        </div>
-      </div>
+        }
+      />
 
-      {/* Barra de Búsqueda */}
-      <div className="hg-list-toolbar text-xs">
-        <Search className="w-4 h-4 text-gray-400 mr-2" />
-        <input
-          type="text"
+      {/* Buscador */}
+      <Panel className="p-3">
+        <SearchField
           placeholder="Buscar por código, suministro, cliente o proveedor..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="hg-list-search px-3 text-sm text-[#252b2d] placeholder-gray-400"
         />
-      </div>
+      </Panel>
 
-      {/* VISTA 1: LISTA AGRUPADA POR ESTADOS (EXACTO A IMAGEN 1 DE VENTAS) */}
+      {/* VISTA 1: LISTA AGRUPADA POR ESTADOS */}
       {activeTab === 'lista' ? (
         <div className="space-y-4">
           {ETAPAS_REVENTA.map((col) => {
-            const isCollapsed = !!collapsedSections[col.id];
+            const isCollapsed = Boolean(collapsedSections[col.id]);
             const colOrdenes = filteredOrdenes.filter((o) => o.estado === col.id);
 
             return (
-              <div key={col.id} className="hg-list-group">
-                {/* Accordion Group Header Estilo ClickUp */}
+              <Panel key={col.id} className="p-0 overflow-hidden">
+                {/* Accordion Group Header */}
                 <button
                   type="button"
                   onClick={() =>
                     setCollapsedSections((prev) => ({ ...prev, [col.id]: !prev[col.id] }))
                   }
                   aria-expanded={!isCollapsed}
-                  className="hg-list-group-heading w-full justify-between cursor-pointer select-none text-left transition group hover:bg-[#fafaf8]"
+                  className="w-full flex items-center justify-between p-3.5 bg-surface-muted hover:bg-surface transition-colors cursor-pointer text-left border-b border-border"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-gray-400 group-hover:text-[#213343] transition">
-                      {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  <div className="flex items-center gap-3">
+                    <span className="text-ink-muted">
+                      {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                     </span>
 
-                    <span className="flex items-center gap-2 text-sm font-semibold text-[#252b2d]">
-                      <span className={`h-2.5 w-2.5 rounded-full border ${col.bg} ${col.border}`} />
-                      <span>{col.label}</span>
-                    </span>
+                    <StatusBadge tone={col.tone}>
+                      {col.label}
+                    </StatusBadge>
 
-                    <span className="hg-list-count">{colOrdenes.length}</span>
+                    <span className="rounded-full bg-surface px-2 py-0.5 t-micro t-num font-semibold text-ink-muted border border-border">
+                      {colOrdenes.length}
+                    </span>
                   </div>
                 </button>
 
-                {/* Tabla de la etapa */}
+                {/* Filas */}
                 {!isCollapsed && (
-                  <div className="border-t border-[#eff0ee]">
-                    {colOrdenes.map((ord) => <div key={ord.id} className="hg-list-row">
-                      <span className={`h-3 w-3 shrink-0 rounded-full border ${col.bg} ${col.border}`} />
-                      <button type="button" onClick={() => handleOpenOrdenModal(ord)} className="min-w-0 flex-1 text-left">
-                        <span className="block truncate text-sm font-semibold text-[#252b2d]">{ord.titulo}</span>
-                        <span className="block truncate text-xs text-[#8a9390]">{ord.codigo} · {ord.cliente?.nombre || 'Cliente sin asignar'}</span>
-                      </button>
-                      <div className="hidden items-center gap-2 lg:flex">
-                        <span className="hg-list-meta">{ord.proveedor_nombre || 'Proveedor por asignar'}</span>
-                        {ord.fecha_despacho && <span className="hg-list-meta">Despacho {ord.fecha_despacho}</span>}
-                        <span className="hg-list-meta font-semibold text-[#252b2d]">${getOportunidadTotalValue(ord.oportunidad).toLocaleString('es-CL')}</span>
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-[#a8afac]" aria-hidden="true" />
-                    </div>)}
+                  <div className="divide-y divide-border">
+                    {colOrdenes.map((ord) => {
+                      const totalMonto = getOportunidadTotalValue(ord.oportunidad);
+
+                      return (
+                        <div
+                          key={ord.id}
+                          className="flex items-center justify-between gap-4 p-3 hover:bg-surface-muted/50 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <CodeStamp>{ord.codigo}</CodeStamp>
+                            <button
+                              type="button"
+                              onClick={() => void handleOpenOrdenModal(ord)}
+                              className="min-w-0 flex-1 text-left group"
+                            >
+                              <span className="block truncate t-body font-semibold text-ink group-hover:text-accent transition-colors">
+                                {ord.titulo}
+                              </span>
+                              <span className="block truncate t-micro text-ink-muted">
+                                {ord.cliente?.nombre || 'Cliente sin asignar'}
+                              </span>
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-4 shrink-0">
+                            {ord.proveedor_nombre && (
+                              <span className="t-micro text-ink-muted hidden md:inline">
+                                {ord.proveedor_nombre}
+                              </span>
+                            )}
+                            {ord.fecha_despacho && (
+                              <span className="t-micro text-ink-muted t-num hidden sm:inline">
+                                Despacho {ord.fecha_despacho}
+                              </span>
+                            )}
+                            <span className="t-caption font-semibold text-ink t-num">
+                              ${totalMonto.toLocaleString('es-CL')}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => void handleOpenOrdenModal(ord)}
+                              className="p-1 rounded text-ink-muted hover:text-ink hover:bg-surface-muted transition-colors"
+                              aria-label={`Ver detalle de ${ord.codigo}`}
+                            >
+                              <ChevronRight size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                     {colOrdenes.length === 0 && (
-                      <div className="px-5 py-4 text-xs text-[#8a9390]">
+                      <div className="p-4 text-center t-micro text-ink-muted">
                         No hay órdenes de reventa en esta etapa.
                       </div>
                     )}
                   </div>
                 )}
-              </div>
+              </Panel>
             );
           })}
         </div>
       ) : (
-        /* VISTA 2: TABLERO KANBAN (EXACTO A IMAGEN 2 DE VENTAS) */
+        /* VISTA 2: TABLERO KANBAN */
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4 items-start">
           {ETAPAS_REVENTA.map((col) => {
             const colOrdenes = filteredOrdenes.filter((o) => o.estado === col.id);
@@ -441,20 +481,20 @@ export default function ReventaPage() {
             return (
               <div
                 key={col.id}
-                className="bg-gray-50 rounded-lg border border-gray-200 p-4 flex flex-col min-h-[600px] shadow-sm space-y-3"
+                className="rounded-xl border border-border bg-surface-muted/40 p-3 flex flex-col min-h-[560px] space-y-3"
               >
-                <div className="flex items-center justify-between pb-2 border-b border-gray-200">
-                  <span className={`text-xs font-black uppercase px-3 py-1 rounded-full border ${col.bg} ${col.color} ${col.border}`}>
+                <div className="flex items-center justify-between pb-2 border-b border-border">
+                  <StatusBadge tone={col.tone}>
                     {col.label}
-                  </span>
-                  <span className="text-xs font-mono font-bold text-gray-600 bg-white px-2.5 py-0.5 rounded-full border border-gray-200">
+                  </StatusBadge>
+                  <span className="rounded-full bg-surface px-2 py-0.5 t-micro t-num font-semibold text-ink-muted border border-border">
                     {colOrdenes.length}
                   </span>
                 </div>
 
                 <div className="space-y-3 flex-1 overflow-y-auto pr-0.5">
                   {colOrdenes.length === 0 ? (
-                    <div className="h-32 flex items-center justify-center text-center text-gray-400 italic text-xs border border-dashed border-gray-200 rounded-lg bg-white/50">
+                    <div className="h-32 flex items-center justify-center text-center t-micro text-ink-subtle border border-dashed border-border rounded-lg bg-surface/50">
                       Sin órdenes aquí
                     </div>
                   ) : (
@@ -467,63 +507,74 @@ export default function ReventaPage() {
                       return (
                         <div
                           key={ord.id}
-                          onClick={() => handleOpenOrdenModal(ord)}
-                          className="bg-white hover:bg-orange-50/20 p-4 rounded-lg border border-gray-200 hover:border-[#f97316] transition cursor-pointer space-y-3 shadow-sm group"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => void handleOpenOrdenModal(ord)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              void handleOpenOrdenModal(ord);
+                            }
+                          }}
+                          className="rounded-lg border border-border bg-surface p-3.5 space-y-2.5 transition-colors hover:border-accent/50 hover:bg-surface-muted/30 cursor-pointer group text-left"
                         >
-                          <div className="flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-1.5 font-mono font-bold text-[#213343]">
-                              <GripVertical className="w-3.5 h-3.5 text-gray-400" />
-                              <span>{ord.codigo}</span>
-                            </div>
-                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
-                              Cot. v2
-                            </span>
+                          <div className="flex items-center justify-between gap-1">
+                            <CodeStamp>{ord.codigo}</CodeStamp>
+                            <StatusBadge tone={col.tone}>
+                              {col.label.split('.')[1]?.trim() || col.label}
+                            </StatusBadge>
                           </div>
 
-                          <h4 className="font-extrabold text-[#213343] text-sm leading-snug group-hover:text-[#f97316] transition">
+                          <h4 className="t-body font-semibold text-ink leading-snug group-hover:text-accent transition-colors line-clamp-2">
                             {ord.titulo}
                           </h4>
 
-                          <div className="flex items-center gap-1.5 text-xs text-[#f97316] font-bold">
-                            <User className="w-3.5 h-3.5 text-[#f97316] shrink-0" />
-                            <span className="truncate">{ord.cliente?.nombre || 'Jesus Rodriguez'}</span>
+                          <div className="flex items-center gap-1.5 t-micro text-ink-muted truncate">
+                            <User size={13} className="shrink-0 text-ink-subtle" />
+                            <span className="truncate">{ord.cliente?.nombre || 'Sin cliente'}</span>
                           </div>
 
-                          <div className="pt-2 border-t border-gray-100 text-[11px] space-y-1 font-mono">
-                            <div className="flex items-center justify-between text-gray-600">
-                              <span>🚚 Despacho:</span>
+                          <div className="pt-2 border-t border-border t-micro space-y-1 t-num">
+                            <div className="flex items-center justify-between text-ink-muted">
+                              <span>Despacho:</span>
                               <span>{ord.fecha_despacho || 'Por definir'}</span>
                             </div>
                             {ord.proveedor_nombre && (
-                              <div className="flex items-center justify-between text-amber-800 font-bold">
-                                <span>🏢 Proveedor:</span>
-                                <span>{ord.proveedor_nombre}</span>
+                              <div className="flex items-center justify-between text-ink font-semibold">
+                                <span>Proveedor:</span>
+                                <span className="truncate max-w-[130px]">{ord.proveedor_nombre}</span>
                               </div>
                             )}
                           </div>
 
-                          <div className="pt-2 border-t border-gray-100 text-[11px] space-y-1">
-                            <div className="flex items-center justify-between font-bold text-gray-700">
-                              <span>Total Venta:</span>
+                          <div className="pt-2 border-t border-border t-micro space-y-1 t-num">
+                            <div className="flex items-center justify-between font-semibold text-ink">
+                              <span>Total:</span>
                               <span>${montoTotal.toLocaleString('es-CL')}</span>
                             </div>
-                            <div className="flex items-center justify-between text-emerald-700 font-bold">
+                            <div className="flex items-center justify-between text-success font-medium">
                               <span>Abonado:</span>
                               <span>${abonado.toLocaleString('es-CL')}</span>
                             </div>
-                            <div className="flex items-center justify-between text-[#f97316] font-black">
+                            <div className="flex items-center justify-between text-ink-muted">
                               <span>Saldo Pendiente:</span>
-                              <span>${saldo.toLocaleString('es-CL')}</span>
+                              <span className="font-semibold text-ink">${saldo.toLocaleString('es-CL')}</span>
                             </div>
                           </div>
 
-                          <div className="pt-2 flex items-center justify-between gap-1 border-t border-gray-100">
-                            <span className="text-[10px] font-bold text-gray-400 uppercase">Estado:</span>
+                          <div className="pt-2 flex items-center justify-between gap-1 border-t border-border">
+                            <span className="t-micro text-ink-subtle uppercase">Mover:</span>
                             <select
                               value={ord.estado}
                               onClick={(e) => e.stopPropagation()}
-                              onChange={(e) => moveOrdenState(ord.id, ord.oportunidad_id, e.target.value as EstadoReventa)}
-                              className="bg-gray-100 text-[#213343] text-[10px] font-bold rounded-lg px-2 py-1 border border-gray-200 focus:outline-none focus:border-[#f97316]"
+                              onChange={(e) =>
+                                void moveOrdenState(
+                                  ord.id,
+                                  ord.oportunidad_id,
+                                  e.target.value as EstadoReventa
+                                )
+                              }
+                              className="rounded border border-border bg-surface px-1.5 py-0.5 t-micro font-medium text-ink outline-none focus:border-accent"
                             >
                               {ETAPAS_REVENTA.map((e) => (
                                 <option key={e.id} value={e.id}>
@@ -543,153 +594,187 @@ export default function ReventaPage() {
         </div>
       )}
 
-      {/* FULL UNIFIED OPORTUNIDAD MODAL (Nativo en Reventa sin redirigir) */}
+      {/* FULL UNIFIED OPORTUNIDAD MODAL */}
       {selectedOp && (
         <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 z-50 "
+          className="fixed inset-0 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50"
           onClick={(e) => {
             if (e.target === e.currentTarget) setSelectedOp(null);
           }}
         >
-          <div className="bg-white text-[#252b2d] border border-[#e5e7e4] rounded-lg max-w-7xl w-full p-4 sm:p-6 shadow-sm h-[95vh] overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="rounded-2xl border border-border bg-surface text-ink max-w-6xl w-full p-4 sm:p-6 shadow-xl h-[92vh] overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Columna Izquierda (7/12 Cols) */}
-            <div className="lg:col-span-7 flex flex-col h-full overflow-hidden pr-2 border-r border-[#e5e7e4]">
+            <div className="lg:col-span-7 flex flex-col h-full overflow-hidden pr-2 lg:border-r border-border">
               {/* Header Modal */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e5e7e4] pb-3 text-sm shrink-0">
-                <div className="flex items-center gap-2.5 text-gray-600 font-medium">
-                  <Building className="w-4 h-4 text-[#f97316]" />
-                  <span className="font-bold text-sm text-[#252b2d]">{selectedOp.cliente?.nombre || 'Jesus Rodriguez'}</span>
-                  <span className="text-gray-600">/</span>
-                  <span className="text-gray-700 font-bold font-mono text-sm">{selectedOp.codigo}</span>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Building size={16} className="text-ink-muted" />
+                  <span className="t-body font-semibold text-ink">
+                    {selectedOp.cliente?.nombre || 'Cliente'}
+                  </span>
+                  <span className="text-ink-subtle">/</span>
+                  <CodeStamp>{selectedOp.codigo}</CodeStamp>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-indigo-800 uppercase bg-indigo-50 px-3 py-1 rounded-md border border-indigo-200">
-                    Estado Logístico: {selectedOrden?.estado?.toUpperCase() || 'REVENTA'}
-                  </span>
+                <div className="flex items-center gap-2">
+                  {selectedOrden?.estado && (
+                    <StatusBadge
+                      tone={
+                        ETAPAS_REVENTA.find((e) => e.id === selectedOrden.estado)?.tone || 'neutral'
+                      }
+                    >
+                      {selectedOrden.estado.toUpperCase()}
+                    </StatusBadge>
+                  )}
+                  <Link href={`/ventas/${selectedOp.id}/operacion`}>
+                    <Button variant="secondary" size="sm" icon={ExternalLink}>
+                      Operación completa
+                    </Button>
+                  </Link>
                   <button
+                    type="button"
                     onClick={() => setSelectedOp(null)}
-                    className="text-gray-400 hover:text-[#252b2d] font-bold text-xl px-2"
+                    className="p-1 rounded text-ink-muted hover:text-ink hover:bg-surface-muted transition-colors"
                   >
-                    ✕
+                    <X size={18} />
                   </button>
                 </div>
               </div>
 
               {/* Título de la Oportunidad */}
-              <div className="py-3 border-b border-[#e5e7e4] shrink-0">
-                <h2 className="text-xl font-extrabold text-[#252b2d]">{selectedOp.titulo}</h2>
+              <div className="py-3 border-b border-border shrink-0">
+                <h2 className="t-page text-ink">{selectedOp.titulo}</h2>
               </div>
 
-              {/* Acordeones (Todos cerrados por defecto) */}
-              <div className="flex-1 overflow-y-auto space-y-3.5 pr-2 py-4 scrollbar-thin">
+              {/* Acordeones */}
+              <div className="flex-1 overflow-y-auto space-y-3 pr-2 py-4">
                 {/* Accordion 1: Contacto */}
-                <div className="bg-white rounded-lg border border-[#e5e7e4] overflow-hidden shadow-sm">
+                <Panel className="p-0 overflow-hidden">
                   <button
                     type="button"
                     onClick={() => setOpenSections({ ...openSections, contacto: !openSections.contacto })}
-                    className="w-full p-4 bg-[#f4f5f3] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-[#e5e7e4]"
+                    className="w-full p-3.5 bg-surface-muted hover:bg-surface transition-colors t-caption font-semibold text-ink flex items-center justify-between border-b border-border text-left"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <User className="w-4 h-4 text-[#f97316]" />
+                    <div className="flex items-center gap-2">
+                      <User size={15} className="text-accent" />
                       <span>1. Contacto del Cliente</span>
                     </div>
-                    {openSections.contacto ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    {openSections.contacto ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </button>
                   {openSections.contacto && (
-                    <div className="p-4 space-y-3 text-xs text-gray-600 bg-[#fafaf9]">
+                    <div className="p-4 space-y-3 t-micro text-ink-muted bg-surface">
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <span className="text-gray-500 font-bold uppercase text-[10px]">Nombre</span>
-                          <p className="font-extrabold text-[#252b2d] text-sm">{selectedOp.cliente?.nombre}</p>
+                          <span className="block font-medium text-ink-subtle uppercase">Nombre</span>
+                          <p className="t-body font-semibold text-ink">{selectedOp.cliente?.nombre}</p>
                         </div>
                         <div>
-                          <span className="text-gray-500 font-bold uppercase text-[10px]">RUT</span>
-                          <p className="font-mono text-gray-600">{selectedOp.cliente?.rut || 'N/A'}</p>
+                          <span className="block font-medium text-ink-subtle uppercase">RUT</span>
+                          <p className="t-body font-mono text-ink t-num">{selectedOp.cliente?.rut || 'N/A'}</p>
                         </div>
                       </div>
                     </div>
                   )}
-                </div>
+                </Panel>
 
                 {/* Accordion 2: Cotizaciones */}
-                <div className="bg-white rounded-lg border border-[#e5e7e4] overflow-hidden shadow-sm">
+                <Panel className="p-0 overflow-hidden">
                   <button
                     type="button"
                     onClick={() => setOpenSections({ ...openSections, productos: !openSections.productos })}
-                    className="w-full p-4 bg-[#f4f5f3] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-[#e5e7e4]"
+                    className="w-full p-3.5 bg-surface-muted hover:bg-surface transition-colors t-caption font-semibold text-ink flex items-center justify-between border-b border-border text-left"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <FileText className="w-4 h-4 text-[#f97316]" />
+                    <div className="flex items-center gap-2">
+                      <FileText size={15} className="text-accent" />
                       <span>2. Cotizaciones de la Oportunidad</span>
                     </div>
-                    {openSections.productos ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    {openSections.productos ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </button>
                   {openSections.productos && (
-                    <div className="p-4 space-y-3 text-xs text-gray-600 bg-[#fafaf9]">
-                      <p className="italic text-gray-400">Cotización v2 Aprobada ($1.755.250)</p>
+                    <div className="p-4 space-y-3 t-micro text-ink-muted bg-surface">
+                      <p className="t-caption text-ink">
+                        Cotización asociada aprobada: ${getOportunidadTotalValue(selectedOp).toLocaleString('es-CL')}
+                      </p>
                     </div>
                   )}
-                </div>
+                </Panel>
 
                 {/* Accordion 3: Finanzas & Abonos */}
-                <div className="bg-white rounded-lg border border-[#e5e7e4] overflow-hidden shadow-sm">
+                <Panel className="p-0 overflow-hidden">
                   <button
                     type="button"
                     onClick={() => setOpenSections({ ...openSections, finanzas: !openSections.finanzas })}
-                    className="w-full p-4 bg-[#f4f5f3] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-[#e5e7e4]"
+                    className="w-full p-3.5 bg-surface-muted hover:bg-surface transition-colors t-caption font-semibold text-ink flex items-center justify-between border-b border-border text-left"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <DollarSign className="w-4 h-4 text-[#f97316]" />
+                    <div className="flex items-center gap-2">
+                      <DollarSign size={15} className="text-accent" />
                       <span>3. Finanzas & Abonos</span>
                     </div>
-                    {openSections.finanzas ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    {openSections.finanzas ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </button>
                   {openSections.finanzas && (
-                    <div className="p-4 space-y-3 text-xs text-gray-600 bg-[#fafaf9]">
-                      <div className="grid grid-cols-3 gap-2 text-center">
-                        <div className="p-2 bg-white rounded-md border border-[#e5e7e4]">
-                          <span className="text-[10px] text-gray-500 font-bold uppercase">Total Venta</span>
-                          <p className="font-extrabold text-[#252b2d]">${getOportunidadTotalValue(selectedOp).toLocaleString('es-CL')}</p>
+                    <div className="p-4 space-y-3 t-micro bg-surface">
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div className="p-3 rounded-lg border border-border bg-surface-muted">
+                          <span className="t-micro text-ink-muted uppercase">Total Venta</span>
+                          <p className="t-body font-semibold text-ink t-num mt-1">
+                            ${getOportunidadTotalValue(selectedOp).toLocaleString('es-CL')}
+                          </p>
                         </div>
-                        <div className="p-2 bg-white rounded-md border border-[#e5e7e4]">
-                          <span className="text-[10px] text-emerald-400 font-bold uppercase">Abonado</span>
-                          <p className="font-extrabold text-emerald-400">${getOportunidadAbonadoValue(selectedOp).toLocaleString('es-CL')}</p>
+                        <div className="p-3 rounded-lg border border-border bg-surface-muted">
+                          <span className="t-micro text-success uppercase">Abonado</span>
+                          <p className="t-body font-semibold text-success t-num mt-1">
+                            ${getOportunidadAbonadoValue(selectedOp).toLocaleString('es-CL')}
+                          </p>
                         </div>
-                        <div className="p-2 bg-white rounded-md border border-[#e5e7e4]">
-                          <span className="text-[10px] text-[#f97316] font-bold uppercase">Saldo Pendiente</span>
-                          <p className="font-extrabold text-[#f97316]">${(getOportunidadTotalValue(selectedOp) - getOportunidadAbonadoValue(selectedOp)).toLocaleString('es-CL')}</p>
+                        <div className="p-3 rounded-lg border border-border bg-surface-muted">
+                          <span className="t-micro text-ink-muted uppercase">Saldo Pendiente</span>
+                          <p className="t-body font-semibold text-ink t-num mt-1">
+                            $
+                            {(
+                              getOportunidadTotalValue(selectedOp) -
+                              getOportunidadAbonadoValue(selectedOp)
+                            ).toLocaleString('es-CL')}
+                          </p>
                         </div>
                       </div>
                     </div>
                   )}
-                </div>
+                </Panel>
 
-                {/* Accordion 6: Datos de Logística & Reventa */}
-                <div className="bg-white rounded-lg border border-[#e5e7e4] overflow-hidden shadow-sm">
+                {/* Accordion 4: Datos de Logística & Reventa */}
+                <Panel className="p-0 overflow-hidden">
                   <button
                     type="button"
                     onClick={() => setOpenSections({ ...openSections, reventa: !openSections.reventa })}
-                    className="w-full p-4 bg-[#f4f5f3] text-[#f97316] font-extrabold text-sm uppercase tracking-normal flex items-center justify-between border-b border-[#e5e7e4]"
+                    className="w-full p-3.5 bg-surface-muted hover:bg-surface transition-colors t-caption font-semibold text-ink flex items-center justify-between border-b border-border text-left"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <Truck className="w-4 h-4 text-[#f97316]" />
-                      <span>6. Datos de Logística & Reventa</span>
+                    <div className="flex items-center gap-2">
+                      <Truck size={15} className="text-accent" />
+                      <span>4. Datos de Logística & Reventa</span>
                     </div>
-                    {openSections.reventa ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    {openSections.reventa ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </button>
 
                   {openSections.reventa && (
-                    <div className="p-4 space-y-4 text-xs text-gray-600 bg-[#fafaf9]">
+                    <div className="p-4 space-y-4 t-caption bg-surface">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
-                          <label className="block font-bold text-gray-600 mb-1">Estado Logístico</label>
+                          <label className="block t-caption font-semibold text-ink mb-1">
+                            Estado Logístico
+                          </label>
                           <select
                             value={selectedOrden?.estado || 'coordinacion_proveedor'}
                             onChange={(e) => {
-                              if (selectedOrden) moveOrdenState(selectedOrden.id, selectedOrden.oportunidad_id, e.target.value as EstadoReventa);
+                              if (selectedOrden) {
+                                void moveOrdenState(
+                                  selectedOrden.id,
+                                  selectedOrden.oportunidad_id,
+                                  e.target.value as EstadoReventa
+                                );
+                              }
                             }}
-                            className="w-full bg-white border border-[#e5e7e4] text-indigo-800 font-bold rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
+                            className="w-full rounded-lg border border-border bg-surface px-3 py-2 t-body font-medium text-ink outline-none focus:border-accent"
                           >
                             {ETAPAS_REVENTA.map((e) => (
                               <option key={e.id} value={e.id}>
@@ -700,7 +785,9 @@ export default function ReventaPage() {
                         </div>
 
                         <div>
-                          <label className="block font-bold text-gray-600 mb-1">Proveedor Asignado</label>
+                          <label className="block t-caption font-semibold text-ink mb-1">
+                            Proveedor Asignado
+                          </label>
                           <input
                             type="text"
                             placeholder="Nombre del proveedor o distribuidor..."
@@ -710,24 +797,31 @@ export default function ReventaPage() {
                               if (selectedOrden) {
                                 setSelectedOrden({ ...selectedOrden, proveedor_nombre: val });
                                 if (isUUID(selectedOrden.oportunidad_id)) {
-                                  await supabase.from('ordenes_reventa').upsert([{
-                                    oportunidad_id: selectedOrden.oportunidad_id,
-                                    codigo: selectedOrden.codigo,
-                                    titulo: selectedOrden.titulo,
-                                    cliente_id: selectedOrden.cliente_id,
-                                    proveedor_nombre: val,
-                                  }], { onConflict: 'oportunidad_id' });
+                                  await supabase.from('ordenes_reventa').upsert(
+                                    [
+                                      {
+                                        oportunidad_id: selectedOrden.oportunidad_id,
+                                        codigo: selectedOrden.codigo,
+                                        titulo: selectedOrden.titulo,
+                                        cliente_id: selectedOrden.cliente_id,
+                                        proveedor_nombre: val,
+                                      },
+                                    ],
+                                    { onConflict: 'oportunidad_id' }
+                                  );
                                 }
                               }
                             }}
-                            className="w-full bg-white border border-[#e5e7e4] text-[#252b2d] rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
+                            className="w-full rounded-lg border border-border bg-surface px-3 py-2 t-body text-ink outline-none focus:border-accent"
                           />
                         </div>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
-                          <label className="block font-bold text-gray-600 mb-1">Fecha Despacho</label>
+                          <label className="block t-caption font-semibold text-ink mb-1">
+                            Fecha Despacho
+                          </label>
                           <input
                             type="date"
                             value={selectedOrden?.fecha_despacho || ''}
@@ -736,23 +830,30 @@ export default function ReventaPage() {
                               if (selectedOrden) {
                                 setSelectedOrden({ ...selectedOrden, fecha_despacho: val });
                                 if (isUUID(selectedOrden.oportunidad_id)) {
-                                  await supabase.from('ordenes_reventa').upsert([{
-                                    oportunidad_id: selectedOrden.oportunidad_id,
-                                    codigo: selectedOrden.codigo,
-                                    titulo: selectedOrden.titulo,
-                                    cliente_id: selectedOrden.cliente_id,
-                                    fecha_despacho: val,
-                                  }], { onConflict: 'oportunidad_id' });
+                                  await supabase.from('ordenes_reventa').upsert(
+                                    [
+                                      {
+                                        oportunidad_id: selectedOrden.oportunidad_id,
+                                        codigo: selectedOrden.codigo,
+                                        titulo: selectedOrden.titulo,
+                                        cliente_id: selectedOrden.cliente_id,
+                                        fecha_despacho: val,
+                                      },
+                                    ],
+                                    { onConflict: 'oportunidad_id' }
+                                  );
                                 }
                               }
                             }}
-                            className="w-full bg-white border border-[#e5e7e4] text-[#252b2d] font-mono rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
+                            className="w-full rounded-lg border border-border bg-surface px-3 py-2 t-body t-num text-ink outline-none focus:border-accent"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label className="block font-bold text-gray-600 mb-1">Notas de Postventa & Seguimiento</label>
+                        <label className="block t-caption font-semibold text-ink mb-1">
+                          Notas de Postventa & Seguimiento
+                        </label>
                         <textarea
                           rows={2}
                           placeholder="Añadir observaciones de entrega, garantías o postventa..."
@@ -762,50 +863,58 @@ export default function ReventaPage() {
                             if (selectedOrden) {
                               setSelectedOrden({ ...selectedOrden, notas_postventa: val });
                               if (isUUID(selectedOrden.oportunidad_id)) {
-                                await supabase.from('ordenes_reventa').upsert([{
-                                  oportunidad_id: selectedOrden.oportunidad_id,
-                                  codigo: selectedOrden.codigo,
-                                  titulo: selectedOrden.titulo,
-                                  cliente_id: selectedOrden.cliente_id,
-                                  notas_postventa: val,
-                                }], { onConflict: 'oportunidad_id' });
+                                await supabase.from('ordenes_reventa').upsert(
+                                  [
+                                    {
+                                      oportunidad_id: selectedOrden.oportunidad_id,
+                                      codigo: selectedOrden.codigo,
+                                      titulo: selectedOrden.titulo,
+                                      cliente_id: selectedOrden.cliente_id,
+                                      notas_postventa: val,
+                                    },
+                                  ],
+                                  { onConflict: 'oportunidad_id' }
+                                );
                               }
                             }
                           }}
-                          className="w-full bg-white border border-[#e5e7e4] text-[#252b2d] rounded-md p-2.5 text-xs focus:outline-none focus:border-[#f97316]"
+                          className="w-full rounded-lg border border-border bg-surface px-3 py-2 t-body text-ink outline-none focus:border-accent resize-none"
                         />
                       </div>
                     </div>
                   )}
-                </div>
+                </Panel>
               </div>
             </div>
 
             {/* Columna Derecha (5/12 Cols): Feed de Actividades & Chat */}
-            <div className="lg:col-span-5 bg-white rounded-lg border border-[#e5e7e4] p-4 flex flex-col justify-between h-full overflow-hidden shadow-sm">
-              <div className="space-y-3.5 flex-1 flex flex-col overflow-hidden">
-                <div className="flex items-center justify-between border-b border-[#e5e7e4] pb-3">
-                  <h3 className="font-black text-base text-[#252b2d] uppercase tracking-normal flex items-center gap-2">
-                    <MessageSquare className="w-5 h-5 text-[#f97316]" />
-                    <span>Actividad & Chat Feed</span>
+            <div className="lg:col-span-5 rounded-xl border border-border bg-surface p-4 flex flex-col justify-between h-full overflow-hidden">
+              <div className="space-y-3 flex-1 flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                  <h3 className="t-body font-semibold text-ink flex items-center gap-2">
+                    <MessageSquare size={16} className="text-accent" />
+                    <span>Actividad y comentarios</span>
                   </h3>
                 </div>
 
-                <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin">
+                <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
                   {opActivities.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500 text-xs italic">
+                    <div className="text-center py-8 t-micro text-ink-muted">
                       Sin mensajes o actividades registradas.
                     </div>
                   ) : (
                     opActivities.map((act) => (
-                      <div key={act.id} className="bg-white p-3 rounded-lg border border-[#e5e7e4] space-y-1">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-[#f97316]">{act.usuario_nombre}</span>
-                          <span className="text-[10px] text-gray-500 font-mono">
-                            {new Date(act.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+                      <div key={act.id} className="p-3 rounded-lg border border-border bg-surface-muted/50 space-y-1">
+                        <div className="flex items-center justify-between t-micro">
+                          <span className="font-semibold text-ink">{act.usuario_nombre}</span>
+                          <span className="text-ink-subtle t-num">
+                            {new Date(act.created_at).toLocaleTimeString('es-CL', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
                           </span>
                         </div>
-                        <p className="text-xs text-gray-700">{act.contenido}</p>
+                        <p className="t-caption text-ink">{act.contenido}</p>
                       </div>
                     ))
                   )}
@@ -813,25 +922,34 @@ export default function ReventaPage() {
               </div>
 
               {/* Chat Input */}
-              <div className="pt-3 border-t border-[#e5e7e4] flex items-center gap-2">
+              <div className="pt-3 border-t border-border flex items-center gap-2">
                 <input
                   type="text"
-                  placeholder="Escribir comentario o mensaje..."
+                  placeholder="Escribir comentario..."
                   value={newChatText}
                   onChange={(e) => setNewChatText(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendChatMessage()}
-                  className="flex-1 bg-white border border-[#e5e7e4] text-[#252b2d] rounded-md px-3 py-2 text-xs focus:outline-none focus:border-[#f97316]"
+                  onKeyDown={(e) => e.key === 'Enter' && void handleSendChatMessage()}
+                  className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 t-body text-ink outline-none focus:border-accent"
                 />
-                <button
-                  onClick={handleSendChatMessage}
-                  className="p-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md transition"
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => void handleSendChatMessage()}
+                  icon={Send}
                 >
-                  <Send className="w-4 h-4" />
-                </button>
+                  Enviar
+                </Button>
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {pdfPreviewCotizacion && (
+        <PdfPreviewModal
+          cotizacion={pdfPreviewCotizacion}
+          onClose={() => setPdfPreviewCotizacion(null)}
+        />
       )}
     </div>
   );

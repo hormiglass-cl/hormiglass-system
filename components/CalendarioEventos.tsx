@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { createClient } from '../lib/supabase/client';
 import {
   EventoProduccionLogistica,
@@ -15,7 +15,6 @@ import { useAuth } from '../lib/context/AuthContext';
 import { logSistema } from '../lib/logger';
 import { claveVehiculo, eventosEnConflicto, produccionesPendientesAntesDe } from '../lib/calendario-conflictos';
 import {
-  Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -27,7 +26,6 @@ import {
   ShoppingCart,
   Trash2,
   Plus,
-  Edit,
   Save,
   CheckCircle2,
   AlertTriangle,
@@ -35,61 +33,59 @@ import {
   XCircle,
 } from 'lucide-react';
 import { mensajeError } from '../lib/errores';
+import {
+  Button,
+  IconButton,
+  Dialog,
+  StatusBadge,
+  Tone,
+} from './ui/crm';
+import { useConfirm, useToast } from './ui/feedback';
 
 export const ESTADOS_EVENTO_CONFIG: Record<
   string,
-  { label: string; bg: string; text: string; border: string; icon: React.ElementType }
+  { label: string; tone: Tone; icon: React.ElementType }
 > = {
   por_hacer: {
     label: 'Por hacer',
-    bg: 'bg-blue-100',
-    text: 'text-blue-800',
-    border: 'border-blue-300',
+    tone: 'info',
     icon: Clock,
   },
   en_curso: {
     label: 'En curso',
-    bg: 'bg-amber-100',
-    text: 'text-amber-800',
-    border: 'border-amber-300',
+    tone: 'accent',
     icon: RotateCcw,
   },
   reprogramado: {
     label: 'Reprogramado',
-    bg: 'bg-purple-100',
-    text: 'text-purple-800',
-    border: 'border-purple-300',
+    tone: 'warning',
     icon: AlertTriangle,
   },
   completado: {
     label: 'Completado',
-    bg: 'bg-emerald-100',
-    text: 'text-emerald-800',
-    border: 'border-emerald-300',
+    tone: 'success',
     icon: CheckCircle2,
   },
   no_realizado: {
     label: 'No realizado',
-    bg: 'bg-red-100',
-    text: 'text-red-800',
-    border: 'border-red-300',
+    tone: 'danger',
     icon: XCircle,
   },
 };
 
 export const TIPOS_EVENTO_CONFIG: Record<
   TipoEventoProduccionLogistica,
-  { label: string; icon: React.ElementType; color: string }
+  { label: string; icon: React.ElementType; tone: Tone }
 > = {
-  obra: { label: 'Obra / Instalación', icon: HardHat, color: 'text-amber-600' },
-  produccion: { label: 'Fabricación Planta', icon: Factory, color: 'text-blue-600' },
-  reventa: { label: 'Reventa / Coordinación', icon: ShoppingCart, color: 'text-purple-600' },
-  logistica: { label: 'Despacho & Logística', icon: Truck, color: 'text-emerald-600' },
-  retiro_proveedor: { label: 'Retiro de proveedor', icon: Truck, color: 'text-indigo-600' },
-  despacho_cliente: { label: 'Despacho a cliente', icon: Truck, color: 'text-emerald-600' },
-  instalacion: { label: 'Instalación', icon: HardHat, color: 'text-orange-600' },
-  postventa: { label: 'Postventa', icon: HardHat, color: 'text-purple-600' },
-  logistica_interna: { label: 'Logística interna', icon: Truck, color: 'text-gray-600' },
+  obra: { label: 'Obra / Instalación', icon: HardHat, tone: 'accent' },
+  produccion: { label: 'Fabricación Planta', icon: Factory, tone: 'info' },
+  reventa: { label: 'Reventa / Coordinación', icon: ShoppingCart, tone: 'info' },
+  logistica: { label: 'Despacho & Logística', icon: Truck, tone: 'success' },
+  retiro_proveedor: { label: 'Retiro de proveedor', icon: Truck, tone: 'warning' },
+  despacho_cliente: { label: 'Despacho a cliente', icon: Truck, tone: 'success' },
+  instalacion: { label: 'Instalación', icon: HardHat, tone: 'accent' },
+  postventa: { label: 'Postventa', icon: HardHat, tone: 'danger' },
+  logistica_interna: { label: 'Logística interna', icon: Truck, tone: 'neutral' },
 };
 
 const CALENDARIOS_OPERACIONALES = [
@@ -116,7 +112,9 @@ export function CalendarioEventos({
   highlightedOpId,
 }: CalendarioEventosProps) {
   const { currentUser } = useAuth();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
+  const confirm = useConfirm();
+  const toast = useToast();
 
   const [eventos, setEventos] = useState<EventoProduccionLogistica[]>([]);
   const [allEventos, setAllEventos] = useState<EventoProduccionLogistica[]>([]);
@@ -124,7 +122,7 @@ export function CalendarioEventos({
   const [ocOptions, setOcOptions] = useState<{ orden_compra_id: string; oportunidad_id: string; ordenes_compra: { numero_oc: string } | null }[]>([]);
   const [personalList, setPersonalList] = useState<Usuario[]>([]);
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
   // Filters (Multi-selection for Responsables)
   const [selectedResponsables, setSelectedResponsables] = useState<string[]>([]);
@@ -155,7 +153,7 @@ export function CalendarioEventos({
   const [historialError, setHistorialError] = useState('');
   const [savingLoading, setSavingLoading] = useState(false);
 
-  const fetchEventos = async () => {
+  const fetchEventos = useCallback(async () => {
     try {
       setLoading(true);
       const [eventRes, userRes, opRes, guideRes, ocRes] = await Promise.all([
@@ -201,12 +199,12 @@ export function CalendarioEventos({
     } finally {
       setLoading(false);
     }
-  };
+  }, [contexto, filtroPersonalField, supabase]);
 
   useEffect(() => {
     let ignore = false;
     const loadTimer = window.setTimeout(() => {
-      if (!ignore) fetchEventos();
+      if (!ignore) void fetchEventos();
     }, 0);
 
     const channel = supabase
@@ -215,14 +213,14 @@ export function CalendarioEventos({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'eventos_produccion_logistica' },
         () => {
-          if (!ignore) fetchEventos();
+          if (!ignore) void fetchEventos();
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'usuarios' },
         () => {
-          if (!ignore) fetchEventos();
+          if (!ignore) void fetchEventos();
         }
       )
       .subscribe();
@@ -230,9 +228,9 @@ export function CalendarioEventos({
     return () => {
       ignore = true;
       window.clearTimeout(loadTimer);
-      supabase.removeChannel(channel);
+      void supabase.removeChannel(channel);
     };
-  }, [contexto]);
+  }, [contexto, fetchEventos, supabase]);
 
   const handleOpenNewModal = (dateStr?: string) => {
     const now = dateStr ? new Date(`${dateStr}T09:00:00`) : new Date();
@@ -251,7 +249,8 @@ export function CalendarioEventos({
     setFormEstado('por_hacer');
     setFormObservaciones('');
     setFormVehiculo('');
-    setFormGuideId(''); setFormOcId('');
+    setFormGuideId('');
+    setFormOcId('');
     setFormMotivo('');
     setIsNewModalOpen(true);
   };
@@ -274,8 +273,8 @@ export function CalendarioEventos({
     setFormEstado((ev.estado as EstadoEventoProduccionLogistica) || 'por_hacer');
     setFormObservaciones(ev.observaciones || '');
     setFormVehiculo(ev.recurso_vehiculo || '');
-    setFormGuideId(ev.guia_despacho_id || ''); setFormOcId(ev.orden_compra_id || '');
-    // Cada cambio de fecha necesita su propio motivo, nunca reutilizar el anterior.
+    setFormGuideId(ev.guia_despacho_id || '');
+    setFormOcId(ev.orden_compra_id || '');
     setFormMotivo('');
     setSelectedEvento(ev);
     setIsEditModalOpen(true);
@@ -286,8 +285,8 @@ export function CalendarioEventos({
         .select('id, fecha_inicio_anterior, fecha_inicio_nueva, motivo, created_at, actor_id')
         .eq('evento_id', ev.id)
         .order('created_at', { ascending: false });
-        if (error) setHistorialError('No se pudo cargar el historial de reprogramaciones.');
-        else setReprogramaciones(data || []);
+      if (error) setHistorialError('No se pudo cargar el historial de reprogramaciones.');
+      else setReprogramaciones(data || []);
     })();
   };
 
@@ -300,16 +299,38 @@ export function CalendarioEventos({
       const startD = new Date(formFechaInicio);
       const endD = formFechaFin ? new Date(formFechaFin) : new Date(startD.getTime() + 3600000);
       if (endD <= startD) throw new Error('La hora de término debe ser posterior al inicio.');
-      const conflicts = eventosEnConflicto({ id: 'nuevo', oportunidad_id: formOpId, tipo_evento: formTipo,
-        titulo: formTitulo, fecha_inicio: startD.toISOString(), fecha_fin: endD.toISOString(),
-        responsable_id: formResponsableId || null, recurso_vehiculo: formVehiculo || null, estado: formEstado }, allEventos);
-      const unfinishedProduction = produccionesPendientesAntesDe({ id: 'nuevo', oportunidad_id: formOpId,
-        tipo_evento: formTipo, titulo: formTitulo, fecha_inicio: startD.toISOString(), fecha_fin: endD.toISOString(),
-        estado: formEstado }, allEventos).length > 0;
-      if ((conflicts.length || unfinishedProduction) && (!formMotivo.trim() || !window.confirm(
-        `${conflicts.length ? `Conflicto con ${conflicts.map((item) => item.titulo).join(', ')}. ` : ''}${unfinishedProduction ? 'La producción programada termina después de este evento. ' : ''}¿Confirmar programación?`
-      ))) {
-        throw new Error('Confirma el conflicto e indica el motivo para continuar.');
+      const conflicts = eventosEnConflicto({
+        id: 'nuevo',
+        oportunidad_id: formOpId,
+        tipo_evento: formTipo,
+        titulo: formTitulo,
+        fecha_inicio: startD.toISOString(),
+        fecha_fin: endD.toISOString(),
+        responsable_id: formResponsableId || null,
+        recurso_vehiculo: formVehiculo || null,
+        estado: formEstado,
+      }, allEventos);
+      const unfinishedProduction = produccionesPendientesAntesDe({
+        id: 'nuevo',
+        oportunidad_id: formOpId,
+        tipo_evento: formTipo,
+        titulo: formTitulo,
+        fecha_inicio: startD.toISOString(),
+        fecha_fin: endD.toISOString(),
+        estado: formEstado,
+      }, allEventos).length > 0;
+
+      if (conflicts.length || unfinishedProduction) {
+        if (!formMotivo.trim()) {
+          throw new Error('Indica el motivo del conflicto o dependencia para continuar.');
+        }
+        const ok = await confirm({
+          title: 'Confirmar conflicto de programación',
+          message: `${conflicts.length ? `Posible conflicto con ${conflicts.map((item) => item.titulo).join(', ')}. ` : ''}${unfinishedProduction ? 'La producción programada termina después de este evento. ' : ''}¿Confirmar programación?`,
+          confirmLabel: 'Confirmar programación',
+          destructive: false,
+        });
+        if (!ok) return;
       }
 
       const dateOnly = startD.toISOString().split('T')[0];
@@ -349,11 +370,12 @@ export function CalendarioEventos({
         datos_nuevos: data,
       });
 
+      toast({ message: `Evento "${formTitulo}" programado exitosamente.`, tone: 'success' });
       setIsNewModalOpen(false);
-      fetchEventos();
+      void fetchEventos();
     } catch (err: unknown) {
       console.error('Error creating calendar event:', err);
-      alert(mensajeError(err, 'No se pudo guardar el evento. Revisa los campos.'));
+      toast({ message: mensajeError(err, 'No se pudo guardar el evento. Revisa los campos.'), tone: 'danger' });
     } finally {
       setSavingLoading(false);
     }
@@ -371,23 +393,39 @@ export function CalendarioEventos({
       const reprogramado = startD.toISOString() !== selectedEvento.fecha_inicio ||
         endD.toISOString() !== selectedEvento.fecha_fin;
       if (reprogramado && !formMotivo.trim()) throw new Error('Indica el motivo de la reprogramación.');
-      const conflicts = eventosEnConflicto({ ...selectedEvento, fecha_inicio: startD.toISOString(),
-        fecha_fin: endD.toISOString(), responsable_id: formResponsableId || null,
-        recurso_vehiculo: formVehiculo || null }, allEventos);
-      const unfinishedProduction = produccionesPendientesAntesDe({ ...selectedEvento,
-        tipo_evento: formTipo, fecha_inicio: startD.toISOString(), fecha_fin: endD.toISOString() }, allEventos).length > 0;
+      const conflicts = eventosEnConflicto({
+        ...selectedEvento,
+        fecha_inicio: startD.toISOString(),
+        fecha_fin: endD.toISOString(),
+        responsable_id: formResponsableId || null,
+        recurso_vehiculo: formVehiculo || null,
+      }, allEventos);
+      const unfinishedProduction = produccionesPendientesAntesDe({
+        ...selectedEvento,
+        tipo_evento: formTipo,
+        fecha_inicio: startD.toISOString(),
+        fecha_fin: endD.toISOString(),
+      }, allEventos).length > 0;
       const affected = allEventos.filter((item) => item.id !== selectedEvento.id &&
         (item.oportunidad_id === selectedEvento.oportunidad_id ||
          (formOcId && item.orden_compra_id === formOcId) ||
          (claveVehiculo(formVehiculo) && claveVehiculo(item.recurso_vehiculo) === claveVehiculo(formVehiculo))) &&
         new Date(item.fecha_inicio).getTime() >= Math.min(new Date(selectedEvento.fecha_inicio).getTime(), startD.getTime()) &&
         new Date(item.fecha_inicio).getTime() <= Math.max(new Date(selectedEvento.fecha_fin).getTime(), endD.getTime()) + 7 * 86400000);
-      if ((conflicts.length || unfinishedProduction) && !formMotivo.trim()) throw new Error('Indica el motivo del conflicto o dependencia.');
-      if ((reprogramado || conflicts.length || unfinishedProduction) && !window.confirm(
-        `Eventos que podrían verse afectados: ${affected.length ? affected.map((item) => item.titulo).join(', ') : 'ninguno adicional'}.\n` +
-        `Conflictos de recursos: ${conflicts.length ? conflicts.map((item) => item.titulo).join(', ') : 'ninguno'}.\n` +
-        `${unfinishedProduction ? 'La producción termina después del despacho o instalación.\n' : ''}¿Confirmar el cambio?`
-      )) return;
+
+      if ((conflicts.length || unfinishedProduction) && !formMotivo.trim()) {
+        throw new Error('Indica el motivo del conflicto o dependencia.');
+      }
+
+      if (reprogramado || conflicts.length || unfinishedProduction) {
+        const ok = await confirm({
+          title: 'Confirmar reprogramación o conflicto',
+          message: `Eventos que podrían verse afectados: ${affected.length ? affected.map((item) => item.titulo).join(', ') : 'ninguno adicional'}. Conflictos de recursos: ${conflicts.length ? conflicts.map((item) => item.titulo).join(', ') : 'ninguno'}. ${unfinishedProduction ? 'La producción termina después del despacho o instalación. ' : ''}¿Confirmar el cambio?`,
+          confirmLabel: 'Confirmar cambio',
+          destructive: false,
+        });
+        if (!ok) return;
+      }
 
       const dateOnly = startD.toISOString().split('T')[0];
       const timeOnly = `${String(startD.getHours()).padStart(2, '0')}:${String(startD.getMinutes()).padStart(2, '0')}`;
@@ -414,7 +452,6 @@ export function CalendarioEventos({
 
       if (error) throw error;
 
-      // El trigger de la base guarda historial y avisos junto con este UPDATE.
       await logSistema({
         tipo_accion: 'actualizacion',
         entidad: 'eventos_produccion_logistica',
@@ -425,28 +462,37 @@ export function CalendarioEventos({
         datos_nuevos: { titulo: formTitulo, estado: formEstado, fecha_inicio: startD },
       });
 
+      toast({ message: `Evento "${formTitulo}" actualizado.`, tone: 'success' });
       setIsEditModalOpen(false);
       setSelectedEvento(null);
-      fetchEventos();
+      void fetchEventos();
     } catch (err: unknown) {
       console.error('Error updating calendar event:', err);
-      alert(mensajeError(err, 'No se pudo actualizar el evento. Revisa los campos.'));
+      toast({ message: mensajeError(err, 'No se pudo actualizar el evento. Revisa los campos.'), tone: 'danger' });
     } finally {
       setSavingLoading(false);
     }
   };
 
   const handleDeleteEvento = async (id: string) => {
-    if (!confirm('¿Seguro que deseas eliminar este evento del calendario?')) return;
+    const ok = await confirm({
+      title: 'Eliminar evento del calendario',
+      message: '¿Seguro que deseas eliminar este evento del calendario? Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar evento',
+      destructive: true,
+    });
+    if (!ok) return;
+
     try {
       const { error } = await supabase.from('eventos_produccion_logistica').delete().eq('id', id);
       if (error) throw error;
+      toast({ message: 'Evento eliminado del calendario.', tone: 'success' });
       setIsEditModalOpen(false);
       setSelectedEvento(null);
-      fetchEventos();
+      void fetchEventos();
     } catch (err: unknown) {
       console.error('Error deleting event:', err);
-      alert('No se pudo eliminar el evento.');
+      toast({ message: 'No se pudo eliminar el evento.', tone: 'danger' });
     }
   };
 
@@ -478,18 +524,22 @@ export function CalendarioEventos({
     if (selectedTipo !== 'todos' && ev.tipo_evento !== selectedTipo) return false;
     return true;
   });
+
   const dayOf = (value: string) => {
     const date = new Date(value);
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   };
   const todayKey = dayOf(new Date().toISOString());
+
   const upcomingEventos = filteredEventos
     .filter((event) => dayOf(event.fecha_fin || event.fecha_inicio) >= todayKey)
     .sort((a, b) => new Date(a.fecha_inicio).getTime() - new Date(b.fecha_inicio).getTime())
     .slice(0, 6);
+
   const alertEventos = filteredEventos.filter((event) =>
     event.estado === 'reprogramado' || eventosEnConflicto(event, allEventos).length > 0
   ).slice(0, 6);
+
   const conflictosFormulario = eventosEnConflicto({
     id: selectedEvento?.id || 'nuevo',
     oportunidad_id: formOpId,
@@ -501,89 +551,110 @@ export function CalendarioEventos({
     recurso_vehiculo: formVehiculo || null,
     estado: formEstado,
   }, allEventos);
+
   const produccionPosteriorFormulario = produccionesPendientesAntesDe({
-    id: selectedEvento?.id || 'nuevo', oportunidad_id: formOpId, tipo_evento: formTipo,
-    titulo: formTitulo, fecha_inicio: formFechaInicio, fecha_fin: formFechaFin, estado: formEstado,
+    id: selectedEvento?.id || 'nuevo',
+    oportunidad_id: formOpId,
+    tipo_evento: formTipo,
+    titulo: formTitulo,
+    fecha_inicio: formFechaInicio,
+    fecha_fin: formFechaFin,
+    estado: formEstado,
   }, allEventos).length > 0;
+
   const linkedOcOptions = Array.from(new Map(ocOptions.filter((item) => item.oportunidad_id === formOpId)
     .map((item) => [item.orden_compra_id, item])).values());
-  const linkFields = <div className="grid grid-cols-2 gap-2">
-    <label className="font-bold text-gray-700">Orden de compra vinculada
-      <select value={formOcId} onChange={(e) => setFormOcId(e.target.value)} className="block w-full border rounded-md p-2 font-normal">
-        <option value="">Sin OC</option>{linkedOcOptions.map((item) => <option key={item.orden_compra_id} value={item.orden_compra_id}>{item.ordenes_compra?.numero_oc || item.orden_compra_id.slice(0, 8)}</option>)}
-      </select>
-    </label>
-    <label className="font-bold text-gray-700">Guía vinculada
-      <select value={formGuideId} onChange={(e) => setFormGuideId(e.target.value)} className="block w-full border rounded-md p-2 font-normal">
-        <option value="">Sin guía</option>{guideOptions.filter((item) => item.oportunidad_id === formOpId).map((item) => <option key={item.id} value={item.id}>{item.numero_guia}</option>)}
-      </select>
-    </label>
-  </div>;
+
+  const linkFields = (
+    <div className="grid grid-cols-2 gap-2">
+      <div>
+        <label className="block text-xs font-semibold text-ink mb-1">Orden de compra vinculada</label>
+        <select value={formOcId} onChange={(e) => setFormOcId(e.target.value)} className="hg-field">
+          <option value="">Sin OC</option>
+          {linkedOcOptions.map((item) => (
+            <option key={item.orden_compra_id} value={item.orden_compra_id}>
+              {item.ordenes_compra?.numero_oc || item.orden_compra_id.slice(0, 8)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-semibold text-ink mb-1">Guía vinculada</label>
+        <select value={formGuideId} onChange={(e) => setFormGuideId(e.target.value)} className="hg-field">
+          <option value="">Sin guía</option>
+          {guideOptions.filter((item) => item.oportunidad_id === formOpId).map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.numero_guia}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="space-y-5 text-[#213343]">
+    <div className="space-y-5 text-ink">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-line pb-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-[#213343] flex items-center gap-2.5">
-            <CalendarIcon className="w-6 h-6 text-[#f97316]" />
+          <h1 className="t-page flex items-center gap-2">
             <span>{titulo}</span>
           </h1>
-          {subtitulo && <p className="text-xs text-gray-500 mt-0.5">{subtitulo}</p>}
+          {subtitulo && <p className="t-caption mt-1">{subtitulo}</p>}
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <button
+        <div className="flex items-center gap-2">
+          <Button
+            variant="primary"
+            icon={Plus}
             onClick={() => handleOpenNewModal()}
-            className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold text-xs px-4 py-2 rounded-md transition flex items-center gap-2 shadow-sm"
           >
-            <Plus className="w-4 h-4" />
-            <span>Programar evento</span>
-          </button>
+            Programar evento
+          </Button>
         </div>
       </div>
 
       {/* Control Bar: Mes + Filtros */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-wrap items-center justify-between gap-4 text-xs">
+      <div className="hg-panel flex flex-wrap items-center justify-between gap-3 p-3 text-xs">
         {/* Navegación de Mes */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center bg-gray-100 rounded-md p-1 border border-gray-200">
-            <button
+          <div className="flex items-center rounded-control border border-line bg-surface p-1">
+            <IconButton
+              icon={ChevronLeft}
+              label="Mes anterior"
               onClick={prevMonth}
-              className="p-1.5 hover:bg-white text-gray-700 rounded-lg transition"
-              title="Mes anterior"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="font-extrabold text-[#213343] px-3 font-mono text-sm">
+              className="h-7 w-7"
+            />
+            <span className="min-w-36 text-center font-semibold text-ink text-xs capitalize">
               {monthNames[month]} {year}
             </span>
-            <button
+            <IconButton
+              icon={ChevronRight}
+              label="Mes siguiente"
               onClick={nextMonth}
-              className="p-1.5 hover:bg-white text-gray-700 rounded-lg transition"
-              title="Mes siguiente"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
+              className="h-7 w-7"
+            />
           </div>
 
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={goToToday}
-            className="px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-[#f97316] font-bold rounded-md border border-orange-200 transition"
           >
             Hoy
-          </button>
+          </Button>
         </div>
 
         {/* Filtros */}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Tipo de evento */}
           <div className="flex items-center gap-1.5">
-            <span className="font-bold text-gray-500">Tipo:</span>
+            <span className="text-ink-muted text-xs font-medium">Tipo:</span>
             <select
               value={selectedTipo}
+              aria-label="Filtrar por tipo de evento"
               onChange={(e) => setSelectedTipo(e.target.value)}
-              className="bg-gray-50 border border-gray-300 rounded-md px-2.5 py-1.5 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
+              className="hg-field !w-auto min-w-32 text-xs"
             >
               <option value="todos">Todos los tipos</option>
               {tiposPermitidos.map((t) => (
@@ -597,11 +668,11 @@ export function CalendarioEventos({
           {/* Responsable (Multi-Selección Desplegable) */}
           <div className="relative">
             <div className="flex items-center gap-1.5">
-              <span className="font-bold text-gray-500">Responsable:</span>
+              <span className="text-ink-muted text-xs font-medium">Responsable:</span>
               <button
                 type="button"
                 onClick={() => setShowResponsableMenu(!showResponsableMenu)}
-                className="bg-gray-50 hover:bg-gray-100 border border-gray-300 rounded-md px-3 py-1.5 text-[#213343] font-bold text-xs flex items-center justify-between gap-2 min-w-[170px] cursor-pointer"
+                className="hg-field !w-auto flex items-center justify-between gap-2 min-w-[170px] text-xs font-semibold cursor-pointer"
               >
                 <span className="truncate">
                   {selectedResponsables.length === 0
@@ -610,34 +681,34 @@ export function CalendarioEventos({
                     ? personalList.find((p) => p.id === selectedResponsables[0])?.nombre || '1 seleccionado'
                     : `${selectedResponsables.length} seleccionados`}
                 </span>
-                <ChevronDown className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                <ChevronDown size={14} className="text-ink-muted shrink-0" />
               </button>
             </div>
 
             {showResponsableMenu && (
-              <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-sm p-3 z-30 space-y-2 text-xs">
-                <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
-                  <span className="font-extrabold text-[#213343] text-[11px] uppercase tracking-normal">
+              <div className="absolute right-0 mt-2 w-64 bg-surface border border-line rounded-panel shadow-[var(--hg-shadow-popover)] p-3 z-30 space-y-2 text-xs">
+                <div className="flex items-center justify-between border-b border-line-subtle pb-1.5">
+                  <span className="font-semibold text-ink text-[11px] uppercase tracking-normal">
                     Filtrar responsables
                   </span>
                   {selectedResponsables.length > 0 && (
                     <button
                       type="button"
                       onClick={() => setSelectedResponsables([])}
-                      className="text-[10px] text-[#f97316] font-bold hover:underline"
+                      className="text-[11px] text-accent-ink font-semibold hover:underline"
                     >
-                      Limpiar filtro
+                      Limpiar
                     </button>
                   )}
                 </div>
 
                 <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
-                  <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-bold text-[#213343]">
+                  <label className="flex items-center gap-2 p-1.5 hover:bg-surface-muted rounded-md cursor-pointer font-semibold text-ink">
                     <input
                       type="checkbox"
                       checked={selectedResponsables.length === 0}
                       onChange={() => setSelectedResponsables([])}
-                      className="rounded text-[#f97316] focus:ring-[#F7931F]"
+                      className="accent-accent rounded"
                     />
                     <span>Todos los responsables</span>
                   </label>
@@ -648,7 +719,7 @@ export function CalendarioEventos({
                     return (
                       <label
                         key={p.id}
-                        className="flex items-center justify-between p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-medium text-gray-700"
+                        className="flex items-center justify-between p-1.5 hover:bg-surface-muted rounded-md cursor-pointer font-medium text-ink"
                       >
                         <div className="flex items-center gap-2 truncate">
                           <input
@@ -661,11 +732,11 @@ export function CalendarioEventos({
                                 setSelectedResponsables([...selectedResponsables, p.id]);
                               }
                             }}
-                            className="rounded text-[#f97316] focus:ring-[#F7931F]"
+                            className="accent-accent rounded"
                           />
                           <span className="truncate">{p.nombre}</span>
                         </div>
-                        <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded-full font-mono text-gray-600 font-bold shrink-0">
+                        <span className="text-[11px] bg-surface-muted px-1.5 py-0.5 rounded-full font-mono text-ink-muted font-semibold shrink-0">
                           {count}
                         </span>
                       </label>
@@ -678,11 +749,12 @@ export function CalendarioEventos({
 
           {/* Estado */}
           <div className="flex items-center gap-1.5">
-            <span className="font-bold text-gray-500">Estado:</span>
+            <span className="text-ink-muted text-xs font-medium">Estado:</span>
             <select
               value={selectedEstado}
+              aria-label="Filtrar por estado del evento"
               onChange={(e) => setSelectedEstado(e.target.value)}
-              className="bg-gray-50 border border-gray-300 rounded-md px-2.5 py-1.5 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
+              className="hg-field !w-auto min-w-32 text-xs"
             >
               <option value="todos">Todos los estados</option>
               {Object.entries(ESTADOS_EVENTO_CONFIG).map(([key, conf]) => (
@@ -697,508 +769,556 @@ export function CalendarioEventos({
 
       {/* Calendario y agenda contextual */}
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-      <div className="hg-panel overflow-x-auto">
-      <div className="min-w-[720px]">
-        {/* Cabecera de días de la semana */}
-        <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-xs font-bold text-gray-600">
-          {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((d) => (
-            <div key={d} className="py-2.5 border-r last:border-r-0 border-gray-200">
-              {d}
+        <div className="hg-panel overflow-x-auto">
+          <div className="min-w-[720px]">
+            {/* Cabecera de días de la semana */}
+            <div className="grid grid-cols-7 border-b border-line-subtle bg-surface-muted text-center text-xs font-semibold text-ink-muted">
+              {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((d) => (
+                <div key={d} className="py-2.5 border-r last:border-r-0 border-line-subtle">
+                  {d}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        {/* Celdas de días */}
-        <div className="grid grid-cols-7 auto-rows-fr min-h-[580px]">
-          {/* Celdas vacías previas */}
-          {Array.from({ length: firstDayIndex }).map((_, idx) => (
-            <div
-              key={`empty-${idx}`}
-              className="bg-gray-50/50 border-r border-b border-gray-200 min-h-[110px]"
-            />
-          ))}
+            {/* Celdas de días */}
+            <div className="grid grid-cols-7 auto-rows-fr min-h-[580px]">
+              {/* Celdas vacías previas */}
+              {Array.from({ length: firstDayIndex }).map((_, idx) => (
+                <div
+                  key={`empty-${idx}`}
+                  className="bg-surface-muted/50 border-r border-b border-line-subtle min-h-[110px]"
+                />
+              ))}
 
-          {/* Días del mes actual */}
-          {Array.from({ length: daysInMonth }).map((_, idx) => {
-            const dayNum = idx + 1;
-            const currentDayDate = new Date(year, month, dayNum);
-            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-            const isToday = dayOf(currentDayDate.toISOString()) === todayKey;
+              {/* Días del mes actual */}
+              {Array.from({ length: daysInMonth }).map((_, idx) => {
+                const dayNum = idx + 1;
+                const currentDayDate = new Date(year, month, dayNum);
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                const isToday = dayOf(currentDayDate.toISOString()) === todayKey;
 
-            // Eventos que caen en este día
-            const dayEvents = filteredEventos.filter((ev) => {
-              return dayOf(ev.fecha_inicio) <= dateStr && dayOf(ev.fecha_fin || ev.fecha_inicio) >= dateStr;
-            });
+                // Eventos que caen en este día
+                const dayEvents = filteredEventos.filter((ev) => {
+                  return dayOf(ev.fecha_inicio) <= dateStr && dayOf(ev.fecha_fin || ev.fecha_inicio) >= dateStr;
+                });
 
-            return (
-              <div
-                key={`day-${dayNum}`}
-                className={`border-r border-b border-gray-200 p-2 min-h-[110px] flex flex-col justify-between group transition hover:bg-gray-50/70 relative ${
-                  isToday ? 'bg-orange-50/30' : 'bg-white'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span
-                      className={`text-xs font-black w-6 h-6 flex items-center justify-center rounded-full ${
-                        isToday ? 'bg-[#f97316] text-white shadow-xs' : 'text-[#213343]'
-                      }`}
-                    >
-                      {dayNum}
-                    </span>
-
-                    <button
-                      onClick={() => handleOpenNewModal(dateStr)}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-[#f97316] transition rounded-md"
-                      title="Agregar evento este día"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  {/* Listado de eventos en el día con diseño claro ganador de Visitas a Terreno */}
-                  <div className="space-y-1.5">
-                    {dayEvents.slice(0, 3).map((ev) => {
-                      const tipoConf = TIPOS_EVENTO_CONFIG[ev.tipo_evento] || TIPOS_EVENTO_CONFIG.obra;
-                      const TipoIcon = tipoConf.icon;
-                      const estadoConf = ESTADOS_EVENTO_CONFIG[ev.estado] || ESTADOS_EVENTO_CONFIG.por_hacer;
-                      const EstadoIcon = estadoConf.icon;
-
-                      const startTime = ev.fecha_inicio
-                        ? new Date(ev.fecha_inicio).toLocaleTimeString('es-CL', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
-                        : ev.hora_evento || '09:00';
-
-                      const isHighlighted = highlightedOpId && ev.oportunidad_id === highlightedOpId;
-
-                      return (
-                        <button type="button"
-                          key={ev.id}
-                          onClick={() => handleOpenEditModal(ev)}
-                          className={`block w-full text-left p-2 rounded-md border text-[11px] leading-tight cursor-pointer transition space-y-1 bg-orange-50/70 border-orange-200 hover:bg-orange-100/60 ${
-                            isHighlighted ? 'ring-2 ring-[#F7931F]' : ''
+                return (
+                  <div
+                    key={`day-${dayNum}`}
+                    className={`border-r border-b border-line-subtle p-2 min-h-[110px] flex flex-col justify-between group transition hover:bg-surface-muted/60 relative ${
+                      isToday ? 'bg-accent-soft/30' : 'bg-surface'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span
+                          className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${
+                            isToday ? 'bg-accent text-on-accent' : 'text-ink'
                           }`}
                         >
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="font-extrabold text-[9.5px] px-1.5 py-0.5 rounded-md text-[#f97316] bg-white border border-orange-200 truncate max-w-[120px]">
-                              {ev.responsable?.nombre || 'Sin responsable'}
-                            </span>
-                            <span className="font-mono text-[9.5px] text-gray-500 font-bold flex items-center gap-0.5 shrink-0">
-                              <Clock className="w-3 h-3 text-gray-400" />
-                              {startTime}
-                            </span>
-                          </div>
+                          {dayNum}
+                        </span>
 
-                          <div className="font-bold text-[#213343] truncate leading-tight flex items-center gap-1">
-                            <TipoIcon className={`w-3.5 h-3.5 shrink-0 ${tipoConf.color}`} />
-                            <span className="truncate">{ev.titulo}</span>
-                          </div>
-
-                          {ev.oportunidad && (
-                            <div className="text-[10px] text-gray-500 truncate flex items-center gap-1">
-                              <Building className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                              <span className="truncate">
-                                {ev.oportunidad.cliente?.nombre || ev.oportunidad.codigo}
-                              </span>
-                            </div>
-                          )}
-
-                          <div className="mt-1 flex items-center justify-between">
-                            <span
-                              className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-md border flex items-center gap-0.5 ${estadoConf.bg} ${estadoConf.text} ${estadoConf.border}`}
-                            >
-                              <EstadoIcon className="w-2.5 h-2.5" />
-                              <span>{estadoConf.label}</span>
-                            </span>
-                          </div>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenNewModal(dateStr)}
+                          className="opacity-0 group-hover:opacity-100 p-1 text-ink-muted hover:text-accent-ink transition rounded-md cursor-pointer"
+                          title="Agregar evento este día"
+                        >
+                          <Plus size={14} />
                         </button>
-                      );
-                    })}
-                    {dayEvents.length > 3 && <span className="block text-[10px] text-gray-500">+{dayEvents.length - 3} eventos</span>}
+                      </div>
+
+                      {/* Listado de eventos en el día */}
+                      <div className="space-y-1.5">
+                        {dayEvents.slice(0, 3).map((ev) => {
+                          const tipoConf = TIPOS_EVENTO_CONFIG[ev.tipo_evento] || TIPOS_EVENTO_CONFIG.obra;
+                          const TipoIcon = tipoConf.icon;
+                          const estadoConf = ESTADOS_EVENTO_CONFIG[ev.estado] || ESTADOS_EVENTO_CONFIG.por_hacer;
+
+                          const startTime = ev.fecha_inicio
+                            ? new Date(ev.fecha_inicio).toLocaleTimeString('es-CL', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : ev.hora_evento || '09:00';
+
+                          const isHighlighted = highlightedOpId && ev.oportunidad_id === highlightedOpId;
+
+                          return (
+                            <button
+                              type="button"
+                              key={ev.id}
+                              onClick={() => handleOpenEditModal(ev)}
+                              className={`block w-full text-left p-2 rounded-md border text-[11px] leading-tight cursor-pointer transition space-y-1 bg-surface-muted border-line hover:border-accent ${
+                                isHighlighted ? 'ring-2 ring-accent' : ''
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="font-semibold text-[11px] px-1.5 py-0.5 rounded-md text-ink bg-surface border border-line truncate max-w-[120px]">
+                                  {ev.responsable?.nombre || 'Sin responsable'}
+                                </span>
+                                <span className="font-mono text-[11px] text-ink-muted font-medium flex items-center gap-0.5 shrink-0">
+                                  <Clock size={11} className="text-ink-muted" />
+                                  {startTime}
+                                </span>
+                              </div>
+
+                              <div className="font-semibold text-ink truncate leading-tight flex items-center gap-1">
+                                <TipoIcon size={13} className="shrink-0 text-accent-ink" />
+                                <span className="truncate">{ev.titulo}</span>
+                              </div>
+
+                              {ev.oportunidad && (
+                                <div className="text-[11px] text-ink-muted truncate flex items-center gap-1">
+                                  <Building size={11} className="text-ink-muted shrink-0" />
+                                  <span className="truncate">
+                                    {ev.oportunidad.cliente?.nombre || ev.oportunidad.codigo}
+                                  </span>
+                                </div>
+                              )}
+
+                              <div className="mt-1 flex items-center justify-between">
+                                <StatusBadge tone={estadoConf.tone}>
+                                  {estadoConf.label}
+                                </StatusBadge>
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {dayEvents.length > 3 && (
+                          <span className="block text-[11px] text-ink-muted">+{dayEvents.length - 3} eventos</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          </div>
         </div>
-      </div>
-      </div>
-      <aside className="space-y-4">
-        <section className="hg-panel p-4">
-          <h2 className="text-sm font-bold">Próxima agenda</h2>
-          {upcomingEventos.length === 0 ? <p className="mt-3 text-xs text-gray-500">Sin eventos próximos.</p> : <div className="mt-3 space-y-1">
-            {upcomingEventos.map((event) => <button key={event.id} type="button" onClick={() => handleOpenEditModal(event)} className="block w-full rounded-lg p-2 text-left hover:bg-gray-50">
-              <span className="block truncate text-xs font-bold">{event.titulo}</span>
-              <span className="text-[11px] text-gray-500">{new Date(event.fecha_inicio).toLocaleDateString('es-CL')} · {event.responsable?.nombre || 'Sin responsable'}</span>
-            </button>)}
-          </div>}
-        </section>
-        <section className="hg-panel p-4">
-          <h2 className="text-sm font-bold">Alertas</h2>
-          {alertEventos.length === 0 ? <p className="mt-3 text-xs text-gray-500">Sin conflictos ni reprogramaciones visibles.</p> : <div className="mt-3 space-y-1">
-            {alertEventos.map((event) => <button key={event.id} type="button" onClick={() => handleOpenEditModal(event)} className="block w-full rounded-lg border border-amber-100 bg-amber-50/60 p-2 text-left hover:bg-amber-50">
-              <span className="block truncate text-xs font-bold">{event.titulo}</span>
-              <span className="text-[11px] text-amber-800">{event.estado === 'reprogramado' ? 'Reprogramado' : 'Choque de recurso'}</span>
-            </button>)}
-          </div>}
-        </section>
-      </aside>
+
+        <aside className="space-y-4">
+          <section className="hg-panel p-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">Próxima agenda</h2>
+            {upcomingEventos.length === 0 ? (
+              <p className="text-xs text-ink-muted">Sin eventos próximos.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {upcomingEventos.map((event) => (
+                  <button
+                    key={event.id}
+                    type="button"
+                    onClick={() => handleOpenEditModal(event)}
+                    className="block w-full rounded-md p-2 text-left hover:bg-surface-muted transition"
+                  >
+                    <span className="block truncate text-xs font-semibold text-ink">{event.titulo}</span>
+                    <span className="text-[11px] text-ink-muted">
+                      {new Date(event.fecha_inicio).toLocaleDateString('es-CL')} · {event.responsable?.nombre || 'Sin responsable'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="hg-panel p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Alertas</h2>
+              {alertEventos.length > 0 && (
+                <StatusBadge tone="warning">{alertEventos.length}</StatusBadge>
+              )}
+            </div>
+            {alertEventos.length === 0 ? (
+              <p className="text-xs text-ink-muted">Sin conflictos ni reprogramaciones visibles.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {alertEventos.map((event) => (
+                  <button
+                    key={event.id}
+                    type="button"
+                    onClick={() => handleOpenEditModal(event)}
+                    className="block w-full rounded-md border border-warning-line bg-warning-soft p-2 text-left hover:bg-warning-soft/80 transition"
+                  >
+                    <span className="block truncate text-xs font-semibold text-ink">{event.titulo}</span>
+                    <span className="text-[11px] text-warning font-medium">
+                      {event.estado === 'reprogramado' ? 'Reprogramado' : 'Choque de recurso'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        </aside>
       </div>
 
       {/* Modal Nuevo Evento */}
-      {isNewModalOpen && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 z-50 ">
-          <div className="bg-white border border-gray-200 rounded-lg max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-sm text-[#213343] max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h3 className="text-base font-extrabold text-[#213343] flex items-center gap-2">
-                <CalendarIcon className="w-5 h-5 text-[#f97316]" />
-                <span>Programar Nuevo Evento ({titulo})</span>
-              </h3>
-              <button
-                onClick={() => setIsNewModalOpen(false)}
-                className="text-gray-400 hover:text-[#213343] text-xl font-bold"
+      <Dialog
+        open={isNewModalOpen}
+        onClose={() => setIsNewModalOpen(false)}
+        title={`Programar Nuevo Evento (${titulo})`}
+        description="Asigna la oportunidad, horario y recursos de este evento operativo."
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setIsNewModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button variant="primary" disabled={savingLoading} onClick={handleSaveNew}>
+              <Save size={15} />
+              <span>{savingLoading ? 'Guardando...' : 'Crear Evento'}</span>
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={handleSaveNew} className="space-y-3.5 text-xs">
+          <div>
+            <label className="block font-semibold text-ink mb-1">Oportunidad de Venta *</label>
+            <select
+              required
+              value={formOpId}
+              onChange={(e) => setFormOpId(e.target.value)}
+              className="hg-field font-semibold"
+            >
+              <option value="">-- Seleccionar Oportunidad --</option>
+              {oportunidades.map((op) => (
+                <option key={op.id} value={op.id}>
+                  {op.codigo} — {op.titulo} ({op.cliente?.nombre || 'Cliente'})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-ink mb-1">Calendario</label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {CALENDARIOS_OPERACIONALES.map((cal) => {
+                const isCurrent = cal.id === contexto;
+                return (
+                  <div
+                    key={cal.id}
+                    className={`px-3 py-2 rounded-md border font-semibold text-xs text-center ${
+                      isCurrent
+                        ? 'bg-accent-soft text-accent-ink border-accent-line'
+                        : 'bg-surface-muted text-ink-muted border-line'
+                    }`}
+                  >
+                    {cal.label}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-ink mb-1">Tipo de evento *</label>
+              <select
+                required
+                value={formTipo}
+                onChange={(e) => setFormTipo(e.target.value as TipoEventoProduccionLogistica)}
+                className="hg-field"
               >
-                ✕
-              </button>
+                {tiposPermitidos.map((t) => (
+                  <option key={t} value={t}>
+                    {TIPOS_EVENTO_CONFIG[t]?.label || t}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <form onSubmit={handleSaveNew} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Oportunidad de Venta *</label>
-                <select
-                  required
-                  value={formOpId}
-                  onChange={(e) => setFormOpId(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
-                >
-                  <option value="">-- Seleccionar Oportunidad --</option>
-                  {oportunidades.map((op) => (
-                    <option key={op.id} value={op.id}>
-                      {op.codigo} — {op.titulo} ({op.cliente?.nombre || 'Cliente'})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Calendario</label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {CALENDARIOS_OPERACIONALES.map((cal) => {
-                    const isCurrent = cal.id === contexto;
-                    return (
-                      <div
-                        key={cal.id}
-                        className={`px-3 py-2 rounded-md border font-extrabold text-xs text-center ${
-                          isCurrent
-                            ? 'bg-orange-50 text-[#f97316] border-orange-300'
-                            : 'bg-gray-50 text-gray-500 border-gray-200'
-                        }`}
-                      >
-                        {cal.label}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Tipo de evento *</label>
-                  <select
-                    required
-                    value={formTipo}
-                    onChange={(e) => setFormTipo(e.target.value as TipoEventoProduccionLogistica)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
-                  >
-                    {tiposPermitidos.map((t) => (
-                      <option key={t} value={t}>
-                        {TIPOS_EVENTO_CONFIG[t]?.label || t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Estado Inicial *</label>
-                  <select
-                    required
-                    value={formEstado}
-                    onChange={(e) => setFormEstado(e.target.value as EstadoEventoProduccionLogistica)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
-                  >
-                    {Object.entries(ESTADOS_EVENTO_CONFIG).map(([key, conf]) => (
-                      <option key={key} value={key}>
-                        {conf.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Título del Evento *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej: Montaje e Instalación Cierros"
-                  value={formTitulo}
-                  onChange={(e) => setFormTitulo(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Fecha y Hora Inicio *</label>
-                  <input
-                    type="datetime-local"
-                    required
-                    value={formFechaInicio}
-                    onChange={(e) => setFormFechaInicio(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Fecha y Hora Término *</label>
-                  <input
-                    type="datetime-local"
-                    required
-                    value={formFechaFin}
-                    onChange={(e) => setFormFechaFin(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Responsable Asignado</label>
-                <select
-                  value={formResponsableId}
-                  onChange={(e) => setFormResponsableId(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                >
-                  <option value="">-- Sin Asignar --</option>
-                  {personalList.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nombre} ({ROL_NOMBRE[p.rol] ?? p.rol})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Notas e Instrucciones</label>
-                <textarea
-                  rows={2}
-                  placeholder="Detalles operacionales, contacto en terreno o materiales..."
-                  value={formObservaciones}
-                  onChange={(e) => setFormObservaciones(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-md p-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                />
-              </div>
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Vehículo o recurso</label>
-                <input value={formVehiculo} onChange={(e) => setFormVehiculo(e.target.value)} placeholder="Ej. Camión 1" className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2" />
-              </div>
-              {linkFields}
-              {(conflictosFormulario.length > 0 || produccionPosteriorFormulario) && <label className="block font-bold text-gray-700">Motivo para confirmar conflicto o dependencia<input value={formMotivo} onChange={(e) => setFormMotivo(e.target.value)} className="block w-full border rounded-md p-2 font-normal" /></label>}
-              {conflictosFormulario.length > 0 && <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2 text-xs">
-                Posible choque de responsable o vehículo con: {conflictosFormulario.map((ev) => ev.titulo).join(', ')}.
-              </p>}
-              {produccionPosteriorFormulario && <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2 text-xs">
-                La producción pendiente de esta venta termina después del despacho o instalación. Para continuar, indica un motivo y confirma la dependencia.
-              </p>}
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => setIsNewModalOpen(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingLoading}
-                  className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold px-5 py-2 rounded-md transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>{savingLoading ? 'Guardando...' : 'Crear Evento'}</span>
-                </button>
-              </div>
-            </form>
+            <div>
+              <label className="block font-semibold text-ink mb-1">Estado Inicial *</label>
+              <select
+                required
+                value={formEstado}
+                onChange={(e) => setFormEstado(e.target.value as EstadoEventoProduccionLogistica)}
+                className="hg-field"
+              >
+                {Object.entries(ESTADOS_EVENTO_CONFIG).map(([key, conf]) => (
+                  <option key={key} value={key}>
+                    {conf.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-        </div>
-      )}
+
+          <div>
+            <label className="block font-semibold text-ink mb-1">Título del Evento *</label>
+            <input
+              type="text"
+              required
+              placeholder="Ej: Montaje e Instalación Cierros"
+              value={formTitulo}
+              onChange={(e) => setFormTitulo(e.target.value)}
+              className="hg-field"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-ink mb-1">Fecha y Hora Inicio *</label>
+              <input
+                type="datetime-local"
+                required
+                value={formFechaInicio}
+                onChange={(e) => setFormFechaInicio(e.target.value)}
+                className="hg-field"
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-ink mb-1">Fecha y Hora Término *</label>
+              <input
+                type="datetime-local"
+                required
+                value={formFechaFin}
+                onChange={(e) => setFormFechaFin(e.target.value)}
+                className="hg-field"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-ink mb-1">Responsable Asignado</label>
+            <select
+              value={formResponsableId}
+              onChange={(e) => setFormResponsableId(e.target.value)}
+              className="hg-field"
+            >
+              <option value="">-- Sin Asignar --</option>
+              {personalList.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre} ({ROL_NOMBRE[p.rol] ?? p.rol})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-ink mb-1">Notas e Instrucciones</label>
+            <textarea
+              rows={2}
+              placeholder="Detalles operacionales, contacto en terreno o materiales..."
+              value={formObservaciones}
+              onChange={(e) => setFormObservaciones(e.target.value)}
+              className="hg-field"
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-ink mb-1">Vehículo o recurso</label>
+            <input
+              value={formVehiculo}
+              onChange={(e) => setFormVehiculo(e.target.value)}
+              placeholder="Ej. Camión 1"
+              className="hg-field"
+            />
+          </div>
+
+          {linkFields}
+
+          {(conflictosFormulario.length > 0 || produccionPosteriorFormulario) && (
+            <div>
+              <label className="block font-semibold text-ink mb-1">
+                Motivo para confirmar conflicto o dependencia *
+              </label>
+              <input
+                value={formMotivo}
+                onChange={(e) => setFormMotivo(e.target.value)}
+                className="hg-field"
+              />
+            </div>
+          )}
+
+          {conflictosFormulario.length > 0 && (
+            <p className="t-caption text-warning bg-warning-soft border border-warning-line rounded-md p-2">
+              Posible choque de responsable o vehículo con: {conflictosFormulario.map((ev) => ev.titulo).join(', ')}.
+            </p>
+          )}
+
+          {produccionPosteriorFormulario && (
+            <p className="t-caption text-warning bg-warning-soft border border-warning-line rounded-md p-2">
+              La producción pendiente de esta venta termina después del despacho o instalación. Para continuar, indica un motivo y confirma la dependencia.
+            </p>
+          )}
+        </form>
+      </Dialog>
 
       {/* Modal Editar / Eliminar Evento */}
-      {isEditModalOpen && selectedEvento && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 z-50 ">
-          <div className="bg-white border border-gray-200 rounded-lg max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-sm text-[#213343] max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h3 className="text-base font-extrabold text-[#213343] flex items-center gap-2">
-                <Edit className="w-5 h-5 text-[#f97316]" />
-                <span>Editar Evento</span>
-              </h3>
-              <button
-                onClick={() => setIsEditModalOpen(false)}
-                className="text-gray-400 hover:text-[#213343] text-xl font-bold"
+      {selectedEvento && (
+        <Dialog
+          open={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          title="Editar Evento"
+          description="Actualiza el estado, fecha o recursos del evento operativo."
+          size="md"
+          footer={
+            <div className="flex items-center justify-between w-full">
+              <Button
+                variant="destructive"
+                onClick={() => handleDeleteEvento(selectedEvento.id)}
               >
-                ✕
-              </button>
+                <Trash2 size={15} />
+                <span>Eliminar Evento</span>
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" onClick={() => setIsEditModalOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button variant="primary" disabled={savingLoading} onClick={handleSaveEdit}>
+                  <Save size={15} />
+                  <span>{savingLoading ? 'Guardando...' : 'Guardar Cambios'}</span>
+                </Button>
+              </div>
             </div>
-
-            <form onSubmit={handleSaveEdit} className="space-y-3.5 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Tipo de Evento</label>
-                  <select
-                    value={formTipo}
-                    onChange={(e) => setFormTipo(e.target.value as TipoEventoProduccionLogistica)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
-                  >
-                    {tiposPermitidos.map((t) => (
-                      <option key={t} value={t}>
-                        {TIPOS_EVENTO_CONFIG[t]?.label || t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Estado del Evento</label>
-                  <select
-                    value={formEstado}
-                    onChange={(e) => setFormEstado(e.target.value as EstadoEventoProduccionLogistica)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
-                  >
-                    {Object.entries(ESTADOS_EVENTO_CONFIG).map(([key, conf]) => (
-                      <option key={key} value={key}>
-                        {conf.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
+          }
+        >
+          <form onSubmit={handleSaveEdit} className="space-y-3.5 text-xs">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Título del Evento *</label>
-                <input
-                  type="text"
-                  required
-                  value={formTitulo}
-                  onChange={(e) => setFormTitulo(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Fecha y Hora Inicio *</label>
-                  <input
-                    type="datetime-local"
-                    required
-                    value={formFechaInicio}
-                    onChange={(e) => setFormFechaInicio(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Fecha y Hora Término *</label>
-                  <input
-                    type="datetime-local"
-                    required
-                    value={formFechaFin}
-                    onChange={(e) => setFormFechaFin(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Responsable Asignado</label>
+                <label className="block font-semibold text-ink mb-1">Tipo de Evento</label>
                 <select
-                  value={formResponsableId}
-                  onChange={(e) => setFormResponsableId(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
+                  value={formTipo}
+                  onChange={(e) => setFormTipo(e.target.value as TipoEventoProduccionLogistica)}
+                  className="hg-field"
                 >
-                  <option value="">-- Sin Asignar --</option>
-                  {personalList.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nombre} ({ROL_NOMBRE[p.rol] ?? p.rol})
+                  {tiposPermitidos.map((t) => (
+                    <option key={t} value={t}>
+                      {TIPOS_EVENTO_CONFIG[t]?.label || t}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Notas e Instrucciones</label>
-                <textarea
-                  rows={2}
-                  value={formObservaciones}
-                  onChange={(e) => setFormObservaciones(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-md p-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
+                <label className="block font-semibold text-ink mb-1">Estado del Evento</label>
+                <select
+                  value={formEstado}
+                  onChange={(e) => setFormEstado(e.target.value as EstadoEventoProduccionLogistica)}
+                  className="hg-field"
+                >
+                  {Object.entries(ESTADOS_EVENTO_CONFIG).map(([key, conf]) => (
+                    <option key={key} value={key}>
+                      {conf.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-ink mb-1">Título del Evento *</label>
+              <input
+                type="text"
+                required
+                value={formTitulo}
+                onChange={(e) => setFormTitulo(e.target.value)}
+                className="hg-field"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold text-ink mb-1">Fecha y Hora Inicio *</label>
+                <input
+                  type="datetime-local"
+                  required
+                  value={formFechaInicio}
+                  onChange={(e) => setFormFechaInicio(e.target.value)}
+                  className="hg-field"
                 />
               </div>
+
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Vehículo o recurso</label>
-                <input value={formVehiculo} onChange={(e) => setFormVehiculo(e.target.value)} placeholder="Ej. Camión 1" className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2" />
+                <label className="block font-semibold text-ink mb-1">Fecha y Hora Término *</label>
+                <input
+                  type="datetime-local"
+                  required
+                  value={formFechaFin}
+                  onChange={(e) => setFormFechaFin(e.target.value)}
+                  className="hg-field"
+                />
               </div>
-              {linkFields}
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Motivo de reprogramación si cambias la fecha u hora</label>
-                <input value={formMotivo} onChange={(e) => setFormMotivo(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2" />
-              </div>
-              {conflictosFormulario.length > 0 && <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2 text-xs">
+            </div>
+
+            <div>
+              <label className="block font-semibold text-ink mb-1">Responsable Asignado</label>
+              <select
+                value={formResponsableId}
+                onChange={(e) => setFormResponsableId(e.target.value)}
+                className="hg-field"
+              >
+                <option value="">-- Sin Asignar --</option>
+                {personalList.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre} ({ROL_NOMBRE[p.rol] ?? p.rol})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-ink mb-1">Notas e Instrucciones</label>
+              <textarea
+                rows={2}
+                value={formObservaciones}
+                onChange={(e) => setFormObservaciones(e.target.value)}
+                className="hg-field"
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-ink mb-1">Vehículo o recurso</label>
+              <input
+                value={formVehiculo}
+                onChange={(e) => setFormVehiculo(e.target.value)}
+                placeholder="Ej. Camión 1"
+                className="hg-field"
+              />
+            </div>
+
+            {linkFields}
+
+            <div>
+              <label className="block font-semibold text-ink mb-1">
+                Motivo de reprogramación si cambias la fecha u hora
+              </label>
+              <input
+                value={formMotivo}
+                onChange={(e) => setFormMotivo(e.target.value)}
+                className="hg-field"
+              />
+            </div>
+
+            {conflictosFormulario.length > 0 && (
+              <p className="t-caption text-warning bg-warning-soft border border-warning-line rounded-md p-2">
                 Posible choque de responsable o vehículo con: {conflictosFormulario.map((ev) => ev.titulo).join(', ')}.
-              </p>}
-              {produccionPosteriorFormulario && <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2 text-xs">
+              </p>
+            )}
+
+            {produccionPosteriorFormulario && (
+              <p className="t-caption text-warning bg-warning-soft border border-warning-line rounded-md p-2">
                 La producción pendiente de esta venta termina después del despacho o instalación. Para continuar, indica un motivo y confirma la dependencia.
-              </p>}
-              <section aria-label="Historial de reprogramaciones" className="rounded-md border border-gray-200 p-3 text-xs">
-                <h4 className="font-bold text-gray-700">Historial de reprogramaciones</h4>
-                {historialError && <p role="alert" className="mt-2 text-red-700">{historialError}</p>}
-                {!historialError && reprogramaciones.length === 0 && <p className="mt-2 text-gray-500">Sin reprogramaciones registradas.</p>}
-                {reprogramaciones.map((cambio) => <p key={cambio.id} className="mt-2 border-t border-gray-100 pt-2 text-gray-600">
+              </p>
+            )}
+
+            <section aria-label="Historial de reprogramaciones" className="rounded-md border border-line p-3 text-xs">
+              <h4 className="font-semibold text-ink">Historial de reprogramaciones</h4>
+              {historialError && <p role="alert" className="mt-2 text-danger">{historialError}</p>}
+              {!historialError && reprogramaciones.length === 0 && (
+                <p className="mt-2 text-ink-muted">Sin reprogramaciones registradas.</p>
+              )}
+              {reprogramaciones.map((cambio) => (
+                <p key={cambio.id} className="mt-2 border-t border-line-subtle pt-2 text-ink-muted">
                   {new Date(cambio.fecha_inicio_anterior).toLocaleString('es-CL')} → {new Date(cambio.fecha_inicio_nueva).toLocaleString('es-CL')}: {cambio.motivo}
-                </p>)}
-              </section>
-
-              <div className="flex items-center justify-between pt-2 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => handleDeleteEvento(selectedEvento.id)}
-                  className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-md transition flex items-center gap-1.5"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>Eliminar Evento</span>
-                </button>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsEditModalOpen(false)}
-                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={savingLoading}
-                    className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold px-5 py-2 rounded-md transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-                  >
-                    <Save className="w-4 h-4" />
-                    <span>{savingLoading ? 'Guardando...' : 'Guardar Cambios'}</span>
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
+                </p>
+              ))}
+            </section>
+          </form>
+        </Dialog>
       )}
     </div>
   );

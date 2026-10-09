@@ -3,6 +3,7 @@ import './globals.css';
 import { AuthProvider } from '../lib/context/AuthContext';
 import { AuthGuard } from '../components/AuthGuard';
 import { AppShell } from '../components/AppShell';
+import { FeedbackProvider } from '../components/ui/feedback';
 
 export const metadata: Metadata = {
   title: 'Hormiglass CRM',
@@ -24,7 +25,9 @@ export default function RootLayout({
       <body className="min-h-screen antialiased" suppressHydrationWarning>
         <AuthProvider>
           <AuthGuard>
-            <AppShell>{children}</AppShell>
+            <FeedbackProvider>
+              <AppShell>{children}</AppShell>
+            </FeedbackProvider>
           </AuthGuard>
         </AuthProvider>
       </body>

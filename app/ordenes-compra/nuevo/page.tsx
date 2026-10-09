@@ -3,8 +3,9 @@
 import React, { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, FileText } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { OrdenCompraModal } from '../../../components/OrdenCompraModal';
+import { PageHeader } from '../../../components/ui/crm';
 
 function NuevaOrdenCompraContent() {
   const router = useRouter();
@@ -17,18 +18,19 @@ function NuevaOrdenCompraContent() {
   };
 
   return (
-    <div className="space-y-6 text-[#213343]">
-      <div className="flex items-center justify-between border-b border-gray-200 pb-5">
-        <div>
-          <Link href="/ordenes-compra" className="inline-flex items-center gap-2 text-xs font-bold text-gray-500 hover:text-[#f97316] mb-3">
-            <ArrowLeft className="w-4 h-4" />
-            <span>Volver a Ordenes de Compra</span>
-          </Link>
-          <h1 className="text-2xl font-extrabold flex items-center gap-2">
-            <FileText className="w-6 h-6 text-[#f97316]" />
-            <span>Nueva Orden de Compra</span>
-          </h1>
-        </div>
+    <div className="hg-page space-y-5">
+      <div>
+        <Link
+          href="/ordenes-compra"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-accent-ink transition mb-3"
+        >
+          <ArrowLeft size={14} aria-hidden />
+          <span>Volver a Órdenes de Compra</span>
+        </Link>
+        <PageHeader
+          title="Nueva Orden de Compra"
+          description="Emisión de orden de compra oficial para abastecimiento o reventa."
+        />
       </div>
 
       <OrdenCompraModal
@@ -44,7 +46,7 @@ function NuevaOrdenCompraContent() {
 
 export default function NuevaOrdenCompraPage() {
   return (
-    <Suspense fallback={<div className="text-sm text-gray-500">Cargando formulario de OC...</div>}>
+    <Suspense fallback={<div className="text-sm text-ink-muted p-6">Cargando formulario de OC...</div>}>
       <NuevaOrdenCompraContent />
     </Suspense>
   );

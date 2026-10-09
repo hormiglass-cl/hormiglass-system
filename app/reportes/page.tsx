@@ -1,25 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
-  ArrowDownRight,
-  ArrowUpRight,
   BarChart3,
   Bookmark,
   CalendarDays,
-  CreditCard,
   Download,
   ExternalLink,
   Filter,
   Landmark,
-  Percent,
   RefreshCcw,
-  Search,
   Trash2,
-  TrendingDown,
-  TrendingUp,
   Wallet,
+  Edit2,
 } from 'lucide-react';
 import { useAuth } from '../../lib/context/AuthContext';
 import { createClient } from '../../lib/supabase/client';
@@ -32,6 +26,24 @@ import {
   type ReportTab,
   type ReportViewConfig,
 } from '../../lib/reportes';
+import {
+  PageHeader,
+  Panel,
+  Button,
+  IconButton,
+  Tabs,
+  SummaryLine,
+  FilterBar,
+  SearchField,
+  FilterSelect,
+  StatusBadge,
+  CodeStamp,
+  Dialog,
+  Field,
+  TextInput,
+  Select,
+} from '../../components/ui/crm';
+import { useToast, useConfirm } from '../../components/ui/feedback';
 
 type SavedView = { id: string; nombre: string; configuracion: unknown };
 
@@ -61,7 +73,11 @@ const initialConfig = (): ReportViewConfig => {
 export default function ReportesPage() {
   const { currentUser } = useAuth();
   const userId = currentUser?.id;
+  const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const supabase = useMemo(() => createClient(), []);
+
   const [config, setConfig] = useState<ReportViewConfig>(initialConfig);
   const [rows, setRows] = useState<MovimientoCaja[]>([]);
   const [saved, setSaved] = useState<SavedView[]>([]);
@@ -73,6 +89,11 @@ export default function ReportesPage() {
   const [saving, setSaving] = useState(false);
   const [viewName, setViewName] = useState('');
   const [activeViewId, setActiveViewId] = useState('');
+
+  // Renombrar vista modal
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [viewToRename, setViewToRename] = useState<SavedView | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   // Margen por NV State
   const [margenRows, setMargenRows] = useState<MargenPorNV[]>([]);
@@ -87,9 +108,9 @@ export default function ReportesPage() {
       .select('id,nombre,configuracion')
       .eq('usuario_id', userId)
       .order('updated_at', { ascending: false });
-    if (viewsError)
+    if (viewsError) {
       setSaveError('No se pudieron cargar las vistas guardadas.');
-    else {
+    } else {
       setSaved((data || []) as SavedView[]);
       setSaveError('');
     }
@@ -164,24 +185,27 @@ export default function ReportesPage() {
 
   useEffect(() => {
     if (!currentUser || currentUser.rol === 'mano_obra') return;
-    void loadCuentas();
-    void loadMargenData();
+    const timer = setTimeout(() => {
+      void loadCuentas();
+      void loadMargenData();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [currentUser, loadCuentas, loadMargenData]);
 
   useEffect(() => {
     if (!currentUser || currentUser.rol === 'mano_obra') return;
-    const timer = window.setTimeout(() => {
+    const timer = setTimeout(() => {
       void loadRows();
     }, 0);
-    return () => window.clearTimeout(timer);
+    return () => clearTimeout(timer);
   }, [currentUser, loadRows]);
 
   useEffect(() => {
     if (!currentUser || currentUser.rol === 'mano_obra') return;
-    const timer = window.setTimeout(() => {
+    const timer = setTimeout(() => {
       void loadViews();
     }, 0);
-    return () => window.clearTimeout(timer);
+    return () => clearTimeout(timer);
   }, [currentUser, loadViews]);
 
   const categories = useMemo(
@@ -296,39 +320,61 @@ export default function ReportesPage() {
           .select('id')
           .single();
     const { data, error: writeError } = await query;
-    if (writeError) setSaveError('No se pudo guardar la vista. Comprueba los permisos y el nombre.');
-    else {
+    if (writeError) {
+      setSaveError('No se pudo guardar la vista. Comprueba los permisos y el nombre.');
+    } else {
       setActiveViewId(data?.id || '');
+      toast({ message: `Vista “${name}” guardada con éxito.`, tone: 'success' });
       await loadViews();
     }
     setSaving(false);
   }
 
   async function deleteView(view: SavedView) {
-    if (!currentUser?.id || !window.confirm(`¿Eliminar la vista “${view.nombre}”?`)) return;
+    if (!currentUser?.id) return;
+    const ok = await confirm({
+      title: 'Eliminar vista guardada',
+      message: `¿Estás seguro de eliminar la vista “${view.nombre}”?`,
+      confirmLabel: 'Eliminar vista',
+      destructive: true,
+    });
+    if (!ok) return;
+
     const { error: deleteError } = await supabase
       .from('reportes_vistas')
       .delete()
       .eq('id', view.id)
       .eq('usuario_id', currentUser.id);
-    if (deleteError) setSaveError('No se pudo eliminar la vista.');
-    else {
+    if (deleteError) {
+      toast({ message: 'No se pudo eliminar la vista.', tone: 'danger' });
+    } else {
       if (activeViewId === view.id) setActiveViewId('');
+      toast({ message: 'Vista eliminada.', tone: 'info' });
       await loadViews();
     }
   }
 
-  async function renameView(view: SavedView) {
-    if (!currentUser?.id) return;
-    const name = window.prompt('Nuevo nombre de la vista', view.nombre)?.trim();
-    if (!name || name === view.nombre) return;
+  function openRenameModal(view: SavedView) {
+    setViewToRename(view);
+    setRenameValue(view.nombre);
+    setRenameModalOpen(true);
+  }
+
+  async function handleConfirmRename() {
+    if (!currentUser?.id || !viewToRename || !renameValue.trim()) return;
     const { error: renameError } = await supabase
       .from('reportes_vistas')
-      .update({ nombre: name })
-      .eq('id', view.id)
+      .update({ nombre: renameValue.trim() })
+      .eq('id', viewToRename.id)
       .eq('usuario_id', currentUser.id);
-    if (renameError) setSaveError('No se pudo renombrar la vista.');
-    else await loadViews();
+    if (renameError) {
+      toast({ message: 'No se pudo renombrar la vista.', tone: 'danger' });
+    } else {
+      toast({ message: 'Vista renombrada con éxito.', tone: 'success' });
+      setRenameModalOpen(false);
+      setViewToRename(null);
+      await loadViews();
+    }
   }
 
   // Exportar Margen a CSV
@@ -386,259 +432,198 @@ export default function ReportesPage() {
     document.body.removeChild(link);
   };
 
-  if (!currentUser || currentUser.rol === 'mano_obra')
+  if (!currentUser || currentUser.rol === 'mano_obra') {
     return (
-      <section className="hg-panel p-8">
-        <h1 className="text-xl font-bold">Acceso restringido</h1>
-        <p className="text-sm text-[#66716f]">
+      <Panel className="p-8 text-center">
+        <h1 className="t-section">Acceso restringido</h1>
+        <p className="t-caption mt-1">
           Los reportes financieros están disponibles para administración y usuarios comerciales.
         </p>
-      </section>
+      </Panel>
     );
+  }
 
   return (
     <div className="hg-page space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="hg-overline">Finanzas / Análisis</p>
-          <h1 className="text-2xl font-bold">Reportes y Rentabilidad</h1>
-          <p className="mt-1 text-sm text-[#66716f]">
-            Flujo de caja bancario y matriz operacional de costos y margen por Nota de Venta (NV).
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {config.tab === 'margen_nv' && (
-            <button
-              onClick={handleExportMargenCsv}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+      <PageHeader
+        title="Reportes y rentabilidad"
+        description="Flujo de caja bancario y matriz operacional de costos y margen por Nota de Venta (NV)."
+        actions={
+          <>
+            <IconButton
+              icon={RefreshCcw}
+              label="Actualizar datos"
+              onClick={() => {
+                void loadRows();
+                void loadMargenData();
+              }}
+              className={loading ? 'animate-spin' : undefined}
+            />
+            {config.tab === 'margen_nv' && (
+              <Button
+                variant="secondary"
+                icon={Download}
+                onClick={handleExportMargenCsv}
+              >
+                Exportar margen a CSV
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              icon={Wallet}
+              onClick={() => router.push('/caja')}
             >
-              <Download size={14} />
-              <span>Exportar Margen a CSV</span>
-            </button>
-          )}
-          <Link href="/caja" className="hg-button-secondary">
-            <Wallet size={16} /> Abrir Caja
-          </Link>
-        </div>
-      </div>
+              Abrir caja
+            </Button>
+          </>
+        }
+      />
 
       {/* Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e5e7e4]">
-        <div role="tablist" aria-label="Tipo de reporte" className="flex gap-5">
-          {(
-            [
-              { id: 'flujo', label: 'Flujo de Caja' },
-              { id: 'ingresos', label: 'Ingresos' },
-              { id: 'egresos', label: 'Egresos' },
-              { id: 'margen_nv', label: 'Margen por Nota de Venta (NV)' },
-            ] as { id: ReportTab; label: string }[]
-          ).map((t) => (
-            <button
-              key={t.id}
-              role="tab"
-              aria-selected={config.tab === t.id}
-              onClick={() => update('tab', t.id)}
-              className={`border-b-2 px-1 py-3 text-sm font-semibold transition cursor-pointer ${
-                config.tab === t.id
-                  ? 'border-[#e87622] text-[#d4671c]'
-                  : 'border-transparent text-[#66716f] hover:text-[#252b2d]'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <button
-          className="mb-2 flex items-center gap-2 text-xs font-semibold text-[#66716f] hover:text-[#252b2d] cursor-pointer"
-          onClick={() => {
-            void loadRows();
-            void loadMargenData();
-          }}
-        >
-          <RefreshCcw size={14} /> Actualizar
-        </button>
-      </div>
+      <Tabs
+        items={[
+          { id: 'flujo', label: 'Flujo de caja' },
+          { id: 'ingresos', label: 'Ingresos' },
+          { id: 'egresos', label: 'Egresos' },
+          { id: 'margen_nv', label: 'Margen por Nota de Venta (NV)', count: margenRows.length },
+        ]}
+        active={config.tab}
+        onChange={(id) => update('tab', id as ReportTab)}
+      />
 
       {/* Pestaña Margen por NV */}
       {config.tab === 'margen_nv' ? (
-        <div className="space-y-5">
-          {/* Indicadores de Margen */}
-          <section aria-label="Indicadores de margen por NV" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="hg-panel p-5">
-              <div className="flex items-center justify-between">
-                <p className="hg-overline">Venta Total Cotizada</p>
-                <BarChart3 size={18} className="text-blue-700" />
-              </div>
-              <p className="hg-kpi-value mt-4 text-blue-900">
-                {money(margenTotals.totalVenta)}
-              </p>
-              <span className="text-[11px] text-gray-500 mt-1 block">Suma de NVs analizadas</span>
-            </div>
-
-            <div className="hg-panel p-5">
-              <div className="flex items-center justify-between">
-                <p className="hg-overline">Cobrado Validado en Caja</p>
-                <ArrowUpRight size={18} className="text-emerald-700" />
-              </div>
-              <p className="hg-kpi-value mt-4 text-emerald-700">
-                {money(margenTotals.totalIngresos)}
-              </p>
-              <span className="text-[11px] text-gray-500 mt-1 block">Abonos verificados</span>
-            </div>
-
-            <div className="hg-panel p-5">
-              <div className="flex items-center justify-between">
-                <p className="hg-overline">Costos Directos (OC + Fletes)</p>
-                <ArrowDownRight size={18} className="text-amber-700" />
-              </div>
-              <p className="hg-kpi-value mt-4 text-amber-700">
-                {money(margenTotals.totalCostos)}
-              </p>
-              <span className="text-[11px] text-gray-500 mt-1 block">Insumos y despachos imputados</span>
-            </div>
-
-            <div className="hg-panel p-5">
-              <div className="flex items-center justify-between">
-                <p className="hg-overline">Margen Bruto Real Total</p>
-                <Percent size={18} className={margenTotals.margenReal >= 0 ? 'text-emerald-600' : 'text-red-600'} />
-              </div>
-              <p className={`hg-kpi-value mt-4 ${margenTotals.margenReal >= 0 ? 'text-emerald-800' : 'text-red-700'}`}>
-                {money(margenTotals.margenReal)}
-              </p>
-              <span className="text-[11px] font-bold mt-1 block text-gray-700">
-                Rentabilidad Real: {margenTotals.pctReal.toFixed(1)}% (Proyectada: {margenTotals.pctProyectado.toFixed(1)}%)
-              </span>
-            </div>
-          </section>
+        <div className="space-y-4">
+          {/* Resumen accionable de margen */}
+          <Panel className="p-3">
+            <SummaryLine
+              items={[
+                {
+                  label: 'venta total cotizada',
+                  value: money(margenTotals.totalVenta),
+                  tone: 'info',
+                },
+                {
+                  label: 'cobrado en caja',
+                  value: money(margenTotals.totalIngresos),
+                  tone: 'success',
+                },
+                {
+                  label: 'costos directos (OC + Fletes)',
+                  value: money(margenTotals.totalCostos),
+                  tone: 'warning',
+                },
+                {
+                  label: `margen bruto real (${margenTotals.pctReal.toFixed(1)}%)`,
+                  value: money(margenTotals.margenReal),
+                  tone: margenTotals.margenReal >= 0 ? 'success' : 'danger',
+                },
+              ]}
+            />
+          </Panel>
 
           {/* Filtros Margen */}
-          <section className="bg-white border border-gray-200 rounded-xl p-3 shadow-xs flex flex-wrap items-center justify-between gap-3">
-            <div className="relative flex-1 min-w-[260px]">
-              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="Buscar por NV, título de venta, cliente o vendedor..."
-                value={searchMargen}
-                onChange={(e) => setSearchMargen(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 bg-[#f4f5f3] rounded-lg text-xs text-[#213343] font-semibold border border-transparent focus:border-[#f97316] focus:outline-none"
-              />
-            </div>
+          <FilterBar>
+            <SearchField
+              placeholder="Buscar por NV, título de venta, cliente o vendedor..."
+              value={searchMargen}
+              onChange={(e) => setSearchMargen(e.target.value)}
+            />
 
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-bold text-gray-600">Rentabilidad:</label>
-              <select
-                value={filtroRentabilidad}
-                onChange={(e) => setFiltroRentabilidad(e.target.value as any)}
-                className="bg-[#f4f5f3] border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs text-[#213343] font-semibold cursor-pointer"
-              >
-                <option value="todos">Todas las Notas de Venta</option>
-                <option value="positivo">Margen Positivo (Ganancia)</option>
-                <option value="negativo">Margen Negativo (Pérdida / En curso)</option>
-              </select>
-            </div>
-          </section>
+            <FilterSelect
+              label="Rentabilidad"
+              value={filtroRentabilidad}
+              onChange={(e) => setFiltroRentabilidad(e.target.value as 'todos' | 'positivo' | 'negativo')}
+            >
+              <option value="todos">Todas las Notas de Venta</option>
+              <option value="positivo">Margen positivo (ganancia)</option>
+              <option value="negativo">Margen negativo (pérdida / en curso)</option>
+            </FilterSelect>
+          </FilterBar>
 
           {/* Tabla de Margen por NV */}
-          <section className="hg-panel overflow-hidden">
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-sm font-extrabold text-[#213343] flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-[#f97316]" />
-                <span>Matriz de Costos y Margen Real por Nota de Venta ({filteredMargen.length})</span>
-              </h2>
-              <span className="text-xs text-gray-500">
-                Cálculo atómico en base a compras asignadas, fletes confirmados y abonos validados
+          <Panel
+            title={
+              <span className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-accent-ink" />
+                <span>Matriz de costos y margen real por Nota de Venta ({filteredMargen.length})</span>
               </span>
-            </div>
-
+            }
+          >
             {loadingMargen ? (
-              <div className="p-8 text-center text-xs text-gray-500">Cargando matriz de rentabilidad...</div>
+              <div className="p-8 text-center t-caption">Cargando matriz de rentabilidad…</div>
             ) : filteredMargen.length === 0 ? (
-              <div className="p-8 text-center text-xs text-gray-500">No se encontraron ventas para este filtro.</div>
+              <div className="p-8 text-center t-caption">No se encontraron ventas para este filtro.</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs min-w-[1100px]">
-                  <thead className="bg-[#f4f5f3] text-[#66716f] uppercase text-[10px] tracking-normal border-b border-gray-200">
+                <table className="hg-table w-full text-left text-xs min-w-[1100px]">
+                  <thead>
                     <tr>
-                      <th className="py-3 px-4">NV / Código</th>
-                      <th className="py-3 px-4">Proyecto & Cliente</th>
-                      <th className="py-3 px-4">Vendedor</th>
-                      <th className="py-3 px-4 text-right">Venta Cotizada</th>
-                      <th className="py-3 px-4 text-right">Cobrado en Caja</th>
-                      <th className="py-3 px-4 text-right">Compras OC</th>
-                      <th className="py-3 px-4 text-right">Fletes Guías</th>
-                      <th className="py-3 px-4 text-right">Costo Total</th>
-                      <th className="py-3 px-4 text-right">Margen Real ($)</th>
-                      <th className="py-3 px-4 text-center">Rentabilidad</th>
-                      <th className="py-3 px-4 text-center">Acciones</th>
+                      <th className="p-3">NV / Código</th>
+                      <th className="p-3">Proyecto y cliente</th>
+                      <th className="p-3">Vendedor</th>
+                      <th className="p-3 text-right">Venta cotizada</th>
+                      <th className="p-3 text-right">Cobrado en caja</th>
+                      <th className="p-3 text-right">Compras OC</th>
+                      <th className="p-3 text-right">Fletes guías</th>
+                      <th className="p-3 text-right">Costo total</th>
+                      <th className="p-3 text-right">Margen real ($)</th>
+                      <th className="p-3 text-center">Rentabilidad</th>
+                      <th className="p-3 text-center">Acciones</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody>
                     {filteredMargen.map((r) => {
                       const isRealPositive = Number(r.margen_bruto_real) >= 0;
                       return (
-                        <tr key={r.oportunidad_id} className="hover:bg-gray-50 transition">
-                          <td className="py-3 px-4 font-mono font-bold text-[#213343]">
-                            {r.codigo}
+                        <tr key={r.oportunidad_id}>
+                          <td className="p-3">
+                            <CodeStamp title={r.titulo}>{r.codigo}</CodeStamp>
                           </td>
-                          <td className="py-3 px-4">
-                            <div className="font-extrabold text-gray-900">{r.titulo}</div>
-                            <div className="text-[11px] text-gray-500">{r.cliente_nombre} {r.cliente_rut ? `(${r.cliente_rut})` : ''}</div>
+                          <td className="p-3">
+                            <div className="font-semibold text-ink">{r.titulo}</div>
+                            <div className="t-caption text-ink-muted">
+                              {r.cliente_nombre} {r.cliente_rut ? `(${r.cliente_rut})` : ''}
+                            </div>
                           </td>
-                          <td className="py-3 px-4 font-medium text-gray-700">
-                            {r.vendedor_nombre}
-                          </td>
-                          <td className="py-3 px-4 text-right font-black text-gray-800">
+                          <td className="p-3 text-ink-muted">{r.vendedor_nombre}</td>
+                          <td className="p-3 text-right font-semibold text-ink t-num">
                             {money(Number(r.valor_cotizado_total || 0))}
                           </td>
-                          <td className="py-3 px-4 text-right font-black text-emerald-700">
-                            {money(Number(r.total_ingresos_validados || 0))}
+                          <td className="p-3 text-right font-semibold text-success t-num">
+                            +{money(Number(r.total_ingresos_validados || 0))}
                           </td>
-                          <td className="py-3 px-4 text-right font-medium text-gray-700">
+                          <td className="p-3 text-right text-ink-muted t-num">
                             {money(Number(r.costo_compras_asignadas || 0))}
                           </td>
-                          <td className="py-3 px-4 text-right font-medium text-gray-700">
+                          <td className="p-3 text-right text-ink-muted t-num">
                             {money(Number(r.costo_fletes_despacho || 0))}
                           </td>
-                          <td className="py-3 px-4 text-right font-black text-amber-800">
-                            {money(Number(r.costo_directo_total || 0))}
+                          <td className="p-3 text-right font-semibold text-ink t-num">
+                            −{money(Number(r.costo_directo_total || 0))}
                           </td>
-                          <td className="py-3 px-4 text-right font-black">
-                            <span className={isRealPositive ? 'text-emerald-700' : 'text-red-700'}>
-                              {money(Number(r.margen_bruto_real || 0))}
-                            </span>
+                          <td className={`p-3 text-right font-semibold t-num ${isRealPositive ? 'text-success' : 'text-danger'}`}>
+                            {isRealPositive ? '+' : '−'}{money(Math.abs(Number(r.margen_bruto_real || 0)))}
                           </td>
-                          <td className="py-3 px-4 text-center">
-                            <span
-                              className={`px-2 py-0.5 rounded-full font-bold text-[10px] inline-flex items-center gap-1 border ${
-                                isRealPositive
-                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                  : 'bg-red-50 text-red-800 border-red-200'
-                              }`}
-                            >
-                              {isRealPositive ? (
-                                <TrendingUp size={12} className="text-emerald-600" />
-                              ) : (
-                                <TrendingDown size={12} className="text-red-600" />
-                              )}
-                              <span>{Number(r.porcentaje_margen_real || 0).toFixed(1)}%</span>
-                            </span>
+                          <td className="p-3 text-center">
+                            <StatusBadge tone={isRealPositive ? 'success' : 'danger'}>
+                              {Number(r.porcentaje_margen_real || 0).toFixed(1)}%
+                            </StatusBadge>
                           </td>
-                          <td className="py-3 px-4 text-center">
+                          <td className="p-3 text-center">
                             <div className="flex items-center justify-center gap-1.5">
-                              <Link
-                                href={`/ventas?oportunidad=${r.oportunidad_id}`}
-                                className="p-1 text-gray-500 hover:text-[#f97316] hover:bg-orange-50 rounded transition"
-                                title="Ver venta"
-                              >
-                                <ExternalLink size={14} />
-                              </Link>
-                              <Link
-                                href={`/ventas/${r.oportunidad_id}/operacion`}
-                                className="text-[10px] font-bold text-[#f97316] hover:underline"
-                                title="Ver producción y margen operativo"
+                              <IconButton
+                                icon={ExternalLink}
+                                label="Ver venta"
+                                onClick={() => router.push(`/ventas?oportunidad=${r.oportunidad_id}`)}
+                              />
+                              <Button
+                                size="sm"
+                                variant="subtle"
+                                onClick={() => router.push(`/ventas/${r.oportunidad_id}/operacion`)}
                               >
                                 Operación
-                              </Link>
+                              </Button>
                             </div>
                           </td>
                         </tr>
@@ -648,127 +633,139 @@ export default function ReportesPage() {
                 </table>
               </div>
             )}
-          </section>
+          </Panel>
         </div>
       ) : (
         /* Pestañas Tradicionales: Flujo, Ingresos, Egresos */
-        <div className="space-y-5">
-          <section aria-label="Filtros de reportes" className="hg-panel flex flex-wrap items-end gap-3 p-4">
-            <label className="min-w-36 flex-1 text-xs font-semibold text-[#66716f]">
-              <CalendarDays size={14} className="mb-1 inline" /> Desde
-              <input
-                aria-label="Fecha inicial"
-                type="date"
-                className="hg-field mt-1"
-                value={config.desde}
-                onChange={(event) => update('desde', event.target.value)}
-              />
-            </label>
-            <label className="min-w-36 flex-1 text-xs font-semibold text-[#66716f]">
-              Hasta
-              <input
-                aria-label="Fecha final"
-                type="date"
-                className="hg-field mt-1"
-                value={config.hasta}
-                onChange={(event) => update('hasta', event.target.value)}
-              />
-            </label>
-            <label className="min-w-40 flex-1 text-xs font-semibold text-[#66716f]">
-              <Filter size={14} className="mb-1 inline" /> Categoría
-              <select
-                className="hg-field mt-1"
-                value={config.categoria}
-                onChange={(event) => update('categoria', event.target.value)}
-              >
-                <option value="todas">Todas las categorías</option>
-                {categories.map((category) => (
-                  <option key={category}>{category}</option>
-                ))}
-              </select>
-            </label>
-            <label className="min-w-40 flex-1 text-xs font-semibold text-[#66716f]">
-              <Landmark size={14} className="mb-1 inline" /> Cuenta Bancaria
-              <select
-                className="hg-field mt-1"
-                value={selectedCuentaBancaria}
-                onChange={(event) => setSelectedCuentaBancaria(event.target.value)}
-              >
-                <option value="todas">Todas las cuentas</option>
-                {cuentasBancarias.map((cb) => (
-                  <option key={cb.id} value={cb.id}>
-                    {cb.alias} ({cb.banco})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="min-w-36 flex-1 text-xs font-semibold text-[#66716f]">
-              <BarChart3 size={14} className="mb-1 inline" /> Agrupar por
-              <select
-                className="hg-field mt-1"
-                value={config.agrupacion}
-                onChange={(event) => update('agrupacion', event.target.value as ReportGrouping)}
-              >
-                <option value="periodo">Día</option>
-                <option value="categoria">Categoría</option>
-              </select>
-            </label>
-          </section>
+        <div className="space-y-4">
+          <Panel className="p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              <div>
+                <label className="block t-caption font-semibold text-ink mb-1">
+                  <CalendarDays size={13} className="inline mr-1 text-ink-muted" /> Desde
+                </label>
+                <TextInput
+                  type="date"
+                  aria-label="Fecha inicial"
+                  value={config.desde}
+                  onChange={(event) => update('desde', event.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block t-caption font-semibold text-ink mb-1">
+                  Hasta
+                </label>
+                <TextInput
+                  type="date"
+                  aria-label="Fecha final"
+                  value={config.hasta}
+                  onChange={(event) => update('hasta', event.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block t-caption font-semibold text-ink mb-1">
+                  <Filter size={13} className="inline mr-1 text-ink-muted" /> Categoría
+                </label>
+                <Select
+                  value={config.categoria}
+                  onChange={(event) => update('categoria', event.target.value)}
+                >
+                  <option value="todas">Todas las categorías</option>
+                  {categories.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </Select>
+              </div>
+
+              <div>
+                <label className="block t-caption font-semibold text-ink mb-1">
+                  <Landmark size={13} className="inline mr-1 text-ink-muted" /> Cuenta bancaria
+                </label>
+                <Select
+                  value={selectedCuentaBancaria}
+                  onChange={(event) => setSelectedCuentaBancaria(event.target.value)}
+                >
+                  <option value="todas">Todas las cuentas</option>
+                  {cuentasBancarias.map((cb) => (
+                    <option key={cb.id} value={cb.id}>
+                      {cb.alias} ({cb.banco})
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div>
+                <label className="block t-caption font-semibold text-ink mb-1">
+                  <BarChart3 size={13} className="inline mr-1 text-ink-muted" /> Agrupar por
+                </label>
+                <Select
+                  value={config.agrupacion}
+                  onChange={(event) => update('agrupacion', event.target.value as ReportGrouping)}
+                >
+                  <option value="periodo">Día</option>
+                  <option value="categoria">Categoría</option>
+                </Select>
+              </div>
+            </div>
+          </Panel>
 
           {error && (
-            <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <p role="alert" className="p-3 rounded-control border border-danger-line bg-danger-soft text-sm text-danger font-semibold">
               {error}
             </p>
           )}
 
-          <section aria-label="Indicadores de caja" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {[
-              { label: 'Ingresos registrados', value: money(totals.ingresos), color: 'text-emerald-700', icon: ArrowUpRight },
-              { label: 'Egresos registrados', value: money(totals.egresos), color: 'text-red-700', icon: ArrowDownRight },
-              { label: 'Saldo neto', value: money(totals.neto), color: 'text-[#252b2d]', icon: BarChart3 },
-              {
-                label: 'Tasa de saldo',
-                value:
-                  totals.tasaSaldo === null
+          {/* Resumen accionable */}
+          <Panel className="p-3">
+            <SummaryLine
+              items={[
+                {
+                  label: 'ingresos registrados',
+                  value: money(totals.ingresos),
+                  tone: 'success',
+                },
+                {
+                  label: 'egresos registrados',
+                  value: money(totals.egresos),
+                  tone: 'danger',
+                },
+                {
+                  label: 'saldo neto',
+                  value: money(totals.neto),
+                  tone: totals.neto >= 0 ? 'accent' : 'danger',
+                },
+                {
+                  label: 'tasa de saldo',
+                  value: totals.tasaSaldo === null
                     ? 'No aplica'
                     : new Intl.NumberFormat('es-CL', { style: 'percent', maximumFractionDigits: 1 }).format(
                         totals.tasaSaldo
                       ),
-                color: 'text-[#252b2d]',
-                icon: Bookmark,
-              },
-            ].map((card) => (
-              <div key={card.label} className="hg-panel p-5">
-                <div className="flex items-center justify-between">
-                  <p className="hg-overline">{card.label}</p>
-                  <card.icon size={18} className={card.color} />
-                </div>
-                <p className={`hg-kpi-value mt-4 ${card.color}`}>{loading ? '…' : card.value}</p>
-              </div>
-            ))}
-          </section>
+                  tone: 'neutral',
+                },
+              ]}
+            />
+          </Panel>
 
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
-            <div className="space-y-5">
-              <section className="hg-panel overflow-hidden">
-                <div className="border-b border-[#e5e7e4] p-5">
-                  <p className="hg-overline">{config.tab}</p>
-                  <h2 className="hg-section-title">
-                    Movimiento por {config.agrupacion === 'periodo' ? 'día' : 'categoría'}
-                  </h2>
-                </div>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="space-y-4">
+              <Panel
+                title={`Movimiento por ${config.agrupacion === 'periodo' ? 'día' : 'categoría'}`}
+              >
                 {series.length === 0 ? (
-                  <div className="p-12 text-center text-sm text-[#66716f]">
+                  <div className="p-12 text-center t-caption">
                     No hay movimientos para este período y filtro.
                   </div>
                 ) : (
-                  <div className="max-h-[420px] space-y-3 overflow-y-auto p-5">
+                  <div className="max-h-[420px] space-y-3 overflow-y-auto p-4">
                     {series.map((item) => (
                       <div
                         key={item.label}
-                        className="grid grid-cols-[minmax(80px,150px)_1fr] items-center gap-3 text-xs"
+                        className="grid grid-cols-[minmax(80px,160px)_1fr] items-center gap-3 text-xs"
                       >
-                        <span className="truncate font-semibold" title={item.label}>
+                        <span className="truncate font-semibold text-ink" title={item.label}>
                           {config.agrupacion === 'periodo'
                             ? new Date(`${item.label}T12:00:00`).toLocaleDateString('es-CL')
                             : item.label}
@@ -778,7 +775,7 @@ export default function ReportesPage() {
                             <div className="flex items-center gap-2">
                               <span
                                 title={`Ingresos ${money(item.ingresos)}`}
-                                className="h-3 rounded bg-emerald-500"
+                                className="h-3 rounded-control bg-success"
                                 style={{
                                   width: `${Math.max(
                                     item.ingresos > 0 ? 2 : 0,
@@ -786,14 +783,14 @@ export default function ReportesPage() {
                                   )}%`,
                                 }}
                               />
-                              <span className="tabular-nums text-[#66716f]">{money(item.ingresos)}</span>
+                              <span className="t-num text-ink-muted">{money(item.ingresos)}</span>
                             </div>
                           )}
                           {config.tab !== 'ingresos' && (
                             <div className="flex items-center gap-2">
                               <span
                                 title={`Egresos ${money(item.egresos)}`}
-                                className="h-3 rounded bg-orange-400"
+                                className="h-3 rounded-control bg-accent"
                                 style={{
                                   width: `${Math.max(
                                     item.egresos > 0 ? 2 : 0,
@@ -801,7 +798,7 @@ export default function ReportesPage() {
                                   )}%`,
                                 }}
                               />
-                              <span className="tabular-nums text-[#66716f]">{money(item.egresos)}</span>
+                              <span className="t-num text-ink-muted">{money(item.egresos)}</span>
                             </div>
                           )}
                         </div>
@@ -809,118 +806,172 @@ export default function ReportesPage() {
                     ))}
                   </div>
                 )}
-              </section>
+              </Panel>
 
-              <section className="hg-panel overflow-hidden">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e5e7e4] p-5">
-                  <h2 className="hg-section-title">Movimientos</h2>
-                  <span className="text-xs text-[#66716f]">{visible.length} registros</span>
-                </div>
+              <Panel
+                title={
+                  <span className="flex items-center justify-between w-full gap-2">
+                    <span>Movimientos</span>
+                    <span className="t-caption">{visible.length} registros</span>
+                  </span>
+                }
+              >
                 <div className="overflow-x-auto">
-                  <table className="hg-table hg-list-table">
+                  <table className="hg-table w-full text-left text-xs min-w-[600px]">
                     <thead>
                       <tr>
-                        <th>Fecha</th>
-                        <th>Tipo</th>
-                        <th>Categoría</th>
-                        <th>Descripción</th>
-                        <th>Monto</th>
+                        <th className="p-3">Fecha</th>
+                        <th className="p-3">Tipo</th>
+                        <th className="p-3">Categoría</th>
+                        <th className="p-3">Descripción</th>
+                        <th className="p-3 text-right">Monto</th>
                       </tr>
                     </thead>
                     <tbody>
                       {visible.slice(0, 100).map((row) => (
                         <tr key={row.id}>
-                          <td>{new Date(row.fecha).toLocaleDateString('es-CL')}</td>
-                          <td className={row.tipo === 'ingreso' ? 'text-emerald-700' : 'text-red-700'}>
-                            {row.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}
+                          <td className="p-3 t-num text-ink-muted">
+                            {new Date(row.fecha).toLocaleDateString('es-CL')}
                           </td>
-                          <td>{row.categoria}</td>
-                          <td>{row.descripcion || '—'}</td>
-                          <td className="font-semibold tabular-nums">{money(Number(row.monto))}</td>
+                          <td className="p-3">
+                            <StatusBadge tone={row.tipo === 'ingreso' ? 'success' : 'danger'}>
+                              {row.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}
+                            </StatusBadge>
+                          </td>
+                          <td className="p-3 font-semibold text-ink">{row.categoria}</td>
+                          <td className="p-3 text-ink-muted">{row.descripcion || '—'}</td>
+                          <td className={`p-3 text-right font-semibold t-num ${row.tipo === 'ingreso' ? 'text-success' : 'text-danger'}`}>
+                            {row.tipo === 'ingreso' ? '+' : '−'}{money(Number(row.monto))}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
                 {visible.length > 100 && (
-                  <p className="border-t border-[#e5e7e4] p-3 text-xs text-[#66716f]">
+                  <p className="border-t border-line-subtle p-3 t-caption">
                     Se muestran los 100 movimientos más recientes.
                   </p>
                 )}
-                {!visible.length && <p className="p-8 text-center text-sm text-[#66716f]">Sin movimientos para mostrar.</p>}
-              </section>
+                {!visible.length && <p className="p-8 text-center t-caption">Sin movimientos para mostrar.</p>}
+              </Panel>
             </div>
 
-            <aside className="hg-panel h-fit p-5">
-              <p className="hg-overline">Personalización</p>
-              <h2 className="hg-section-title mt-1">Vistas guardadas</h2>
-              <p className="mt-1 text-xs text-[#66716f]">Solo tú puedes ver y administrar tus vistas.</p>
-              <label className="mt-4 block text-xs font-semibold text-[#66716f]">
-                Nombre de la vista
-                <input
-                  className="hg-field mt-1"
-                  maxLength={80}
-                  value={viewName}
-                  onChange={(event) => setViewName(event.target.value)}
-                  placeholder="Ej. Flujo mensual"
-                />
-              </label>
-              <button
-                onClick={() => void saveView()}
-                disabled={saving}
-                className="hg-button-primary mt-3 w-full"
-              >
-                <Bookmark size={16} /> {saving ? 'Guardando…' : 'Guardar vista'}
-              </button>
-              {saveError && <p role="alert" className="mt-3 text-xs text-red-700">{saveError}</p>}
-              <div className="mt-5 space-y-2 border-t border-[#e5e7e4] pt-4">
-                {saved.length === 0 && <p className="text-xs text-[#66716f]">Aún no tienes vistas guardadas.</p>}
-                {saved.map((view) => (
-                  <div
-                    key={view.id}
-                    className={`flex items-center gap-1 rounded-lg border p-1 ${
-                      activeViewId === view.id ? 'border-[#f7d3b8] bg-[#fff1e7]' : 'border-[#e5e7e4]'
-                    }`}
-                  >
-                    <button
-                      className="min-w-0 flex-1 truncate rounded px-2 py-1.5 text-left text-xs font-semibold hover:underline"
-                      onClick={() => {
-                        const next = parseReportConfig(view.configuracion);
-                        if (!next) {
-                          setSaveError('Esta vista tiene una configuración inválida.');
-                          return;
-                        }
-                        setConfig(next);
-                        setViewName(view.nombre);
-                        setActiveViewId(view.id);
-                      }}
-                      title={view.nombre}
+            <aside className="space-y-4">
+              <Panel className="p-4 space-y-3">
+                <h2 className="t-section">Vistas guardadas</h2>
+                <p className="t-caption">Solo tú puedes ver y administrar tus vistas personalizadas.</p>
+
+                <Field label="Nombre de la vista">
+                  {({ id }) => (
+                    <TextInput
+                      id={id}
+                      maxLength={80}
+                      value={viewName}
+                      onChange={(event) => setViewName(event.target.value)}
+                      placeholder="Ej. Flujo mensual"
+                    />
+                  )}
+                </Field>
+
+                <Button
+                  variant="primary"
+                  icon={Bookmark}
+                  disabled={saving}
+                  onClick={() => void saveView()}
+                  className="w-full"
+                >
+                  {saving ? 'Guardando…' : 'Guardar vista'}
+                </Button>
+
+                {saveError && (
+                  <p role="alert" className="t-caption text-danger">{saveError}</p>
+                )}
+
+                <div className="pt-3 border-t border-line-subtle space-y-2">
+                  {saved.length === 0 && (
+                    <p className="t-caption">Aún no tienes vistas guardadas.</p>
+                  )}
+                  {saved.map((view) => (
+                    <div
+                      key={view.id}
+                      className={`flex items-center gap-1 rounded-control border p-1 transition-colors ${
+                        activeViewId === view.id
+                          ? 'border-accent-line bg-accent-soft'
+                          : 'border-line bg-surface'
+                      }`}
                     >
-                      {view.nombre}
-                    </button>
-                    <button
-                      title="Renombrar vista"
-                      aria-label={`Renombrar ${view.nombre}`}
-                      onClick={() => void renameView(view)}
-                      className="rounded p-1.5 text-[#66716f] hover:bg-white"
-                    >
-                      ✎
-                    </button>
-                    <button
-                      title="Eliminar vista"
-                      aria-label={`Eliminar ${view.nombre}`}
-                      onClick={() => void deleteView(view)}
-                      className="rounded p-1.5 text-[#b83d46] hover:bg-white"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 truncate px-2 py-1.5 text-left text-xs font-semibold text-ink hover:underline cursor-pointer"
+                        onClick={() => {
+                          const next = parseReportConfig(view.configuracion);
+                          if (!next) {
+                            setSaveError('Esta vista tiene una configuración inválida.');
+                            return;
+                          }
+                          setConfig(next);
+                          setViewName(view.nombre);
+                          setActiveViewId(view.id);
+                        }}
+                        title={view.nombre}
+                      >
+                        {view.nombre}
+                      </button>
+                      <IconButton
+                        icon={Edit2}
+                        label={`Renombrar ${view.nombre}`}
+                        onClick={() => openRenameModal(view)}
+                      />
+                      <IconButton
+                        icon={Trash2}
+                        label={`Eliminar ${view.nombre}`}
+                        onClick={() => void deleteView(view)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </Panel>
             </aside>
           </div>
         </div>
       )}
+
+      {/* Diálogo Renombrar Vista (evita prompt nativo) */}
+      <Dialog
+        open={renameModalOpen && !!viewToRename}
+        title="Renombrar vista guardada"
+        onClose={() => setRenameModalOpen(false)}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setRenameModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => void handleConfirmRename()}
+            >
+              Guardar nombre
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Field label="Nuevo nombre" required>
+            {({ id }) => (
+              <TextInput
+                id={id}
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                maxLength={80}
+              />
+            )}
+          </Field>
+        </div>
+      </Dialog>
     </div>
   );
 }

@@ -1,15 +1,14 @@
 'use client';
 
 import React from 'react';
-import { Target, TrendingUp, ChevronRight, Layers } from 'lucide-react';
-import Link from 'next/link';
+import { Target } from 'lucide-react';
 
 export interface FunnelStageData {
   stageId: string;
   label: string;
   count: number;
   nominalMonto: number;
-  probabilidad: number; // e.g. 20, 50, 80, 100
+  probabilidad: number;
   weightedMonto: number;
   color: string;
   bgColor: string;
@@ -29,36 +28,36 @@ export function PipelineFunnelChart({
   const maxNominal = Math.max(...stages.map((s) => s.nominalMonto), 1);
 
   return (
-    <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-5">
+    <div className="space-y-5 rounded-panel border border-line bg-surface p-5">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
+      <div className="flex flex-col justify-between gap-3 border-b border-line-subtle pb-3 sm:flex-row sm:items-center">
         <div>
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-md bg-orange-50 text-[#f97316]">
-              <Target className="w-4 h-4" />
-            </div>
-            <h3 className="font-extrabold text-base text-[#213343]">
-              Proyecciones de Venta en Pipeline
+            <span className="grid h-7 w-7 place-items-center rounded-control bg-surface-muted text-accent-ink">
+              <Target className="h-4 w-4" aria-hidden />
+            </span>
+            <h3 className="text-base font-semibold text-ink">
+              Proyecciones de venta en pipeline
             </h3>
           </div>
-          <p className="text-xs text-gray-500 font-medium mt-0.5">
+          <p className="t-caption mt-0.5 text-ink-muted">
             Valor nominal y proyección ponderada por probabilidad de cierre en cada etapa
           </p>
         </div>
 
         {/* Resumen Ponderado */}
-        <div className="bg-orange-50 border border-orange-200 px-3.5 py-1.5 rounded-lg text-right">
-          <span className="text-[10.5px] text-gray-500 font-bold block">
+        <div className="rounded-control border border-line bg-surface-muted px-3 py-1.5 text-right">
+          <span className="t-micro block font-medium text-ink-muted">
             Proyección ponderada
           </span>
-          <span className="text-sm font-black text-[#f97316]">
-            ${totalPipelineWeighted.toLocaleString('es-CL')} CLP
+          <span className="t-num block text-sm font-semibold text-accent-ink">
+            ${totalPipelineWeighted.toLocaleString('es-CL')}
           </span>
         </div>
       </div>
 
       {/* Embudo Visual / Funnel */}
-      <div className="space-y-3 text-xs">
+      <div className="space-y-2.5 text-xs">
         {stages.map((st) => {
           const widthPercent =
             totalPipelineNominal > 0
@@ -66,31 +65,34 @@ export function PipelineFunnelChart({
               : 12;
 
           return (
-            <div key={st.stageId} className="space-y-1.5 p-3 rounded-lg bg-gray-50/70 border border-gray-200 hover:border-orange-200 transition">
-              <div className="flex items-center justify-between font-bold">
-                <div className="flex items-center gap-2">
+            <div
+              key={st.stageId}
+              className="space-y-1.5 rounded-control border border-line bg-surface-muted/60 p-3 transition hover:border-line"
+            >
+              <div className="flex items-center justify-between font-medium">
+                <div className="flex items-center gap-2 truncate">
                   <span
-                    className="w-2.5 h-2.5 rounded-full"
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
                     style={{ backgroundColor: st.color }}
                   />
-                  <span className="text-[#213343]">{st.label}</span>
-                  <span className="text-[10px] bg-white border border-gray-200 px-2 py-0.5 rounded-full text-gray-600 font-semibold">
+                  <span className="truncate text-ink">{st.label}</span>
+                  <span className="t-micro rounded-full border border-line bg-surface px-2 py-0.5 font-medium text-ink-muted">
                     {st.count} ops · {st.probabilidad}% prob.
                   </span>
                 </div>
 
                 <div className="text-right">
-                  <span className="font-black text-[#213343] block">
+                  <span className="t-num block font-semibold text-ink">
                     ${st.nominalMonto.toLocaleString('es-CL')}
                   </span>
-                  <span className="text-[10px] text-[#f97316] font-bold block">
+                  <span className="t-micro t-num block text-ink-muted">
                     Pond: ${st.weightedMonto.toLocaleString('es-CL')}
                   </span>
                 </div>
               </div>
 
               {/* Barra Proporcional del Embudo */}
-              <div className="w-full bg-gray-200/80 h-2 rounded-full overflow-hidden flex items-center">
+              <div className="flex h-2 w-full items-center overflow-hidden rounded-full bg-surface">
                 <div
                   className="h-full rounded-full transition-all duration-500"
                   style={{
@@ -102,20 +104,6 @@ export function PipelineFunnelChart({
             </div>
           );
         })}
-      </div>
-
-      {/* Link al Pipeline */}
-      <div className="pt-1 flex items-center justify-between text-xs">
-        <span className="text-gray-500 font-medium">
-          Total nominal en embudo: <strong className="text-[#213343] font-bold">${totalPipelineNominal.toLocaleString('es-CL')} CLP</strong>
-        </span>
-        <Link
-          href="/ventas"
-          className="text-[#f97316] hover:underline font-bold flex items-center gap-1 cursor-pointer"
-        >
-          <span>Gestionar pipeline</span>
-          <ChevronRight className="w-4 h-4" />
-        </Link>
       </div>
     </div>
   );

@@ -9,7 +9,6 @@ import { Cotizacion, EstadoCotizacion, OportunidadVenta } from '../../lib/types'
 import { PdfPreviewModal } from '../../components/PdfPreviewModal';
 import { CotizacionModal } from '../../components/CotizacionModal';
 import {
-  FileText,
   Plus,
   Search,
   Building,
@@ -19,13 +18,12 @@ import {
   Square,
   Edit3,
   TrendingUp,
-  AlertTriangle,
   Trash2,
-  Save,
-  CheckCircle2,
 } from 'lucide-react';
 import { Pagination } from '../../components/Pagination';
 import { mensajeError } from '../../lib/errores';
+import { Button, CodeStamp, PageHeader, Panel, StatusBadge } from '../../components/ui/crm';
+import { useConfirm, useToast } from '../../components/ui/feedback';
 
 export default function CotizacionesPage() {
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
@@ -36,10 +34,6 @@ export default function CotizacionesPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [previewCotizacion, setPreviewCotizacion] = useState<Cotizacion | null>(null);
 
-  // Deletion State
-  const [cotToDelete, setCotToDelete] = useState<Cotizacion | null>(null);
-  const [successMsg, setSuccessMsg] = useState('');
-
   // Unified CotizacionModal Edit State
   const [editingCotizacion, setEditingCotizacion] = useState<Cotizacion | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -48,12 +42,15 @@ export default function CotizacionesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
+  const confirmDialog = useConfirm();
+  const toast = useToast();
+  const { currentUser } = useAuth();
+  const supabase = createClient();
+
   const isUUID = (str?: string | null): boolean => {
     if (!str) return false;
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
   };
-
-  const supabase = createClient();
 
   useEffect(() => {
     let ignore = false;
@@ -117,7 +114,7 @@ export default function CotizacionesPage() {
       ignore = true;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [supabase]);
 
   const filtered = cotizaciones.filter(
     (c) =>
@@ -156,8 +153,6 @@ export default function CotizacionesPage() {
     if (firstSelected) setPreviewCotizacion(firstSelected);
   };
 
-  const { currentUser } = useAuth();
-
   // Change quote status directly
   const handleChangeStatus = async (cotId: string, newStatus: EstadoCotizacion) => {
     const targetCot = cotizaciones.find((c) => c.id === cotId);
@@ -186,6 +181,10 @@ export default function CotizacionesPage() {
         datos_anteriores: targetCot,
         datos_nuevos: { estado: newStatus },
       });
+      toast({
+        message: `Cotización actualizada a ${newStatus}.`,
+        tone: 'success',
+      });
     } catch (err) {
       console.error('Error updating status in Supabase:', err);
       setLoadError(mensajeError(err, 'No se pudo cambiar el estado de la cotización.'));
@@ -194,143 +193,176 @@ export default function CotizacionesPage() {
   };
 
   // Delete quote permanently from Supabase
-  const handleDeleteCotizacion = async () => {
-    if (!cotToDelete) return;
+  const handleDeleteCotizacion = async (cot: Cotizacion) => {
+    const ok = await confirmDialog({
+      title: 'Eliminar Cotización',
+      message: `¿Estás seguro de que deseas eliminar la cotización ${cot.numero_cotizacion} por un monto de $${(cot.monto_total || 0).toLocaleString('es-CL')}? Esta acción la eliminará permanentemente.`,
+      confirmLabel: 'Eliminar Cotización',
+      destructive: true,
+    });
+    if (!ok) return;
+
     try {
-      await supabase.from('cotizaciones').delete().eq('id', cotToDelete.id);
+      const { error } = await supabase.from('cotizaciones').delete().eq('id', cot.id);
+      if (error) throw error;
       await logSistema({
         tipo_accion: 'eliminacion',
         entidad: 'cotizaciones',
-        entidad_id: cotToDelete.id,
-        descripcion: `Cotización ${cotToDelete.numero_cotizacion} eliminada del sistema`,
+        entidad_id: cot.id,
+        descripcion: `Cotización ${cot.numero_cotizacion} eliminada del sistema`,
         usuario_id: currentUser?.id,
-        datos_anteriores: cotToDelete,
+        datos_anteriores: cot,
+      });
+      setCotizaciones((prev) => prev.filter((c) => c.id !== cot.id));
+      toast({
+        message: `Cotización ${cot.numero_cotizacion} eliminada.`,
+        tone: 'success',
       });
     } catch (err) {
       console.error('Error deleting quote from Supabase:', err);
+      toast({
+        message: 'No se pudo eliminar la cotización.',
+        tone: 'danger',
+      });
     }
-
-    setCotizaciones((prev) => prev.filter((c) => c.id !== cotToDelete.id));
-    setSuccessMsg(`Cotización ${cotToDelete.numero_cotizacion} eliminada.`);
-    setCotToDelete(null);
-    setTimeout(() => setSuccessMsg(''), 4000);
   };
 
-
+  const getStatusTone = (estado: EstadoCotizacion): 'neutral' | 'accent' | 'success' | 'danger' | 'warning' => {
+    if (estado === 'aprobada') return 'success';
+    if (estado === 'enviada') return 'accent';
+    if (estado === 'rechazada' || estado === 'declinada') return 'danger';
+    return 'neutral';
+  };
 
   return (
-    <div className="space-y-6 text-[#213343]">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
-        <div>
-          <h1 className="text-2xl font-extrabold text-[#213343] flex items-center gap-2">
-            <FileText className="w-6 h-6 text-[#f97316]" />
-            <span>Cotizaciones Emitidas</span>
-          </h1>
-          <p className="text-xs text-gray-600 mt-1">
-            Gestiona estados, versiones y vínculos con oportunidades de venta.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {selectedIds.length > 0 && (
-            <button
-              onClick={handleDownloadSelected}
-              className="bg-[#213343] hover:bg-black text-white font-bold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2"
-            >
-              <Download className="w-4 h-4 text-[#f97316]" />
-              <span>Ver PDF Selección ({selectedIds.length})</span>
-            </button>
-          )}
-
-          <Link
-            href="/cotizaciones/nuevo"
-            className="bg-[#f97316] hover:bg-[#ea580c] text-white font-bold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2 self-start md:self-auto"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Crear Nueva Cotización</span>
-          </Link>
-        </div>
-      </div>
-
-      {successMsg && (
-        <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 p-4 rounded-md text-xs flex items-center gap-2 font-bold ">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          <span>{successMsg}</span>
-        </div>
-      )}
+      <PageHeader
+        title="Cotizaciones Emitidas"
+        description="Gestiona estados, versiones y vínculos con oportunidades de venta."
+        actions={
+          <div className="flex items-center gap-2">
+            {selectedIds.length > 0 && (
+              <Button variant="secondary" onClick={handleDownloadSelected}>
+                <Download className="w-4 h-4 text-accent-ink" />
+                <span>Ver PDF Selección ({selectedIds.length})</span>
+              </Button>
+            )}
+            <Link href="/cotizaciones/nuevo">
+              <Button variant="primary">
+                <Plus className="w-4 h-4" />
+                <span>Crear Nueva Cotización</span>
+              </Button>
+            </Link>
+          </div>
+        }
+      />
 
       {/* Barra Búsqueda y Selección */}
-      <div className="hg-list-toolbar">
-        <div className="relative min-w-[220px] flex-[2]">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="relative w-full sm:max-w-md">
+          <Search className="w-4 h-4 text-ink-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             placeholder="Buscar por N° cotización, cliente o RUT..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="hg-list-search w-full pl-9 pr-3 py-2 text-sm text-[#252b2d] placeholder-gray-400"
+            className="w-full pl-9 pr-3 py-2 text-sm bg-surface border border-line rounded-md text-ink placeholder:text-ink-muted focus:outline-none focus:border-accent"
           />
         </div>
 
         {!loadError && (
-          <div className="text-xs text-gray-600 font-semibold">
-            Mostrando {filtered.length} cotizaciones {selectedIds.length > 0 && `(${selectedIds.length} seleccionadas)`}
+          <div className="text-xs text-ink-muted font-medium self-end sm:self-center">
+            Mostrando <span className="font-semibold text-ink t-num">{filtered.length}</span> cotizaciones {selectedIds.length > 0 && `(${selectedIds.length} seleccionadas)`}
           </div>
         )}
       </div>
 
-      {/* Tabla de Cotizaciones */}
       {loadError && (
-        <div role="alert" className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+        <div role="alert" className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-medium text-danger">
           {loadError}
         </div>
       )}
-      <div className="hg-list-group">
-        <div className="hg-list-group-heading"><span>Cotizaciones</span><span className="hg-list-count">{loadError ? 'Error' : filtered.length}</span></div>
-        <div className="md:hidden">
-          {loading ? <p className="p-5 text-sm text-[#66716f]">Cargando cotizaciones…</p> : loadError ? null : paginatedCotizaciones.length === 0 ? <p className="p-5 text-sm text-[#66716f]">No se encontraron cotizaciones.</p> : paginatedCotizaciones.map((cot) => <div key={cot.id} className="hg-list-row flex-wrap">
-            <button type="button" onClick={() => toggleSelectOne(cot.id)} aria-label={`Seleccionar cotización ${cot.numero_cotizacion}`} className="shrink-0 text-[#8a9390]">{selectedIds.includes(cot.id) ? <CheckSquare size={17} className="text-[#e87622]" /> : <Square size={17} />}</button>
-            <button type="button" onClick={() => setPreviewCotizacion(cot)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-semibold">{cot.numero_cotizacion} · v{cot.version || 1}</span><span className="block truncate text-xs text-[#8a9390]">{cot.cliente?.nombre || 'Cliente registrado'}</span></button>
-            <span className="hg-list-meta font-semibold text-[#252b2d]">${Number(cot.monto_total || 0).toLocaleString('es-CL')}</span>
-            <div className="flex basis-full items-center justify-end gap-2 pl-7">
-              <span className="text-xs capitalize text-[#66716f]">{cot.estado}</span>
-              <button type="button" onClick={() => { setEditingCotizacion(cot); setShowEditModal(true); }} className="rounded-lg p-1.5 text-[#d4671c]" aria-label={`Editar ${cot.numero_cotizacion}`}><Edit3 size={16} /></button>
-            </div>
-          </div>)}
+
+      {/* Tabla de Cotizaciones */}
+      <Panel className="overflow-hidden">
+        <div className="md:hidden divide-y divide-line-subtle">
+          {loading ? (
+            <p className="p-5 text-sm text-ink-muted">Cargando cotizaciones…</p>
+          ) : loadError ? null : paginatedCotizaciones.length === 0 ? (
+            <p className="p-5 text-sm text-ink-muted">No se encontraron cotizaciones.</p>
+          ) : (
+            paginatedCotizaciones.map((cot) => (
+              <div key={cot.id} className="p-4 space-y-2 hover:bg-surface-muted transition">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleSelectOne(cot.id)}
+                      aria-label={`Seleccionar cotización ${cot.numero_cotizacion}`}
+                      className="shrink-0 text-ink-muted"
+                    >
+                      {selectedIds.includes(cot.id) ? <CheckSquare size={16} className="text-accent" /> : <Square size={16} />}
+                    </button>
+                    <CodeStamp>{cot.numero_cotizacion}</CodeStamp>
+                    <span className="text-xs text-ink-muted font-medium">v{cot.version || 1}</span>
+                  </div>
+                  <span className="t-num font-semibold text-sm text-ink">${Number(cot.monto_total || 0).toLocaleString('es-CL')}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="text-ink-muted truncate">{cot.cliente?.nombre || 'Cliente registrado'}</span>
+                  <StatusBadge tone={getStatusTone(cot.estado)}>{cot.estado}</StatusBadge>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-1 border-t border-line-subtle">
+                  <Button variant="subtle" size="sm" onClick={() => setPreviewCotizacion(cot)}>
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Ver</span>
+                  </Button>
+                  <Button variant="subtle" size="sm" onClick={() => { setEditingCotizacion(cot); setShowEditModal(true); }}>
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Editar</span>
+                  </Button>
+                  <Button variant="subtle" size="sm" onClick={() => handleDeleteCotizacion(cot)}>
+                    <Trash2 className="w-3.5 h-3.5 text-danger" />
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
+
         <div className="hidden overflow-x-auto md:block">
-          <table className="hg-list-table w-full text-left text-xs min-w-[950px]">
-            <thead className="bg-[#f4f5f3] text-[#66716f] uppercase text-[10px] tracking-normal">
+          <table className="w-full text-left text-xs min-w-[950px]">
+            <thead className="bg-surface-muted text-ink-muted uppercase text-[11px] tracking-normal border-b border-line">
               <tr>
                 <th className="py-3.5 px-4 w-10 text-center">
-                  <button onClick={toggleSelectAll} className="text-[#66716f] hover:text-[#f97316]" aria-label="Seleccionar todas las cotizaciones">
+                  <button onClick={toggleSelectAll} className="text-ink-muted hover:text-accent" aria-label="Seleccionar todas las cotizaciones">
                     {selectedIds.length === filtered.length && filtered.length > 0 ? (
-                      <CheckSquare className="w-4 h-4 text-[#f97316]" />
+                      <CheckSquare className="w-4 h-4 text-accent" />
                     ) : (
                       <Square className="w-4 h-4" />
                     )}
                   </button>
                 </th>
-                <th className="py-3.5 px-4">N° Cotización</th>
-                <th className="py-3.5 px-4">Versión</th>
-                <th className="py-3.5 px-4">Cliente & RUT</th>
-                <th className="py-3.5 px-4">Oportunidad de Venta</th>
-                <th className="py-3.5 px-4">Estado</th>
-                <th className="py-3.5 px-4 text-right">Monto Total</th>
-                <th className="py-3.5 px-4 text-center">Acciones</th>
+                <th className="py-3.5 px-4 font-semibold text-ink">N° Cotización</th>
+                <th className="py-3.5 px-4 font-semibold text-ink">Versión</th>
+                <th className="py-3.5 px-4 font-semibold text-ink">Cliente & RUT</th>
+                <th className="py-3.5 px-4 font-semibold text-ink">Oportunidad de Venta</th>
+                <th className="py-3.5 px-4 font-semibold text-ink">Estado</th>
+                <th className="py-3.5 px-4 text-right font-semibold text-ink">Monto Total</th>
+                <th className="py-3.5 px-4 text-center font-semibold text-ink">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-line-subtle">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-gray-500 font-medium">
+                  <td colSpan={8} className="py-8 text-center text-ink-muted font-medium">
                     Cargando cotizaciones...
                   </td>
                 </tr>
               ) : loadError ? null : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-gray-500 font-medium">
+                  <td colSpan={8} className="py-8 text-center text-ink-muted font-medium">
                     No se encontraron cotizaciones.
                   </td>
                 </tr>
@@ -344,25 +376,27 @@ export default function CotizacionesPage() {
                   return (
                     <tr
                       key={cot.id}
-                      className={`hover:bg-orange-50/50 transition ${
-                        isSelected ? 'bg-orange-50/80 font-medium' : ''
+                      className={`hover:bg-surface-muted/50 transition ${
+                        isSelected ? 'bg-surface-muted font-medium' : ''
                       }`}
                     >
                       <td className="py-3.5 px-4 text-center">
                         <button
                           onClick={() => toggleSelectOne(cot.id)}
-                          className="text-[#213343] hover:text-[#f97316]"
+                          className="text-ink-muted hover:text-accent"
                         >
                           {isSelected ? (
-                            <CheckSquare className="w-4 h-4 text-[#f97316]" />
+                            <CheckSquare className="w-4 h-4 text-accent" />
                           ) : (
-                            <Square className="w-4 h-4 text-gray-400" />
+                            <Square className="w-4 h-4 text-ink-muted" />
                           )}
                         </button>
                       </td>
-                      <td className="py-3.5 px-4 font-bold text-[#213343] font-mono">{cot.numero_cotizacion}</td>
+                      <td className="py-3.5 px-4 font-semibold text-ink">
+                        <CodeStamp>{cot.numero_cotizacion}</CodeStamp>
+                      </td>
                       <td className="py-3.5 px-4">
-                        <span className="text-[10px] font-extrabold uppercase bg-blue-50 text-blue-800 px-2 py-0.5 rounded-full border border-blue-200">
+                        <span className="text-[11px] font-medium text-ink-muted bg-surface-muted border border-line px-2 py-0.5 rounded-md">
                           v{cot.version || 1}
                         </span>
                       </td>
@@ -371,13 +405,13 @@ export default function CotizacionesPage() {
                       <td className="py-3.5 px-4">
                         <Link
                           href={`/clientes/${cot.cliente_id}`}
-                          className="group flex flex-col hover:text-[#f97316] transition"
+                          className="group flex flex-col hover:text-accent transition"
                         >
-                          <div className="flex items-center gap-1.5 font-bold text-[#213343] group-hover:text-[#f97316] group-hover:underline">
-                            <Building className="w-3.5 h-3.5 text-[#f97316]" />
+                          <div className="flex items-center gap-1.5 font-semibold text-ink group-hover:text-accent">
+                            <Building className="w-3.5 h-3.5 text-ink-muted" />
                             <span>{cot.cliente?.nombre || 'Cliente Registrado'}</span>
                           </div>
-                          <span className="text-[11px] text-gray-500 font-mono pl-5">
+                          <span className="text-[11px] text-ink-muted t-num pl-5">
                             RUT: {cot.cliente?.rut || 'Sin RUT'}
                           </span>
                         </Link>
@@ -387,17 +421,15 @@ export default function CotizacionesPage() {
                       <td className="py-3.5 px-4 max-w-[240px]">
                         {linkedOp ? (
                           <Link
-                            href={`/ventas?oportunidad=${linkedOp.id}`}
-                            className="flex flex-col text-xs text-[#213343] hover:text-[#f97316] transition font-bold group"
+                            href={`/ventas/${linkedOp.id}`}
+                            className="flex flex-col text-xs text-ink hover:text-accent transition font-medium group"
                           >
-                            <div className="flex items-center gap-1">
-                              <TrendingUp className="w-3.5 h-3.5 text-[#f97316] shrink-0" />
-                              <span className="font-extrabold font-mono text-[#f97316] group-hover:underline">{linkedOp.codigo}</span>
-                              <span className="text-[10px] bg-orange-100 text-[#f97316] font-bold px-1.5 py-0.5 rounded uppercase">
-                                {linkedOp.estado_pipeline}
-                              </span>
+                            <div className="flex items-center gap-1.5">
+                              <TrendingUp className="w-3.5 h-3.5 text-accent shrink-0" />
+                              <CodeStamp>{linkedOp.codigo}</CodeStamp>
+                              <StatusBadge tone="neutral">{linkedOp.estado_pipeline}</StatusBadge>
                             </div>
-                            <span className="text-[11px] font-semibold text-gray-700 truncate" title={linkedOp.titulo}>
+                            <span className="text-[11px] text-ink-muted truncate mt-0.5" title={linkedOp.titulo}>
                               {linkedOp.titulo}
                             </span>
                           </Link>
@@ -421,12 +453,16 @@ export default function CotizacionesPage() {
                                     contenido: `Cotización ${cot.numero_cotizacion} vinculada a la oportunidad.`,
                                     tipo: 'actualizacion',
                                   });
+                                  toast({
+                                    message: 'Oportunidad vinculada.',
+                                    tone: 'success',
+                                  });
                                 } catch (err) {
                                   console.error('Error linking op:', err);
                                   setCotizaciones((prev) => prev.map((c) => c.id === cot.id ? { ...c, oportunidad_id: cot.oportunidad_id } : c));
                                 }
                               }}
-                              className="bg-white border border-gray-300 rounded-lg px-2 py-1 text-[11px] text-gray-700 font-medium focus:outline-none focus:border-[#f97316] w-full"
+                              className="bg-surface border border-line rounded-md px-2 py-1 text-[11px] text-ink font-medium focus:outline-none focus:border-accent w-full"
                             >
                               <option value="">-- Asignar Oportunidad --</option>
                               {oportunidades.map((op) => (
@@ -444,15 +480,7 @@ export default function CotizacionesPage() {
                         <select
                           value={cot.estado}
                           onChange={(e) => handleChangeStatus(cot.id, e.target.value as EstadoCotizacion)}
-                          className={`text-[11px] font-extrabold uppercase px-2.5 py-1 rounded-md border cursor-pointer focus:outline-none ${
-                            cot.estado === 'aprobada'
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                              : cot.estado === 'enviada'
-                              ? 'bg-blue-100 text-blue-800 border-blue-300'
-                              : cot.estado === 'declinada' || cot.estado === 'rechazada'
-                              ? 'bg-red-100 text-red-800 border-red-300'
-                              : 'bg-amber-100 text-amber-800 border-amber-300'
-                          }`}
+                          className="text-[11px] font-semibold bg-surface border border-line rounded-md px-2 py-1 text-ink focus:outline-none focus:border-accent cursor-pointer"
                         >
                           <option value="borrador">Borrador</option>
                           <option value="enviada">Enviada</option>
@@ -461,37 +489,40 @@ export default function CotizacionesPage() {
                         </select>
                       </td>
 
-                      <td className="py-3.5 px-4 text-right font-black text-[#213343] text-sm">
+                      <td className="py-3.5 px-4 text-right font-semibold text-ink text-sm t-num">
                         ${(cot.monto_total || 0).toLocaleString('es-CL')}
                       </td>
                       <td className="py-3.5 px-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Button
+                            variant="subtle"
+                            size="sm"
                             onClick={() => setPreviewCotizacion(cot)}
-                            className="p-1.5 bg-orange-50 hover:bg-[#f97316] text-[#f97316] hover:text-white rounded-lg transition border border-orange-200"
                             title="Previsualizar PDF"
                           >
                             <Eye className="w-3.5 h-3.5" />
-                          </button>
+                          </Button>
 
-                          <button
+                          <Button
+                            variant="subtle"
+                            size="sm"
                             onClick={() => {
                               setEditingCotizacion(cot);
                               setShowEditModal(true);
                             }}
-                            className="p-1.5 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white rounded-lg transition border border-blue-200"
                             title="Editar Cotización"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
-                          </button>
+                          </Button>
 
-                          <button
-                            onClick={() => setCotToDelete(cot)}
-                            className="p-1.5 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-lg transition border border-red-200"
+                          <Button
+                            variant="subtle"
+                            size="sm"
+                            onClick={() => handleDeleteCotizacion(cot)}
                             title="Eliminar Cotización"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                            <Trash2 className="w-3.5 h-3.5 text-danger" />
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -508,53 +539,9 @@ export default function CotizacionesPage() {
           onPageChange={setCurrentPage}
           onItemsPerPageChange={setItemsPerPage}
         />
-      </div>
+      </Panel>
 
-      {/* Modal Confirmación Eliminación de Cotización */}
-      {cotToDelete && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
-          <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-[#213343]">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h3 className="text-base font-extrabold text-red-700 flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-red-500" />
-                <span>Eliminar Cotización</span>
-              </h3>
-              <button onClick={() => setCotToDelete(null)} className="text-gray-400 hover:text-[#213343] font-bold">
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-2 text-xs text-gray-700">
-              <p>
-                ¿Estás seguro de que deseas eliminar la cotización <strong className="font-mono text-[#213343]">{cotToDelete.numero_cotizacion}</strong> por un monto de <strong className="text-emerald-700">${(cotToDelete.monto_total || 0).toLocaleString('es-CL')}</strong>?
-              </p>
-              <p className="bg-red-50 p-3 rounded-md border border-red-200 text-red-900 font-medium">
-                Esta acción la eliminará del sistema permanentemente.
-              </p>
-            </div>
-
-            <div className="pt-2 flex items-center justify-end gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => setCotToDelete(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteCotizacion}
-                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-md transition shadow-sm flex items-center gap-1.5"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Eliminar Cotización</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Unificado de Cotizaciones (Creación y Edición con Versiones Inteligentes) */}
+      {/* Modal Unificado de Cotizaciones */}
       <CotizacionModal
         isOpen={showEditModal}
         onClose={() => {

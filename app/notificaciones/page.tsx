@@ -1,11 +1,28 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '../../lib/supabase/client';
 import { Notificacion } from '../../lib/types';
 import { useAuth } from '../../lib/context/AuthContext';
-import { Bell, Info, Trash2, AtSign, ChevronRight, CheckCheck, AlarmClock, ChevronDown } from 'lucide-react';
+import {
+  Bell,
+  CheckCheck,
+  Trash2,
+  AtSign,
+  AlarmClock,
+  Info,
+  ChevronRight,
+  Check,
+} from 'lucide-react';
+import {
+  PageHeader,
+  Button,
+  IconButton,
+  FilterSelect,
+  EmptyState,
+} from '../../components/ui';
+import { useConfirm, useToast } from '../../components/ui/feedback';
 
 const TIPO_LABELS: Record<string, string> = {
   mencion: 'Menciones',
@@ -25,6 +42,38 @@ function tipoLabel(tipo: string): string {
   return TIPO_LABELS[tipo] || tipo.charAt(0).toUpperCase() + tipo.slice(1).replace(/_/g, ' ');
 }
 
+/** Agrupa fechas por día: Hoy, Ayer, Esta semana o fecha completa */
+function getDayGroupLabel(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+
+  const isToday =
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear();
+
+  if (isToday) return 'Hoy';
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday =
+    date.getDate() === yesterday.getDate() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getFullYear() === yesterday.getFullYear();
+
+  if (isYesterday) return 'Ayer';
+
+  // Días de diferencia
+  const diffDays = Math.round((now.getTime() - date.getTime()) / (1000 * 3600 * 24));
+  if (diffDays <= 7) return 'Esta semana';
+
+  return date.toLocaleDateString('es-CL', {
+    day: 'numeric',
+    month: 'long',
+    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+  });
+}
+
 export default function NotificacionesPage() {
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,14 +81,18 @@ export default function NotificacionesPage() {
   const [filterType, setFilterType] = useState<'todas' | 'no_leidas' | 'leidas' | 'menciones' | 'sistema'>('todas');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [tipoFilter, setTipoFilter] = useState('');
+
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const { currentUser } = useAuth();
   const currentUserId = currentUser?.id;
+  const confirm = useConfirm();
+  const toast = useToast();
 
   useEffect(() => {
     let ignore = false;
     if (!currentUserId) return;
+
     async function loadNotificaciones() {
       try {
         const { data, error } = await supabase
@@ -66,7 +119,7 @@ export default function NotificacionesPage() {
       }
     }
 
-    loadNotificaciones();
+    void loadNotificaciones();
 
     const channel = supabase
       .channel('realtime_notificaciones')
@@ -79,26 +132,32 @@ export default function NotificacionesPage() {
           filter: `usuario_id=eq.${currentUserId}`,
         },
         () => {
-          loadNotificaciones();
+          void loadNotificaciones();
         }
       )
       .subscribe();
 
     return () => {
       ignore = true;
-      supabase.removeChannel(channel);
+      void supabase.removeChannel(channel);
     };
-  }, [currentUserId]);
+  }, [currentUserId, supabase]);
 
   const handleMarkAsReadAndNavigate = async (n: Notificacion) => {
-    try {
-      const { error } = await supabase.from('notificaciones').update({ leido: true })
-        .eq('id', n.id).eq('usuario_id', currentUserId);
-      if (error) throw error;
-      setNotificaciones((prev) => prev.map((item) => item.id === n.id ? { ...item, leido: true } : item));
-      setErrorMessage('');
-    } catch {
-      setErrorMessage('No se pudo marcar la notificación como leída.');
+    if (!n.leido && currentUserId) {
+      try {
+        const { error } = await supabase
+          .from('notificaciones')
+          .update({ leido: true })
+          .eq('id', n.id)
+          .eq('usuario_id', currentUserId);
+        if (error) throw error;
+        setNotificaciones((prev) =>
+          prev.map((item) => (item.id === n.id ? { ...item, leido: true } : item))
+        );
+      } catch {
+        setErrorMessage('No se pudo marcar la notificación como leída.');
+      }
     }
 
     if (n.link_url) {
@@ -106,37 +165,166 @@ export default function NotificacionesPage() {
     }
   };
 
-  const handleClearAll = async () => {
-    if (!currentUserId || !window.confirm('¿Eliminar todas tus notificaciones?')) return;
-    const { error } = await supabase.from('notificaciones').delete().eq('usuario_id', currentUserId);
-    if (error) { setErrorMessage('No se pudieron eliminar las notificaciones.'); return; }
-    setNotificaciones([]);
-    setSelectedIds([]);
-    setErrorMessage('');
+  const handleToggleReadSingle = async (e: React.MouseEvent, n: Notificacion) => {
+    e.stopPropagation();
+    if (!currentUserId) return;
+    const nextLeido = !n.leido;
+
+    try {
+      const { error } = await supabase
+        .from('notificaciones')
+        .update({ leido: nextLeido })
+        .eq('id', n.id)
+        .eq('usuario_id', currentUserId);
+      if (error) throw error;
+      setNotificaciones((prev) =>
+        prev.map((item) => (item.id === n.id ? { ...item, leido: nextLeido } : item))
+      );
+      toast(nextLeido ? 'Notificación marcada como leída' : 'Notificación marcada como no leída');
+    } catch {
+      setErrorMessage('No se pudo actualizar el estado de la notificación.');
+    }
   };
 
-  // Filter notifications
-  const filteredNotifications = notificaciones.filter((n) => {
-    if (tipoFilter && (n.tipo || 'general') !== tipoFilter) return false;
-    if (filterType === 'no_leidas') {
-      return !n.leido;
+  const handleDeleteSingle = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!currentUserId) return;
+
+    try {
+      const { error } = await supabase
+        .from('notificaciones')
+        .delete()
+        .eq('id', id)
+        .eq('usuario_id', currentUserId);
+      if (error) throw error;
+      setNotificaciones((prev) => prev.filter((item) => item.id !== id));
+      setSelectedIds((prev) => prev.filter((item) => item !== id));
+      toast({ message: 'Notificación eliminada', tone: 'info' });
+    } catch {
+      setErrorMessage('No se pudo eliminar la notificación.');
     }
-    if (filterType === 'leidas') {
-      return !!n.leido;
+  };
+
+  const handleClearAll = async () => {
+    if (!currentUserId) return;
+    const ok = await confirm({
+      title: '¿Eliminar todas tus notificaciones?',
+      message: 'Esta acción borrará todas las notificaciones de tu bandeja de entrada. No se puede deshacer.',
+      confirmLabel: 'Eliminar todas',
+      destructive: true,
+    });
+    if (!ok) return;
+
+    const { error } = await supabase
+      .from('notificaciones')
+      .delete()
+      .eq('usuario_id', currentUserId);
+
+    if (error) {
+      setErrorMessage('No se pudieron eliminar las notificaciones.');
+      return;
     }
-    if (filterType === 'menciones') {
-      return n.tipo === 'mencion' || n.mensaje.includes('@');
+    setNotificaciones([]);
+    setSelectedIds([]);
+    toast({ message: 'Bandeja de notificaciones vaciada', tone: 'info' });
+  };
+
+  const handleBulkMarkAsRead = async () => {
+    if (selectedIds.length === 0 || !currentUserId) return;
+
+    try {
+      const { error } = await supabase
+        .from('notificaciones')
+        .update({ leido: true })
+        .in('id', selectedIds)
+        .eq('usuario_id', currentUserId);
+      if (error) throw error;
+      setNotificaciones((prev) =>
+        prev.map((n) => (selectedIds.includes(n.id) ? { ...n, leido: true } : n))
+      );
+      toast(`${selectedIds.length} notificaciones marcadas como leídas`);
+    } catch (err) {
+      console.error('Error marking notifications as read:', err);
+      setErrorMessage('No se pudieron marcar las notificaciones.');
     }
-    if (filterType === 'sistema') {
-      return n.tipo !== 'mencion' && !n.mensaje.includes('@');
+    setSelectedIds([]);
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0 || !currentUserId) return;
+    const count = selectedIds.length;
+    const ok = await confirm({
+      title: `¿Eliminar ${count} notificaciones?`,
+      message: 'Se eliminarán permanentemente de tu cuenta.',
+      confirmLabel: 'Eliminar',
+      destructive: true,
+    });
+    if (!ok) return;
+
+    try {
+      const { error } = await supabase
+        .from('notificaciones')
+        .delete()
+        .in('id', selectedIds)
+        .eq('usuario_id', currentUserId);
+      if (error) throw error;
+      setNotificaciones((prev) => prev.filter((n) => !selectedIds.includes(n.id)));
+      toast({ message: `${count} notificaciones eliminadas`, tone: 'info' });
+    } catch (err) {
+      console.error('Error deleting notifications:', err);
+      setErrorMessage('No se pudieron eliminar las notificaciones.');
     }
-    return true;
-  });
+    setSelectedIds([]);
+  };
+
+  const handleMarkAllAsRead = async () => {
+    if (!currentUserId) return;
+    try {
+      const { error } = await supabase
+        .from('notificaciones')
+        .update({ leido: true })
+        .eq('leido', false)
+        .eq('usuario_id', currentUserId);
+      if (error) throw error;
+      setNotificaciones((prev) => prev.map((n) => ({ ...n, leido: true })));
+      toast('Todas las notificaciones marcadas como leídas');
+    } catch (err) {
+      console.error('Error marking all as read:', err);
+      setErrorMessage('No se pudieron marcar todas las notificaciones.');
+    }
+    setSelectedIds([]);
+  };
+
+  // Filtrado
+  const filteredNotifications = useMemo(() => {
+    return notificaciones.filter((n) => {
+      if (tipoFilter && (n.tipo || 'general') !== tipoFilter) return false;
+      if (filterType === 'no_leidas') return !n.leido;
+      if (filterType === 'leidas') return !!n.leido;
+      if (filterType === 'menciones') return n.tipo === 'mencion' || n.mensaje.includes('@');
+      if (filterType === 'sistema') return n.tipo !== 'mencion' && !n.mensaje.includes('@');
+      return true;
+    });
+  }, [notificaciones, tipoFilter, filterType]);
+
+  // Agrupación por día
+  const groupedNotifications = useMemo(() => {
+    const groups: { label: string; items: Notificacion[] }[] = [];
+    filteredNotifications.forEach((n) => {
+      const groupLabel = getDayGroupLabel(n.fecha);
+      const existing = groups.find((g) => g.label === groupLabel);
+      if (existing) {
+        existing.items.push(n);
+      } else {
+        groups.push({ label: groupLabel, items: [n] });
+      }
+    });
+    return groups;
+  }, [filteredNotifications]);
 
   const toggleSelectAll = () => {
     const allFilteredIds = filteredNotifications.map((n) => n.id);
     const isAllSelected = allFilteredIds.length > 0 && allFilteredIds.every((id) => selectedIds.includes(id));
-
     if (isAllSelected) {
       setSelectedIds([]);
     } else {
@@ -152,52 +340,6 @@ export default function NotificacionesPage() {
     }
   };
 
-  const handleBulkMarkAsRead = async () => {
-    if (selectedIds.length === 0) return;
-
-    try {
-      const { error } = await supabase.from('notificaciones').update({ leido: true })
-        .in('id', selectedIds).eq('usuario_id', currentUserId);
-      if (error) throw error;
-      setNotificaciones((prev) => prev.map((n) => selectedIds.includes(n.id) ? { ...n, leido: true } : n));
-      setErrorMessage('');
-    } catch (err) {
-      console.error('Error marking notifications as read:', err);
-      setErrorMessage('No se pudieron marcar las notificaciones.');
-    }
-    setSelectedIds([]);
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectedIds.length === 0) return;
-
-    try {
-      const { error } = await supabase.from('notificaciones').delete()
-        .in('id', selectedIds).eq('usuario_id', currentUserId);
-      if (error) throw error;
-      setNotificaciones((prev) => prev.filter((n) => !selectedIds.includes(n.id)));
-      setErrorMessage('');
-    } catch (err) {
-      console.error('Error deleting notifications:', err);
-      setErrorMessage('No se pudieron eliminar las notificaciones.');
-    }
-    setSelectedIds([]);
-  };
-
-  const handleMarkAllAsRead = async () => {
-    try {
-      const { error } = await supabase.from('notificaciones').update({ leido: true })
-        .eq('leido', false).eq('usuario_id', currentUserId);
-      if (error) throw error;
-      setNotificaciones((prev) => prev.map((n) => ({ ...n, leido: true })));
-      setErrorMessage('');
-    } catch (err) {
-      console.error('Error marking all as read:', err);
-      setErrorMessage('No se pudieron marcar todas las notificaciones.');
-    }
-    setSelectedIds([]);
-  };
-
   const tiposDisponibles = Array.from(new Set(notificaciones.map((n) => String(n.tipo || 'general'))))
     .sort((a, b) => tipoLabel(a).localeCompare(tipoLabel(b), 'es'));
 
@@ -208,6 +350,7 @@ export default function NotificacionesPage() {
     menciones: notificaciones.filter((n) => n.tipo === 'mencion' || n.mensaje.includes('@')).length,
     sistema: notificaciones.filter((n) => n.tipo !== 'mencion' && !n.mensaje.includes('@')).length,
   };
+
   const filters: { id: typeof filterType; label: string }[] = [
     { id: 'todas', label: 'Todas' },
     { id: 'no_leidas', label: 'No leídas' },
@@ -215,183 +358,260 @@ export default function NotificacionesPage() {
     { id: 'menciones', label: 'Menciones' },
     { id: 'sistema', label: 'Sistema' },
   ];
+
   const allSelected = filteredNotifications.length > 0 && filteredNotifications.every((n) => selectedIds.includes(n.id));
 
   return (
-    <div className="space-y-5 text-[#213343]">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
-        <div>
-          <h1 className="text-2xl font-extrabold flex items-center gap-2">
-            <Bell className="w-6 h-6 text-[#f97316]" />
-            <span>Notificaciones</span>
-          </h1>
-          <p className="text-xs text-gray-600 mt-1">Menciones, recordatorios y avisos del sistema. Haz clic en una notificación para ir a su origen.</p>
+      <PageHeader
+        title="Notificaciones"
+        description="Menciones, recordatorios y avisos del sistema. Haz clic en una notificación para ir a su origen."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              icon={CheckCheck}
+              onClick={handleMarkAllAsRead}
+              disabled={counts.no_leidas === 0}
+            >
+              Marcar todas como leídas
+            </Button>
+            {notificaciones.length > 0 && (
+              <Button
+                variant="destructive"
+                icon={Trash2}
+                onClick={handleClearAll}
+              >
+                Vaciar bandeja
+              </Button>
+            )}
+          </div>
+        }
+      />
+
+      {errorMessage && (
+        <div role="alert" className="rounded-control border border-danger-line bg-danger-soft p-3 text-sm text-danger">
+          {errorMessage}
         </div>
-        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
-          <button
-            type="button"
-            onClick={handleMarkAllAsRead}
-            disabled={counts.no_leidas === 0}
-            className="bg-white hover:bg-gray-50 border border-gray-200 text-[#213343] font-bold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <CheckCheck className="w-4 h-4 text-[#f97316]" />
-            <span>Marcar todas como leídas</span>
-          </button>
-          <div className="relative">
-            <select
-              aria-label="Filtrar por tipo de notificación"
-              value={tipoFilter}
-              onChange={(e) => { setTipoFilter(e.target.value); setSelectedIds([]); }}
-              className={`appearance-none bg-white hover:bg-gray-50 border rounded-md shadow-sm pl-4 pr-9 py-2.5 text-xs font-bold cursor-pointer transition focus:outline-none focus:border-[#f97316] ${
-                tipoFilter ? 'border-[#f97316] text-[#ea580c]' : 'border-gray-200 text-[#213343]'
+      )}
+
+      {/* Barra de Filtros */}
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        {/* Pestañas de estado */}
+        <div className="inline-flex rounded-control border border-line bg-surface p-1 text-xs font-medium overflow-x-auto">
+          {filters.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => { setFilterType(f.id); setSelectedIds([]); }}
+              className={`flex shrink-0 cursor-pointer items-center gap-1.5 rounded-control px-3 py-1.5 transition ${
+                filterType === f.id
+                  ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                  : 'text-ink-muted hover:bg-surface-muted hover:text-ink'
               }`}
             >
-              <option value="">Todos los tipos</option>
-              {tiposDisponibles.map((tipo) => (
-                <option key={tipo} value={tipo}>
-                  {tipoLabel(tipo)} ({notificaciones.filter((n) => String(n.tipo || 'general') === tipo).length})
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
-          {notificaciones.length > 0 && (
-            <button
-              type="button"
-              onClick={handleClearAll}
-              className="bg-white hover:bg-red-50 border border-gray-200 hover:border-red-200 text-red-600 font-bold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Eliminar todas</span>
+              <span>{f.label}</span>
+              <span
+                className={`t-micro rounded-full px-1.5 font-mono ${
+                  filterType === f.id ? 'bg-surface/30 text-on-accent' : 'bg-surface-muted text-ink-muted'
+                }`}
+              >
+                {counts[f.id]}
+              </span>
             </button>
-          )}
+          ))}
+        </div>
+
+        {/* Filtro por tipo específico */}
+        <div className="w-full sm:w-56">
+          <FilterSelect
+            label="Tipo"
+            value={tipoFilter}
+            onChange={(e) => { setTipoFilter(e.target.value); setSelectedIds([]); }}
+          >
+            <option value="">Todos los tipos</option>
+            {tiposDisponibles.map((tipo) => (
+              <option key={tipo} value={tipo}>
+                {tipoLabel(tipo)} ({notificaciones.filter((n) => String(n.tipo || 'general') === tipo).length})
+              </option>
+            ))}
+          </FilterSelect>
         </div>
       </div>
 
-      {errorMessage && <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errorMessage}</p>}
-
-      {/* Filtros */}
-      <div className="flex items-center gap-1 p-1 bg-white rounded-md border border-gray-200 text-xs overflow-x-auto">
-        {filters.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            onClick={() => { setFilterType(f.id); setSelectedIds([]); }}
-            className={`shrink-0 flex-1 py-1.5 px-3 rounded-md font-bold transition flex items-center justify-center gap-1.5 ${
-              filterType === f.id ? 'bg-[#f97316] text-white shadow-xs' : 'text-gray-500 hover:text-[#213343] hover:bg-gray-100'
-            }`}
-          >
-            <span>{f.label}</span>
-            <span className={`rounded-full px-1.5 text-[10px] font-mono ${filterType === f.id ? 'bg-white/25' : 'bg-gray-100 text-gray-500'}`}>{counts[f.id]}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Listado */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-xs overflow-hidden">
-        <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs">
-          <label className="flex items-center gap-2.5 font-semibold text-gray-600 cursor-pointer">
+      {/* Contenedor Principal de Lista */}
+      <div className="rounded-panel border border-line bg-surface overflow-hidden">
+        {/* Barra de selección masiva */}
+        <div className="flex items-center justify-between gap-3 border-b border-line-subtle bg-surface-muted px-4 py-2.5 text-xs">
+          <label className="flex cursor-pointer items-center gap-2.5 font-medium text-ink">
             <input
               type="checkbox"
               checked={allSelected}
               onChange={toggleSelectAll}
               disabled={filteredNotifications.length === 0}
-              className="w-4 h-4 rounded accent-[#f97316] cursor-pointer"
+              className="h-4 w-4 rounded accent-accent cursor-pointer"
             />
-            <span>{selectedIds.length > 0 ? `${selectedIds.length} seleccionada(s)` : `${filteredNotifications.length} notificaciones`}</span>
+            <span>
+              {selectedIds.length > 0
+                ? `${selectedIds.length} seleccionada(s)`
+                : `${filteredNotifications.length} notificaciones`}
+            </span>
           </label>
+
           {selectedIds.length > 0 && (
             <div className="flex items-center gap-2">
-              <button type="button" onClick={handleBulkMarkAsRead} className="bg-white hover:bg-orange-50 border border-gray-200 text-[#213343] font-bold px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
-                <CheckCheck className="w-3.5 h-3.5 text-[#f97316]" />
-                <span>Marcar leídas</span>
-              </button>
-              <button type="button" onClick={handleBulkDelete} className="bg-white hover:bg-red-50 border border-gray-200 text-red-600 font-bold px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Eliminar</span>
-              </button>
+              <Button size="sm" icon={CheckCheck} onClick={handleBulkMarkAsRead}>
+                Marcar leídas
+              </Button>
+              <Button size="sm" variant="destructive" icon={Trash2} onClick={handleBulkDelete}>
+                Eliminar
+              </Button>
             </div>
           )}
         </div>
 
         {loading ? (
-          <p className="py-12 text-center text-sm text-gray-400">Cargando notificaciones...</p>
+          <p className="py-12 text-center text-sm text-ink-muted">Cargando notificaciones…</p>
         ) : filteredNotifications.length === 0 ? (
-          <div className="py-14 text-center space-y-2">
-            <Bell className="w-10 h-10 text-gray-300 mx-auto" />
-            <p className="text-sm font-semibold text-gray-600">No hay notificaciones en esta categoría.</p>
+          <div className="p-8">
+            <EmptyState
+              icon={Bell}
+              title="Bandeja de notificaciones al día"
+              description="No hay avisos pendientes en esta categoría. Te notificaremos cuando tengas nuevas menciones, recordatorios o despachos en riesgo."
+              action={
+                <Button variant="primary" onClick={() => router.push('/')}>
+                  Ir al panel operativo
+                </Button>
+              }
+            />
           </div>
         ) : (
-          <ul className="divide-y divide-gray-100">
-            {filteredNotifications.map((n) => {
-              const isMention = n.tipo === 'mencion' || n.mensaje.includes('@');
-              const isReminder = String(n.tipo) === 'seguimiento' || n.tipo === 'recordatorio' || n.mensaje.toUpperCase().includes('RECORDATORIO');
+          <div className="divide-y divide-line-subtle">
+            {groupedNotifications.map((group) => (
+              <div key={group.label} className="space-y-1">
+                {/* Encabezado de Grupo por Día */}
+                <div className="sticky top-14 z-10 bg-surface-muted/90 px-4 py-1.5 backdrop-blur-xs">
+                  <h3 className="t-micro font-semibold uppercase text-ink-muted">
+                    {group.label}
+                  </h3>
+                </div>
 
-              // Ubicación / ficha de origen de la notificación
-              const opMatch = n.mensaje.match(/oportunidad ([A-Z0-9-]+)/i);
-              const recMatch = n.mensaje.match(/RECORDATORIO \((.*?)\):/);
-              const cliMatch = n.mensaje.match(/cliente ([\w\s]+)/i);
-              let ubicacionNombre = 'Sistema CRM';
-              if (opMatch) ubicacionNombre = `Oportunidad ${opMatch[1]}`;
-              else if (recMatch) ubicacionNombre = `Cliente: ${recMatch[1]}`;
-              else if (cliMatch) ubicacionNombre = `Cliente: ${cliMatch[1]}`;
-              else if (n.link_url?.includes('/ventas')) ubicacionNombre = 'Pipeline de ventas';
-              else if (n.link_url?.includes('/clientes')) ubicacionNombre = 'Clientes';
+                <ul className="divide-y divide-line-subtle">
+                  {group.items.map((n) => {
+                    const isMention = n.tipo === 'mencion' || n.mensaje.includes('@');
+                    const isReminder =
+                      String(n.tipo) === 'seguimiento' ||
+                      n.tipo === 'recordatorio' ||
+                      n.mensaje.toUpperCase().includes('RECORDATORIO');
 
-              const tipoCfg = isMention
-                ? { label: 'Mención', Icon: AtSign, box: 'bg-orange-50 text-[#f97316] border-orange-200' }
-                : isReminder
-                  ? { label: 'Recordatorio', Icon: AlarmClock, box: 'bg-amber-50 text-amber-600 border-amber-200' }
-                  : { label: 'Sistema', Icon: Info, box: 'bg-gray-50 text-gray-500 border-gray-200' };
-              const isSelected = selectedIds.includes(n.id);
+                    // Ubicación / contexto
+                    const opMatch = n.mensaje.match(/oportunidad ([A-Z0-9-]+)/i);
+                    const recMatch = n.mensaje.match(/RECORDATORIO \((.*?)\):/);
+                    const cliMatch = n.mensaje.match(/cliente ([\w\s]+)/i);
+                    let ubicacionNombre = 'Sistema';
+                    if (opMatch) ubicacionNombre = `Oportunidad ${opMatch[1]}`;
+                    else if (recMatch) ubicacionNombre = `Cliente: ${recMatch[1]}`;
+                    else if (cliMatch) ubicacionNombre = `Cliente: ${cliMatch[1]}`;
+                    else if (n.link_url?.includes('/ventas')) ubicacionNombre = 'Pipeline de ventas';
+                    else if (n.link_url?.includes('/clientes')) ubicacionNombre = 'Clientes';
 
-              return (
-                <li
-                  key={n.id}
-                  className={`group flex items-start gap-3 px-4 py-3.5 transition ${
-                    isSelected ? 'bg-orange-50' : !n.leido ? 'bg-orange-50/40 hover:bg-orange-50/70' : 'bg-white hover:bg-gray-50'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => toggleSelectOne(n.id)}
-                    aria-label="Seleccionar notificación"
-                    className="mt-2.5 w-4 h-4 rounded accent-[#f97316] cursor-pointer shrink-0"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleMarkAsReadAndNavigate(n)}
-                    className="flex flex-1 min-w-0 items-start gap-3 text-left"
-                  >
-                    <span className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 ${tipoCfg.box}`}>
-                      <tipoCfg.Icon className="w-4 h-4" />
-                    </span>
-                    <span className="flex-1 min-w-0 space-y-1">
-                      <span className="flex flex-wrap items-center gap-2 text-[11px]">
-                        <span className="font-bold text-gray-500">{tipoCfg.label}</span>
-                        <span className="text-gray-300">·</span>
-                        <span className="font-semibold text-gray-500 truncate">{ubicacionNombre}</span>
-                      </span>
-                      <span className={`block text-sm leading-snug break-words ${n.leido ? 'text-gray-600' : 'font-semibold text-[#213343]'}`}>
-                        {n.mensaje}
-                      </span>
-                    </span>
-                    <span className="flex flex-col items-end gap-1.5 shrink-0 pl-2">
-                      <span className="text-[11px] font-mono text-gray-400 whitespace-nowrap">
-                        {new Date(n.fecha).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        {!n.leido && <span className="w-2 h-2 rounded-full bg-[#f97316]" aria-label="No leída" />}
-                        {n.link_url && <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-[#f97316] transition" />}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                    const tipoCfg = isMention
+                      ? { label: 'Mención', Icon: AtSign, badgeTone: 'text-accent-ink bg-accent-soft' }
+                      : isReminder
+                        ? { label: 'Recordatorio', Icon: AlarmClock, badgeTone: 'text-warning bg-warning-soft' }
+                        : { label: 'Sistema', Icon: Info, badgeTone: 'text-info bg-info-soft' };
+
+                    const isSelected = selectedIds.includes(n.id);
+
+                    return (
+                      <li
+                        key={n.id}
+                        className={`group flex items-start gap-3 px-4 py-3 transition ${
+                          isSelected
+                            ? 'bg-surface-muted'
+                            : !n.leido
+                              ? 'bg-accent-soft/30 hover:bg-surface-muted'
+                              : 'bg-surface hover:bg-surface-muted/60'
+                        }`}
+                      >
+                        {/* Selector checkbox */}
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectOne(n.id)}
+                          aria-label="Seleccionar notificación"
+                          className="mt-2.5 h-4 w-4 shrink-0 rounded accent-accent cursor-pointer"
+                        />
+
+                        {/* Botón principal de la notificación */}
+                        <button
+                          type="button"
+                          onClick={() => handleMarkAsReadAndNavigate(n)}
+                          className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 text-left"
+                        >
+                          {/* Ícono semántico con forma */}
+                          <span
+                            className={`grid h-8 w-8 shrink-0 place-items-center rounded-control ${tipoCfg.badgeTone}`}
+                          >
+                            <tipoCfg.Icon className="h-4 w-4" aria-hidden />
+                          </span>
+
+                          <span className="min-w-0 flex-1 space-y-1">
+                            <span className="flex flex-wrap items-center gap-2 text-xs">
+                              <span className="font-semibold text-ink-muted">{tipoCfg.label}</span>
+                              <span className="text-ink-muted/50" aria-hidden>·</span>
+                              <span className="t-micro truncate text-ink-muted">{ubicacionNombre}</span>
+                              {!n.leido && (
+                                <span className="t-micro rounded-full border border-accent-line bg-accent-soft px-1.5 font-semibold text-accent-ink">
+                                  No leída
+                                </span>
+                              )}
+                            </span>
+                            <span
+                              className={`block text-sm leading-snug break-words ${
+                                n.leido ? 'text-ink-muted' : 'font-semibold text-ink'
+                              }`}
+                            >
+                              {n.mensaje}
+                            </span>
+                          </span>
+
+                          {/* Fecha y navegación */}
+                          <span className="flex shrink-0 flex-col items-end gap-1.5 pl-2">
+                            <span className="t-micro t-num whitespace-nowrap text-ink-muted">
+                              {new Date(n.fecha).toLocaleDateString('es-CL', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              {n.link_url && (
+                                <ChevronRight className="h-4 w-4 text-ink-muted transition group-hover:text-ink" aria-hidden />
+                              )}
+                            </span>
+                          </span>
+                        </button>
+
+                        {/* Acciones en línea rápidas */}
+                        <div className="flex shrink-0 items-center gap-1 opacity-80 group-hover:opacity-100 sm:opacity-0 sm:transition-opacity">
+                          <IconButton
+                            icon={n.leido ? Check : CheckCheck}
+                            label={n.leido ? 'Marcar como no leída' : 'Marcar como leída'}
+                            onClick={(e) => handleToggleReadSingle(e, n)}
+                          />
+                          <IconButton
+                            icon={Trash2}
+                            label="Eliminar notificación"
+                            onClick={(e) => handleDeleteSingle(e, n.id)}
+                          />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

@@ -14,99 +14,62 @@ import {
   ROL_NOMBRE,
 } from '../../lib/types';
 import {
-  Users,
-  UserCheck,
   Plus,
-  Search,
-  DollarSign,
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  HardHat,
-  ChevronRight,
   Eye,
   UserX,
-  Grid,
+  LayoutGrid,
   List,
-  X,
-  Save,
   Lock,
   UserRound,
 } from 'lucide-react';
 import { TODAS_COMUNAS_CHILE } from '../../lib/chile-data';
-import { SearchableSelect } from '../../components/SearchableSelect';
 import { mensajeError } from '../../lib/errores';
+import {
+  PageHeader,
+  SummaryLine,
+  FilterBar,
+  SearchField,
+  FilterSelect,
+  Panel,
+  Button,
+  StatusBadge,
+  CodeStamp,
+  Dialog,
+  Field,
+  TextInput,
+  Select,
+  Tone,
+} from '../../components/ui/crm';
+import { useToast } from '../../components/ui/feedback';
 
-// Configuración visual de los estados de disponibilidad
-const DISPONIBILIDAD_CONFIG: Record<
-  EstadoDisponibilidad,
-  { label: string; bg: string; text: string; border: string; dot: string }
-> = {
-  disponible: {
-    label: 'Disponible',
-    bg: 'bg-emerald-50',
-    text: 'text-emerald-700',
-    border: 'border-emerald-200',
-    dot: 'bg-emerald-500',
-  },
-  en_terreno: {
-    label: 'En terreno / obra',
-    bg: 'bg-blue-50',
-    text: 'text-blue-700',
-    border: 'border-blue-200',
-    dot: 'bg-blue-500',
-  },
-  permiso: {
-    label: 'En permiso',
-    bg: 'bg-amber-50',
-    text: 'text-amber-700',
-    border: 'border-amber-200',
-    dot: 'bg-amber-500',
-  },
-  licencia: {
-    label: 'Licencia médica',
-    bg: 'bg-purple-50',
-    text: 'text-purple-700',
-    border: 'border-purple-200',
-    dot: 'bg-purple-500',
-  },
-  vacaciones: {
-    label: 'Vacaciones',
-    bg: 'bg-indigo-50',
-    text: 'text-indigo-700',
-    border: 'border-indigo-200',
-    dot: 'bg-indigo-500',
-  },
-  falta: {
-    label: 'Falta / ausente',
-    bg: 'bg-red-50',
-    text: 'text-red-700',
-    border: 'border-red-200',
-    dot: 'bg-red-500',
-  },
+const DISPONIBILIDAD_LABELS: Record<EstadoDisponibilidad, string> = {
+  disponible: 'Disponible',
+  en_terreno: 'En terreno / obra',
+  permiso: 'En permiso',
+  licencia: 'Licencia médica',
+  vacaciones: 'Vacaciones',
+  falta: 'Falta / ausente',
 };
 
-const USER_ROLE_CONFIG: Record<UserRole, { label: string; className: string }> = {
-  admin: {
-    label: ROL_NOMBRE.admin,
-    className: 'bg-red-50 text-red-800 border-red-200',
-  },
-  user: {
-    label: ROL_NOMBRE.user,
-    className: 'bg-blue-50 text-blue-800 border-blue-200',
-  },
-  mano_obra: {
-    label: ROL_NOMBRE.mano_obra,
-    className: 'bg-amber-50 text-amber-800 border-amber-200',
-  },
-  finanzas: {
-    label: ROL_NOMBRE.finanzas,
-    className: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-  },
+const DISPONIBILIDAD_TONE: Record<EstadoDisponibilidad, Tone> = {
+  disponible: 'success',
+  en_terreno: 'info',
+  permiso: 'warning',
+  licencia: 'accent',
+  vacaciones: 'neutral',
+  falta: 'danger',
+};
+
+const USER_ROLE_TONE: Record<UserRole, Tone> = {
+  admin: 'danger',
+  user: 'info',
+  mano_obra: 'warning',
+  finanzas: 'success',
 };
 
 export default function RecursosHumanosPage() {
   const { addUser, currentUser, updateUserRole } = useAuth();
+  const toast = useToast();
   const supabase = useMemo(() => createClient(), []);
   const isAdmin = currentUser?.rol === 'admin';
 
@@ -202,21 +165,27 @@ export default function RecursosHumanosPage() {
   }, [supabase]);
 
   useEffect(() => {
-    const loadTimeout = window.setTimeout(() => {
-      loadTrabajadores();
+    const timer = setTimeout(() => {
+      void loadTrabajadores();
     }, 0);
 
     // Supabase Realtime
     const channel = supabase
       .channel('rrhh_trabajadores_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'trabajadores' }, () => loadTrabajadores())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'usuarios' }, () => loadTrabajadores())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'trabajador_permisos_ausencias' }, () => loadTrabajadores())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trabajadores' }, () => {
+        void loadTrabajadores();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'usuarios' }, () => {
+        void loadTrabajadores();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trabajador_permisos_ausencias' }, () => {
+        void loadTrabajadores();
+      })
       .subscribe();
 
     return () => {
-      window.clearTimeout(loadTimeout);
-      supabase.removeChannel(channel);
+      clearTimeout(timer);
+      void supabase.removeChannel(channel);
     };
   }, [loadTrabajadores, supabase]);
 
@@ -234,10 +203,14 @@ export default function RecursosHumanosPage() {
 
       if (error) {
         console.error('Error actualizando disponibilidad:', error);
-        loadTrabajadores();
+        void loadTrabajadores();
+        toast({ message: 'No se pudo actualizar la disponibilidad', tone: 'danger' });
+      } else {
+        toast({ message: `Disponibilidad actualizada a ${DISPONIBILIDAD_LABELS[nuevoEstado]}`, tone: 'success' });
       }
     } catch (err) {
       console.error('Error:', err);
+      toast({ message: 'Ocurrió un error al actualizar la disponibilidad', tone: 'danger' });
     }
   };
 
@@ -251,10 +224,11 @@ export default function RecursosHumanosPage() {
 
     try {
       await updateUserRole(usuario.id, nuevoRol, usuario.activo);
+      toast({ message: `Rol actualizado a ${ROL_NOMBRE[nuevoRol]}`, tone: 'success' });
     } catch (err) {
       console.error('Error actualizando tipo de usuario:', err);
       setUsuarios(previousUsuarios);
-      alert(mensajeError(err, 'No se pudo actualizar el tipo de usuario.'));
+      toast({ message: mensajeError(err, 'No se pudo actualizar el tipo de usuario.'), tone: 'danger' });
     }
   };
 
@@ -302,7 +276,6 @@ export default function RecursosHumanosPage() {
             activo: true,
           });
 
-          // Obtener el ID del usuario recién creado
           const { data: createdUser } = await supabase
             .from('usuarios')
             .select('id')
@@ -365,7 +338,8 @@ export default function RecursosHumanosPage() {
 
       setShowNewWorkerModal(false);
       setSavingNewWorker(false);
-      loadTrabajadores();
+      toast({ message: 'Colaborador creado exitosamente', tone: 'success' });
+      void loadTrabajadores();
     } catch (err: unknown) {
       setFormError(mensajeError(err, 'No se pudo guardar la ficha del colaborador.'));
       setSavingNewWorker(false);
@@ -375,7 +349,6 @@ export default function RecursosHumanosPage() {
   // Filtrado reactivo de trabajadores
   const filteredTrabajadores = useMemo(() => {
     return trabajadores.filter((t) => {
-      // Búsqueda por texto
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const matchName = t.nombre.toLowerCase().includes(q);
@@ -385,12 +358,10 @@ export default function RecursosHumanosPage() {
         if (!matchName && !matchRut && !matchCargo && !matchEmail) return false;
       }
 
-      // Filtro disponibilidad
       if (filterDisponibilidad !== 'todos') {
         if (t.estado_disponibilidad !== filterDisponibilidad) return false;
       }
 
-      // Filtro área
       if (filterArea !== 'todas') {
         if (t.area !== filterArea) return false;
       }
@@ -409,324 +380,252 @@ export default function RecursosHumanosPage() {
   const totalNominaSueldos = trabajadores.reduce((sum, t) => sum + Number(t.sueldo_base || 0), 0);
 
   return (
-    <div className="space-y-7 text-[#213343] pb-12 ">
-      {/* ========================================================= */}
-      {/* 1. CABECERA & ACCIÓN PRINCIPAL                            */}
-      {/* ========================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-lg border border-gray-200 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-orange-50 text-[#f97316]">
-              <UserCheck className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-[#213343] tracking-normal">
-                Recursos Humanos
-              </h1>
-              <p className="text-xs text-gray-500 font-medium mt-0.5">
-                Directorio de colaboradores vinculados a cuentas de usuario, asistencia y carpetas laborales.
-              </p>
-            </div>
-          </div>
-        </div>
+    <div className="space-y-6">
+      {/* 1. CABECERA & ACCIÓN PRINCIPAL */}
+      <PageHeader
+        title="Recursos Humanos"
+        description="Directorio de colaboradores vinculados a cuentas de usuario, asistencia y carpetas laborales."
+        actions={
+          <Button
+            variant="primary"
+            icon={Plus}
+            onClick={() => {
+              setFormError(null);
+              setShowNewWorkerModal(true);
+            }}
+          >
+            Nuevo colaborador
+          </Button>
+        }
+      />
 
-        <button
-          onClick={() => {
-            setFormError(null);
-            setShowNewWorkerModal(true);
-          }}
-          className="bg-[#f97316] hover:bg-[#ea580c] text-white px-4 py-2.5 rounded-lg font-black text-xs transition shadow-sm flex items-center gap-2 self-start sm:self-auto cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Nuevo colaborador</span>
-        </button>
-      </div>
+      {/* 2. KPIS EJECUTIVOS (SummaryLine accionable) */}
+      <Panel className="p-3">
+        <SummaryLine
+          items={[
+            {
+              label: 'Colaboradores',
+              value: totalColaboradores,
+              active: filterDisponibilidad === 'todos',
+              onClick: () => setFilterDisponibilidad('todos'),
+            },
+            {
+              label: 'Disponibles',
+              value: totalDisponibles,
+              tone: 'success',
+              active: filterDisponibilidad === 'disponible',
+              onClick: () =>
+                setFilterDisponibilidad(
+                  filterDisponibilidad === 'disponible' ? 'todos' : 'disponible'
+                ),
+            },
+            {
+              label: 'En terreno',
+              value: totalEnTerreno,
+              tone: 'info',
+              active: filterDisponibilidad === 'en_terreno',
+              onClick: () =>
+                setFilterDisponibilidad(
+                  filterDisponibilidad === 'en_terreno' ? 'todos' : 'en_terreno'
+                ),
+            },
+            {
+              label: 'Ausencias / Permisos',
+              value: totalAusentes,
+              tone: 'warning',
+            },
+            {
+              label: 'Nómina mensual',
+              value: `$${totalNominaSueldos.toLocaleString('es-CL')}`,
+            },
+          ]}
+        />
+      </Panel>
 
-      {/* ========================================================= */}
-      {/* 2. KPIS EJECUTIVOS DE RECURSOS HUMANOS                    */}
-      {/* ========================================================= */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* KPI 1: Total Colaboradores */}
-        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-gray-500">Colaboradores</span>
-            <div className="w-8 h-8 rounded-lg bg-gray-100 text-[#213343] flex items-center justify-center font-bold">
-              <Users className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-black text-[#213343]">{totalColaboradores}</span>
-            <span className="text-[11px] text-gray-400 font-medium block">Cuentas activas</span>
-          </div>
-        </div>
+      {/* 3. BARRA DE FILTROS & BÚSQUEDA */}
+      <FilterBar>
+        <SearchField
+          placeholder="Buscar por nombre, RUT, cargo o correo..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
 
-        {/* KPI 2: Disponibles en Planta */}
-        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-800">Disponibles</span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-black text-emerald-950">{totalDisponibles}</span>
-            <span className="text-[11px] text-emerald-700 font-semibold block">Listos para faenas</span>
-          </div>
-        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <FilterSelect
+            label="Estado"
+            value={filterDisponibilidad}
+            onChange={(e) => setFilterDisponibilidad(e.target.value)}
+          >
+            <option value="todos">Todos los estados</option>
+            <option value="disponible">Disponible</option>
+            <option value="en_terreno">En terreno / obra</option>
+            <option value="permiso">En permiso</option>
+            <option value="licencia">Licencia médica</option>
+            <option value="vacaciones">Vacaciones</option>
+            <option value="falta">Falta / ausente</option>
+          </FilterSelect>
 
-        {/* KPI 3: En Terreno / Obras */}
-        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-blue-800">En terreno</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-              <HardHat className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-black text-blue-950">{totalEnTerreno}</span>
-            <span className="text-[11px] text-blue-700 font-semibold block">Instalación y visitas</span>
-          </div>
-        </div>
+          <FilterSelect
+            label="Área"
+            value={filterArea}
+            onChange={(e) => setFilterArea(e.target.value)}
+          >
+            <option value="todas">Todas las áreas</option>
+            {AREAS_RRHH_DEFAULT.map((area) => (
+              <option key={area} value={area}>
+                {area}
+              </option>
+            ))}
+          </FilterSelect>
 
-        {/* KPI 4: Permiso / Licencia / Vacaciones */}
-        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-800">Ausencias / Permisos</span>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-              <Clock className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-black text-amber-950">{totalAusentes}</span>
-            <span className="text-[11px] text-amber-700 font-semibold block">Permisos y licencias</span>
-          </div>
-        </div>
-
-        {/* KPI 5: Nómina Total */}
-        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-gray-500">Nómina mensual</span>
-            <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#f97316] flex items-center justify-center font-bold">
-              <DollarSign className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <span className="text-xl font-black text-[#213343] truncate">
-              ${totalNominaSueldos.toLocaleString('es-CL')}
-            </span>
-            <span className="text-[11px] text-gray-400 font-medium block">Sueldos base</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================= */}
-      {/* 3. BARRA DE FILTROS & BÚSQUEDA                            */}
-      {/* ========================================================= */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
-        {/* Campo de búsqueda */}
-        <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Buscar por nombre, RUT, cargo o correo..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-9 pr-4 py-2 font-bold text-xs focus:outline-none focus:border-[#f97316]"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-
-        {/* Filtros desplegables */}
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-          {/* Filtro Disponibilidad */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-gray-500 font-bold">Estado:</span>
-            <select
-              value={filterDisponibilidad}
-              onChange={(e) => setFilterDisponibilidad(e.target.value)}
-              className="bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 font-bold text-xs cursor-pointer focus:outline-none focus:border-[#f97316]"
-            >
-              <option value="todos">Todos los estados</option>
-              <option value="disponible">Disponible</option>
-              <option value="en_terreno">En terreno / obra</option>
-              <option value="permiso">En permiso</option>
-              <option value="licencia">Licencia médica</option>
-              <option value="vacaciones">Vacaciones</option>
-              <option value="falta">Falta / ausente</option>
-            </select>
-          </div>
-
-          {/* Filtro Área */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-gray-500 font-bold">Área:</span>
-            <select
-              value={filterArea}
-              onChange={(e) => setFilterArea(e.target.value)}
-              className="bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 font-bold text-xs cursor-pointer focus:outline-none focus:border-[#f97316]"
-            >
-              <option value="todas">Todas las áreas</option>
-              {AREAS_RRHH_DEFAULT.map((area) => (
-                <option key={area} value={area}>
-                  {area}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Selector de Vista (Tabla vs Grid) */}
-          <div className="inline-flex bg-gray-100 p-1 rounded-md">
+          {/* Selector de Vista (Tabla vs Cuadrícula) */}
+          <div className="flex items-center rounded-control border border-line bg-surface p-0.5" role="group" aria-label="Modo de vista">
             <button
               type="button"
               onClick={() => setViewMode('table')}
-              className={`p-1.5 rounded-lg transition cursor-pointer ${
-                viewMode === 'table' ? 'bg-white text-[#f97316] shadow-xs' : 'text-gray-500 hover:text-[#213343]'
+              aria-label="Vista tabla"
+              aria-pressed={viewMode === 'table'}
+              className={`p-1.5 rounded-control transition-colors ${
+                viewMode === 'table' ? 'bg-surface-muted text-ink font-semibold' : 'text-ink-muted hover:text-ink'
               }`}
-              title="Vista de tabla"
             >
-              <List className="w-3.5 h-3.5" />
+              <List size={16} aria-hidden />
             </button>
             <button
               type="button"
               onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded-lg transition cursor-pointer ${
-                viewMode === 'grid' ? 'bg-white text-[#f97316] shadow-xs' : 'text-gray-500 hover:text-[#213343]'
+              aria-label="Vista cuadrícula"
+              aria-pressed={viewMode === 'grid'}
+              className={`p-1.5 rounded-control transition-colors ${
+                viewMode === 'grid' ? 'bg-surface-muted text-ink font-semibold' : 'text-ink-muted hover:text-ink'
               }`}
-              title="Vista de tarjetas"
             >
-              <Grid className="w-3.5 h-3.5" />
+              <LayoutGrid size={16} aria-hidden />
             </button>
           </div>
         </div>
-      </div>
+      </FilterBar>
 
-      {/* ========================================================= */}
-      {/* 4. LISTADO PRINCIPAL DE TRABAJADORES                     */}
-      {/* ========================================================= */}
+      {/* 4. LISTADO PRINCIPAL DE TRABAJADORES */}
       {loading ? (
-        <div className="p-12 text-center text-gray-500 font-medium animate-pulse">
+        <Panel className="p-12 text-center text-ink-muted">
           Cargando colaboradores de Hormiglass...
-        </div>
+        </Panel>
       ) : filteredTrabajadores.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center space-y-3">
-          <UserX className="w-10 h-10 text-gray-300 mx-auto" />
-          <h3 className="font-extrabold text-base text-[#213343]">
-            No se encontraron colaboradores
-          </h3>
-          <p className="text-xs text-gray-500 max-w-md mx-auto">
+        <Panel className="p-12 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-surface-muted text-ink-muted">
+            <UserX size={24} aria-hidden />
+          </div>
+          <h3 className="t-section mt-3">No se encontraron colaboradores</h3>
+          <p className="t-caption mt-1 max-w-md mx-auto">
             No hay trabajadores que coincidan con los filtros seleccionados. Todos los colaboradores deben tener cuenta de usuario activa.
           </p>
-        </div>
+        </Panel>
       ) : viewMode === 'table' ? (
         /* VISTA DE TABLA */
-        <div className="hg-list-group">
+        <Panel className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="hg-list-table w-full min-w-[920px] text-left text-xs">
+            <table className="hg-table">
               <thead>
-                <tr className="bg-gray-50/80 text-gray-500 font-bold border-b border-gray-200">
-                  <th className="py-3.5 px-4">Colaborador</th>
-                  <th className="py-3.5 px-4">Tipo de Usuario</th>
-                  <th className="py-3.5 px-4">Cargo & Área</th>
-                  <th className="py-3.5 px-4">Disponibilidad / Asistencia</th>
-                  <th className="py-3.5 px-4 text-right">Acción</th>
+                <tr>
+                  <th>Colaborador</th>
+                  <th>Tipo de usuario</th>
+                  <th>Cargo & Área</th>
+                  <th>Disponibilidad</th>
+                  <th className="text-right">Acción</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 text-[#213343]">
+              <tbody>
                 {filteredTrabajadores.map((t) => {
-                  const dispCfg =
-                    DISPONIBILIDAD_CONFIG[t.estado_disponibilidad] ||
-                    DISPONIBILIDAD_CONFIG.disponible;
-
                   const linkedUser = usuarios.find(
                     (u) =>
                       u.id === t.usuario_id ||
                       (t.email && u.email?.toLowerCase() === t.email?.toLowerCase())
                   );
-                  const userRoleConfig = linkedUser ? USER_ROLE_CONFIG[linkedUser.rol] : null;
 
                   return (
-                    <tr key={t.id} className="hover:bg-orange-50/30 transition group">
+                    <tr key={t.id}>
                       {/* 1. Colaborador */}
-                      <td className="py-3 px-4">
+                      <td>
                         <Link
                           href={`/rrhh/${t.id}`}
-                          className="flex items-center gap-3 group-hover:text-[#f97316] transition"
+                          className="flex items-center gap-3 transition-colors hover:text-accent-ink"
                         >
-                          <div className="w-9 h-9 rounded-lg bg-orange-500 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
-                            <UserRound className="w-5 h-5" />
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-accent-soft text-accent-ink font-semibold">
+                            <UserRound size={18} aria-hidden />
                           </div>
-                          <div>
-                            <span className="font-extrabold text-[#213343] block group-hover:text-[#f97316] transition">
+                          <div className="min-w-0">
+                            <span className="block font-semibold text-ink hover:underline">
                               {t.nombre}
                             </span>
-                            <span className="font-mono text-[11px] text-gray-400">
-                              RUT: {t.rut}
-                            </span>
+                            <div className="mt-0.5">
+                              <CodeStamp title={`RUT: ${t.rut}`}>{t.rut || 'Sin RUT'}</CodeStamp>
+                            </div>
                           </div>
                         </Link>
                       </td>
 
-                      {/* 3. Tipo de Usuario */}
-                      <td className="py-3 px-4">
-                        {linkedUser && userRoleConfig && isAdmin ? (
-                          <select
-                            value={linkedUser.rol}
-                            onChange={(e) => handleUpdateTipoUsuario(linkedUser, e.target.value as UserRole)}
-                            className={`px-2.5 py-1 rounded-md text-xs font-bold border cursor-pointer focus:outline-none transition shadow-2xs ${userRoleConfig.className}`}
-                          >
-                            {Object.entries(USER_ROLE_CONFIG).map(([role, config]) => (
-                              <option key={role} value={role}>
-                                {config.label}
-                              </option>
-                            ))}
-                          </select>
-                        ) : userRoleConfig ? (
-                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full inline-block border ${userRoleConfig.className}`}>
-                            {userRoleConfig.label}
-                          </span>
+                      {/* 2. Tipo de Usuario */}
+                      <td>
+                        {linkedUser && isAdmin ? (
+                          <div className="max-w-[160px]">
+                            <Select
+                              value={linkedUser.rol}
+                              onChange={(e) =>
+                                void handleUpdateTipoUsuario(linkedUser, e.target.value as UserRole)
+                              }
+                              className="text-xs"
+                            >
+                              {Object.entries(ROL_NOMBRE).map(([role, label]) => (
+                                <option key={role} value={role}>
+                                  {label}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                        ) : linkedUser ? (
+                          <StatusBadge tone={USER_ROLE_TONE[linkedUser.rol]}>
+                            {ROL_NOMBRE[linkedUser.rol] ?? linkedUser.rol}
+                          </StatusBadge>
                         ) : (
-                          <span className="text-[10px] text-gray-400 italic">Sin tipo</span>
+                          <span className="t-caption text-ink-muted">Sin cuenta</span>
                         )}
                       </td>
 
-                      {/* 4. Cargo & Área */}
-                      <td className="py-3 px-4">
-                        <span className="font-bold text-[#213343] block">{t.cargo}</span>
-                        <span className="text-[11px] text-gray-400 font-semibold">{t.area}</span>
+                      {/* 3. Cargo & Área */}
+                      <td>
+                        <span className="block font-semibold text-ink">{t.cargo}</span>
+                        <span className="t-caption text-ink-muted">{t.area}</span>
                       </td>
 
-                      {/* 5. Disponibilidad / Asistencia */}
-                      <td className="py-3 px-4">
-                        <select
-                          value={t.estado_disponibilidad}
-                          onChange={(e) =>
-                            handleUpdateDisponibilidad(t.id, e.target.value as EstadoDisponibilidad)
-                          }
-                          className={`px-2.5 py-1 rounded-md text-xs font-bold border cursor-pointer focus:outline-none transition shadow-2xs ${dispCfg.bg} ${dispCfg.text} ${dispCfg.border}`}
-                        >
-                          <option value="disponible">Disponible</option>
-                          <option value="en_terreno">En terreno / obra</option>
-                          <option value="permiso">En permiso</option>
-                          <option value="licencia">Licencia médica</option>
-                          <option value="vacaciones">Vacaciones</option>
-                          <option value="falta">Falta / ausente</option>
-                        </select>
+                      {/* 4. Disponibilidad */}
+                      <td>
+                        <div className="max-w-[170px]">
+                          <Select
+                            value={t.estado_disponibilidad}
+                            onChange={(e) =>
+                              void handleUpdateDisponibilidad(
+                                t.id,
+                                e.target.value as EstadoDisponibilidad
+                              )
+                            }
+                            className="text-xs"
+                          >
+                            {Object.entries(DISPONIBILIDAD_LABELS).map(([estado, label]) => (
+                              <option key={estado} value={estado}>
+                                {label}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
                       </td>
 
-                      {/* 7. Acción */}
-                      <td className="py-3 px-4 text-right">
-                        <Link
-                          href={`/rrhh/${t.id}`}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-gray-100 hover:bg-[#f97316] text-gray-700 hover:text-white font-bold transition text-xs cursor-pointer"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Ver ficha</span>
+                      {/* 5. Acción */}
+                      <td className="text-right">
+                        <Link href={`/rrhh/${t.id}`}>
+                          <Button variant="secondary" size="sm" icon={Eye}>
+                            Ver ficha
+                          </Button>
                         </Link>
                       </td>
                     </tr>
@@ -735,460 +634,460 @@ export default function RecursosHumanosPage() {
               </tbody>
             </table>
           </div>
-        </div>
+        </Panel>
       ) : (
         /* VISTA DE TARJETAS (GRID) */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredTrabajadores.map((t) => {
-            const dispCfg =
-              DISPONIBILIDAD_CONFIG[t.estado_disponibilidad] ||
-              DISPONIBILIDAD_CONFIG.disponible;
+            const linkedUser = usuarios.find(
+              (u) =>
+                u.id === t.usuario_id ||
+                (t.email && u.email?.toLowerCase() === t.email?.toLowerCase())
+            );
 
             return (
-              <div
-                key={t.id}
-                className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm hover:border-[#f97316] transition flex flex-col justify-between space-y-4"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="w-12 h-12 rounded-lg bg-orange-500 text-white font-black text-base flex items-center justify-center shadow-xs">
-                      <UserRound className="w-6 h-6" />
+              <Panel key={t.id} className="p-4 flex flex-col justify-between space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-control bg-accent-soft text-accent-ink font-semibold">
+                      <UserRound size={22} aria-hidden />
                     </div>
-
-                    <select
-                      value={t.estado_disponibilidad}
-                      onChange={(e) =>
-                        handleUpdateDisponibilidad(t.id, e.target.value as EstadoDisponibilidad)
-                      }
-                      className={`px-2.5 py-1 rounded-md text-xs font-bold border cursor-pointer focus:outline-none transition shadow-2xs ${dispCfg.bg} ${dispCfg.text} ${dispCfg.border}`}
-                    >
-                      <option value="disponible">Disponible</option>
-                      <option value="en_terreno">En terreno</option>
-                      <option value="permiso">Permiso</option>
-                      <option value="licencia">Licencia</option>
-                      <option value="vacaciones">Vacaciones</option>
-                      <option value="falta">Falta</option>
-                    </select>
+                    <StatusBadge tone={DISPONIBILIDAD_TONE[t.estado_disponibilidad]}>
+                      {DISPONIBILIDAD_LABELS[t.estado_disponibilidad]}
+                    </StatusBadge>
                   </div>
 
-                  <Link href={`/rrhh/${t.id}`} className="group">
-                    <h3 className="font-black text-base text-[#213343] group-hover:text-[#f97316] transition">
-                      {t.nombre}
-                    </h3>
-                    <p className="font-mono text-xs text-gray-400">RUT: {t.rut}</p>
-                  </Link>
+                  <div>
+                    <Link href={`/rrhh/${t.id}`} className="block group">
+                      <h3 className="font-semibold text-ink group-hover:underline">
+                        {t.nombre}
+                      </h3>
+                    </Link>
+                    <div className="mt-1 flex items-center gap-2">
+                      <CodeStamp title={`RUT: ${t.rut}`}>{t.rut || 'Sin RUT'}</CodeStamp>
+                      {linkedUser && (
+                        <StatusBadge tone={USER_ROLE_TONE[linkedUser.rol]} icon={false}>
+                          {ROL_NOMBRE[linkedUser.rol]}
+                        </StatusBadge>
+                      )}
+                    </div>
+                  </div>
 
-                  <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5 text-xs">
+                  <div className="border-t border-line-subtle pt-3 space-y-1.5 text-xs">
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-400 font-semibold">Cargo:</span>
-                      <span className="font-bold text-[#213343] truncate max-w-[180px]">
-                        {t.cargo}
-                      </span>
+                      <span className="text-ink-muted">Cargo</span>
+                      <span className="font-medium text-ink truncate max-w-[180px]">{t.cargo}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-400 font-semibold">Sueldo base:</span>
-                      <span className="font-bold font-mono text-[#f97316]">
+                      <span className="text-ink-muted">Área</span>
+                      <span className="font-medium text-ink truncate max-w-[180px]">{t.area}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-ink-muted">Sueldo base</span>
+                      <span className="t-num font-semibold text-ink">
                         ${Number(t.sueldo_base || 0).toLocaleString('es-CL')}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                  <span className="text-[11px] text-gray-400">
-                    Ingreso: {t.fecha_ingreso || 'No registrado'}
+                <div className="border-t border-line-subtle pt-3 flex items-center justify-between">
+                  <span className="t-caption text-ink-muted">
+                    {t.fecha_ingreso ? `Ingreso: ${t.fecha_ingreso}` : 'Sin fecha'}
                   </span>
-                  <Link
-                    href={`/rrhh/${t.id}`}
-                    className="text-xs font-bold text-[#f97316] hover:underline flex items-center gap-1"
-                  >
-                    <span>Ficha laboral</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
+                  <Link href={`/rrhh/${t.id}`}>
+                    <Button variant="subtle" size="sm" icon={Eye}>
+                      Ficha laboral
+                    </Button>
                   </Link>
                 </div>
-              </div>
+              </Panel>
             );
           })}
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* 5. MODAL CREAR NUEVO TRABAJADOR                           */}
-      {/* ========================================================= */}
-      {showNewWorkerModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 ">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-200 shadow-sm p-6 space-y-5">
-            {/* Header Modal */}
-            <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-lg bg-orange-50 text-[#f97316]">
-                  <UserCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-black text-[#213343]">
-                    Nuevo colaborador
-                  </h2>
-                  <p className="text-xs text-gray-500 font-medium">
-                    Registrar ficha personal vinculada a una cuenta de usuario
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setShowNewWorkerModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-full hover:bg-gray-100 transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
+      {/* 5. DIALOG CREAR NUEVO TRABAJADOR */}
+      <Dialog
+        open={showNewWorkerModal}
+        title="Nuevo colaborador"
+        description="Registrar ficha laboral vinculada a una cuenta de usuario."
+        size="lg"
+        onClose={() => setShowNewWorkerModal(false)}
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <Button
+              variant="secondary"
+              onClick={() => setShowNewWorkerModal(false)}
+              disabled={savingNewWorker}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              onClick={(e) => void handleCreateWorker(e)}
+              disabled={savingNewWorker}
+            >
+              {savingNewWorker ? 'Guardando...' : 'Guardar colaborador'}
+            </Button>
+          </div>
+        }
+      >
+        <form onSubmit={(e) => void handleCreateWorker(e)} className="space-y-5">
+          {formError && (
+            <div className="rounded-control border border-danger-line bg-danger-soft p-3 text-xs text-danger font-medium">
+              {formError}
             </div>
+          )}
 
-            {formError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-bold text-red-700 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{formError}</span>
-              </div>
-            )}
+          {/* Sección 0: Cuenta de Usuario Vinculada */}
+          <div className="rounded-panel border border-line-subtle bg-surface-muted p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <span className="font-semibold text-ink flex items-center gap-1.5 text-sm">
+                <Lock size={16} className="text-accent-ink" aria-hidden />
+                <span>Cuenta de usuario</span>
+              </span>
 
-            {/* Formulario */}
-            <form onSubmit={handleCreateWorker} className="space-y-4 text-xs">
-              {/* Sección 0: Cuenta de Usuario Vinculada (OBLIGATORIA) */}
-              <div className="p-3.5 bg-orange-50/70 border border-orange-200 rounded-lg space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <span className="font-extrabold text-[#213343] flex items-center gap-1.5">
-                    <Lock className="w-4 h-4 text-[#f97316]" />
-                    <span>Cuenta de usuario *</span>
-                  </span>
-
-                  <div className="inline-flex bg-white p-1 rounded-md border border-orange-200 text-[11px] font-bold">
-                    <button
-                      type="button"
-                      onClick={() => setWorkerAccountMode('create')}
-                      className={`px-3 py-1 rounded-lg transition cursor-pointer ${
-                        workerAccountMode === 'create'
-                          ? 'bg-[#f97316] text-white shadow-xs'
-                          : 'text-gray-600 hover:text-[#213343]'
-                      }`}
-                    >
-                      Crear nueva cuenta
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setWorkerAccountMode('link')}
-                      className={`px-3 py-1 rounded-lg transition cursor-pointer ${
-                        workerAccountMode === 'link'
-                          ? 'bg-[#f97316] text-white shadow-xs'
-                          : 'text-gray-600 hover:text-[#213343]'
-                      }`}
-                    >
-                      Vincular existente
-                    </button>
-                  </div>
-                </div>
-
-                {workerAccountMode === 'link' ? (
-                  <div>
-                    <label className="text-[11px] font-bold text-gray-600 block mb-1">
-                      Seleccionar usuario registrado:
-                    </label>
-                    <select
-                      value={selectedUserId}
-                      onChange={(e) => {
-                        const uid = e.target.value;
-                        setSelectedUserId(uid);
-                        const u = usuarios.find((usr) => usr.id === uid);
-                        if (u) {
-                          setNewWorker((prev) => ({
-                            ...prev,
-                            nombre: u.nombre,
-                            email: u.email,
-                          }));
-                        }
-                      }}
-                      className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 font-bold text-xs focus:outline-none focus:border-[#f97316]"
-                    >
-                      <option value="">-- Seleccionar usuario registrado --</option>
-                      {usuarios.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.nombre} ({u.email}) — Rol: {ROL_NOMBRE[u.rol] ?? u.rol}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    <div>
-                      <label className="text-[11px] font-bold text-gray-600 block mb-1">
-                        Rol de Acceso en Sistema *
-                      </label>
-                      <select
-                        value={newUserRole}
-                        onChange={(e) => setNewUserRole(e.target.value as UserRole)}
-                        className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 font-bold text-xs focus:outline-none focus:border-[#f97316]"
-                      >
-                        <option value="mano_obra">Mano de Obra</option>
-                        <option value="user">Ejecutivo Comercial</option>
-                        <option value="finanzas">Finanzas y Caja</option>
-                        <option value="admin">Administrador</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-[11px] font-bold text-gray-600 block mb-1">
-                        Contraseña Inicial *
-                      </label>
-                      <input
-                        type="password"
-                        required
-                        minLength={6}
-                        placeholder="Mínimo 6 caracteres"
-                        value={newUserPassword}
-                        onChange={(e) => setNewUserPassword(e.target.value)}
-                        className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 font-bold text-xs focus:outline-none focus:border-[#f97316]"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Sección 1: Datos Personales */}
-              <div className="space-y-3 pt-1">
-                <h4 className="font-black text-gray-700 uppercase tracking-normal text-[11px]">
-                  1. Datos Personales & Contacto
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-gray-500 block mb-1">Nombre completo *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Ej: Felipe Valverde"
-                      value={newWorker.nombre}
-                      onChange={(e) => setNewWorker({ ...newWorker, nombre: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-gray-500 block mb-1">RUT chileno *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="16.892.341-2"
-                      value={newWorker.rut}
-                      onChange={(e) => setNewWorker({ ...newWorker, rut: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold font-mono focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-gray-500 block mb-1">Correo electrónico (Login) *</label>
-                    <input
-                      type="email"
-                      required
-                      placeholder="correo@hormiglass.cl"
-                      value={newWorker.email}
-                      onChange={(e) => setNewWorker({ ...newWorker, email: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-semibold focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-gray-500 block mb-1">Teléfono</label>
-                    <input
-                      type="text"
-                      placeholder="+56 9 1234 5678"
-                      value={newWorker.telefono}
-                      onChange={(e) => setNewWorker({ ...newWorker, telefono: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-semibold focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-gray-500 block mb-1">Dirección</label>
-                    <input
-                      type="text"
-                      placeholder="Av. Las Industrias 1420"
-                      value={newWorker.direccion}
-                      onChange={(e) => setNewWorker({ ...newWorker, direccion: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-semibold focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-gray-500 block mb-1">Comuna</label>
-                    <SearchableSelect
-                      options={TODAS_COMUNAS_CHILE}
-                      value={newWorker.comuna}
-                      onChange={(val) => setNewWorker({ ...newWorker, comuna: val })}
-                      placeholder="Seleccionar comuna..."
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Sección 2: Cargo & Condiciones Laborales */}
-              <div className="space-y-3 pt-2 border-t border-gray-100">
-                <h4 className="font-black text-gray-700 uppercase tracking-normal text-[11px]">
-                  2. Cargo & Contrato Laboral
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="font-bold text-gray-500 block mb-1">Cargo / Rol *</label>
-                    <select
-                      value={newWorker.cargo}
-                      onChange={(e) => setNewWorker({ ...newWorker, cargo: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold cursor-pointer focus:outline-none focus:border-[#f97316]"
-                    >
-                      {CARGOS_RRHH_DEFAULT.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-gray-500 block mb-1">Área / Departamento</label>
-                    <select
-                      value={newWorker.area}
-                      onChange={(e) => setNewWorker({ ...newWorker, area: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold cursor-pointer focus:outline-none focus:border-[#f97316]"
-                    >
-                      {AREAS_RRHH_DEFAULT.map((a) => (
-                        <option key={a} value={a}>
-                          {a}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-gray-500 block mb-1">Tipo de contrato</label>
-                    <select
-                      value={newWorker.tipo_contrato}
-                      onChange={(e) => setNewWorker({ ...newWorker, tipo_contrato: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold cursor-pointer focus:outline-none focus:border-[#f97316]"
-                    >
-                      <option value="Indefinido">Indefinido</option>
-                      <option value="Plazo fijo">Plazo fijo</option>
-                      <option value="Honorarios">Honorarios</option>
-                      <option value="Por faena / obra">Por faena / obra</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-gray-500 block mb-1">Sueldo base (CLP)</label>
-                    <input
-                      type="number"
-                      placeholder="950000"
-                      value={newWorker.sueldo_base}
-                      onChange={(e) => setNewWorker({ ...newWorker, sueldo_base: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold font-mono focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-gray-500 block mb-1">Fecha de ingreso</label>
-                    <input
-                      type="date"
-                      value={newWorker.fecha_ingreso}
-                      onChange={(e) => setNewWorker({ ...newWorker, fecha_ingreso: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-gray-500 block mb-1">Disponibilidad inicial</label>
-                    <select
-                      value={newWorker.estado_disponibilidad}
-                      onChange={(e) =>
-                        setNewWorker({
-                          ...newWorker,
-                          estado_disponibilidad: e.target.value as EstadoDisponibilidad,
-                        })
-                      }
-                      className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-bold cursor-pointer focus:outline-none focus:border-[#f97316]"
-                    >
-                      <option value="disponible">Disponible</option>
-                      <option value="en_terreno">En terreno / obra</option>
-                      <option value="permiso">En permiso</option>
-                      <option value="licencia">Licencia médica</option>
-                      <option value="vacaciones">Vacaciones</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Sección 3: Contacto de Emergencia & Datos Bancarios */}
-              <div className="space-y-3 pt-2 border-t border-gray-100">
-                <h4 className="font-black text-gray-700 uppercase tracking-normal text-[11px]">
-                  3. Contacto de Emergencia & Pago
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-gray-500 block mb-1">Contacto de emergencia (Nombre)</label>
-                    <input
-                      type="text"
-                      placeholder="Ej: María Valverde (Esposa)"
-                      value={newWorker.contacto_emergencia_nombre}
-                      onChange={(e) =>
-                        setNewWorker({ ...newWorker, contacto_emergencia_nombre: e.target.value })
-                      }
-                      className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-semibold focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-gray-500 block mb-1">Teléfono de emergencia</label>
-                    <input
-                      type="text"
-                      placeholder="+56 9 8765 4321"
-                      value={newWorker.contacto_emergencia_telefono}
-                      onChange={(e) =>
-                        setNewWorker({ ...newWorker, contacto_emergencia_telefono: e.target.value })
-                      }
-                      className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-semibold focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-gray-500 block mb-1">Banco</label>
-                    <input
-                      type="text"
-                      placeholder="BancoEstado / Banco Santander"
-                      value={newWorker.banco}
-                      onChange={(e) => setNewWorker({ ...newWorker, banco: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-semibold focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-gray-500 block mb-1">N° de cuenta bancaria</label>
-                    <input
-                      type="text"
-                      placeholder="16892341"
-                      value={newWorker.numero_cuenta}
-                      onChange={(e) => setNewWorker({ ...newWorker, numero_cuenta: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 font-mono font-semibold focus:outline-none focus:border-[#f97316]"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Botones de acción */}
-              <div className="pt-4 border-t border-gray-100 flex items-center justify-end gap-3">
+              <div className="inline-flex rounded-control border border-line bg-surface p-0.5 text-xs font-semibold">
                 <button
                   type="button"
-                  onClick={() => setShowNewWorkerModal(false)}
-                  className="px-4 py-2 rounded-md text-gray-600 font-bold hover:bg-gray-100 transition"
+                  onClick={() => setWorkerAccountMode('create')}
+                  className={`px-2.5 py-1 rounded-control transition-colors ${
+                    workerAccountMode === 'create'
+                      ? 'bg-accent text-on-accent'
+                      : 'text-ink-muted hover:text-ink'
+                  }`}
                 >
-                  Cancelar
+                  Crear nueva cuenta
                 </button>
                 <button
-                  type="submit"
-                  disabled={savingNewWorker}
-                  className="px-5 py-2 rounded-md bg-[#f97316] hover:bg-[#ea580c] text-white font-black transition shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  type="button"
+                  onClick={() => setWorkerAccountMode('link')}
+                  className={`px-2.5 py-1 rounded-control transition-colors ${
+                    workerAccountMode === 'link'
+                      ? 'bg-accent text-on-accent'
+                      : 'text-ink-muted hover:text-ink'
+                  }`}
                 >
-                  <Save className="w-4 h-4" />
-                  <span>{savingNewWorker ? 'Guardando...' : 'Guardar colaborador'}</span>
+                  Vincular existente
                 </button>
               </div>
-            </form>
+            </div>
+
+            {workerAccountMode === 'link' ? (
+              <Field label="Seleccionar usuario registrado" required>
+                {({ id }) => (
+                  <Select
+                    id={id}
+                    value={selectedUserId}
+                    onChange={(e) => {
+                      const uid = e.target.value;
+                      setSelectedUserId(uid);
+                      const u = usuarios.find((usr) => usr.id === uid);
+                      if (u) {
+                        setNewWorker((prev) => ({
+                          ...prev,
+                          nombre: u.nombre,
+                          email: u.email,
+                        }));
+                      }
+                    }}
+                  >
+                    <option value="">-- Seleccionar usuario registrado --</option>
+                    {usuarios.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.nombre} ({u.email}) — Rol: {ROL_NOMBRE[u.rol] ?? u.rol}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Rol de acceso en el sistema" required>
+                  {({ id }) => (
+                    <Select
+                      id={id}
+                      value={newUserRole}
+                      onChange={(e) => setNewUserRole(e.target.value as UserRole)}
+                    >
+                      <option value="mano_obra">Mano de Obra</option>
+                      <option value="user">Ejecutivo Comercial</option>
+                      <option value="finanzas">Finanzas y Caja</option>
+                      <option value="admin">Administrador</option>
+                    </Select>
+                  )}
+                </Field>
+
+                <Field label="Contraseña inicial" hint="Mínimo 6 caracteres" required>
+                  {({ id }) => (
+                    <TextInput
+                      id={id}
+                      type="password"
+                      required
+                      minLength={6}
+                      value={newUserPassword}
+                      onChange={(e) => setNewUserPassword(e.target.value)}
+                    />
+                  )}
+                </Field>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+
+          {/* Sección 1: Datos Personales */}
+          <div className="space-y-3">
+            <h4 className="t-caption font-semibold uppercase tracking-wider text-ink-muted">
+              1. Datos personales & contacto
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label="Nombre completo" required>
+                {({ id }) => (
+                  <TextInput
+                    id={id}
+                    type="text"
+                    required
+                    placeholder="Ej: Felipe Valverde"
+                    value={newWorker.nombre}
+                    onChange={(e) => setNewWorker({ ...newWorker, nombre: e.target.value })}
+                  />
+                )}
+              </Field>
+
+              <Field label="RUT chileno" required>
+                {({ id }) => (
+                  <TextInput
+                    id={id}
+                    type="text"
+                    required
+                    placeholder="16.892.341-2"
+                    value={newWorker.rut}
+                    onChange={(e) => setNewWorker({ ...newWorker, rut: e.target.value })}
+                    className="font-mono tabular-nums"
+                  />
+                )}
+              </Field>
+
+              <Field label="Correo electrónico (Login)" required>
+                {({ id }) => (
+                  <TextInput
+                    id={id}
+                    type="email"
+                    required
+                    placeholder="correo@hormiglass.cl"
+                    value={newWorker.email}
+                    onChange={(e) => setNewWorker({ ...newWorker, email: e.target.value })}
+                  />
+                )}
+              </Field>
+
+              <Field label="Teléfono">
+                {({ id }) => (
+                  <TextInput
+                    id={id}
+                    type="text"
+                    placeholder="+56 9 1234 5678"
+                    value={newWorker.telefono}
+                    onChange={(e) => setNewWorker({ ...newWorker, telefono: e.target.value })}
+                  />
+                )}
+              </Field>
+
+              <Field label="Dirección">
+                {({ id }) => (
+                  <TextInput
+                    id={id}
+                    type="text"
+                    placeholder="Av. Las Industrias 1420"
+                    value={newWorker.direccion}
+                    onChange={(e) => setNewWorker({ ...newWorker, direccion: e.target.value })}
+                  />
+                )}
+              </Field>
+
+              <Field label="Comuna">
+                {({ id }) => (
+                  <>
+                    <TextInput
+                      id={id}
+                      list="comunas-datalist"
+                      placeholder="Seleccionar comuna..."
+                      value={newWorker.comuna}
+                      onChange={(e) => setNewWorker({ ...newWorker, comuna: e.target.value })}
+                    />
+                    <datalist id="comunas-datalist">
+                      {TODAS_COMUNAS_CHILE.map((c) => (
+                        <option key={c} value={c} />
+                      ))}
+                    </datalist>
+                  </>
+                )}
+              </Field>
+            </div>
+          </div>
+
+          {/* Sección 2: Cargo & Condiciones Laborales */}
+          <div className="space-y-3 border-t border-line-subtle pt-3">
+            <h4 className="t-caption font-semibold uppercase tracking-wider text-ink-muted">
+              2. Cargo & contrato laboral
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Field label="Cargo / Rol" required>
+                {({ id }) => (
+                  <Select
+                    id={id}
+                    value={newWorker.cargo}
+                    onChange={(e) => setNewWorker({ ...newWorker, cargo: e.target.value })}
+                  >
+                    {CARGOS_RRHH_DEFAULT.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+
+              <Field label="Área / Departamento">
+                {({ id }) => (
+                  <Select
+                    id={id}
+                    value={newWorker.area}
+                    onChange={(e) => setNewWorker({ ...newWorker, area: e.target.value })}
+                  >
+                    {AREAS_RRHH_DEFAULT.map((a) => (
+                      <option key={a} value={a}>
+                        {a}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+
+              <Field label="Tipo de contrato">
+                {({ id }) => (
+                  <Select
+                    id={id}
+                    value={newWorker.tipo_contrato}
+                    onChange={(e) => setNewWorker({ ...newWorker, tipo_contrato: e.target.value })}
+                  >
+                    <option value="Indefinido">Indefinido</option>
+                    <option value="Plazo fijo">Plazo fijo</option>
+                    <option value="Honorarios">Honorarios</option>
+                    <option value="Por faena / obra">Por faena / obra</option>
+                  </Select>
+                )}
+              </Field>
+
+              <Field label="Sueldo base (CLP)">
+                {({ id }) => (
+                  <TextInput
+                    id={id}
+                    type="number"
+                    placeholder="950000"
+                    value={newWorker.sueldo_base}
+                    onChange={(e) => setNewWorker({ ...newWorker, sueldo_base: e.target.value })}
+                    className="font-mono tabular-nums"
+                  />
+                )}
+              </Field>
+
+              <Field label="Fecha de ingreso">
+                {({ id }) => (
+                  <TextInput
+                    id={id}
+                    type="date"
+                    value={newWorker.fecha_ingreso}
+                    onChange={(e) => setNewWorker({ ...newWorker, fecha_ingreso: e.target.value })}
+                  />
+                )}
+              </Field>
+
+              <Field label="Disponibilidad inicial">
+                {({ id }) => (
+                  <Select
+                    id={id}
+                    value={newWorker.estado_disponibilidad}
+                    onChange={(e) =>
+                      setNewWorker({
+                        ...newWorker,
+                        estado_disponibilidad: e.target.value as EstadoDisponibilidad,
+                      })
+                    }
+                  >
+                    <option value="disponible">Disponible</option>
+                    <option value="en_terreno">En terreno / obra</option>
+                    <option value="permiso">En permiso</option>
+                    <option value="licencia">Licencia médica</option>
+                    <option value="vacaciones">Vacaciones</option>
+                  </Select>
+                )}
+              </Field>
+            </div>
+          </div>
+
+          {/* Sección 3: Contacto de Emergencia & Datos Bancarios */}
+          <div className="space-y-3 border-t border-line-subtle pt-3">
+            <h4 className="t-caption font-semibold uppercase tracking-wider text-ink-muted">
+              3. Contacto de emergencia & datos bancarios
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label="Contacto de emergencia (Nombre)">
+                {({ id }) => (
+                  <TextInput
+                    id={id}
+                    type="text"
+                    placeholder="Ej: María Valverde (Esposa)"
+                    value={newWorker.contacto_emergencia_nombre}
+                    onChange={(e) =>
+                      setNewWorker({ ...newWorker, contacto_emergencia_nombre: e.target.value })
+                    }
+                  />
+                )}
+              </Field>
+
+              <Field label="Teléfono de emergencia">
+                {({ id }) => (
+                  <TextInput
+                    id={id}
+                    type="text"
+                    placeholder="+56 9 8765 4321"
+                    value={newWorker.contacto_emergencia_telefono}
+                    onChange={(e) =>
+                      setNewWorker({ ...newWorker, contacto_emergencia_telefono: e.target.value })
+                    }
+                  />
+                )}
+              </Field>
+
+              <Field label="Banco">
+                {({ id }) => (
+                  <TextInput
+                    id={id}
+                    type="text"
+                    placeholder="BancoEstado / Banco Santander"
+                    value={newWorker.banco}
+                    onChange={(e) => setNewWorker({ ...newWorker, banco: e.target.value })}
+                  />
+                )}
+              </Field>
+
+              <Field label="N° de cuenta bancaria">
+                {({ id }) => (
+                  <TextInput
+                    id={id}
+                    type="text"
+                    placeholder="16892341"
+                    value={newWorker.numero_cuenta}
+                    onChange={(e) => setNewWorker({ ...newWorker, numero_cuenta: e.target.value })}
+                    className="font-mono tabular-nums"
+                  />
+                )}
+              </Field>
+            </div>
+          </div>
+        </form>
+      </Dialog>
     </div>
   );
 }

@@ -10,7 +10,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   if (pathname === '/login' || pathname.startsWith('/auth')) return <main>{children}</main>;
 
-  return <div className="flex min-h-screen bg-[var(--hg-app-bg)]">
+  return <div className="flex min-h-screen bg-app">
     <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
     <div className="flex min-h-screen min-w-0 flex-1 flex-col">
       <Navbar onMenuClick={() => setMobileOpen(true)} />

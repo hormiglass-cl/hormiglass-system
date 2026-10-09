@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { TrendingUp, Calendar, BarChart3, LineChart } from 'lucide-react';
+import { TrendingUp, BarChart3, LineChart } from 'lucide-react';
 
 export interface TimelineDataPoint {
-  dateKey: string; // "2026-08-21" or "2026-08"
-  label: string; // "21 Ago" or "Ago 2026"
+  dateKey: string;
+  label: string;
   fullDateLabel: string;
   monto: number;
   count: number;
@@ -88,19 +88,19 @@ export function SalesTimelineChart({
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-4">
+    <div className="space-y-4 rounded-panel border border-line bg-surface p-5">
       {/* Header con controles */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
+      <div className="flex flex-col justify-between gap-3 border-b border-line-subtle pb-3 sm:flex-row sm:items-center">
         <div>
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-md bg-orange-50 text-[#f97316]">
-              <TrendingUp className="w-4 h-4" />
-            </div>
-            <h3 className="font-extrabold text-base text-[#213343]">
+            <span className="grid h-7 w-7 place-items-center rounded-control bg-surface-muted text-accent-ink">
+              <TrendingUp className="h-4 w-4" aria-hidden />
+            </span>
+            <h3 className="text-base font-semibold text-ink">
               Evolución de ventas
             </h3>
           </div>
-          <p className="text-xs text-gray-500 font-medium mt-0.5">
+          <p className="t-caption mt-0.5 text-ink-muted">
             Ingresos generados por cotizaciones aprobadas y contratos de venta
           </p>
         </div>
@@ -108,14 +108,14 @@ export function SalesTimelineChart({
         {/* Botones de alternar vista */}
         <div className="flex items-center gap-2">
           {/* Selector Diario / Mensual */}
-          <div className="inline-flex bg-gray-100 p-1 rounded-md text-xs font-bold text-gray-600">
+          <div className="inline-flex rounded-control border border-line bg-surface-muted p-0.5 text-xs font-medium">
             <button
               type="button"
               onClick={() => setViewMode('daily')}
-              className={`px-3 py-1 rounded-lg transition cursor-pointer ${
+              className={`cursor-pointer rounded-control px-2.5 py-1 transition ${
                 viewMode === 'daily'
-                  ? 'bg-white text-[#f97316] shadow-xs font-black'
-                  : 'hover:text-[#213343]'
+                  ? 'bg-surface font-semibold text-ink shadow-xs'
+                  : 'text-ink-muted hover:text-ink'
               }`}
             >
               Diarias
@@ -123,41 +123,43 @@ export function SalesTimelineChart({
             <button
               type="button"
               onClick={() => setViewMode('monthly')}
-              className={`px-3 py-1 rounded-lg transition cursor-pointer ${
+              className={`cursor-pointer rounded-control px-2.5 py-1 transition ${
                 viewMode === 'monthly'
-                  ? 'bg-white text-[#f97316] shadow-xs font-black'
-                  : 'hover:text-[#213343]'
+                  ? 'bg-surface font-semibold text-ink shadow-xs'
+                  : 'text-ink-muted hover:text-ink'
               }`}
             >
               Mensuales
             </button>
           </div>
 
-          {/* Selector Tipo Gráfico (Curva / Barras) */}
-          <div className="inline-flex bg-gray-100 p-1 rounded-md text-xs font-bold text-gray-600">
+          {/* Selector Tipo Gráfico */}
+          <div className="inline-flex rounded-control border border-line bg-surface-muted p-0.5 text-xs">
             <button
               type="button"
               onClick={() => setChartType('area')}
-              className={`p-1.5 rounded-lg transition cursor-pointer ${
+              aria-label="Gráfico de área"
+              className={`cursor-pointer rounded-control p-1.5 transition ${
                 chartType === 'area'
-                  ? 'bg-white text-[#f97316] shadow-xs'
-                  : 'hover:text-[#213343]'
+                  ? 'bg-surface text-ink shadow-xs'
+                  : 'text-ink-muted hover:text-ink'
               }`}
               title="Gráfico de área"
             >
-              <LineChart className="w-3.5 h-3.5" />
+              <LineChart className="h-3.5 w-3.5" aria-hidden />
             </button>
             <button
               type="button"
               onClick={() => setChartType('bar')}
-              className={`p-1.5 rounded-lg transition cursor-pointer ${
+              aria-label="Gráfico de columnas"
+              className={`cursor-pointer rounded-control p-1.5 transition ${
                 chartType === 'bar'
-                  ? 'bg-white text-[#f97316] shadow-xs'
-                  : 'hover:text-[#213343]'
+                  ? 'bg-surface text-ink shadow-xs'
+                  : 'text-ink-muted hover:text-ink'
               }`}
               title="Gráfico de columnas"
             >
-              <BarChart3 className="w-3.5 h-3.5" />
+              <BarChart3 className="h-3.5 w-3.5" aria-hidden />
             </button>
           </div>
         </div>
@@ -166,25 +168,21 @@ export function SalesTimelineChart({
       {/* Gráfico SVG Reactivo */}
       <div className="relative w-full overflow-hidden">
         {currentData.length === 0 ? (
-          <div className="h-48 flex items-center justify-center text-xs text-gray-400 italic">
+          <div className="flex h-48 items-center justify-center text-xs italic text-ink-muted">
             No hay registros de ventas en el período seleccionado.
           </div>
         ) : (
           <div className="relative">
             <svg
               viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-              className="w-full h-56 select-none"
+              className="h-56 w-full select-none"
               preserveAspectRatio="xMidYMid meet"
             >
               <defs>
-                {/* Gradiente corporativo Hormiglass */}
+                {/* Gradiente corporativo Hormiglass con variables CSS */}
                 <linearGradient id="hormiglassSalesGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#F7931F" stopOpacity="0.35" />
-                  <stop offset="100%" stopColor="#F7931F" stopOpacity="0.0" />
-                </linearGradient>
-                <linearGradient id="hormiglassBarGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#F7931F" stopOpacity="0.9" />
-                  <stop offset="100%" stopColor="#d97706" stopOpacity="0.75" />
+                  <stop offset="0%" stopColor="var(--hg-accent)" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="var(--hg-accent)" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
 
@@ -198,7 +196,7 @@ export function SalesTimelineChart({
                       y1={yPos}
                       x2={svgWidth - paddingRight}
                       y2={yPos}
-                      stroke="#f1f5f9"
+                      stroke="var(--hg-line)"
                       strokeDasharray="4 4"
                       strokeWidth="1"
                     />
@@ -206,9 +204,9 @@ export function SalesTimelineChart({
                       x={paddingLeft - 10}
                       y={yPos + 4}
                       textAnchor="end"
-                      fontSize="10"
-                      fontWeight="bold"
-                      fill="#94a3b8"
+                      fontSize="11"
+                      fontWeight="500"
+                      fill="var(--hg-text-soft)"
                       className="font-mono"
                     >
                       {formatShortMoney(val)}
@@ -224,8 +222,8 @@ export function SalesTimelineChart({
                   <path
                     d={linePath}
                     fill="none"
-                    stroke="#F7931F"
-                    strokeWidth="3"
+                    stroke="var(--hg-accent)"
+                    strokeWidth="2.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
@@ -234,11 +232,11 @@ export function SalesTimelineChart({
                       <circle
                         cx={pt.x}
                         cy={pt.y}
-                        r={hoveredPoint?.dateKey === pt.dateKey ? 6 : 4}
-                        fill="#ffffff"
-                        stroke="#F7931F"
-                        strokeWidth={hoveredPoint?.dateKey === pt.dateKey ? 3 : 2}
-                        className="transition-all duration-150 cursor-pointer"
+                        r={hoveredPoint?.dateKey === pt.dateKey ? 5 : 3.5}
+                        fill="var(--hg-surface)"
+                        stroke="var(--hg-accent)"
+                        strokeWidth={hoveredPoint?.dateKey === pt.dateKey ? 2.5 : 1.5}
+                        className="cursor-pointer transition-all duration-150"
                         onMouseEnter={() => {
                           setHoveredPoint(pt);
                         }}
@@ -268,9 +266,10 @@ export function SalesTimelineChart({
                         y={barY}
                         width={barWidth}
                         height={Math.max(barHeight, 2)}
-                        rx="6"
-                        fill={isHovered ? '#ea580c' : 'url(#hormiglassBarGrad)'}
-                        className="transition-all duration-200 cursor-pointer"
+                        rx="4"
+                        fill="var(--hg-accent)"
+                        opacity={isHovered ? 1 : 0.85}
+                        className="cursor-pointer transition-all duration-200"
                         onMouseEnter={() => {
                           setHoveredPoint(pt);
                         }}
@@ -299,9 +298,9 @@ export function SalesTimelineChart({
                     x={pt.x}
                     y={svgHeight - 12}
                     textAnchor="middle"
-                    fontSize="10"
-                    fontWeight="bold"
-                    fill="#64748b"
+                    fontSize="11"
+                    fontWeight="500"
+                    fill="var(--hg-text-soft)"
                   >
                     {pt.label}
                   </text>
@@ -312,15 +311,15 @@ export function SalesTimelineChart({
             {/* Tooltip interactivo flotante */}
             {hoveredPoint && (
               <div
-                className="absolute top-2 left-1/2 -translate-x-1/2 bg-[#213343] text-white px-3.5 py-2 rounded-lg shadow-sm text-xs space-y-0.5 pointer-events-none z-30 "
+                className="pointer-events-none absolute left-1/2 top-2 z-30 -translate-x-1/2 space-y-0.5 rounded-control border border-line bg-surface p-2.5 text-xs text-ink shadow-[var(--hg-shadow-popover)]"
               >
-                <p className="font-semibold text-gray-300 text-[10px]">
+                <p className="t-micro text-ink-muted">
                   {hoveredPoint.fullDateLabel}
                 </p>
-                <p className="text-sm font-black text-[#f97316]">
+                <p className="t-num text-sm font-semibold text-accent-ink">
                   ${hoveredPoint.monto.toLocaleString('es-CL')} CLP
                 </p>
-                <p className="text-[10px] text-gray-300 font-medium">
+                <p className="t-micro font-medium text-ink-muted">
                   {hoveredPoint.count} {hoveredPoint.count === 1 ? 'venta' : 'ventas'}
                 </p>
               </div>
@@ -330,11 +329,11 @@ export function SalesTimelineChart({
       </div>
 
       {/* Footer con resumen */}
-      <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100">
-        <span className="text-gray-500 font-semibold">
+      <div className="flex items-center justify-between border-t border-line-subtle pt-2 text-xs">
+        <span className="font-medium text-ink-muted">
           Total acumulado en el período:
         </span>
-        <span className="font-black text-[#213343] text-sm">
+        <span className="t-num text-sm font-semibold text-ink">
           ${totalPeriodSales.toLocaleString('es-CL')} CLP
         </span>
       </div>

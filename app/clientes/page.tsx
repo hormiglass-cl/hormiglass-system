@@ -6,24 +6,23 @@ import { createClient } from '../../lib/supabase/client';
 import { Cliente, NICHOS_CLIENTE_DEFAULT, OportunidadVenta, Usuario } from '../../lib/types';
 import { logSistema } from '../../lib/logger';
 import {
-  Users,
   UserPlus,
   Search,
   Phone,
   Mail,
-  MapPin,
   ChevronRight,
   SlidersHorizontal,
   TrendingUp,
   AlertCircle,
   Plus,
   Trash2,
-  CheckCircle,
 } from 'lucide-react';
 import { Pagination } from '../../components/Pagination';
 import { SearchableSelect } from '../../components/SearchableSelect';
 import { REGIONES_CHILE, TODAS_COMUNAS_CHILE } from '../../lib/chile-data';
 import { mensajeError } from '../../lib/errores';
+import { Button, CodeStamp, PageHeader, Panel, StatusBadge } from '../../components/ui/crm';
+import { useConfirm, useToast } from '../../components/ui/feedback';
 
 interface ColumnState {
   rut: boolean;
@@ -52,13 +51,14 @@ export default function ClientesPage() {
   const [showModal, setShowModal] = useState(false);
   const [showColumnMenu, setShowColumnMenu] = useState(false);
   const [duplicateError, setDuplicateError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
-  const [clientsToDelete, setClientsToDelete] = useState<Cliente[] | null>(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  const confirmDialog = useConfirm();
+  const toast = useToast();
 
   // Column visibility state
   const [columns, setColumns] = useState<ColumnState>(() => {
@@ -105,125 +105,118 @@ export default function ClientesPage() {
 
   const supabase = createClient();
 
-  // Helper to format RUT: 12345678-K (sin puntos y con guion)
-  const formatRutClean = (rawRut: string) => {
-    const clean = rawRut.replace(/[^0-9kK]/g, '').toUpperCase();
-    if (clean.length <= 1) return clean;
-    const dv = clean.slice(-1);
+  // Helper para normalizar RUT chileno
+  const normalizeRut = (rutStr: string): string => {
+    if (!rutStr) return '';
+    const clean = rutStr.replace(/[^0-9kK]/g, '').toUpperCase();
+    if (clean.length < 2) return clean;
     const body = clean.slice(0, -1);
+    const dv = clean.slice(-1);
     return `${body}-${dv}`;
+  };
+
+  const formatRutClean = (rutStr?: string): string => {
+    if (!rutStr) return 'Sin RUT';
+    return normalizeRut(rutStr);
+  };
+
+  // Helper para validar RUT con Algoritmo Módulo 11
+  const validarRutChileno = (body: string, dv: string): { valido: boolean; mensaje: string } => {
+    if (!body || !dv) return { valido: false, mensaje: 'Ingresa RUT y DV' };
+    const cleanBody = body.replace(/[^0-9]/g, '');
+    if (cleanBody.length < 7 || cleanBody.length > 8) {
+      return { valido: false, mensaje: 'El cuerpo debe tener 7 u 8 dígitos' };
+    }
+
+    let suma = 0;
+    let multiplo = 2;
+    for (let i = cleanBody.length - 1; i >= 0; i--) {
+      suma += parseInt(cleanBody.charAt(i), 10) * multiplo;
+      multiplo = multiplo === 7 ? 2 : multiplo + 1;
+    }
+    const resto = suma % 11;
+    let dvEsperado = (11 - resto).toString();
+    if (dvEsperado === '11') dvEsperado = '0';
+    if (dvEsperado === '10') dvEsperado = 'K';
+
+    const cleanDv = dv.toUpperCase();
+    if (cleanDv !== dvEsperado) {
+      return { valido: false, mensaje: `DV incorrecto (debería ser ${dvEsperado})` };
+    }
+    return { valido: true, mensaje: 'RUT Válido' };
   };
 
   useEffect(() => {
     let ignore = false;
-    async function getClientesData() {
+    async function loadData() {
       try {
-        const [cliRes, opRes, nichoRes, userRes] = await Promise.all([
+        const [cliRes, opRes, usrRes] = await Promise.all([
           supabase.from('clientes').select('*').order('created_at', { ascending: false }),
-          supabase.from('oportunidades').select('id, cliente_id'),
-          supabase.from('campos_personalizados').select('opciones').eq('campo_supabase', 'nicho').maybeSingle(),
-          supabase.from('usuarios').select('*').eq('activo', true).order('nombre', { ascending: true }),
+          supabase.from('oportunidades').select('*'),
+          supabase.from('usuarios').select('*').eq('activo', true).order('nombre'),
         ]);
 
         if (!ignore) {
           if (cliRes.data) {
             setClientes(cliRes.data as Cliente[]);
-          } else {
-            setClientes([]);
+            const dbNichos = Array.from(new Set(cliRes.data.map((c: Cliente) => c.nicho).filter(Boolean)));
+            const allNichos = Array.from(new Set([...NICHOS_CLIENTE_DEFAULT, ...dbNichos]));
+            setNichos(allNichos as string[]);
           }
-
-          if (opRes.data) {
-            setOportunidades(opRes.data as OportunidadVenta[]);
-          } else {
-            setOportunidades([]);
-          }
-
-          if (userRes.data) {
-            setUsuariosList(userRes.data as Usuario[]);
-          }
-
-          if (nichoRes.data && nichoRes.data.opciones && nichoRes.data.opciones.length > 0) {
-            setNichos(nichoRes.data.opciones);
-            setNichoSeleccionado(nichoRes.data.opciones[0]);
-          }
-
+          if (opRes.data) setOportunidades(opRes.data as OportunidadVenta[]);
+          if (usrRes.data) setUsuariosList(usrRes.data as Usuario[]);
           setLoading(false);
         }
       } catch (err) {
-        console.error('Error fetching clientes from Supabase:', err);
-        if (!ignore) {
-          setClientes([]);
-          setOportunidades([]);
-          setLoading(false);
-        }
+        console.error('Error cargando directorio de clientes:', err);
+        if (!ignore) setLoading(false);
       }
     }
 
-    getClientesData();
-
-    const channel = supabase
-      .channel('realtime_clientes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'clientes',
-        },
-        () => {
-          getClientesData();
-        }
-      )
-      .subscribe();
-
+    loadData();
     return () => {
       ignore = true;
-      supabase.removeChannel(channel);
     };
-  }, []);
+  }, [supabase]);
 
-  const handleCreateNicho = async () => {
-    if (!nuevoNichoInput.trim()) return;
-    const newNichoName = nuevoNichoInput.trim();
-    let updatedNichos = [...nichos];
-    if (!nichos.includes(newNichoName)) {
-      updatedNichos = [...nichos, newNichoName];
-      setNichos(updatedNichos);
-
-      try {
-        await supabase
-          .from('campos_personalizados')
-          .update({ opciones: updatedNichos })
-          .eq('campo_supabase', 'nicho');
-      } catch (err) {
-        console.error('Error updating nicho options in Supabase:', err);
-      }
+  const handleUpdateNicho = async (clienteId: string, nuevoNicho: string) => {
+    setClientes((prev) =>
+      prev.map((c) => (c.id === clienteId ? { ...c, nicho: nuevoNicho } : c))
+    );
+    try {
+      const { error } = await supabase.from('clientes').update({ nicho: nuevoNicho }).eq('id', clienteId);
+      if (error) console.error('Error updating nicho on cliente:', error);
+    } catch (err) {
+      console.error('Error updating nicho on cliente:', err);
     }
-    setNichoSeleccionado(newNichoName);
+  };
+
+  const handleCreateNicho = () => {
+    if (!nuevoNichoInput.trim()) return;
+    const formatted = nuevoNichoInput.trim();
+    if (!nichos.includes(formatted)) {
+      setNichos([...nichos, formatted]);
+    }
+    setNichoSeleccionado(formatted);
     setNuevoNichoInput('');
     setShowAddNichoInput(false);
   };
 
-  const handleUpdateNicho = async (clienteId: string, newNicho: string) => {
-    setClientes((prev) =>
-      prev.map((c) => (c.id === clienteId ? { ...c, nicho: newNicho } : c))
-    );
-    try {
-      await supabase.from('clientes').update({ nicho: newNicho }).eq('id', clienteId);
-    } catch (err) {
-      console.error('Error updating client nicho:', err);
-    }
-  };
-
   const filteredClientes = clientes.filter((c) => {
-    const matchesSearch =
-      c.nombre.toLowerCase().includes(search.toLowerCase()) ||
-      c.rut.toLowerCase().includes(search.toLowerCase()) ||
-      (c.apellido_razon_social && c.apellido_razon_social.toLowerCase().includes(search.toLowerCase()));
+    const q = search.toLowerCase();
+    const rutClean = (c.rut || '').replace(/[^0-9kK]/g, '').toLowerCase();
+    const searchClean = q.replace(/[^0-9kK]/g, '');
 
-    const matchesNicho = nichoFiltro === 'todos' || c.nicho === nichoFiltro;
+    const matchSearch =
+      c.nombre.toLowerCase().includes(q) ||
+      (c.apellido_razon_social && c.apellido_razon_social.toLowerCase().includes(q)) ||
+      (c.correo && c.correo.toLowerCase().includes(q)) ||
+      (c.telefono && c.telefono.includes(q)) ||
+      (searchClean && rutClean.includes(searchClean));
 
-    return matchesSearch && matchesNicho;
+    const matchNicho = nichoFiltro === 'todos' || c.nicho === nichoFiltro;
+
+    return matchSearch && matchNicho;
   });
 
   // Calculate pagination
@@ -233,13 +226,12 @@ export default function ClientesPage() {
     currentPage * itemsPerPage
   );
 
-  // Multi-select helpers
-  const isAllSelected =
-    filteredClientes.length > 0 &&
-    filteredClientes.every((c) => selectedClientIds.includes(c.id));
+  const getOportunidadesCount = (clienteId: string) => {
+    return oportunidades.filter((o) => o.cliente_id === clienteId).length;
+  };
 
   const handleSelectAll = () => {
-    if (isAllSelected) {
+    if (selectedClientIds.length === filteredClientes.length) {
       setSelectedClientIds([]);
     } else {
       setSelectedClientIds(filteredClientes.map((c) => c.id));
@@ -247,103 +239,94 @@ export default function ClientesPage() {
   };
 
   const toggleSelectClient = (id: string) => {
-    setSelectedClientIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
+    if (selectedClientIds.includes(id)) {
+      setSelectedClientIds(selectedClientIds.filter((item) => item !== id));
+    } else {
+      setSelectedClientIds([...selectedClientIds, id]);
+    }
   };
 
-  const handleConfirmDeleteClients = async () => {
-    if (!clientsToDelete || clientsToDelete.length === 0) return;
-    const idsToDelete = clientsToDelete.map((c) => c.id);
+  const isAllSelected = filteredClientes.length > 0 && selectedClientIds.length === filteredClientes.length;
+
+  const handleDeleteClient = async (cli: Cliente) => {
+    const ok = await confirmDialog({
+      title: 'Eliminar Cliente',
+      message: `¿Estás seguro de que deseas eliminar a "${cli.nombre}" (${formatRutClean(cli.rut)})? Esta acción no se puede deshacer.`,
+      confirmLabel: 'Eliminar Cliente',
+      destructive: true,
+    });
+    if (!ok) return;
 
     try {
-      const { error } = await supabase.from('clientes').delete().in('id', idsToDelete);
-      if (error) {
-        setDuplicateError(mensajeError(error, 'No se pudo eliminar el cliente.'));
-      } else {
-        setClientes((prev) => prev.filter((c) => !idsToDelete.includes(c.id)));
-        setSelectedClientIds((prev) => prev.filter((id) => !idsToDelete.includes(id)));
-
-        for (const c of clientsToDelete) {
-          await logSistema({
-            tipo_accion: 'eliminacion',
-            entidad: 'clientes',
-            entidad_id: c.id,
-            descripcion: `Cliente ${c.nombre} (${c.rut}) eliminado del sistema`,
-            datos_anteriores: c,
-          });
-        }
-
-        setSuccessMsg(
-          idsToDelete.length === 1
-            ? `Cliente "${clientsToDelete[0].nombre}" eliminado exitosamente.`
-            : `Se eliminaron ${idsToDelete.length} clientes exitosamente.`
-        );
-        setTimeout(() => setSuccessMsg(''), 4000);
-      }
-    } catch (err: unknown) {
-      console.error('Error deleting client(s):', err);
-      setDuplicateError(mensajeError(err, 'No se pudo eliminar el cliente.'));
+      const { error } = await supabase.from('clientes').delete().eq('id', cli.id);
+      if (error) throw error;
+      setClientes((prev) => prev.filter((c) => c.id !== cli.id));
+      setSelectedClientIds((prev) => prev.filter((id) => id !== cli.id));
+      toast({
+        message: `Cliente ${cli.nombre} eliminado.`,
+        tone: 'success',
+      });
+    } catch (err) {
+      console.error('Error deleting client:', err);
+      toast({
+        message: 'No se pudo eliminar el cliente.',
+        tone: 'danger',
+      });
     }
-
-    setClientsToDelete(null);
   };
 
-  const getOportunidadesCount = (clienteId: string) =>
-    oportunidades.filter((o) => o.cliente_id === clienteId).length;
+  const handleDeleteSelected = async () => {
+    if (selectedClientIds.length === 0) return;
+    const ok = await confirmDialog({
+      title: 'Eliminar Clientes',
+      message: `¿Estás seguro de que deseas eliminar permanentemente los ${selectedClientIds.length} clientes seleccionados?`,
+      confirmLabel: 'Eliminar Selección',
+      destructive: true,
+    });
+    if (!ok) return;
 
-  // Chilean RUT Modulo 11 validation helpers
-  const calcularDV = (rutBody: string): string => {
-    const cleanBody = rutBody.replace(/[^0-9]/g, '');
-    if (!cleanBody) return '';
-    let sum = 0;
-    let multiplier = 2;
-    for (let i = cleanBody.length - 1; i >= 0; i--) {
-      sum += parseInt(cleanBody.charAt(i), 10) * multiplier;
-      multiplier = multiplier === 7 ? 2 : multiplier + 1;
+    try {
+      const { error } = await supabase.from('clientes').delete().in('id', selectedClientIds);
+      if (error) throw error;
+      setClientes((prev) => prev.filter((c) => !selectedClientIds.includes(c.id)));
+      toast({
+        message: `${selectedClientIds.length} cliente(s) eliminados correctamente.`,
+        tone: 'success',
+      });
+      setSelectedClientIds([]);
+    } catch (err) {
+      console.error('Error eliminando clientes seleccionados:', err);
+      toast({
+        message: 'No se pudieron eliminar los clientes seleccionados.',
+        tone: 'danger',
+      });
     }
-    const expectedMod = 11 - (sum % 11);
-    if (expectedMod === 11) return '0';
-    if (expectedMod === 10) return 'K';
-    return expectedMod.toString();
-  };
-
-  const validarRutChileno = (rutBody: string, dv: string): { valido: boolean; mensaje?: string } => {
-    const cleanBody = rutBody.replace(/[^0-9]/g, '');
-    const cleanDv = dv.trim().toUpperCase();
-    if (!cleanBody) return { valido: false, mensaje: 'Ingresa el número de RUT' };
-    if (cleanBody.length < 7 || cleanBody.length > 8) return { valido: false, mensaje: 'El RUT debe tener entre 7 y 8 dígitos' };
-    if (!cleanDv) return { valido: false, mensaje: 'Ingresa el DV' };
-    if (!/^[0-9K]$/.test(cleanDv)) return { valido: false, mensaje: 'DV inválido (0-9 o K)' };
-
-    const dvEsperado = calcularDV(cleanBody);
-    if (dvEsperado !== cleanDv) {
-      return { valido: false, mensaje: `RUT Inválido. El DV para ${cleanBody} es ${dvEsperado}` };
-    }
-    return { valido: true };
   };
 
   const handleCreateCliente = async (e: React.FormEvent) => {
     e.preventDefault();
     setDuplicateError('');
 
-    if (!nombre || !rutBody || !rutDv) return;
-
-    const valRut = validarRutChileno(rutBody, rutDv);
-    if (!valRut.valido) {
-      setDuplicateError(valRut.mensaje || 'RUT inválido. Verifica el número y el dígito verificador.');
+    if (!nombre.trim() || !rutBody.trim() || !rutDv.trim()) {
+      setDuplicateError('Por favor completa todos los campos requeridos (*).');
       return;
     }
 
-    const formattedRut = `${rutBody.replace(/[^0-9]/g, '')}-${rutDv.trim().toUpperCase()}`;
+    const { valido, mensaje } = validarRutChileno(rutBody, rutDv);
+    if (!valido) {
+      setDuplicateError(mensaje);
+      return;
+    }
 
-    // Deduplication check: verify if RUT or email already exists
-    const duplicateByRut = clientes.find((c) => formatRutClean(c.rut) === formattedRut);
-    const duplicateByEmail = correo
+    const formattedRut = normalizeRut(`${rutBody}-${rutDv}`);
+
+    const duplicateByRut = clientes.find(
+      (c) => normalizeRut(c.rut || '') === formattedRut
+    );
+
+    const duplicateByEmail = correo.trim()
       ? clientes.find(
-          (c) =>
-            (c.correo && c.correo.toLowerCase() === correo.toLowerCase()) ||
-            c.correos_secundarios?.some((sec) => sec.toLowerCase() === correo.toLowerCase())
+          (c) => (c.correo || '').toLowerCase() === correo.trim().toLowerCase()
         )
       : null;
 
@@ -394,6 +377,10 @@ export default function ClientesPage() {
       }
 
       setClientes([data as Cliente, ...clientes]);
+      toast({
+        message: `Cliente ${nombre} creado exitosamente.`,
+        tone: 'success',
+      });
 
       await logSistema({
         tipo_accion: 'creacion',
@@ -424,80 +411,64 @@ export default function ClientesPage() {
   };
 
   return (
-    <div className="space-y-6 text-[#213343]">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
-        <div>
-          <h1 className="text-2xl font-extrabold text-[#213343] flex items-center gap-2">
-            <Users className="w-6 h-6 text-[#f97316]" />
-            <span>Directorio de Clientes</span>
-          </h1>
-          <p className="text-xs text-gray-600 mt-1">
-            Visualización clasificada por Nichos de Mercado con deduplicación automática de contactos por RUT sin puntos y correos.
-          </p>
-        </div>
+      <PageHeader
+        title="Directorio de Clientes"
+        description="Visualización clasificada por Nichos de Mercado con deduplicación automática por RUT y correos."
+        actions={
+          <div className="flex items-center gap-2">
+            {selectedClientIds.length > 0 && (
+              <Button
+                variant="destructive"
+                onClick={handleDeleteSelected}
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Eliminar Selección ({selectedClientIds.length})</span>
+              </Button>
+            )}
 
-        <div className="flex items-center gap-3 self-start md:self-auto">
-          {selectedClientIds.length > 0 && (
-            <button
+            <Button
+              variant="primary"
               onClick={() => {
-                const toDel = clientes.filter((c) => selectedClientIds.includes(c.id));
-                if (toDel.length > 0) setClientsToDelete(toDel);
+                setDuplicateError('');
+                setShowAddNichoInput(false);
+                setNuevoNichoInput('');
+                setNombre('');
+                setUsarMismaRazonSocial(true);
+                setApellidoRazon('');
+                setRutBody('');
+                setRutDv('');
+                setShowModal(true);
               }}
-              className="bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2"
             >
-              <Trash2 className="w-4 h-4" />
-              <span>Eliminar Selección ({selectedClientIds.length})</span>
-            </button>
-          )}
-
-          <button
-            onClick={() => {
-              setDuplicateError('');
-              setShowAddNichoInput(false);
-              setNuevoNichoInput('');
-              setNombre('');
-              setUsarMismaRazonSocial(true);
-              setApellidoRazon('');
-              setRutBody('');
-              setRutDv('');
-              setShowModal(true);
-            }}
-            className="bg-[#f97316] hover:bg-[#ea580c] text-white font-bold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Nuevo Cliente</span>
-          </button>
-        </div>
-      </div>
-
-      {successMsg && (
-        <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs px-4 py-3 rounded-lg flex items-center gap-2 font-bold ">
-          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>{successMsg}</span>
-        </div>
-      )}
+              <UserPlus className="w-4 h-4" />
+              <span>Nuevo Cliente</span>
+            </Button>
+          </div>
+        }
+      />
 
       {/* Barra de Filtros, Búsqueda y Personalización de Columnas */}
-      <div className="hg-list-toolbar relative">
-        <div className="relative min-w-[220px] flex-[2]">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="relative w-full sm:max-w-md">
+          <Search className="w-4 h-4 text-ink-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             placeholder="Buscar por nombre, razón social o RUT..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="hg-list-search w-full pl-9 pr-3 py-2 text-sm text-[#252b2d] placeholder-gray-400"
+            className="w-full pl-9 pr-3 py-2 text-sm bg-surface border border-line rounded-md text-ink placeholder:text-ink-muted focus:outline-none focus:border-accent"
           />
         </div>
 
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-600 font-semibold">Nicho de Mercado:</span>
+            <span className="text-xs text-ink-muted font-medium">Nicho:</span>
             <select
               value={nichoFiltro}
               onChange={(e) => setNichoFiltro(e.target.value)}
-              className="bg-white text-[#213343] border border-gray-300 text-xs rounded-md px-3 py-2 focus:outline-none focus:border-[#f97316] font-medium"
+              className="bg-surface text-ink border border-line text-xs rounded-md px-3 py-2 focus:outline-none focus:border-accent font-medium"
             >
               <option value="todos">Todos los nichos ({clientes.length})</option>
               {nichos.map((n) => (
@@ -508,67 +479,65 @@ export default function ClientesPage() {
 
           {/* Menú para Escoger Columnas Visibles */}
           <div className="relative">
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setShowColumnMenu(!showColumnMenu)}
-              className="bg-white hover:bg-gray-100 text-[#213343] border border-gray-300 text-xs font-bold px-3 py-2 rounded-md transition flex items-center gap-1.5 shadow-2xs"
             >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-[#f97316]" />
-              <span>Personalizar Vista</span>
-            </button>
+              <SlidersHorizontal className="w-3.5 h-3.5 text-accent-ink" />
+              <span>Columnas</span>
+            </Button>
 
             {showColumnMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-sm p-3 z-30 space-y-2 text-xs">
-                <p className="font-extrabold text-[#213343] border-b border-gray-100 pb-1.5 text-xs">
-                  Campos visibles en tabla
-                </p>
-
-                <div className="space-y-1">
-                  <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-medium">
+              <div className="absolute right-0 mt-2 w-56 bg-surface border border-line rounded-lg shadow-sm p-3 z-30 space-y-2 text-xs">
+                <p className="font-semibold text-ink border-b border-line pb-1">Columnas Visibles</p>
+                <div className="space-y-1 text-ink">
+                  <label className="flex items-center gap-2 p-1.5 hover:bg-surface-muted rounded cursor-pointer font-medium">
                     <input
                       type="checkbox"
                       checked={columns.rut}
                       onChange={() => toggleColumn('rut')}
-                      className="rounded text-[#f97316] focus:ring-[#F7931F]"
+                      className="rounded accent-accent"
                     />
                     <span>RUT</span>
                   </label>
 
-                  <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-medium">
+                  <label className="flex items-center gap-2 p-1.5 hover:bg-surface-muted rounded cursor-pointer font-medium">
                     <input
                       type="checkbox"
                       checked={columns.ejecutivo}
                       onChange={() => toggleColumn('ejecutivo')}
-                      className="rounded text-[#f97316] focus:ring-[#F7931F]"
+                      className="rounded accent-accent"
                     />
                     <span>Ejecutivo asignado</span>
                   </label>
 
-                  <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-medium">
+                  <label className="flex items-center gap-2 p-1.5 hover:bg-surface-muted rounded cursor-pointer font-medium">
                     <input
                       type="checkbox"
                       checked={columns.nicho}
                       onChange={() => toggleColumn('nicho')}
-                      className="rounded text-[#f97316] focus:ring-[#F7931F]"
+                      className="rounded accent-accent"
                     />
                     <span>Nicho de mercado</span>
                   </label>
 
-                  <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-medium">
+                  <label className="flex items-center gap-2 p-1.5 hover:bg-surface-muted rounded cursor-pointer font-medium">
                     <input
                       type="checkbox"
                       checked={columns.cant_oportunidades}
                       onChange={() => toggleColumn('cant_oportunidades')}
-                      className="rounded text-[#f97316] focus:ring-[#F7931F]"
+                      className="rounded accent-accent"
                     />
                     <span>Oportunidades de venta</span>
                   </label>
 
-                  <label className="flex items-center gap-2 p-1.5 hover:bg-orange-50 rounded-lg cursor-pointer font-medium">
+                  <label className="flex items-center gap-2 p-1.5 hover:bg-surface-muted rounded cursor-pointer font-medium">
                     <input
                       type="checkbox"
                       checked={columns.contacto}
                       onChange={() => toggleColumn('contacto')}
-                      className="rounded text-[#f97316] focus:ring-[#F7931F]"
+                      className="rounded accent-accent"
                     />
                     <span>Contacto (tel/emails)</span>
                   </label>
@@ -579,50 +548,85 @@ export default function ClientesPage() {
         </div>
       </div>
 
-      {nichoFiltro !== 'todos' && <div aria-label="Filtros activos" className="flex flex-wrap gap-2"><button type="button" onClick={() => setNichoFiltro('todos')} className="hg-list-meta hover:bg-[#ecefed]">Nicho: {nichoFiltro} ×</button></div>}
-
-      {/* Lista de Clientes (Tabla Incrustada en el Fondo sin Scroll Interno) */}
-      <div className="hg-list-group">
-        <div className="hg-list-group-heading"><span>Clientes</span><span className="hg-list-count">{filteredClientes.length}</span></div>
-        <div className="md:hidden">
-          {loading ? <p className="p-5 text-sm text-[#66716f]">Cargando clientes…</p> : paginatedClientes.length === 0 ? <p className="p-5 text-sm text-[#66716f]">No se encontraron clientes.</p> : paginatedClientes.map((cli) => <div key={cli.id} className="hg-list-row">
-            <input type="checkbox" checked={selectedClientIds.includes(cli.id)} onChange={() => toggleSelectClient(cli.id)} aria-label={`Seleccionar ${cli.nombre}`} className="shrink-0 accent-[#e87622]" />
-            <Link href={`/clientes/${cli.id}`} className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{cli.nombre}</span><span className="block truncate text-xs text-[#8a9390]">{formatRutClean(cli.rut)} · {cli.nicho || 'Sin nicho'}</span></Link>
-            <span className="hg-list-count" title="Oportunidades">{getOportunidadesCount(cli.id)}</span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-[#a8afac]" aria-hidden="true" />
-          </div>)}
+      {nichoFiltro !== 'todos' && (
+        <div aria-label="Filtros activos" className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setNichoFiltro('todos')}
+            className="text-xs bg-surface-muted border border-line px-2.5 py-1 rounded-md text-ink hover:bg-line-subtle transition"
+          >
+            Nicho: {nichoFiltro} ✕
+          </button>
         </div>
+      )}
+
+      {/* Lista de Clientes */}
+      <Panel className="overflow-hidden">
+        <div className="md:hidden divide-y divide-line-subtle">
+          {loading ? (
+            <p className="p-5 text-sm text-ink-muted">Cargando clientes…</p>
+          ) : paginatedClientes.length === 0 ? (
+            <p className="p-5 text-sm text-ink-muted">No se encontraron clientes.</p>
+          ) : (
+            paginatedClientes.map((cli) => (
+              <div key={cli.id} className="p-4 space-y-2 hover:bg-surface-muted transition">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedClientIds.includes(cli.id)}
+                      onChange={() => toggleSelectClient(cli.id)}
+                      aria-label={`Seleccionar ${cli.nombre}`}
+                      className="shrink-0 accent-accent"
+                    />
+                    <Link href={`/clientes/${cli.id}`} className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-ink hover:text-accent">{cli.nombre}</span>
+                      <span className="block truncate text-xs text-ink-muted t-num">{formatRutClean(cli.rut)} · {cli.nicho || 'Sin nicho'}</span>
+                    </Link>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-ink-muted t-num font-semibold">{getOportunidadesCount(cli.id)} ops</span>
+                    <Link href={`/clientes/${cli.id}`}>
+                      <ChevronRight className="h-4 w-4 text-ink-muted hover:text-accent" />
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
         <div className="hidden overflow-x-auto md:block">
-          <table className="hg-list-table w-full text-left min-w-[900px]">
+          <table className="w-full text-left min-w-[900px] text-xs">
             <thead>
-              <tr className="bg-[#f4f5f3] text-[#66716f] text-xs font-bold">
-                <th className="py-4 px-4 w-12 text-center">
+              <tr className="bg-surface-muted text-ink-muted text-[11px] font-semibold border-b border-line uppercase tracking-normal">
+                <th className="py-3.5 px-4 w-12 text-center">
                   <input
                     type="checkbox"
                     checked={isAllSelected}
                     onChange={handleSelectAll}
-                    className="rounded text-[#f97316] focus:ring-[#F7931F] cursor-pointer accent-[#F7931F]"
+                    className="rounded cursor-pointer accent-accent"
                   />
                 </th>
-                <th className="py-4 px-6 min-w-[200px]">Cliente / Razón social</th>
-                {columns.rut && <th className="py-4 px-6 min-w-[130px]">RUT</th>}
-                {columns.ejecutivo && <th className="py-4 px-6 min-w-[170px]">Ejecutivo asignado</th>}
-                {columns.nicho && <th className="py-4 px-6 min-w-[160px]">Nicho de mercado</th>}
-                {columns.cant_oportunidades && <th className="py-4 px-6 min-w-[180px]">Oportunidades de venta</th>}
-                {columns.contacto && <th className="py-4 px-6 min-w-[200px]">Contacto</th>}
-                <th className="py-4 px-6 text-right min-w-[120px]">Acciones</th>
+                <th className="py-3.5 px-6 min-w-[200px] text-ink">Cliente / Razón social</th>
+                {columns.rut && <th className="py-3.5 px-6 min-w-[130px] text-ink">RUT</th>}
+                {columns.ejecutivo && <th className="py-3.5 px-6 min-w-[170px] text-ink">Ejecutivo asignado</th>}
+                {columns.nicho && <th className="py-3.5 px-6 min-w-[160px] text-ink">Nicho de mercado</th>}
+                {columns.cant_oportunidades && <th className="py-3.5 px-6 min-w-[180px] text-ink">Oportunidades de venta</th>}
+                {columns.contacto && <th className="py-3.5 px-6 min-w-[200px] text-ink">Contacto</th>}
+                <th className="py-3.5 px-6 text-right min-w-[120px] text-ink">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 text-xs text-[#213343]">
+            <tbody className="divide-y divide-line-subtle text-xs text-ink">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-gray-500 font-medium">
+                  <td colSpan={8} className="py-8 text-center text-ink-muted font-medium">
                     Cargando directorio de clientes...
                   </td>
                 </tr>
               ) : filteredClientes.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-gray-500 font-medium">
+                  <td colSpan={8} className="py-8 text-center text-ink-muted font-medium">
                     No se encontraron clientes registrados.
                   </td>
                 </tr>
@@ -632,40 +636,40 @@ export default function ClientesPage() {
                   const isSelected = selectedClientIds.includes(cli.id);
 
                   return (
-                    <tr key={cli.id} className={`hover:bg-orange-50/50 transition group ${isSelected ? 'bg-orange-50/40' : ''}`}>
+                    <tr key={cli.id} className={`hover:bg-surface-muted/50 transition group ${isSelected ? 'bg-surface-muted' : ''}`}>
                       {/* Checkbox Selección Individual */}
-                      <td className="py-4 px-4 text-center">
+                      <td className="py-3.5 px-4 text-center">
                         <input
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggleSelectClient(cli.id)}
-                          className="rounded text-[#f97316] focus:ring-[#F7931F] cursor-pointer accent-[#F7931F]"
+                          className="rounded cursor-pointer accent-accent"
                         />
                       </td>
 
                       {/* Cliente / Razón Social */}
-                      <td className="py-4 px-6 font-bold">
+                      <td className="py-3.5 px-6 font-semibold">
                         <Link
                           href={`/clientes/${cli.id}`}
-                          className="text-[#213343] hover:text-[#f97316] transition flex flex-col"
+                          className="text-ink hover:text-accent transition flex flex-col"
                         >
-                          <span className="text-sm font-bold leading-tight group-hover:underline">{cli.nombre}</span>
+                          <span className="text-sm font-semibold leading-tight group-hover:underline">{cli.nombre}</span>
                           {cli.apellido_razon_social && cli.apellido_razon_social !== cli.nombre && (
-                            <span className="text-xs text-gray-500 font-normal">{cli.apellido_razon_social}</span>
+                            <span className="text-xs text-ink-muted font-normal">{cli.apellido_razon_social}</span>
                           )}
                         </Link>
                       </td>
 
-                      {/* RUT (sin puntos y con guion) */}
+                      {/* RUT */}
                       {columns.rut && (
-                        <td className="py-4 px-6 font-mono font-semibold text-gray-700 text-xs">
-                          {formatRutClean(cli.rut)}
+                        <td className="py-3.5 px-6 font-medium text-xs">
+                          <CodeStamp>{formatRutClean(cli.rut)}</CodeStamp>
                         </td>
                       )}
 
-                      {/* Ejecutivo Asignado (al lado del RUT) */}
+                      {/* Ejecutivo Asignado */}
                       {columns.ejecutivo && (
-                        <td className="py-4 px-6">
+                        <td className="py-3.5 px-6">
                           <select
                             value={cli.asignado_a || ''}
                             onChange={async (e) => {
@@ -680,7 +684,7 @@ export default function ClientesPage() {
                                 console.error('Error updating asignado_a on cliente:', err);
                               }
                             }}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-md bg-blue-50 text-blue-900 border border-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer min-w-[150px] truncate"
+                            className="text-xs font-medium px-2 py-1 rounded-md bg-surface border border-line text-ink focus:outline-none focus:border-accent cursor-pointer min-w-[140px] truncate"
                           >
                             <option value="">-- Sin asignar --</option>
                             {usuariosList.map((u) => (
@@ -692,13 +696,13 @@ export default function ClientesPage() {
                         </td>
                       )}
 
-                      {/* Nicho de Mercado (Editable directamente en tabla) */}
+                      {/* Nicho de Mercado */}
                       {columns.nicho && (
-                        <td className="py-4 px-6">
+                        <td className="py-3.5 px-6">
                           <select
                             value={cli.nicho || 'Constructora B2B'}
                             onChange={(e) => handleUpdateNicho(cli.id, e.target.value)}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-md bg-orange-50 text-[#f97316] border border-orange-200 focus:outline-none focus:ring-1 focus:ring-[#F7931F] cursor-pointer min-w-[150px]"
+                            className="text-xs font-medium px-2 py-1 rounded-md bg-surface border border-line text-ink focus:outline-none focus:border-accent cursor-pointer min-w-[140px]"
                           >
                             {nichos.map((n) => (
                               <option key={n} value={n}>{n}</option>
@@ -707,61 +711,63 @@ export default function ClientesPage() {
                         </td>
                       )}
 
-                      {/* Cantidad de oportunidades de venta asignadas */}
+                      {/* Cantidad de oportunidades de venta */}
                       {columns.cant_oportunidades && (
-                        <td className="py-4 px-6">
-                          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 text-[#f97316] border border-orange-200 rounded-md font-bold text-xs">
-                            <TrendingUp className="w-3.5 h-3.5" />
-                            <span>{oportunidadesCount} {oportunidadesCount === 1 ? 'oportunidad' : 'oportunidades'}</span>
+                        <td className="py-3.5 px-6">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-surface-muted text-ink border border-line rounded-md font-medium text-xs">
+                            <TrendingUp className="w-3.5 h-3.5 text-accent-ink" />
+                            <span className="t-num">{oportunidadesCount} {oportunidadesCount === 1 ? 'oportunidad' : 'oportunidades'}</span>
                           </div>
                         </td>
                       )}
 
-                      {/* Contacto (Teléfono y Correos Primario/Secundarios) */}
+                      {/* Contacto */}
                       {columns.contacto && (
-                        <td className="py-4 px-6 space-y-1">
+                        <td className="py-3.5 px-6 space-y-1">
                           {cli.telefono && (
-                            <p className="flex items-center gap-1.5 text-gray-700">
-                              <Phone className="w-3 h-3 text-gray-400 shrink-0" />
-                              <span>{cli.telefono}</span>
+                            <p className="flex items-center gap-1.5 text-ink">
+                              <Phone className="w-3 h-3 text-ink-muted shrink-0" />
+                              <span className="t-num">{cli.telefono}</span>
                             </p>
                           )}
                           {cli.correo && (
-                            <p className="flex items-center gap-1.5 text-gray-700 font-medium">
-                              <Mail className="w-3 h-3 text-[#f97316] shrink-0" />
+                            <p className="flex items-center gap-1.5 text-ink font-medium">
+                              <Mail className="w-3 h-3 text-accent-ink shrink-0" />
                               <span className="truncate max-w-[150px]" title={`Correo Primario: ${cli.correo}`}>{cli.correo}</span>
                             </p>
                           )}
                           {cli.correos_secundarios && cli.correos_secundarios.length > 0 && (
-                            <div className="text-[10px] text-gray-400">
+                            <div className="text-[11px] text-ink-muted">
                               +{cli.correos_secundarios.length} correo(s) sec.
                             </div>
                           )}
                         </td>
                       )}
 
-                      {/* Acciones: Ver Ficha y Eliminar */}
-                      <td className="py-4 px-6 text-right">
-                        <div className="flex items-center justify-end gap-3">
+                      {/* Acciones */}
+                      <td className="py-3.5 px-6 text-right">
+                        <div className="flex items-center justify-end gap-2">
                           <Link
                             href={`/clientes/${cli.id}`}
-                            className="inline-flex items-center gap-1 text-[#f97316] font-bold hover:underline"
+                            className="inline-flex items-center gap-1 text-accent-ink font-semibold hover:underline"
                           >
                             <span>Ficha</span>
                             <ChevronRight className="w-4 h-4" />
                           </Link>
-                          <button
-                            onClick={() => setClientsToDelete([cli])}
+                          <Button
+                            variant="subtle"
+                            size="sm"
+                            onClick={() => handleDeleteClient(cli)}
                             title="Eliminar Cliente"
-                            className="p-1 text-gray-400 hover:text-red-600 transition"
                           >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                            <Trash2 className="w-3.5 h-3.5 text-danger" />
+                          </Button>
                         </div>
                       </td>
                     </tr>
                   );
-                }))}
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -772,15 +778,15 @@ export default function ClientesPage() {
           onPageChange={setCurrentPage}
           onItemsPerPageChange={setItemsPerPage}
         />
-      </div>
+      </Panel>
 
       {/* Modal para Crear Cliente Nuevo */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white border border-gray-200 rounded-lg max-w-lg w-full p-6 space-y-5 shadow-sm text-[#213343] max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h3 className="text-lg font-extrabold text-[#213343] flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-[#f97316]" />
+        <div className="fixed inset-0 bg-ink/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-surface border border-line rounded-lg max-w-lg w-full p-6 space-y-4 shadow-sm text-ink max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <h3 className="text-base font-semibold text-ink flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-accent-ink" />
                 <span>Registrar Nuevo Cliente</span>
               </h3>
               <button
@@ -791,15 +797,15 @@ export default function ClientesPage() {
                   setApellidoRazon('');
                   setShowModal(false);
                 }}
-                className="text-gray-400 hover:text-[#213343] text-lg font-bold"
+                className="text-ink-muted hover:text-ink text-lg font-semibold px-2 py-1"
               >
                 ✕
               </button>
             </div>
 
             {duplicateError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-xs flex items-center gap-2 font-bold ">
-                <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+              <div className="bg-danger/10 border border-danger/30 text-danger p-3 rounded-md text-xs flex items-center gap-2 font-semibold">
+                <AlertCircle className="w-4 h-4 text-danger shrink-0" />
                 <span>{duplicateError}</span>
               </div>
             )}
@@ -807,13 +813,13 @@ export default function ClientesPage() {
             <form onSubmit={handleCreateCliente} className="space-y-4 text-xs">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">Nicho de mercado *</label>
+                  <label className="block font-semibold text-ink mb-1">Nicho de mercado *</label>
                   {!showAddNichoInput ? (
                     <div className="flex gap-1.5">
                       <select
                         value={nichoSeleccionado}
                         onChange={(e) => setNichoSeleccionado(e.target.value)}
-                        className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316] font-semibold text-xs"
+                        className="w-full bg-surface border border-line rounded-md px-2.5 py-1.5 text-ink focus:outline-none focus:border-accent font-medium text-xs"
                       >
                         {nichos.map((n) => (
                           <option key={n} value={n}>{n}</option>
@@ -822,7 +828,7 @@ export default function ClientesPage() {
                       <button
                         type="button"
                         onClick={() => setShowAddNichoInput(true)}
-                        className="p-2 bg-orange-50 hover:bg-[#f97316] text-[#f97316] hover:text-white rounded-md border border-orange-200 transition cursor-pointer"
+                        className="p-1.5 bg-surface-muted hover:bg-line-subtle text-ink rounded-md border border-line transition cursor-pointer"
                         title="Crear nuevo nicho"
                       >
                         <Plus className="w-4 h-4" />
@@ -832,28 +838,29 @@ export default function ClientesPage() {
                     <div className="flex gap-1.5">
                       <input
                         type="text"
-                        placeholder="Ej. Minería / Obras Viales"
+                        placeholder="Ej. Minería"
                         value={nuevoNichoInput}
                         onChange={(e) => setNuevoNichoInput(e.target.value)}
-                        className="w-full bg-white border border-gray-300 rounded-md px-2.5 py-1.5 text-[#213343] text-xs"
+                        className="w-full bg-surface border border-line rounded-md px-2 py-1 text-ink text-xs"
                       />
-                      <button
+                      <Button
+                        variant="primary"
+                        size="sm"
                         type="button"
                         onClick={handleCreateNicho}
-                        className="px-3 py-1 bg-[#f97316] text-white font-bold rounded-md text-xs cursor-pointer"
                       >
-                        Guardar
-                      </button>
+                        OK
+                      </Button>
                     </div>
                   )}
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">Tipo de venta habitual</label>
+                  <label className="block font-semibold text-ink mb-1">Tipo de venta</label>
                   <select
                     value={tipoVentaSeleccionado}
                     onChange={(e) => setTipoVentaSeleccionado(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316] font-semibold text-xs"
+                    className="w-full bg-surface border border-line rounded-md px-2.5 py-1.5 text-ink focus:outline-none focus:border-accent font-medium text-xs"
                   >
                     <option value="Instalación">Instalación</option>
                     <option value="Suministro">Suministro</option>
@@ -862,11 +869,11 @@ export default function ClientesPage() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">Ejecutivo asignado</label>
+                  <label className="block font-semibold text-ink mb-1">Ejecutivo</label>
                   <select
                     value={asignadoA}
                     onChange={(e) => setAsignadoA(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316] font-semibold text-xs"
+                    className="w-full bg-surface border border-line rounded-md px-2.5 py-1.5 text-ink focus:outline-none focus:border-accent font-medium text-xs"
                   >
                     <option value="">-- Sin asignar --</option>
                     {usuariosList.map((u) => (
@@ -880,7 +887,7 @@ export default function ClientesPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">RUT empresa / persona *</label>
+                  <label className="block font-semibold text-ink mb-1">RUT empresa / persona *</label>
                   <div className="flex items-center gap-1.5">
                     <div className="flex-1">
                       <input
@@ -893,10 +900,10 @@ export default function ClientesPage() {
                           const val = e.target.value.replace(/[^0-9]/g, '');
                           setRutBody(val);
                         }}
-                        className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-mono text-xs focus:outline-none focus:border-[#f97316]"
+                        className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink t-num text-xs focus:outline-none focus:border-accent"
                       />
                     </div>
-                    <span className="font-extrabold text-gray-400 text-sm">-</span>
+                    <span className="font-semibold text-ink-muted text-sm">-</span>
                     <div className="w-14">
                       <input
                         type="text"
@@ -908,18 +915,18 @@ export default function ClientesPage() {
                           const val = e.target.value.replace(/[^0-9kK]/g, '').toUpperCase();
                           setRutDv(val);
                         }}
-                        className="w-full bg-white border border-gray-300 rounded-md px-2 py-2 text-center text-[#213343] font-mono font-bold text-xs uppercase focus:outline-none focus:border-[#f97316]"
+                        className="w-full bg-surface border border-line rounded-md px-2 py-2 text-center text-ink t-num font-semibold text-xs uppercase focus:outline-none focus:border-accent"
                       />
                     </div>
                   </div>
                   {rutBody && (
                     <div className="mt-1">
                       {validarRutChileno(rutBody, rutDv).valido ? (
-                        <span className="text-[10px] text-emerald-600 font-bold">
+                        <span className="text-[11px] text-accent-ink font-medium">
                           ✓ RUT válido ({rutBody}-{rutDv.toUpperCase()})
                         </span>
                       ) : (
-                        <span className="text-[10px] text-red-500 font-bold">
+                        <span className="text-[11px] text-danger font-medium">
                           {validarRutChileno(rutBody, rutDv).mensaje}
                         </span>
                       )}
@@ -928,29 +935,29 @@ export default function ClientesPage() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">Nombre comercial *</label>
+                  <label className="block font-semibold text-ink mb-1">Nombre comercial *</label>
                   <input
                     type="text"
                     required
-                    placeholder="Ej. Constructora Besalco / Juan Pérez"
+                    placeholder="Ej. Constructora Besalco"
                     value={nombre}
                     onChange={(e) => setNombre(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316]"
+                    className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Razón social *</label>
-                <div className="space-y-2 bg-gray-50 p-3 rounded-lg border border-gray-200">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 text-xs font-semibold text-[#213343]">
+                <label className="block font-semibold text-ink mb-1">Razón social *</label>
+                <div className="space-y-2 bg-surface-muted p-3 rounded-lg border border-line">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 text-xs font-medium text-ink">
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="radio"
                         name="razonSocialOption"
                         checked={usarMismaRazonSocial}
                         onChange={() => setUsarMismaRazonSocial(true)}
-                        className="text-[#f97316] focus:ring-[#F7931F]"
+                        className="accent-accent"
                       />
                       <span>Misma que el nombre comercial</span>
                     </label>
@@ -961,7 +968,7 @@ export default function ClientesPage() {
                         name="razonSocialOption"
                         checked={!usarMismaRazonSocial}
                         onChange={() => setUsarMismaRazonSocial(false)}
-                        className="text-[#f97316] focus:ring-[#F7931F]"
+                        className="accent-accent"
                       />
                       <span>Usar una diferente</span>
                     </label>
@@ -974,11 +981,11 @@ export default function ClientesPage() {
                       placeholder="Ej. Constructora Besalco S.A."
                       value={apellidoRazon}
                       onChange={(e) => setApellidoRazon(e.target.value)}
-                      className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316] font-medium"
+                      className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent font-medium"
                     />
                   ) : (
-                    <p className="text-xs text-gray-500 italic">
-                      Se registrará automáticamente como: <strong className="text-[#213343] font-semibold">{nombre || 'Mismo nombre comercial'}</strong>
+                    <p className="text-xs text-ink-muted">
+                      Se registrará como: <strong className="text-ink font-semibold">{nombre || 'Mismo nombre comercial'}</strong>
                     </p>
                   )}
                 </div>
@@ -986,48 +993,48 @@ export default function ClientesPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">Teléfono</label>
+                  <label className="block font-semibold text-ink mb-1">Teléfono</label>
                   <input
                     type="text"
                     placeholder="+56 9 1234 5678"
                     value={telefono}
                     onChange={(e) => setTelefono(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316]"
+                    className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink t-num focus:outline-none focus:border-accent"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">Correo primario (deduplicación)</label>
+                  <label className="block font-semibold text-ink mb-1">Correo primario</label>
                   <input
                     type="email"
                     placeholder="contacto@empresa.cl"
                     value={correo}
                     onChange={(e) => setCorreo(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316]"
+                    className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Correos Secundarios (Opcional - Separados por coma)</label>
+                <label className="block font-semibold text-ink mb-1">Correos Secundarios (Separados por coma)</label>
                 <input
                   type="text"
                   placeholder="ventas@empresa.cl, adquisiciones@empresa.cl"
                   value={correosSecundariosInput}
                   onChange={(e) => setCorreosSecundariosInput(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] focus:outline-none focus:border-[#f97316]"
+                  className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="sm:col-span-2">
-                  <label className="block font-bold text-gray-700 mb-1">Dirección (Calle y Número)</label>
+                  <label className="block font-semibold text-ink mb-1">Dirección (Calle y Número)</label>
                   <input
                     type="text"
                     placeholder="Av. Los Pajaritos 1230"
                     value={direccion}
                     onChange={(e) => setDireccion(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] text-xs focus:outline-none focus:border-[#f97316]"
+                    className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink text-xs focus:outline-none focus:border-accent"
                   />
                 </div>
 
@@ -1064,9 +1071,9 @@ export default function ClientesPage() {
                 </div>
               </div>
 
-              <div className="pt-3 flex items-center justify-end gap-3 border-t border-gray-200">
-                <button
-                  type="button"
+              <div className="pt-3 flex items-center justify-end gap-2 border-t border-line">
+                <Button
+                  variant="secondary"
                   onClick={() => {
                     setShowAddNichoInput(false);
                     setNuevoNichoInput('');
@@ -1074,70 +1081,17 @@ export default function ClientesPage() {
                     setApellidoRazon('');
                     setShowModal(false);
                   }}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-bold transition"
                 >
                   Cancelar
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="primary"
                   type="submit"
-                  className="px-5 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-extrabold transition shadow-sm cursor-pointer"
                 >
                   Guardar cliente
-                </button>
+                </Button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Confirmación para Eliminar Cliente(s) en Supabase */}
-      {clientsToDelete && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
-          <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-[#213343]">
-            <div className="flex items-center gap-3 text-red-600">
-              <AlertCircle className="w-6 h-6 shrink-0" />
-              <h3 className="text-base font-extrabold">¿Eliminar Cliente(s)?</h3>
-            </div>
-            <p className="text-xs text-gray-600 leading-relaxed">
-              {clientsToDelete.length === 1 ? (
-                <>
-                  ¿Estás seguro de que deseas eliminar permanentemente a{' '}
-                  <strong className="text-[#213343] font-bold">{clientsToDelete[0].nombre}</strong>? Esta acción eliminará el registro de la base de datos y no se podrá deshacer.
-                </>
-              ) : (
-                <>
-                  ¿Estás seguro de que deseas eliminar permanentemente los{' '}
-                  <strong className="text-[#213343] font-bold">{clientsToDelete.length} clientes seleccionados</strong>? Esta acción eliminará los registros de la base de datos y no se podrá deshacer.
-                </>
-              )}
-            </p>
-
-            {clientsToDelete.length > 1 && (
-              <div className="max-h-32 overflow-y-auto bg-gray-50 p-2.5 rounded-md border border-gray-200 text-[11px] space-y-1">
-                {clientsToDelete.map((c) => (
-                  <div key={c.id} className="flex justify-between text-gray-700 font-medium">
-                    <span className="font-bold truncate">{c.nombre}</span>
-                    <span className="font-mono text-gray-500 shrink-0">{c.rut}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                onClick={() => setClientsToDelete(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md text-xs font-bold transition"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleConfirmDeleteClients}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-extrabold shadow-sm transition flex items-center gap-1.5"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Eliminar</span>
-              </button>
-            </div>
           </div>
         </div>
       )}

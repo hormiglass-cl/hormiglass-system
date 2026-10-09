@@ -19,6 +19,51 @@ import { CotizacionModal } from '../../../components/CotizacionModal';
 import { SearchableSelect } from '../../../components/SearchableSelect';
 import { REGIONES_CHILE, TODAS_COMUNAS_CHILE } from '../../../lib/chile-data';
 import { cotizacionVigente, totalAbonado, totalComercial } from '../../../lib/oportunidad-finanzas';
+import { mensajeError } from '../../../lib/errores';
+import {
+  Button,
+  CodeStamp,
+  Dialog,
+  EmptyState,
+  PageHeader,
+  Panel,
+  PropertyPanel,
+  RecordLayout,
+  StageRail,
+  StatusBadge,
+  Tabs,
+  Tone,
+} from '../../../components/ui/crm';
+import { useToast } from '../../../components/ui/feedback';
+import {
+  ArrowLeft,
+  Building,
+  FileText,
+  MessageSquare,
+  Send,
+  User,
+  UserCheck,
+  Edit,
+  Save,
+  CheckCircle,
+  Bell,
+  PhoneCall,
+  Calendar,
+  Eye,
+  FileCheck,
+  TrendingUp,
+  Clock,
+  Plus,
+  HardHat,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Filter,
+  Mail,
+  Phone,
+  MapPin,
+} from 'lucide-react';
 
 const NICHOS_CLIENTE_DEFAULT = [
   'Constructora B2B',
@@ -81,64 +126,70 @@ type ReclamoActividadRow = {
   oportunidad_id: string;
 };
 
-import {
-  ArrowLeft,
-  Building,
-  FileText,
-  MessageSquare,
-  Send,
-  User,
-  UserCheck,
-  Edit,
-  Save,
-  X,
-  CheckCircle,
-  Bell,
-  PhoneCall,
-  Calendar,
-  Eye,
-  FileCheck,
-  TrendingUp,
-  Clock,
-  Plus,
-  HardHat,
-  AlertTriangle,
-  ChevronDown,
-  ChevronUp,
-  ExternalLink,
-  Filter,
-} from 'lucide-react';
-import { mensajeError } from '../../../lib/errores';
+const STAGE_CONFIG: Record<string, { label: string; area: string; tone: Tone }> = {
+  nueva: { label: 'Nueva oportunidad', area: 'Comercial', tone: 'neutral' },
+  pagada: { label: 'Pago validado', area: 'Comercial', tone: 'info' },
+  entregada: { label: 'Venta cerrada', area: 'Comercial', tone: 'success' },
 
-const STAGE_CONFIG: Record<string, { label: string; area: string; step: number; totalSteps: number; bg: string; text: string; border: string }> = {
-  nueva: { label: 'Nueva oportunidad', area: 'Comercial y ventas', step: 1, totalSteps: 3, bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-300' },
-  pagada: { label: 'Pago validado', area: 'Comercial y ventas', step: 2, totalSteps: 3, bg: 'bg-blue-50', text: 'text-blue-800', border: 'border-blue-300' },
-  entregada: { label: 'Venta cerrada', area: 'Comercial y ventas', step: 3, totalSteps: 3, bg: 'bg-emerald-50', text: 'text-emerald-800', border: 'border-emerald-300' },
+  prod_pendiente: { label: 'Pendiente planif.', area: 'Producción', tone: 'warning' },
+  prod_cola: { label: 'En cola', area: 'Producción', tone: 'info' },
+  prod_fabricacion: { label: 'En fabricación', area: 'Producción', tone: 'accent' },
+  prod_listo_instalacion: { label: 'Listo p/ instal.', area: 'Producción', tone: 'info' },
+  prod_instalacion: { label: 'En instalación', area: 'Producción', tone: 'accent' },
+  prod_finalizado: { label: 'Finalizado', area: 'Producción', tone: 'success' },
 
-  prod_pendiente: { label: 'Pendiente planificación', area: 'Producción y logística', step: 1, totalSteps: 6, bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-300' },
-  prod_cola: { label: 'En cola de fabricación', area: 'Producción y logística', step: 2, totalSteps: 6, bg: 'bg-blue-50', text: 'text-blue-800', border: 'border-blue-300' },
-  prod_fabricacion: { label: 'En fabricación', area: 'Producción y logística', step: 3, totalSteps: 6, bg: 'bg-purple-50', text: 'text-purple-800', border: 'border-purple-300' },
-  prod_listo_instalacion: { label: 'Listo p/ instalación', area: 'Producción y logística', step: 4, totalSteps: 6, bg: 'bg-indigo-50', text: 'text-indigo-800', border: 'border-indigo-300' },
-  prod_instalacion: { label: 'En instalación', area: 'Producción y logística', step: 5, totalSteps: 6, bg: 'bg-orange-50', text: 'text-orange-800', border: 'border-orange-300' },
-  prod_finalizado: { label: 'Finalizado / entregado', area: 'Producción y logística', step: 6, totalSteps: 6, bg: 'bg-emerald-50', text: 'text-emerald-800', border: 'border-emerald-300' },
+  rev_coordinacion: { label: 'Coord. proveedor', area: 'Reventa', tone: 'info' },
+  rev_stock: { label: 'Confirm. stock', area: 'Reventa', tone: 'info' },
+  rev_listo_retiro: { label: 'Listo retiro', area: 'Reventa', tone: 'warning' },
+  rev_listo_despacho: { label: 'Listo despacho', area: 'Reventa', tone: 'accent' },
+  rev_entregado: { label: 'Entregado', area: 'Reventa', tone: 'success' },
+  rev_postventa: { label: 'Postventa', area: 'Reventa', tone: 'accent' },
 
-  rev_coordinacion: { label: 'Coordinación proveedor', area: 'Reventa y logística', step: 1, totalSteps: 6, bg: 'bg-blue-50', text: 'text-blue-800', border: 'border-blue-300' },
-  rev_stock: { label: 'Confirmación stock', area: 'Reventa y logística', step: 2, totalSteps: 6, bg: 'bg-indigo-50', text: 'text-indigo-800', border: 'border-indigo-300' },
-  rev_listo_retiro: { label: 'Listo para retiro', area: 'Reventa y logística', step: 3, totalSteps: 6, bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-300' },
-  rev_listo_despacho: { label: 'Listo para despacho', area: 'Reventa y logística', step: 4, totalSteps: 6, bg: 'bg-orange-50', text: 'text-orange-800', border: 'border-orange-300' },
-  rev_entregado: { label: 'Entregado al cliente', area: 'Reventa y logística', step: 5, totalSteps: 6, bg: 'bg-emerald-50', text: 'text-emerald-800', border: 'border-emerald-300' },
-  rev_postventa: { label: 'Postventa & seguimiento', area: 'Reventa y logística', step: 6, totalSteps: 6, bg: 'bg-purple-50', text: 'text-purple-800', border: 'border-purple-300' },
-
-  programada: { label: 'En programación', area: 'Legacy', step: 3, totalSteps: 5, bg: 'bg-purple-50', text: 'text-purple-800', border: 'border-purple-300' },
-  en_fabricacion: { label: 'En fabricación', area: 'Legacy', step: 4, totalSteps: 5, bg: 'bg-indigo-50', text: 'text-indigo-800', border: 'border-indigo-300' },
-  lista_despacho: { label: 'Listo para despacho', area: 'Legacy', step: 4, totalSteps: 5, bg: 'bg-cyan-50', text: 'text-cyan-800', border: 'border-cyan-300' },
-  instalacion: { label: 'En instalación', area: 'Legacy', step: 4, totalSteps: 5, bg: 'bg-teal-50', text: 'text-teal-800', border: 'border-teal-300' },
-  venta_cerrada: { label: 'Venta cerrada', area: 'Legacy', step: 5, totalSteps: 5, bg: 'bg-emerald-50', text: 'text-emerald-800', border: 'border-emerald-300' },
+  programada: { label: 'En programación', area: 'Legacy', tone: 'info' },
+  en_fabricacion: { label: 'En fabricación', area: 'Legacy', tone: 'accent' },
+  lista_despacho: { label: 'Listo despacho', area: 'Legacy', tone: 'accent' },
+  instalacion: { label: 'En instalación', area: 'Legacy', tone: 'accent' },
+  venta_cerrada: { label: 'Venta cerrada', area: 'Legacy', tone: 'success' },
 };
+
+function getEtapaObraIndex(estado?: string | null): number {
+  if (!estado) return 0;
+  switch (estado) {
+    case 'nueva':
+      return 0;
+    case 'pagada':
+      return 1;
+    case 'prod_pendiente':
+    case 'prod_cola':
+    case 'prod_fabricacion':
+    case 'rev_coordinacion':
+    case 'rev_stock':
+    case 'rev_listo_retiro':
+    case 'programada':
+    case 'en_fabricacion':
+      return 2;
+    case 'rev_listo_despacho':
+    case 'lista_despacho':
+      return 3;
+    case 'prod_listo_instalacion':
+    case 'prod_instalacion':
+    case 'instalacion':
+      return 4;
+    case 'prod_finalizado':
+    case 'rev_entregado':
+    case 'rev_postventa':
+    case 'entregada':
+    case 'venta_cerrada':
+      return 5;
+    default:
+      return 1;
+  }
+}
 
 export default function ClienteDetailPage() {
   const params = useParams();
   const { currentUser } = useAuth();
+  const toast = useToast();
   const clienteId = params.id as string;
   const supabase = useMemo(() => createClient(), []);
 
@@ -146,7 +197,6 @@ export default function ClienteDetailPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [nichosOptions, setNichosOptions] = useState<string[]>(NICHOS_CLIENTE_DEFAULT);
 
   // Tab and view state
@@ -254,7 +304,6 @@ export default function ClienteDetailPage() {
         if (!clientErr && clientData) {
           currentCli = clientData as Cliente;
         } else {
-          // Fallback lookup
           const { data: allClis, error: clientsError } = await supabase.from('clientes').select('*');
           if (clientsError) throw clientsError;
           if (allClis && allClis.length > 0) {
@@ -338,7 +387,7 @@ export default function ClienteDetailPage() {
           if (!ignore) { setOportunidades([]); setDeliveryAccreditation({}); }
         }
 
-        // 4. Fetch Events & Reclamos for these opportunities
+        // 4. Fetch Events & Reclamos
         const opIds = matchedOps.map((o) => o.id);
         if (opIds.length > 0) {
           const [evRes, reclamosRes] = await Promise.all([
@@ -395,7 +444,6 @@ export default function ClienteDetailPage() {
 
     loadData();
 
-    // Supabase Realtime channel subscription
     const channel = supabase
       .channel(`realtime_client_detail_${clienteId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notas_actividad' }, () => loadData())
@@ -460,8 +508,7 @@ export default function ClienteDetailPage() {
       if (data) {
         setCliente(data as Cliente);
         setIsEditing(false);
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+        toast({ message: 'Información del cliente actualizada', tone: 'success' });
       }
     } catch (err) {
       console.error('Error saving client:', err);
@@ -499,6 +546,7 @@ export default function ClienteDetailPage() {
 
       if (data) {
         setNotas([data as NotaActividad, ...notas]);
+        toast({ message: tipoActividad === 'recordatorio' ? 'Recordatorio programado' : 'Nota guardada', tone: 'success' });
       }
 
       if (tipoActividad === 'recordatorio') {
@@ -524,8 +572,7 @@ export default function ClienteDetailPage() {
     setTipoActividad('nota');
   };
 
-  // ===== MÉTRICAS CONSOLIDADAS DE LA FICHA DE CLIENTE (Sin Cotizaciones Abiertas) =====
-  // 1. Ventas acumuladas 100% pagadas
+  // Metrics
   const oportunidadesPagadas = oportunidades.filter((op) => {
     const totalVal = totalComercial(op, op.cotizaciones || []);
     const abonadoVal = totalAbonado(op);
@@ -537,7 +584,6 @@ export default function ClienteDetailPage() {
     return sum + Number(totalVal);
   }, 0);
 
-  // 2. Saldo pendiente total
   const saldoPendienteTotal = oportunidades.reduce((sum, op) => {
     const totalVal = totalComercial(op, op.cotizaciones || []);
     const abonadoVal = totalAbonado(op);
@@ -545,20 +591,17 @@ export default function ClienteDetailPage() {
     return sum + pend;
   }, 0);
 
-  // 3. Obras / Producción / Logística activas
   const eventosActivosCount = eventosList.filter((e) =>
     ['por_hacer', 'en_curso', 'reprogramado'].includes(e.estado)
   ).length;
   const eventosCompletadosCount = eventosList.filter((e) => e.estado === 'completado').length;
 
-  // 4. Monto facturado en obras
   const montoFacturadoObras = oportunidades
     .filter((op) => op.tipo_venta === 'Instalación' || op.tipo_venta === 'Obra')
     .reduce((sum, op) => {
       return sum + totalComercial(op, op.cotizaciones || []);
     }, 0);
 
-  // 6. Días promedio de pago
   const diffDaysList: number[] = [];
   oportunidades.forEach((op) => {
     const vigente = cotizacionVigente(op, op.cotizaciones || []);
@@ -585,7 +628,6 @@ export default function ClienteDetailPage() {
   const diasPromedioPago =
     diffDaysList.length > 0 ? Math.round(diffDaysList.reduce((a, b) => a + b, 0) / diffDaysList.length) : null;
 
-  // 7. Próxima actividad
   const candidateActivities: {
     titulo: string;
     fecha: string;
@@ -629,7 +671,6 @@ export default function ClienteDetailPage() {
   candidateActivities.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
   const proximaActividad = candidateActivities[0] || null;
 
-  // Helper for filtered activities timeline
   const filteredNotas = notas.filter((n) => {
     if (filtroActividadTipo === 'todos') return true;
     return n.tipo_actividad === filtroActividadTipo;
@@ -637,17 +678,17 @@ export default function ClienteDetailPage() {
 
   if (loading) {
     return (
-      <div className="p-12 text-center text-gray-500 font-medium">
-        Cargando la ficha del cliente...
+      <div className="py-16 text-center">
+        <p className="t-caption text-ink-muted">Cargando la ficha del cliente...</p>
       </div>
     );
   }
 
   if (loadError) {
     return (
-      <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-6 text-sm font-medium text-red-800">
-        {loadError}
-        <button type="button" onClick={() => window.location.reload()} className="ml-3 underline">
+      <div role="alert" className="rounded-panel border border-danger-line bg-danger-soft p-5 text-sm text-danger">
+        <p className="font-semibold">{loadError}</p>
+        <button type="button" onClick={() => window.location.reload()} className="mt-2 text-xs font-semibold underline">
           Reintentar
         </button>
       </div>
@@ -656,965 +697,998 @@ export default function ClienteDetailPage() {
 
   if (!cliente) {
     return (
-      <div className="p-12 text-center text-red-500 font-bold space-y-4">
-        <p>Cliente no encontrado.</p>
-        <Link href="/clientes" className="text-sm underline text-[#f97316]">
-          Volver a la lista de clientes
-        </Link>
-      </div>
+      <EmptyState
+        title="Cliente no encontrado"
+        description="No se encontró ningún registro para el identificador seleccionado."
+        action={
+          <Link href="/clientes">
+            <Button variant="primary">Volver al directorio de clientes</Button>
+          </Link>
+        }
+      />
     );
   }
 
+  const tabItems = [
+    { id: 'actividad', label: 'Actividad', count: notas.length },
+    { id: 'notas', label: 'Notas & recordatorios' },
+    { id: 'reclamos', label: 'Reclamos / postventa', count: reclamosList.length },
+    { id: 'metricas', label: 'Resumen & métricas' },
+  ];
+
   return (
-    <div className="space-y-5 text-[#213343]  pb-12">
-      {/* Botón Volver & Notificación de Éxito */}
-      <div className="flex items-center justify-between">
-        <Link
-          href="/clientes"
-          className="text-xs text-gray-500 hover:text-[#f97316] font-bold flex items-center gap-1 transition"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Volver al directorio de clientes</span>
-        </Link>
-
-        {saveSuccess && (
-          <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs px-3.5 py-1.5 rounded-md flex items-center gap-1.5 font-bold ">
-            <CheckCircle className="w-4 h-4 text-emerald-600" />
-            <span>Información actualizada exitosamente</span>
+    <div className="space-y-5 pb-12">
+      {/* Encabezado Principal */}
+      <PageHeader
+        title={cliente.nombre}
+        description={
+          <span className="inline-flex items-center gap-2">
+            <span>{cliente.apellido_razon_social || cliente.nombre}</span>
+            <span aria-hidden className="text-line">·</span>
+            <CodeStamp>{cliente.rut}</CodeStamp>
+          </span>
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/clientes">
+              <Button variant="secondary" icon={ArrowLeft} size="sm">
+                Directorio
+              </Button>
+            </Link>
+            <Button variant="secondary" icon={Edit} size="sm" onClick={() => setIsEditing(true)}>
+              Editar ficha
+            </Button>
+            <Button variant="secondary" icon={TrendingUp} size="sm" onClick={() => setShowCreateOpModal(true)}>
+              Oportunidad
+            </Button>
+            <Button variant="primary" icon={Plus} size="sm" onClick={() => setShowCreateQuoteModal(true)}>
+              Nueva cotización
+            </Button>
           </div>
-        )}
-      </div>
+        }
+      />
 
-      {/* MODAL DE EDICIÓN COMPLETA */}
-      {isEditing && (
-        <div className="bg-orange-50/70 p-6 rounded-lg border border-orange-200 shadow-sm space-y-4 ">
-          <div className="flex items-center justify-between border-b border-orange-200 pb-3">
-            <h3 className="font-extrabold text-base text-[#213343] flex items-center gap-2">
-              <Edit className="w-5 h-5 text-[#f97316]" />
-              <span>Editar información del cliente</span>
-            </h3>
-            <button
-              onClick={() => setIsEditing(false)}
-              className="p-1.5 hover:bg-orange-100 rounded-md text-gray-500 hover:text-gray-800 transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <form onSubmit={handleSaveClient} className="space-y-4 text-xs">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Nombre fantasía / comercial *</label>
-                <input
-                  type="text"
-                  required
-                  value={editNombre}
-                  onChange={(e) => setEditNombre(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Razón social *</label>
-                <input
-                  type="text"
-                  required
-                  value={editRazon}
-                  onChange={(e) => setEditRazon(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">RUT empresa o persona *</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    required
-                    value={editRutBody}
-                    onChange={(e) => setEditRutBody(e.target.value)}
-                    placeholder="12345678"
-                    className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-mono focus:outline-none focus:border-[#f97316]"
-                  />
-                  <span className="font-bold text-gray-400">-</span>
-                  <input
-                    type="text"
-                    required
-                    maxLength={1}
-                    value={editRutDv}
-                    onChange={(e) => setEditRutDv(e.target.value.toUpperCase())}
-                    placeholder="K"
-                    className="w-12 text-center bg-white border border-gray-300 rounded-md px-2 py-2 text-[#213343] font-mono font-bold focus:outline-none focus:border-[#f97316]"
-                  />
-                </div>
-                {editRutError && <span className="text-[10px] text-red-600 font-bold block mt-1">{editRutError}</span>}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Nicho de mercado</label>
-                <select
-                  value={editNicho}
-                  onChange={(e) => setEditNicho(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                >
-                  {nichosOptions.map((n) => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Tipo de venta habitual</label>
-                <select
-                  value={editTipoVenta}
-                  onChange={(e) => setEditTipoVenta(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                >
-                  <option value="Instalación">Instalación</option>
-                  <option value="Suministro">Suministro</option>
-                  <option value="Reventa de Material">Reventa de Material</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Ejecutivo asignado</label>
-                <select
-                  value={editAsignadoA}
-                  onChange={(e) => setEditAsignadoA(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                >
-                  <option value="">-- Sin asignar --</option>
-                  {usuariosList.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Teléfono</label>
-                <input
-                  type="text"
-                  value={editTelefono}
-                  onChange={(e) => setEditTelefono(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Correo electrónico</label>
-                <input
-                  type="email"
-                  value={editCorreo}
-                  onChange={(e) => setEditCorreo(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Dirección de despacho</label>
-                <input
-                  type="text"
-                  value={editDireccion}
-                  onChange={(e) => setEditDireccion(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Región</label>
-                <SearchableSelect
-                  value={editRegion}
-                  onChange={(val) => {
-                    setEditRegion(val);
-                    setEditComuna('');
-                  }}
-                  options={REGIONES_CHILE.map((r) => r.region)}
-                  placeholder="Seleccionar región..."
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Comuna</label>
-                <SearchableSelect
-                  value={editComuna}
-                  onChange={(val) => setEditComuna(val)}
-                  options={
-                    editRegion
-                      ? (REGIONES_CHILE.find((r) => r.region === editRegion)?.comunas || TODAS_COMUNAS_CHILE)
-                      : TODAS_COMUNAS_CHILE
-                  }
-                  placeholder="Seleccionar comuna..."
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsEditing(false)}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md font-bold transition"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-extrabold transition shadow-sm flex items-center gap-2"
-              >
-                <Save className="w-4 h-4" />
-                <span>Guardar cambios</span>
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* ===== LAYOUT HUBSPOT EN 3 COLUMNAS MODULARES ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        
-        {/* ========================================================= */}
-        {/* COLUMNA 1: PERFIL DEL CLIENTE & CONTACTO (~28% width)   */}
-        {/* ========================================================= */}
-        <div className="lg:col-span-3 space-y-4">
-          <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm space-y-4">
-            {/* Avatar Grande con Icono & Nombre */}
-            <div className="flex flex-col items-center text-center space-y-2 pt-2">
-              <div className="relative">
-                <div className="w-16 h-16 rounded-full bg-orange-50 text-[#f97316] border border-orange-100 flex items-center justify-center shadow-sm">
-                  <User className="w-8 h-8" />
-                </div>
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="absolute bottom-0 right-0 p-1.5 bg-white hover:bg-gray-100 rounded-full border border-gray-200 shadow-xs text-gray-600 hover:text-[#f97316] transition"
-                  title="Editar cliente"
-                >
-                  <Edit className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              <div>
-                <h1 className="text-lg font-black text-[#213343] leading-tight">{cliente.nombre}</h1>
-                <p className="text-xs text-gray-500 mt-0.5">{cliente.apellido_razon_social || cliente.nombre}</p>
-                <p className="text-xs font-mono font-bold text-gray-600 mt-0.5">{cliente.rut}</p>
-              </div>
-            </div>
-
-            {/* Badges de Atributos Clave con Nombre Propio y tamaño estándar */}
-            <div className="space-y-3 pt-3 border-t border-gray-100 text-xs">
-              {/* Nicho */}
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-bold text-gray-500 shrink-0">Nicho:</span>
-                <select
-                  value={cliente.nicho || nichosOptions[0] || 'Constructora B2B'}
-                  onChange={async (e) => {
-                    const newN = e.target.value;
-                    setCliente({ ...cliente, nicho: newN });
-                    try {
-                      const { error } = await supabase.from('clientes').update({ nicho: newN }).eq('id', cliente.id);
-                      if (error) console.error('Error updating nicho:', error);
-                    } catch (err) {
-                      console.error('Error updating nicho:', err);
-                    }
-                  }}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-md bg-orange-50 text-[#f97316] border border-orange-200 focus:outline-none focus:ring-1 focus:ring-[#F7931F] cursor-pointer min-w-[150px] truncate"
-                >
-                  {nichosOptions.map((n) => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Tipo de Venta */}
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-bold text-gray-500 shrink-0">Tipo de venta:</span>
-                <select
-                  value={cliente.tipo_venta || 'Instalación'}
-                  onChange={async (e) => {
-                    const newTipo = e.target.value;
-                    setCliente({ ...cliente, tipo_venta: newTipo });
-                    try {
-                      const { error } = await supabase.from('clientes').update({ tipo_venta: newTipo }).eq('id', cliente.id);
-                      if (error) console.error('Error updating tipo_venta:', error);
-                    } catch (err) {
-                      console.error('Error updating tipo_venta:', err);
-                    }
-                  }}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-md bg-purple-50 text-purple-900 border border-purple-200 focus:outline-none focus:ring-1 focus:ring-purple-400 cursor-pointer min-w-[150px] truncate"
-                >
-                  <option value="Instalación">Instalación</option>
-                  <option value="Suministro">Suministro</option>
-                  <option value="Reventa de Material">Reventa de Material</option>
-                </select>
-              </div>
-
-              {/* Ejecutivo Asignado (Persistencia Corregida a asignado_a) */}
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-bold text-gray-500 shrink-0">Ejecutivo:</span>
-                <select
-                  value={cliente.asignado_a || ''}
-                  onChange={async (e) => {
-                    const newUid = e.target.value || null;
-                    setCliente({ ...cliente, asignado_a: newUid });
-                    try {
-                      const { error } = await supabase.from('clientes').update({ asignado_a: newUid }).eq('id', cliente.id);
-                      if (error) console.error('Error updating asignado_a on cliente:', error);
-                    } catch (err) {
-                      console.error('Error updating asignado_a on cliente:', err);
-                    }
-                  }}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-md bg-blue-50 text-blue-900 border border-blue-200 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer min-w-[150px] truncate"
-                >
-                  <option value="">-- Sin asignar --</option>
-                  {usuariosList.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Fila de Botones de Acción Rápida (Sin Email ni Llamar) */}
-            <div className="pt-3 border-t border-gray-100">
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('notas')}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-lg bg-gray-50 hover:bg-orange-50 hover:text-[#f97316] text-gray-700 transition group border border-gray-200 shadow-2xs cursor-pointer"
-                  title="Crear nota o recordatorio"
-                >
-                  <MessageSquare className="w-4 h-4 mb-1 text-[#f97316] group-hover:scale-110 transition-transform" />
-                  <span className="text-xs font-bold">Nota</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowCreateOpModal(true)}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-lg bg-gray-50 hover:bg-orange-50 hover:text-[#f97316] text-gray-700 transition group border border-gray-200 shadow-2xs cursor-pointer"
-                  title="Crear oportunidad"
-                >
-                  <TrendingUp className="w-4 h-4 mb-1 text-[#f97316] group-hover:scale-110 transition-transform" />
-                  <span className="text-xs font-bold">Oportunidad</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowCreateQuoteModal(true)}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-lg bg-gray-50 hover:bg-orange-50 hover:text-[#f97316] text-gray-700 transition group border border-gray-200 shadow-2xs cursor-pointer"
-                  title="Crear cotización"
-                >
-                  <FileText className="w-4 h-4 mb-1 text-[#f97316] group-hover:scale-110 transition-transform" />
-                  <span className="text-xs font-bold">Cotización</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Acordeón Información de Contacto */}
-            <div className="pt-2 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => setIsContactInfoExpanded(!isContactInfoExpanded)}
-                className="w-full flex items-center justify-between text-xs font-black text-[#213343] hover:text-[#f97316] transition py-1"
-              >
-                <span className="flex items-center gap-1.5">
-                  <Building className="w-4 h-4 text-[#f97316]" />
-                  <span>Información de contacto</span>
-                </span>
-                {isContactInfoExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-
-              {isContactInfoExpanded && (
-                <div className="space-y-3 pt-2 text-xs text-gray-700 ">
-                  <div>
-                    <span className="text-gray-400 text-xs block font-semibold">Teléfono de contacto</span>
-                    <span className="font-bold text-[#213343] text-xs">{cliente.telefono || 'No registrado'}</span>
+      {/* Record Layout: Sidebar izquierda (Perfil) | Children centro (Pestañas) | Aside derecha (Asociados) */}
+      <RecordLayout
+        sidebar={
+          <div className="space-y-4">
+            {/* Tarjeta Perfil Resumido */}
+            <Panel>
+              <div className="p-4 space-y-4">
+                <div className="flex flex-col items-center text-center space-y-2">
+                  <div className="relative">
+                    <div className="h-16 w-16 rounded-full bg-accent-soft text-accent-ink border border-accent-line flex items-center justify-center">
+                      <User size={28} aria-hidden />
+                    </div>
                   </div>
                   <div>
-                    <span className="text-gray-400 text-xs block font-semibold">Correo electrónico</span>
-                    <span className="font-bold text-[#213343] text-xs truncate block">{cliente.correo || 'No registrado'}</span>
+                    <h2 className="t-section text-ink">{cliente.nombre}</h2>
+                    <p className="t-caption text-ink-muted">{cliente.apellido_razon_social || cliente.nombre}</p>
+                    <div className="mt-1">
+                      <CodeStamp>{cliente.rut}</CodeStamp>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Atributos Clave */}
+                <div className="space-y-2.5 pt-3 border-t border-line-subtle text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="t-caption text-ink-muted">Nicho:</span>
+                    <select
+                      value={cliente.nicho || nichosOptions[0] || 'Constructora B2B'}
+                      onChange={async (e) => {
+                        const newN = e.target.value;
+                        setCliente({ ...cliente, nicho: newN });
+                        try {
+                          await supabase.from('clientes').update({ nicho: newN }).eq('id', cliente.id);
+                          toast({ message: 'Nicho actualizado', tone: 'success' });
+                        } catch (err) {
+                          console.error('Error updating nicho:', err);
+                        }
+                      }}
+                      className="hg-field min-h-7 py-0.5 text-xs font-semibold w-auto max-w-[160px] truncate"
+                    >
+                      {nichosOptions.map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="t-caption text-ink-muted">Tipo de venta:</span>
+                    <select
+                      value={cliente.tipo_venta || 'Instalación'}
+                      onChange={async (e) => {
+                        const newTipo = e.target.value;
+                        setCliente({ ...cliente, tipo_venta: newTipo });
+                        try {
+                          await supabase.from('clientes').update({ tipo_venta: newTipo }).eq('id', cliente.id);
+                          toast({ message: 'Tipo de venta actualizado', tone: 'success' });
+                        } catch (err) {
+                          console.error('Error updating tipo_venta:', err);
+                        }
+                      }}
+                      className="hg-field min-h-7 py-0.5 text-xs font-semibold w-auto max-w-[160px] truncate"
+                    >
+                      <option value="Instalación">Instalación</option>
+                      <option value="Suministro">Suministro</option>
+                      <option value="Reventa de Material">Reventa de Material</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="t-caption text-ink-muted">Ejecutivo:</span>
+                    <select
+                      value={cliente.asignado_a || ''}
+                      onChange={async (e) => {
+                        const newUid = e.target.value || null;
+                        setCliente({ ...cliente, asignado_a: newUid });
+                        try {
+                          await supabase.from('clientes').update({ asignado_a: newUid }).eq('id', cliente.id);
+                          toast({ message: 'Ejecutivo asignado', tone: 'success' });
+                        } catch (err) {
+                          console.error('Error updating asignado_a on cliente:', err);
+                        }
+                      }}
+                      className="hg-field min-h-7 py-0.5 text-xs font-semibold w-auto max-w-[160px] truncate"
+                    >
+                      <option value="">-- Sin asignar --</option>
+                      {usuariosList.map((u) => (
+                        <option key={u.id} value={u.id}>{u.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Acciones Rápidas */}
+                <div className="grid grid-cols-3 gap-1.5 pt-3 border-t border-line-subtle text-center">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('notas')}
+                    className="flex flex-col items-center justify-center p-2 rounded-control border border-line bg-surface hover:bg-surface-muted text-ink transition-colors"
+                  >
+                    <MessageSquare size={15} className="mb-1 text-accent-ink" aria-hidden />
+                    <span className="t-micro font-semibold">Nota</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateOpModal(true)}
+                    className="flex flex-col items-center justify-center p-2 rounded-control border border-line bg-surface hover:bg-surface-muted text-ink transition-colors"
+                  >
+                    <TrendingUp size={15} className="mb-1 text-accent-ink" aria-hidden />
+                    <span className="t-micro font-semibold">Venta</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateQuoteModal(true)}
+                    className="flex flex-col items-center justify-center p-2 rounded-control border border-line bg-surface hover:bg-surface-muted text-ink transition-colors"
+                  >
+                    <FileText size={15} className="mb-1 text-accent-ink" aria-hidden />
+                    <span className="t-micro font-semibold">Cotizar</span>
+                  </button>
+                </div>
+              </div>
+            </Panel>
+
+            {/* Información de Contacto */}
+            <PropertyPanel
+              title={
+                <button
+                  type="button"
+                  onClick={() => setIsContactInfoExpanded(!isContactInfoExpanded)}
+                  className="w-full flex items-center justify-between text-left"
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <Building size={14} className="text-accent-ink" aria-hidden />
+                    <span className="font-semibold text-ink">Información de contacto</span>
+                  </span>
+                  {isContactInfoExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                </button>
+              }
+            >
+              {isContactInfoExpanded && (
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <span className="t-caption text-ink-muted block">Teléfono de contacto</span>
+                    <span className="font-semibold text-ink inline-flex items-center gap-1.5 mt-0.5">
+                      <Phone size={13} className="text-ink-muted" aria-hidden />
+                      {cliente.telefono || 'No registrado'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="t-caption text-ink-muted block">Correo electrónico</span>
+                    <span className="font-semibold text-ink truncate block mt-0.5">
+                      <Mail size={13} className="inline mr-1 text-ink-muted" aria-hidden />
+                      {cliente.correo || 'No registrado'}
+                    </span>
                   </div>
                   {cliente.correos_secundarios && cliente.correos_secundarios.length > 0 && (
                     <div>
-                      <span className="text-gray-400 text-xs block font-semibold">Correos secundarios</span>
-                      <span className="font-mono text-gray-600 text-xs block">{cliente.correos_secundarios.join(', ')}</span>
+                      <span className="t-caption text-ink-muted block">Correos secundarios</span>
+                      <span className="text-ink-muted font-mono block mt-0.5">
+                        {cliente.correos_secundarios.join(', ')}
+                      </span>
                     </div>
                   )}
                   <div>
-                    <span className="text-gray-400 text-xs block font-semibold">Dirección de despacho</span>
-                    <span className="font-bold text-[#213343] text-xs block">{cliente.direccion || 'No registrada'}</span>
+                    <span className="t-caption text-ink-muted block">Dirección de despacho</span>
+                    <span className="font-semibold text-ink block mt-0.5">
+                      <MapPin size={13} className="inline mr-1 text-ink-muted" aria-hidden />
+                      {cliente.direccion || 'No registrada'}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-gray-400 text-xs block font-semibold">Comuna / Región</span>
-                    <span className="font-bold text-[#213343] text-xs block">
+                    <span className="t-caption text-ink-muted block">Comuna / Región</span>
+                    <span className="font-semibold text-ink block mt-0.5">
                       {[cliente.comuna, cliente.region].filter(Boolean).join(', ') || 'No registrada'}
                     </span>
                   </div>
 
-                  <button
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full mt-2"
                     onClick={() => setIsEditing(true)}
-                    className="w-full text-center py-2 bg-gray-50 hover:bg-orange-50 text-[#f97316] font-bold text-xs rounded-md border border-orange-200 transition mt-2 cursor-pointer"
                   >
-                    Editar datos de contacto
-                  </button>
+                    Editar contacto
+                  </Button>
                 </div>
               )}
-            </div>
+            </PropertyPanel>
           </div>
-        </div>
-
-        {/* ========================================================= */}
-        {/* COLUMNA 2: PESTAÑAS Y ACTIVIDAD CENTRAL (~44% width)     */}
-        {/* ========================================================= */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-            {/* Header de Pestañas estilo Minimalista */}
-            <div className="flex items-center border-b border-gray-200 px-4 pt-2 bg-gray-50/50 gap-2 overflow-x-auto text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => setActiveTab('actividad')}
-                className={`pb-3 px-3 border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-                  activeTab === 'actividad'
-                    ? 'border-[#f97316] text-[#f97316] font-extrabold'
-                    : 'border-transparent text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                <Clock className="w-4 h-4" />
-                <span>Actividad</span>
-                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono font-bold">
-                  {notas.length}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('notas')}
-                className={`pb-3 px-3 border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-                  activeTab === 'notas'
-                    ? 'border-[#f97316] text-[#f97316] font-extrabold'
-                    : 'border-transparent text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                <MessageSquare className="w-4 h-4" />
-                <span>Notas & recordatorios</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('reclamos')}
-                className={`pb-3 px-3 border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-                  activeTab === 'reclamos'
-                    ? 'border-red-500 text-red-600 font-extrabold'
-                    : 'border-transparent text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                <AlertTriangle className="w-4 h-4 text-red-500" />
-                <span>Reclamos / postventa</span>
-                {reclamosList.length > 0 && (
-                  <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">
-                    {reclamosList.length}
+        }
+        aside={
+          <div className="space-y-4">
+            {/* OPORTUNIDADES (DEALS) */}
+            <Panel
+              title={
+                <div className="flex items-center justify-between w-full">
+                  <span className="inline-flex items-center gap-1.5">
+                    <TrendingUp size={16} className="text-accent-ink" aria-hidden />
+                    <span>Oportunidades</span>
+                    <span className="hg-list-count">{oportunidades.length}</span>
                   </span>
+                  <Button variant="subtle" size="sm" icon={Plus} onClick={() => setShowCreateOpModal(true)}>
+                    Agregar
+                  </Button>
+                </div>
+              }
+            >
+              <div className="p-3 space-y-2.5">
+                {oportunidades.length === 0 ? (
+                  <p className="t-caption text-ink-muted text-center py-4">Sin oportunidades registradas</p>
+                ) : (
+                  oportunidades.map((op) => {
+                    const montoDisplay = totalComercial(op, op.cotizaciones || []);
+                    const stageInfo = STAGE_CONFIG[op.estado_pipeline] || {
+                      label: op.estado_pipeline || 'Sin etapa',
+                      area: 'General',
+                      tone: 'neutral' as Tone,
+                    };
+                    const closeWithoutEvidence =
+                      ['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline) &&
+                      deliveryAccreditation[op.id] !== true;
+
+                    return (
+                      <div
+                        key={op.id}
+                        className="rounded-control border border-line bg-surface p-3 space-y-2 hover:bg-surface-muted transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="t-num font-bold text-sm text-ink block">
+                              ${montoDisplay.toLocaleString('es-CL')} CLP
+                            </span>
+                            <div className="mt-0.5">
+                              <CodeStamp>{op.codigo}</CodeStamp>
+                            </div>
+                          </div>
+                          <StatusBadge tone={closeWithoutEvidence ? 'warning' : stageInfo.tone}>
+                            {closeWithoutEvidence ? 'Sin acreditación' : stageInfo.label}
+                          </StatusBadge>
+                        </div>
+
+                        {/* Riel de Obra Mini */}
+                        <div className="pt-1">
+                          <StageRail current={getEtapaObraIndex(op.estado_pipeline)} size="mini" />
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs text-ink-muted pt-1 border-t border-line-subtle">
+                          <span className="inline-flex items-center gap-1 t-num">
+                            <Clock size={12} aria-hidden />
+                            {op.fecha_limite || 'Sin fecha límite'}
+                          </span>
+                          <Link
+                            href={`/ventas?oportunidad=${op.id}`}
+                            className="inline-flex items-center gap-1 font-semibold text-accent-ink hover:underline"
+                          >
+                            <span>Ver venta</span>
+                            <ExternalLink size={12} aria-hidden />
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
-              </button>
+              </div>
+            </Panel>
 
-              <button
-                type="button"
-                onClick={() => setActiveTab('metricas')}
-                className={`pb-3 px-3 border-b-2 transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-                  activeTab === 'metricas'
-                    ? 'border-[#f97316] text-[#f97316] font-extrabold'
-                    : 'border-transparent text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                <TrendingUp className="w-4 h-4" />
-                <span>Resumen & métricas</span>
-              </button>
-            </div>
-
-            {/* CONTENIDO DE CADA PESTAÑA */}
-            <div className="p-5 space-y-4">
-              
-              {/* PESTAÑA 1: TIMELINE DE ACTIVIDAD */}
-              {activeTab === 'actividad' && (
-                <div className="space-y-4">
-                  {/* Filtro de Actividad */}
-                  <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-3 text-xs">
-                    <div className="flex items-center gap-1.5 text-gray-500">
-                      <Filter className="w-4 h-4 text-gray-400" />
-                      <span className="font-semibold text-xs">Filtrar por:</span>
-                    </div>
-                    <select
-                      value={filtroActividadTipo}
-                      onChange={(e) => setFiltroActividadTipo(e.target.value)}
-                      className="text-xs font-semibold bg-gray-50 border border-gray-300 rounded-md px-3 py-1.5 text-[#213343] focus:outline-none focus:border-[#f97316] cursor-pointer"
+            {/* COTIZACIONES */}
+            <Panel
+              title={
+                <div className="flex items-center justify-between w-full">
+                  <span className="inline-flex items-center gap-1.5">
+                    <FileText size={16} className="text-accent-ink" aria-hidden />
+                    <span>Cotizaciones</span>
+                    <span className="hg-list-count">{cotizaciones.length}</span>
+                  </span>
+                  <Button variant="subtle" size="sm" icon={Plus} onClick={() => setShowCreateQuoteModal(true)}>
+                    Crear
+                  </Button>
+                </div>
+              }
+            >
+              <div className="p-3 space-y-2">
+                {cotizaciones.length === 0 ? (
+                  <p className="t-caption text-ink-muted text-center py-4">Sin cotizaciones registradas</p>
+                ) : (
+                  cotizaciones.map((cot) => (
+                    <div
+                      key={cot.id}
+                      className="rounded-control border border-line bg-surface p-2.5 text-xs space-y-1.5"
                     >
-                      <option value="todos">Toda la actividad ({notas.length})</option>
-                      <option value="nota">Notas generales</option>
-                      <option value="reunion">Reuniones</option>
-                      <option value="llamada">Llamadas telefónicas</option>
-                      <option value="recordatorio">Recordatorios</option>
-                    </select>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <CodeStamp>{cot.numero_cotizacion}</CodeStamp>
+                          <span className="t-caption text-ink-muted font-mono">v{cot.version || 1}</span>
+                        </div>
+                        <span className="t-num font-bold text-ink">
+                          ${cot.monto_total?.toLocaleString('es-CL')}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between pt-1">
+                        <StatusBadge
+                          tone={
+                            cot.estado === 'aprobada' ? 'success' : cot.estado === 'rechazada' ? 'danger' : 'neutral'
+                          }
+                        >
+                          {cot.estado}
+                        </StatusBadge>
+                        <Button
+                          variant="subtle"
+                          size="sm"
+                          icon={Eye}
+                          onClick={() => setPreviewCotizacion(cot)}
+                        >
+                          PDF
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </Panel>
+
+            {/* OBRAS & DESPACHOS */}
+            <Panel
+              title={
+                <span className="inline-flex items-center gap-1.5">
+                  <HardHat size={16} className="text-accent-ink" aria-hidden />
+                  <span>Obras & despachos</span>
+                  <span className="hg-list-count">{eventosList.length}</span>
+                </span>
+              }
+            >
+              <div className="p-3 space-y-2">
+                {eventosList.length === 0 ? (
+                  <p className="t-caption text-ink-muted text-center py-4">Sin eventos programados</p>
+                ) : (
+                  eventosList.slice(0, 4).map((ev) => (
+                    <div key={ev.id} className="rounded-control border border-line bg-surface p-2.5 text-xs space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-ink truncate max-w-[160px]">{ev.titulo}</span>
+                        <StatusBadge tone={ev.estado === 'completado' ? 'success' : 'neutral'}>
+                          {ev.estado.replace(/_/g, ' ')}
+                        </StatusBadge>
+                      </div>
+                      <div className="flex items-center justify-between text-ink-muted t-num">
+                        <span>{ev.fecha_inicio?.split('T')[0] || ev.fecha_evento}</span>
+                        <span className="truncate max-w-[120px]">{ev.responsable?.nombre || 'Sin responsable'}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </Panel>
+          </div>
+        }
+      >
+        {/* PANEL CENTRAL: Pestañas de Gestión */}
+        <Panel>
+          <Tabs items={tabItems} active={activeTab} onChange={(id) => setActiveTab(id as typeof activeTab)} />
+
+          <div className="p-5">
+            {/* PESTAÑA 1: TIMELINE DE ACTIVIDAD */}
+            {activeTab === 'actividad' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-2 border-b border-line-subtle pb-3">
+                  <div className="flex items-center gap-1.5 text-ink-muted t-caption">
+                    <Filter size={14} aria-hidden />
+                    <span>Filtrar por:</span>
+                  </div>
+                  <select
+                    value={filtroActividadTipo}
+                    onChange={(e) => setFiltroActividadTipo(e.target.value)}
+                    className="hg-field min-h-8 py-1 text-xs font-semibold w-auto"
+                  >
+                    <option value="todos">Toda la actividad ({notas.length})</option>
+                    <option value="nota">Notas generales</option>
+                    <option value="reunion">Reuniones</option>
+                    <option value="llamada">Llamadas telefónicas</option>
+                    <option value="recordatorio">Recordatorios</option>
+                  </select>
+                </div>
+
+                <div className="space-y-3">
+                  {filteredNotas.length === 0 ? (
+                    <EmptyState
+                      icon={MessageSquare}
+                      title="Sin actividades registradas"
+                      description="No hay notas ni recordatorios que coincidan con el filtro seleccionado."
+                      action={
+                        <Button variant="secondary" size="sm" onClick={() => setActiveTab('notas')}>
+                          Crear una nota
+                        </Button>
+                      }
+                    />
+                  ) : (
+                    filteredNotas.map((n) => {
+                      const isReminder = n.tipo_actividad === 'recordatorio';
+                      return (
+                        <div
+                          key={n.id}
+                          className={`p-3.5 rounded-panel border space-y-2 ${
+                            isReminder
+                              ? 'bg-warning-soft border-warning-line text-ink'
+                              : 'bg-surface border-line text-ink'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2">
+                              {isReminder ? (
+                                <Bell size={15} className="text-warning" aria-hidden />
+                              ) : n.tipo_actividad === 'llamada' ? (
+                                <PhoneCall size={15} className="text-info" aria-hidden />
+                              ) : n.tipo_actividad === 'reunion' ? (
+                                <UserCheck size={15} className="text-success" aria-hidden />
+                              ) : (
+                                <FileCheck size={15} className="text-accent-ink" aria-hidden />
+                              )}
+                              <span className="font-semibold text-ink">{n.usuario?.nombre || 'Usuario CRM'}</span>
+                              <StatusBadge tone={isReminder ? 'warning' : 'neutral'}>
+                                {n.tipo_actividad || 'nota'}
+                              </StatusBadge>
+                            </div>
+                            <span className="t-caption text-ink-muted t-num">
+                              {formatSantiagoDateTime(n.fecha)}
+                            </span>
+                          </div>
+
+                          <p className="text-xs leading-relaxed pl-3 border-l-2 border-line">
+                            {n.contenido}
+                          </p>
+
+                          {n.fecha_recordatorio && (
+                            <p className="t-caption font-semibold text-warning pt-0.5">
+                              Recordatorio: {formatSantiagoDateTime(n.fecha_recordatorio, n.hora_recordatorio)}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* PESTAÑA 2: NOTAS & RECORDATORIOS */}
+            {activeTab === 'notas' && (
+              <div className="space-y-4">
+                <form onSubmit={handleAddNota} className="space-y-3 rounded-panel border border-line bg-surface-muted p-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <label className="block t-caption font-semibold text-ink mb-1">Tipo de actividad</label>
+                      <select
+                        value={tipoActividad}
+                        onChange={(e) => setTipoActividad(e.target.value as TipoNotaActividad)}
+                        className="hg-field text-xs font-semibold"
+                      >
+                        <option value="nota">Nota general</option>
+                        <option value="reunion">Reunión con cliente</option>
+                        <option value="llamada">Llamada telefónica</option>
+                        <option value="recordatorio">Recordatorio programado</option>
+                      </select>
+                    </div>
+
+                    {tipoActividad === 'recordatorio' && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block t-caption font-semibold text-ink mb-1 flex items-center gap-1">
+                            <Calendar size={13} className="text-warning" aria-hidden />
+                            <span>Fecha *</span>
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={fechaRecordatorio}
+                            onChange={(e) => setFechaRecordatorio(e.target.value)}
+                            className="hg-field text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block t-caption font-semibold text-ink mb-1 flex items-center gap-1">
+                            <Clock size={13} className="text-warning" aria-hidden />
+                            <span>Hora *</span>
+                          </label>
+                          <input
+                            type="time"
+                            required
+                            value={horaRecordatorio}
+                            onChange={(e) => setHoraRecordatorio(e.target.value)}
+                            className="hg-field text-xs"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Lista Cronológica */}
-                  <div className="space-y-3">
-                    {filteredNotas.length === 0 ? (
-                      <div className="p-8 text-center text-gray-400 text-xs italic">
-                        No hay actividades registradas con este filtro.
+                  <div>
+                    <textarea
+                      rows={3}
+                      required
+                      value={nuevaNota}
+                      onChange={(e) => setNuevaNota(e.target.value)}
+                      placeholder={
+                        tipoActividad === 'recordatorio'
+                          ? 'Escribe el detalle del recordatorio...'
+                          : 'Escribe el detalle de la reunión, llamada o nota...'
+                      }
+                      className="hg-field text-xs p-3 leading-relaxed"
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button type="submit" variant="primary" icon={Send}>
+                      {tipoActividad === 'recordatorio' ? 'Guardar recordatorio' : 'Guardar nota'}
+                    </Button>
+                  </div>
+                </form>
+
+                <div className="space-y-3">
+                  {notas.map((n) => (
+                    <div key={n.id} className="p-3.5 bg-surface rounded-panel border border-line text-xs space-y-1.5">
+                      <div className="flex justify-between items-center text-ink-muted">
+                        <span className="font-semibold text-ink">{n.usuario?.nombre || 'Usuario CRM'}</span>
+                        <span className="font-mono t-num">{new Date(n.fecha).toLocaleDateString('es-CL')}</span>
                       </div>
+                      <p className="text-ink leading-relaxed">{n.contenido}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* PESTAÑA 3: RECLAMOS & POSTVENTA */}
+            {activeTab === 'reclamos' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-line-subtle pb-2">
+                  <span className="font-semibold text-danger flex items-center gap-1.5 text-xs">
+                    <AlertTriangle size={15} aria-hidden />
+                    <span>Incidencias y reclamos registrados</span>
+                  </span>
+                  <StatusBadge tone="danger">
+                    {reclamosList.length} {reclamosList.length === 1 ? 'reclamo' : 'reclamos'}
+                  </StatusBadge>
+                </div>
+
+                {reclamosList.length === 0 ? (
+                  <EmptyState
+                    icon={AlertTriangle}
+                    title="Sin reclamos abiertos"
+                    description="No se registran incidencias ni casos de postventa para este cliente."
+                  />
+                ) : (
+                  reclamosList.map((rec) => (
+                    <div key={rec.id} className="p-3.5 bg-danger-soft/40 rounded-panel border border-danger-line space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <CodeStamp>{rec.oportunidad_codigo}</CodeStamp>
+                          <span className="text-ink-muted">· Por {rec.usuario_nombre || 'Ejecutivo'}</span>
+                        </div>
+                        <span className="font-mono t-num text-ink-muted">
+                          {new Date(rec.created_at).toLocaleDateString('es-CL')}
+                        </span>
+                      </div>
+                      <p className="text-ink font-medium leading-relaxed">{rec.contenido}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* PESTAÑA 4: RESUMEN & MÉTRICAS */}
+            {activeTab === 'metricas' && (
+              <div className="space-y-4">
+                <p className="t-caption text-ink-muted border-b border-line-subtle pb-2">
+                  Métricas consolidadas de rendimiento comercial y operativo
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  {/* 1. Ventas Acumuladas 100% */}
+                  <div className="p-4 bg-success-soft rounded-panel border border-success-line space-y-1">
+                    <span className="t-caption font-semibold text-success block">Ventas acumuladas (100% pagadas)</span>
+                    <span className="t-num text-lg font-bold text-success block">
+                      ${ventasAcumuladas100.toLocaleString('es-CL')} CLP
+                    </span>
+                    <span className="t-caption text-ink-muted block">
+                      {oportunidadesPagadas.length} {oportunidadesPagadas.length === 1 ? 'oportunidad pagada' : 'oportunidades pagadas'}
+                    </span>
+                  </div>
+
+                  {/* 2. Saldo Pendiente */}
+                  <div className="p-4 bg-warning-soft rounded-panel border border-warning-line space-y-1">
+                    <span className="t-caption font-semibold text-warning block">Saldo pendiente por cobrar</span>
+                    <span className="t-num text-lg font-bold text-warning block">
+                      ${saldoPendienteTotal.toLocaleString('es-CL')} CLP
+                    </span>
+                    <span className="t-caption text-ink-muted block">En oportunidades comerciales activas</span>
+                  </div>
+
+                  {/* 3. Obras & Logística Activas */}
+                  <div className="p-4 bg-info-soft rounded-panel border border-info-line space-y-1">
+                    <span className="t-caption font-semibold text-info block">Obras & logística activas</span>
+                    <span className="t-num text-lg font-bold text-info block">
+                      {eventosActivosCount} <span className="text-xs font-normal">eventos en curso</span>
+                    </span>
+                    <span className="t-caption text-ink-muted block">{eventosCompletadosCount} eventos completados</span>
+                  </div>
+
+                  {/* 4. Facturado en Obras */}
+                  <div className="p-4 bg-accent-soft rounded-panel border border-accent-line space-y-1">
+                    <span className="t-caption font-semibold text-accent-ink block">Facturado en obras / montaje</span>
+                    <span className="t-num text-lg font-bold text-accent-ink block">
+                      ${montoFacturadoObras.toLocaleString('es-CL')} CLP
+                    </span>
+                    <span className="t-caption text-ink-muted block">Instalación y montaje en terreno</span>
+                  </div>
+
+                  {/* 5. Días Promedio de Pago */}
+                  <div className="p-4 bg-surface-muted rounded-panel border border-line space-y-1">
+                    <span className="t-caption font-semibold text-ink block">Días promedio de pago</span>
+                    <span className="t-num text-lg font-bold text-ink block">
+                      {diasPromedioPago !== null ? `${diasPromedioPago} días` : '—'}
+                    </span>
+                    <span className="t-caption text-ink-muted block">Entre aprobación y primer abono</span>
+                  </div>
+
+                  {/* 6. Próxima Actividad */}
+                  <div className="p-4 bg-surface rounded-panel border border-line space-y-1">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className="t-caption font-semibold text-ink block">Próxima actividad</span>
+                      {proximaActividad?.esVencida && (
+                        <StatusBadge tone="danger">Vencida</StatusBadge>
+                      )}
+                    </div>
+                    {proximaActividad ? (
+                      <>
+                        <span className="font-semibold text-ink block truncate">{proximaActividad.titulo}</span>
+                        <span className="t-caption font-mono text-ink-muted t-num block">{proximaActividad.fecha}</span>
+                      </>
                     ) : (
-                      filteredNotas.map((n) => {
-                        const isReminder = n.tipo_actividad === 'recordatorio';
-                        return (
-                          <div
-                            key={n.id}
-                            className={`p-3.5 rounded-lg border space-y-2 ${
-                              isReminder ? 'bg-amber-50/60 border-amber-200' : 'bg-gray-50 border-gray-200'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between text-xs">
-                              <div className="flex items-center gap-2">
-                                {isReminder ? (
-                                  <Bell className="w-4 h-4 text-amber-600" />
-                                ) : n.tipo_actividad === 'llamada' ? (
-                                  <PhoneCall className="w-4 h-4 text-blue-600" />
-                                ) : n.tipo_actividad === 'reunion' ? (
-                                  <UserCheck className="w-4 h-4 text-emerald-600" />
-                                ) : (
-                                  <FileCheck className="w-4 h-4 text-[#f97316]" />
-                                )}
-                                <span className="font-extrabold text-[#213343] text-xs">{n.usuario?.nombre || 'Usuario CRM'}</span>
-                                <span className="text-xs text-[#213343] bg-white font-bold px-2 py-0.5 rounded-full capitalize border border-gray-200">
-                                  {n.tipo_actividad || 'nota'}
-                                </span>
-                              </div>
-                              <span className="text-xs text-gray-500 font-mono">
-                                {formatSantiagoDateTime(n.fecha)}
-                              </span>
-                            </div>
-
-                            <p className="text-xs text-[#213343] leading-relaxed pl-3 border-l-2 border-[#f97316]">
-                              {n.contenido}
-                            </p>
-
-                            {n.fecha_recordatorio && (
-                              <p className="text-xs text-amber-800 font-bold pt-0.5">
-                                Recordatorio: {formatSantiagoDateTime(n.fecha_recordatorio, n.hora_recordatorio)}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })
+                      <span className="t-caption text-ink-muted italic">Sin actividades pendientes</span>
                     )}
                   </div>
                 </div>
-              )}
+              </div>
+            )}
+          </div>
+        </Panel>
+      </RecordLayout>
 
-              {/* PESTAÑA 2: NOTAS & RECORDATORIOS */}
-              {activeTab === 'notas' && (
-                <div className="space-y-4">
-                  {/* Formulario Agregar Nota / Recordatorio */}
-                  <form onSubmit={handleAddNota} className="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                      <div>
-                        <label className="block font-bold text-gray-700 mb-1">Tipo de actividad</label>
-                        <select
-                          value={tipoActividad}
-                          onChange={(e) => setTipoActividad(e.target.value as TipoNotaActividad)}
-                          className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                        >
-                          <option value="nota">Nota general</option>
-                          <option value="reunion">Reunión con cliente</option>
-                          <option value="llamada">Llamada telefónica</option>
-                          <option value="recordatorio">Recordatorio in-app</option>
-                        </select>
-                      </div>
+      {/* DIÁLOGO: EDICIÓN COMPLETA DEL CLIENTE */}
+      <Dialog
+        open={isEditing}
+        onClose={() => setIsEditing(false)}
+        title="Editar información del cliente"
+        description="Actualiza la razón social, RUT, contactos y ejecutivos asignados."
+        size="lg"
+      >
+        <form onSubmit={handleSaveClient} className="space-y-4 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block t-caption font-semibold text-ink mb-1">Nombre comercial *</label>
+              <input
+                type="text"
+                required
+                value={editNombre}
+                onChange={(e) => setEditNombre(e.target.value)}
+                className="hg-field"
+              />
+            </div>
 
-                      {tipoActividad === 'recordatorio' && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block font-bold text-amber-800 mb-1 flex items-center gap-1">
-                              <Calendar className="w-3.5 h-3.5 text-amber-600" />
-                              <span>Fecha *</span>
-                            </label>
-                            <input
-                              type="date"
-                              required
-                              value={fechaRecordatorio}
-                              onChange={(e) => setFechaRecordatorio(e.target.value)}
-                              className="w-full bg-white border border-amber-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                            />
-                          </div>
-                          <div>
-                            <label className="block font-bold text-amber-800 mb-1 flex items-center gap-1">
-                              <Clock className="w-3.5 h-3.5 text-amber-600" />
-                              <span>Hora *</span>
-                            </label>
-                            <input
-                              type="time"
-                              required
-                              value={horaRecordatorio}
-                              onChange={(e) => setHoraRecordatorio(e.target.value)}
-                              className="w-full bg-white border border-amber-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
+            <div>
+              <label className="block t-caption font-semibold text-ink mb-1">Razón social *</label>
+              <input
+                type="text"
+                required
+                value={editRazon}
+                onChange={(e) => setEditRazon(e.target.value)}
+                className="hg-field"
+              />
+            </div>
 
-                    <div>
-                      <textarea
-                        rows={3}
-                        required
-                        value={nuevaNota}
-                        onChange={(e) => setNuevaNota(e.target.value)}
-                        placeholder={
-                          tipoActividad === 'recordatorio'
-                            ? 'Escribe el detalle del recordatorio...'
-                            : 'Escribe el detalle de la reunión o llamada...'
-                        }
-                        className="w-full bg-white border border-gray-300 rounded-md p-3 text-xs text-[#213343] placeholder-gray-400 focus:outline-none focus:border-[#f97316] font-medium"
-                      />
-                    </div>
-
-                    <div className="flex justify-end">
-                      <button
-                        type="submit"
-                        className="bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold text-xs px-4 py-2 rounded-md transition flex items-center gap-2 shadow-sm cursor-pointer"
-                      >
-                        <Send className="w-4 h-4" />
-                        <span>{tipoActividad === 'recordatorio' ? 'Guardar recordatorio' : 'Guardar nota'}</span>
-                      </button>
-                    </div>
-                  </form>
-
-                  {/* Lista de notas */}
-                  <div className="space-y-3">
-                    {notas.map((n) => (
-                      <div key={n.id} className="p-3.5 bg-gray-50 rounded-lg border border-gray-200 text-xs space-y-1.5">
-                        <div className="flex justify-between items-center text-gray-500 text-xs">
-                          <span className="font-bold text-[#213343]">{n.usuario?.nombre || 'Usuario CRM'}</span>
-                          <span className="font-mono text-gray-400">{new Date(n.fecha).toLocaleDateString('es-CL')}</span>
-                        </div>
-                        <p className="text-gray-700 leading-relaxed">{n.contenido}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* PESTAÑA 3: RECLAMOS & POSTVENTA */}
-              {activeTab === 'reclamos' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between border-b border-gray-100 pb-2 text-xs">
-                    <span className="font-extrabold text-red-600 flex items-center gap-1.5 text-xs">
-                      <AlertTriangle className="w-4 h-4" />
-                      <span>Reclamos e incidencias registradas</span>
-                    </span>
-                    <span className="bg-red-100 text-red-800 text-xs font-bold px-2.5 py-0.5 rounded-full">
-                      {reclamosList.length} {reclamosList.length === 1 ? 'reclamo' : 'reclamos'}
-                    </span>
-                  </div>
-
-                  {reclamosList.length === 0 ? (
-                    <div className="p-8 text-center text-gray-400 text-xs italic bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                      Sin reclamos ni incidencias abiertas para este cliente.
-                    </div>
-                  ) : (
-                    reclamosList.map((rec) => (
-                      <div key={rec.id} className="p-3.5 bg-red-50/70 rounded-lg border border-red-200 space-y-1.5 text-xs">
-                        <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold font-mono text-red-800">{rec.oportunidad_codigo}</span>
-                            <span className="text-gray-600 font-medium">· Por {rec.usuario_nombre || 'Vendedor'}</span>
-                          </div>
-                          <span className="font-mono text-gray-400 text-xs">
-                            {new Date(rec.created_at).toLocaleDateString('es-CL')}
-                          </span>
-                        </div>
-                        <p className="text-red-950 font-medium leading-relaxed">{rec.contenido}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-
-              {/* PESTAÑA 4: RESUMEN & MÉTRICAS (SIN KPI DE COTIZACIONES ABIERTAS) */}
-              {activeTab === 'metricas' && (
-                <div className="space-y-3">
-                  <p className="text-xs text-gray-500 font-bold border-b border-gray-100 pb-2">
-                    Métricas consolidadas de rendimiento comercial y operativo
-                  </p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    {/* 1. Ventas Acumuladas 100% */}
-                    <div className="p-3.5 bg-emerald-50/60 rounded-lg border border-emerald-200 space-y-1">
-                      <span className="text-xs font-bold text-emerald-800 block">Ventas acumuladas (100%)</span>
-                      <span className="text-base font-black text-emerald-700 block">
-                        ${ventasAcumuladas100.toLocaleString('es-CL')} CLP
-                      </span>
-                      <span className="text-xs text-gray-500 block">
-                        {oportunidadesPagadas.length} {oportunidadesPagadas.length === 1 ? 'oportunidad pagada' : 'oportunidades pagadas'}
-                      </span>
-                    </div>
-
-                    {/* 2. Saldo Pendiente */}
-                    <div className="p-3.5 bg-amber-50/60 rounded-lg border border-amber-200 space-y-1">
-                      <span className="text-xs font-bold text-amber-800 block">Saldo pendiente</span>
-                      <span className="text-base font-black text-amber-700 block">
-                        ${saldoPendienteTotal.toLocaleString('es-CL')} CLP
-                      </span>
-                      <span className="text-xs text-gray-500 block">Por cobrar en oportunidades activas</span>
-                    </div>
-
-                    {/* 3. Obras & Logística Activas */}
-                    <div className="p-3.5 bg-blue-50/60 rounded-lg border border-blue-200 space-y-1">
-                      <span className="text-xs font-bold text-blue-800 block">Obras & logística activas</span>
-                      <span className="text-base font-black text-blue-700 block">
-                        {eventosActivosCount} <span className="text-xs font-normal">eventos en curso</span>
-                      </span>
-                      <span className="text-xs text-gray-500 block">{eventosCompletadosCount} eventos completados</span>
-                    </div>
-
-                    {/* 4. Facturado en Obras */}
-                    <div className="p-3.5 bg-purple-50/60 rounded-lg border border-purple-200 space-y-1">
-                      <span className="text-xs font-bold text-purple-800 block">Facturado en obras</span>
-                      <span className="text-base font-black text-purple-700 block">
-                        ${montoFacturadoObras.toLocaleString('es-CL')} CLP
-                      </span>
-                      <span className="text-xs text-gray-500 block">Instalación y montaje en terreno</span>
-                    </div>
-
-                    {/* 5. Días Promedio de Pago */}
-                    <div className="p-3.5 bg-indigo-50/60 rounded-lg border border-indigo-200 space-y-1">
-                      <span className="text-xs font-bold text-indigo-800 block">Días promedio de pago</span>
-                      <span className="text-base font-black text-indigo-700 block">
-                        {diasPromedioPago !== null ? `${diasPromedioPago} días` : '—'}
-                      </span>
-                      <span className="text-xs text-gray-500 block">Entre aprobación y primer abono</span>
-                    </div>
-
-                    {/* 6. Próxima Actividad */}
-                    <div className="p-3.5 bg-gray-50 rounded-lg border border-gray-200 space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-gray-600 block">Próxima actividad</span>
-                        {proximaActividad?.esVencida && (
-                          <span className="bg-red-500 text-white font-black text-[10px] px-1.5 py-0.2 rounded uppercase">
-                            Vencida
-                          </span>
-                        )}
-                      </div>
-                      {proximaActividad ? (
-                        <>
-                          <span className="text-xs font-black text-[#213343] block truncate">{proximaActividad.titulo}</span>
-                          <span className="text-xs font-mono text-gray-400 block">{proximaActividad.fecha}</span>
-                        </>
-                      ) : (
-                        <span className="text-xs text-gray-400 italic">Sin actividades pendientes</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
+            <div>
+              <label className="block t-caption font-semibold text-ink mb-1">RUT *</label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  required
+                  value={editRutBody}
+                  onChange={(e) => setEditRutBody(e.target.value)}
+                  placeholder="12345678"
+                  className="hg-field flex-1 font-mono"
+                />
+                <span className="font-semibold text-ink-muted">-</span>
+                <input
+                  type="text"
+                  required
+                  maxLength={1}
+                  value={editRutDv}
+                  onChange={(e) => setEditRutDv(e.target.value.toUpperCase())}
+                  placeholder="K"
+                  className="hg-field w-12 text-center font-mono font-bold"
+                />
+              </div>
+              {editRutError && <span className="t-micro text-danger font-semibold block mt-1">{editRutError}</span>}
             </div>
           </div>
-        </div>
 
-        {/* ========================================================= */}
-        {/* COLUMNA 3: ASOCIADOS / DEALS & COTIZACIONES (~28% width) */}
-        {/* ========================================================= */}
-        <div className="lg:col-span-4 space-y-4">
-          
-          {/* SECCIÓN 1: OPORTUNIDADES DE VENTA (DEALS) */}
-          <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm space-y-3">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
-              <h3 className="font-extrabold text-xs text-[#213343] flex items-center gap-1.5">
-                <TrendingUp className="w-4 h-4 text-[#f97316]" />
-                <span>Oportunidades ({oportunidades.length})</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowCreateOpModal(true)}
-                className="text-xs font-extrabold text-[#f97316] hover:underline flex items-center gap-1 cursor-pointer"
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block t-caption font-semibold text-ink mb-1">Nicho</label>
+              <select
+                value={editNicho}
+                onChange={(e) => setEditNicho(e.target.value)}
+                className="hg-field font-semibold"
               >
-                <Plus className="w-4 h-4" />
-                <span>Agregar</span>
-              </button>
+                {nichosOptions.map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
             </div>
 
-            {oportunidades.length === 0 ? (
-              <p className="text-xs text-gray-400 italic py-2">Sin oportunidades registradas.</p>
-            ) : (
-              <div className="space-y-2.5">
-                {oportunidades.map((op) => {
-                  const montoDisplay = totalComercial(op, op.cotizaciones || []);
-                  const stageInfo = STAGE_CONFIG[op.estado_pipeline] || {
-                    ...STAGE_CONFIG.nueva,
-                    label: op.estado_pipeline || 'Sin etapa',
-                    area: 'Sin área definida',
-                  };
-                  const closeWithoutEvidence = ['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline) && deliveryAccreditation[op.id] !== true;
-
-                  return (
-                    <div
-                      key={op.id}
-                      className="p-3.5 bg-gray-50 hover:bg-orange-50/50 rounded-lg border border-gray-200 text-xs space-y-2 transition group"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <span className="font-black text-sm text-[#213343] group-hover:text-[#f97316] transition block">
-                            ${montoDisplay.toLocaleString('es-CL')} CLP
-                          </span>
-                          <span className="font-mono text-xs text-gray-500 font-bold block mt-0.5">{op.codigo}</span>
-                        </div>
-                        <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${closeWithoutEvidence ? 'bg-amber-50 text-amber-900 border-amber-300' : `${stageInfo.bg} ${stageInfo.text} ${stageInfo.border}`}`}>
-                          {closeWithoutEvidence ? 'Entrega sin acreditar' : stageInfo.label}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2 text-[11px] text-gray-500 font-bold">
-                        <span>{stageInfo.area}</span>
-                        <span className="font-mono">{stageInfo.step}/{stageInfo.totalSteps}</span>
-                      </div>
-
-                      {(op.origen || op.modalidad_requerimiento) && (
-                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
-                          {op.origen && (
-                            <span className="px-2 py-0.5 rounded-lg bg-white border border-gray-200 text-gray-600">
-                              Origen: {op.origen}
-                            </span>
-                          )}
-                          <span className="px-2 py-0.5 rounded-lg bg-white border border-orange-200 text-[#f97316]">
-                            {op.modalidad_requerimiento === 'solo_material' ? 'Sólo material' : 'Instalación'}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Progreso visual de etapa según el área real del pipeline */}
-                      <div
-                        className="grid gap-1 pt-1"
-                        style={{ gridTemplateColumns: `repeat(${stageInfo.totalSteps}, minmax(0, 1fr))` }}
-                      >
-                        {Array.from({ length: stageInfo.totalSteps }).map((_, idx) => (
-                          <div
-                            key={idx}
-                            className={`h-1.5 rounded-full transition ${
-                              idx < stageInfo.step ? 'bg-[#f97316]' : 'bg-gray-200'
-                            }`}
-                          />
-                        ))}
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs text-gray-500 pt-1.5 border-t border-gray-200/60">
-                        <span className="flex items-center gap-1 font-mono">
-                          <Clock className="w-3.5 h-3.5 text-amber-600" />
-                          {op.fecha_limite || 'Sin fecha'}
-                        </span>
-                        <Link
-                          href={`/ventas?oportunidad=${op.id}`}
-                          className="text-[#f97316] font-bold hover:underline flex items-center gap-0.5"
-                        >
-                          <span>Ver en pipeline</span>
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </Link>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* SECCIÓN 2: COTIZACIONES DEL CLIENTE */}
-          <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm space-y-3">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
-              <h3 className="font-extrabold text-xs text-[#213343] flex items-center gap-1.5">
-                <FileText className="w-4 h-4 text-[#f97316]" />
-                <span>Cotizaciones ({cotizaciones.length})</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowCreateQuoteModal(true)}
-                className="text-xs font-extrabold text-[#f97316] hover:underline flex items-center gap-1 cursor-pointer"
+            <div>
+              <label className="block t-caption font-semibold text-ink mb-1">Tipo de venta</label>
+              <select
+                value={editTipoVenta}
+                onChange={(e) => setEditTipoVenta(e.target.value)}
+                className="hg-field font-semibold"
               >
-                <Plus className="w-4 h-4" />
-                <span>Crear</span>
-              </button>
+                <option value="Instalación">Instalación</option>
+                <option value="Suministro">Suministro</option>
+                <option value="Reventa de Material">Reventa de Material</option>
+              </select>
             </div>
 
-            {cotizaciones.length === 0 ? (
-              <p className="text-xs text-gray-400 italic py-2">Sin cotizaciones registradas.</p>
-            ) : (
-              <div className="space-y-2">
-                {cotizaciones.map((cot) => (
-                  <div
-                    key={cot.id}
-                    className="p-3 bg-gray-50 hover:bg-orange-50/40 rounded-lg border border-gray-200 text-xs space-y-1.5 transition"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-[#213343] font-mono text-xs">
-                        {cot.numero_cotizacion} (v{cot.version || 1})
-                      </span>
-                      <span className="text-[#f97316] font-black text-xs">${cot.monto_total?.toLocaleString('es-CL')}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs pt-1">
-                      <span className="capitalize font-semibold text-gray-600 text-xs px-2.5 py-0.5 rounded-full bg-white border border-gray-200">
-                        {cot.estado}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setPreviewCotizacion(cot)}
-                        className="text-[#f97316] hover:underline font-bold flex items-center gap-1 text-xs cursor-pointer"
-                      >
-                        <Eye className="w-4 h-4" />
-                        <span>Previsualizar PDF</span>
-                      </button>
-                    </div>
-                  </div>
+            <div>
+              <label className="block t-caption font-semibold text-ink mb-1">Ejecutivo asignado</label>
+              <select
+                value={editAsignadoA}
+                onChange={(e) => setEditAsignadoA(e.target.value)}
+                className="hg-field font-semibold"
+              >
+                <option value="">-- Sin asignar --</option>
+                {usuariosList.map((u) => (
+                  <option key={u.id} value={u.id}>{u.nombre}</option>
                 ))}
-              </div>
-            )}
+              </select>
+            </div>
           </div>
 
-          {/* SECCIÓN 3: EVENTOS & OBRAS PROGRAMADAS */}
-          <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm space-y-3">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
-              <h3 className="font-extrabold text-xs text-[#213343] flex items-center gap-1.5">
-                <HardHat className="w-4 h-4 text-[#f97316]" />
-                <span>Obras & despachos ({eventosList.length})</span>
-              </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block t-caption font-semibold text-ink mb-1">Teléfono</label>
+              <input
+                type="text"
+                value={editTelefono}
+                onChange={(e) => setEditTelefono(e.target.value)}
+                className="hg-field"
+              />
             </div>
 
-            {eventosList.length === 0 ? (
-              <p className="text-xs text-gray-400 italic py-2">Sin eventos programados para este cliente.</p>
-            ) : (
-              <div className="space-y-2">
-                {eventosList.slice(0, 4).map((ev) => (
-                  <div key={ev.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-extrabold text-[#213343] truncate max-w-[160px]">{ev.titulo}</span>
-                      <span className="capitalize text-xs font-bold text-gray-600 px-2 py-0.5 rounded bg-white border">
-                        {ev.estado.replace(/_/g, ' ')}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-gray-500 text-xs font-mono">
-                      <span>{ev.fecha_inicio?.split('T')[0] || ev.fecha_evento}</span>
-                      <span>{ev.responsable?.nombre || 'Sin responsable'}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div>
+              <label className="block t-caption font-semibold text-ink mb-1">Correo electrónico</label>
+              <input
+                type="email"
+                value={editCorreo}
+                onChange={(e) => setEditCorreo(e.target.value)}
+                className="hg-field"
+              />
+            </div>
+
+            <div>
+              <label className="block t-caption font-semibold text-ink mb-1">Dirección de despacho</label>
+              <input
+                type="text"
+                value={editDireccion}
+                onChange={(e) => setEditDireccion(e.target.value)}
+                className="hg-field"
+              />
+            </div>
           </div>
-        </div>
-      </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block t-caption font-semibold text-ink mb-1">Región</label>
+              <SearchableSelect
+                value={editRegion}
+                onChange={(val) => {
+                  setEditRegion(val);
+                  setEditComuna('');
+                }}
+                options={REGIONES_CHILE.map((r) => r.region)}
+                placeholder="Seleccionar región..."
+              />
+            </div>
+
+            <div>
+              <label className="block t-caption font-semibold text-ink mb-1">Comuna</label>
+              <SearchableSelect
+                value={editComuna}
+                onChange={(val) => setEditComuna(val)}
+                options={
+                  editRegion
+                    ? (REGIONES_CHILE.find((r) => r.region === editRegion)?.comunas || TODAS_COMUNAS_CHILE)
+                    : TODAS_COMUNAS_CHILE
+                }
+                placeholder="Seleccionar comuna..."
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-line-subtle">
+            <Button variant="secondary" onClick={() => setIsEditing(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" variant="primary" icon={Save}>
+              Guardar cambios
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* DIÁLOGO: CREAR OPORTUNIDAD */}
+      <Dialog
+        open={showCreateOpModal}
+        onClose={() => setShowCreateOpModal(false)}
+        title="Nueva oportunidad de venta"
+        description={`Crear una orden de venta asociada a ${cliente.nombre}.`}
+        size="md"
+      >
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!opTitulo.trim() || !cliente) return;
+            try {
+              const now = new Date();
+              const year = now.getFullYear();
+              const rnd = Math.floor(100 + Math.random() * 900);
+              const newCode = `OP-${year}-${rnd}`;
+
+              const newOp = {
+                codigo: newCode,
+                titulo: opTitulo.trim(),
+                cliente_id: cliente.id,
+                estado_pipeline: 'nueva',
+                monto_estimado: opMonto,
+                fecha_inicio: now.toISOString().split('T')[0],
+                fecha_limite: opFechaLimite || null,
+                tipo_venta: cliente.tipo_venta || 'Instalación',
+                origen: opOrigen.trim() || null,
+                modalidad_requerimiento: opModalidadRequerimiento,
+                prioridad: 'normal',
+                asignado_a: cliente.asignado_a || null,
+              };
+
+              const { data, error } = await supabase
+                .from('oportunidades')
+                .insert([newOp])
+                .select('*, cliente:clientes(*)')
+                .single();
+
+              if (error) throw error;
+              if (data) {
+                setOportunidades([data as OportunidadVenta, ...oportunidades]);
+                setShowCreateOpModal(false);
+                setOpTitulo('');
+                setOpOrigen('');
+                setOpModalidadRequerimiento('instalacion');
+                toast({ message: `Oportunidad ${newCode} creada`, tone: 'success' });
+              }
+            } catch (err) {
+              console.error('Error creating opportunity:', err);
+            }
+          }}
+          className="space-y-3 text-xs"
+        >
+          <div>
+            <label className="block t-caption font-semibold text-ink mb-1">Título del proyecto *</label>
+            <input
+              type="text"
+              required
+              placeholder="Ej: Suministro de Bloques de Vidrio Edificio Central"
+              value={opTitulo}
+              onChange={(e) => setOpTitulo(e.target.value)}
+              className="hg-field"
+            />
+          </div>
+
+          <div>
+            <label className="block t-caption font-semibold text-ink mb-1">Monto estimado ($ CLP)</label>
+            <input
+              type="number"
+              min={0}
+              value={opMonto}
+              onChange={(e) => setOpMonto(Number(e.target.value))}
+              className="hg-field font-mono"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block t-caption font-semibold text-ink mb-1">Origen</label>
+              <input
+                type="text"
+                placeholder="Ej: WhatsApp, referido, web..."
+                value={opOrigen}
+                onChange={(e) => setOpOrigen(e.target.value)}
+                className="hg-field"
+              />
+            </div>
+
+            <div>
+              <label className="block t-caption font-semibold text-ink mb-1">Modalidad</label>
+              <select
+                value={opModalidadRequerimiento}
+                onChange={(e) => setOpModalidadRequerimiento(e.target.value as 'solo_material' | 'instalacion')}
+                className="hg-field font-semibold"
+              >
+                <option value="solo_material">Sólo material</option>
+                <option value="instalacion">Instalación</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block t-caption font-semibold text-ink mb-1">Fecha límite de cierre</label>
+            <input
+              type="date"
+              value={opFechaLimite}
+              onChange={(e) => setOpFechaLimite(e.target.value)}
+              className="hg-field"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-line-subtle">
+            <Button variant="secondary" onClick={() => setShowCreateOpModal(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" variant="primary" icon={Plus}>
+              Crear oportunidad
+            </Button>
+          </div>
+        </form>
+      </Dialog>
 
       {/* MODAL POPUP PARA PREVISUALIZAR PDF DE COTIZACIÓN */}
       {previewCotizacion && (
@@ -1635,148 +1709,6 @@ export default function ClienteDetailPage() {
             setShowCreateQuoteModal(false);
           }}
         />
-      )}
-
-      {/* MODAL PARA CREAR OPORTUNIDAD */}
-      {showCreateOpModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
-          <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-[#213343]">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h3 className="text-base font-black text-[#213343] flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-[#f97316]" />
-                <span>Nueva oportunidad de venta</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowCreateOpModal(false)}
-                className="p-1 hover:bg-gray-100 rounded-md text-gray-400 hover:text-gray-700 transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!opTitulo.trim() || !cliente) return;
-                try {
-                  const now = new Date();
-                  const year = now.getFullYear();
-                  const rnd = Math.floor(100 + Math.random() * 900);
-                  const newCode = `OP-${year}-${rnd}`;
-
-                  const newOp = {
-                    codigo: newCode,
-                    titulo: opTitulo.trim(),
-                    cliente_id: cliente.id,
-                    estado_pipeline: 'nueva',
-                    monto_estimado: opMonto,
-                    fecha_inicio: now.toISOString().split('T')[0],
-                    fecha_limite: opFechaLimite || null,
-                    tipo_venta: cliente.tipo_venta || 'Instalación',
-                    origen: opOrigen.trim() || null,
-                    modalidad_requerimiento: opModalidadRequerimiento,
-                    prioridad: 'normal',
-                    asignado_a: cliente.asignado_a || null,
-                  };
-
-                  const { data, error } = await supabase
-                    .from('oportunidades')
-                    .insert([newOp])
-                    .select('*, cliente:clientes(*)')
-                    .single();
-
-                  if (error) throw error;
-                  if (data) {
-                    setOportunidades([data as OportunidadVenta, ...oportunidades]);
-                    setShowCreateOpModal(false);
-                    setOpTitulo('');
-                    setOpOrigen('');
-                    setOpModalidadRequerimiento('instalacion');
-                  }
-                } catch (err) {
-                  console.error('Error creating opportunity:', err);
-                }
-              }}
-              className="space-y-4 text-xs"
-            >
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Título del proyecto *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej: Suministro de Bloques de Vidrio Edificio Central"
-                  value={opTitulo}
-                  onChange={(e) => setOpTitulo(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Monto estimado ($ CLP)</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={opMonto}
-                  onChange={(e) => setOpMonto(Number(e.target.value))}
-                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Origen</label>
-                  <input
-                    type="text"
-                    placeholder="Ej: WhatsApp, referido, web..."
-                    value={opOrigen}
-                    onChange={(e) => setOpOrigen(e.target.value)}
-                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Sólo material o instalación</label>
-                  <select
-                    value={opModalidadRequerimiento}
-                    onChange={(e) => setOpModalidadRequerimiento(e.target.value as 'solo_material' | 'instalacion')}
-                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-bold focus:outline-none focus:border-[#f97316]"
-                  >
-                    <option value="solo_material">Sólo material</option>
-                    <option value="instalacion">Instalación</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Fecha límite de cierre</label>
-                <input
-                  type="date"
-                  value={opFechaLimite}
-                  onChange={(e) => setOpFechaLimite(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateOpModal(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-md transition"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold rounded-md transition shadow-sm flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Crear oportunidad</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
       )}
     </div>
   );

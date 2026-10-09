@@ -6,8 +6,9 @@ import { createClient } from '../lib/supabase/client';
 import { useAuth } from '../lib/context/AuthContext';
 import { EstadoOrdenCompra, OrdenCompra, OrdenCompraItem, Proveedor, OportunidadVenta, ProductoCatalogo } from '../lib/types';
 import { logSistema } from '../lib/logger';
-import { AlertTriangle, Calculator, Check, ChevronDown, FileText, Plus, Save, Trash2 } from 'lucide-react';
+import { AlertTriangle, Calculator, Check, ChevronDown, FileText, Plus, Save, Trash2, X } from 'lucide-react';
 import { mensajeError } from '../lib/errores';
+import { Button, IconButton, CodeStamp } from './ui/crm';
 
 interface OrdenCompraModalProps {
   isOpen: boolean;
@@ -200,13 +201,13 @@ export function OrdenCompraModal({
     }
 
     if (!numeroOc.trim()) {
-      setErrorMsg('Debes ingresar un numero de OC.');
+      setErrorMsg('Debes ingresar un número de OC.');
       return false;
     }
 
     const validItems = items.filter((item) => item.descripcion.trim());
     if (validItems.length === 0) {
-      setErrorMsg('Debes agregar al menos un item con descripcion.');
+      setErrorMsg('Debes agregar al menos un ítem con descripción.');
       return false;
     }
     return true;
@@ -298,7 +299,7 @@ export function OrdenCompraModal({
       const { data: duplicateOrden, error: duplicateError } = await duplicateQuery.maybeSingle();
       if (duplicateError) throw new Error(mensajeError(duplicateError));
       if (duplicateOrden) {
-        setErrorMsg(`Ya existe una orden de compra con el numero ${finalNumeroOc}.`);
+        setErrorMsg(`Ya existe una orden de compra con el número ${finalNumeroOc}.`);
         setLoading(false);
         return;
       }
@@ -398,7 +399,7 @@ export function OrdenCompraModal({
         entidad: 'ordenes_compra',
         entidad_id: ordenData.id,
         descripcion: initialOrden && createNewVersion
-          ? `Nueva version (v${nextVersion}) creada para OC ${initialOrden.numero_oc}`
+          ? `Nueva versión (v${nextVersion}) creada para OC ${initialOrden.numero_oc}`
           : `Orden de compra ${payload.numero_oc} ${isEditing ? 'actualizada' : 'creada'} por $${montoTotal.toLocaleString('es-CL')}`,
         usuario_id: currentUser?.id,
         datos_anteriores: initialOrden || undefined,
@@ -434,7 +435,7 @@ export function OrdenCompraModal({
         setNextVersionPreview(await getNextAvailableVersion());
       } catch (err) {
         console.error('Error calculating next OC version:', err);
-        setErrorMsg('No se pudo preparar la nueva version de la OC. Intenta nuevamente.');
+        setErrorMsg('No se pudo preparar la nueva versión de la OC. Intenta nuevamente.');
         return;
       }
       setShowVersionConfirmModal(true);
@@ -445,43 +446,43 @@ export function OrdenCompraModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
-      <div className="bg-white border border-gray-200 rounded-lg max-w-4xl w-full p-6 space-y-5 shadow-sm text-[#213343] max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-          <h3 className="text-lg font-extrabold flex items-center gap-2">
-            <FileText className="w-5 h-5 text-[#f97316]" />
+    <div className="fixed inset-0 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+      <div className="bg-surface border border-line rounded-panel max-w-4xl w-full p-6 space-y-5 shadow-[var(--hg-shadow-popover)] text-ink max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between border-b border-line pb-3">
+          <h3 className="t-section flex items-center gap-2">
+            <FileText className="w-5 h-5 text-accent-ink" />
             <span>{initialOrden ? `Editar OC ${initialOrden.numero_oc}` : 'Emitir Nueva Orden de Compra'}</span>
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-[#213343] text-xl font-bold">x</button>
+          <IconButton icon={X} label="Cerrar" onClick={onClose} />
         </div>
 
         {errorMsg && (
-          <div className="bg-orange-50 border border-orange-200 text-orange-950 p-3.5 rounded-lg text-xs font-bold flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-[#f97316]" />
+          <div className="bg-danger-soft border border-danger-line text-danger p-3.5 rounded-lg text-xs font-semibold flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-danger shrink-0" />
             <span>{errorMsg}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 bg-surface-muted p-4 rounded-lg border border-line">
             <div className="lg:col-span-2 relative">
-              <label className="block font-bold text-gray-700 mb-1">Proveedor *</label>
+              <label className="block font-semibold text-ink mb-1">Proveedor *</label>
               <button
                 type="button"
                 onClick={() => setSupplierOpen(!supplierOpen)}
-                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-left font-bold flex items-center justify-between"
+                className="w-full bg-surface border border-line rounded-md px-3 py-2 text-left font-semibold text-ink flex items-center justify-between hover:border-accent transition cursor-pointer"
               >
                 <span className="truncate">{selectedProveedor ? selectedProveedor.nombre : 'Seleccionar proveedor...'}</span>
-                <ChevronDown className="w-4 h-4 text-gray-400" />
+                <ChevronDown className="w-4 h-4 text-ink-muted shrink-0" />
               </button>
               {supplierOpen && (
-                <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-sm z-50 p-2 max-h-64 overflow-y-auto space-y-1">
+                <div className="absolute left-0 right-0 mt-1 bg-surface border border-line rounded-lg shadow-sm z-50 p-2 max-h-64 overflow-y-auto space-y-1">
                   <input
                     type="text"
                     value={supplierSearch}
                     onChange={(e) => setSupplierSearch(e.target.value)}
                     placeholder="Buscar proveedor..."
-                    className="w-full bg-gray-50 border border-gray-200 rounded-md px-3 py-2 text-xs mb-1"
+                    className="w-full bg-surface-muted border border-line rounded-md px-3 py-2 text-xs mb-1 text-ink focus:outline-none focus:border-accent"
                   />
                   {filteredProveedores.map((prov) => (
                     <button
@@ -491,13 +492,13 @@ export function OrdenCompraModal({
                         setProveedorId(prov.id);
                         setSupplierOpen(false);
                       }}
-                      className="w-full p-2 hover:bg-orange-50 rounded-md cursor-pointer flex items-center justify-between text-left"
+                      className="w-full p-2 hover:bg-surface-muted rounded-md cursor-pointer flex items-center justify-between text-left transition"
                     >
                       <span>
-                        <span className="block font-bold">{prov.nombre}</span>
-                        <span className="block text-[10px] text-gray-500 font-mono">RUT: {prov.rut}</span>
+                        <span className="block font-semibold text-ink">{prov.nombre}</span>
+                        <span className="block text-[11px] text-ink-muted font-mono">RUT: {prov.rut}</span>
                       </span>
-                      {prov.id === proveedorId && <Check className="w-4 h-4 text-[#f97316]" />}
+                      {prov.id === proveedorId && <Check className="w-4 h-4 text-accent-ink" />}
                     </button>
                   ))}
                 </div>
@@ -505,18 +506,31 @@ export function OrdenCompraModal({
             </div>
 
             <div>
-              <label className="block font-bold text-gray-700 mb-1">Numero OC *</label>
-              <input value={numeroOc} onChange={(e) => setNumeroOc(e.target.value)} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 font-mono font-bold" />
+              <label className="block font-semibold text-ink mb-1">Número OC *</label>
+              <input
+                value={numeroOc}
+                onChange={(e) => setNumeroOc(e.target.value)}
+                className="w-full bg-surface border border-line rounded-md px-3 py-2 font-mono font-semibold text-ink focus:outline-none focus:border-accent"
+              />
             </div>
 
             <div>
-              <label className="block font-bold text-gray-700 mb-1">Fecha</label>
-              <input type="date" value={fechaEmision} onChange={(e) => setFechaEmision(e.target.value)} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 font-bold" />
+              <label className="block font-semibold text-ink mb-1">Fecha</label>
+              <input
+                type="date"
+                value={fechaEmision}
+                onChange={(e) => setFechaEmision(e.target.value)}
+                className="w-full bg-surface border border-line rounded-md px-3 py-2 font-semibold text-ink focus:outline-none focus:border-accent"
+              />
             </div>
 
             <div>
-              <label className="block font-bold text-gray-700 mb-1">Estado</label>
-              <select value={estado} onChange={(e) => setEstado(e.target.value as EstadoOrdenCompra)} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 font-bold">
+              <label className="block font-semibold text-ink mb-1">Estado</label>
+              <select
+                value={estado}
+                onChange={(e) => setEstado(e.target.value as EstadoOrdenCompra)}
+                className="w-full bg-surface border border-line rounded-md px-3 py-2 font-semibold text-ink focus:outline-none focus:border-accent"
+              >
                 <option value="borrador">Borrador</option>
                 <option value="emitida">Emitida</option>
                 <option value="aprobada">Aprobada</option>
@@ -526,8 +540,12 @@ export function OrdenCompraModal({
             </div>
 
             <div className="lg:col-span-3">
-              <label className="block font-bold text-gray-700 mb-1">Oportunidad asociada</label>
-              <select value={oportunidadId} onChange={(e) => setOportunidadId(e.target.value)} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 font-bold">
+              <label className="block font-semibold text-ink mb-1">Oportunidad asociada</label>
+              <select
+                value={oportunidadId}
+                onChange={(e) => setOportunidadId(e.target.value)}
+                className="w-full bg-surface border border-line rounded-md px-3 py-2 font-semibold text-ink focus:outline-none focus:border-accent"
+              >
                 <option value="">-- Sin oportunidad vinculada --</option>
                 {oportunidades.map((op) => (
                   <option key={op.id} value={op.id}>{op.codigo} - {op.titulo}</option>
@@ -537,53 +555,58 @@ export function OrdenCompraModal({
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-white p-4 rounded-lg border border-gray-200 space-y-3">
-              <h4 className="font-black text-[#f97316] uppercase">Envie A</h4>
+            <div className="bg-surface p-4 rounded-lg border border-line space-y-3">
+              <h4 className="font-semibold text-accent-ink text-xs uppercase tracking-wide">Envío</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input value="Sociedad Inmobiliaria Hormiglass Spa" disabled className="sm:col-span-2 bg-gray-100 border border-gray-200 rounded-md px-3 py-2 font-bold" />
-                <input value="77.615.313-3" disabled className="bg-gray-100 border border-gray-200 rounded-md px-3 py-2 font-bold" />
-                <input value={envieAContacto} onChange={(e) => setEnvieAContacto(e.target.value)} placeholder="Contacto" className="bg-white border border-gray-300 rounded-md px-3 py-2" />
-                <input value={envieADireccion} onChange={(e) => setEnvieADireccion(e.target.value)} placeholder="Direccion" className="sm:col-span-2 bg-white border border-gray-300 rounded-md px-3 py-2" />
-                <input value={envieATelefono} onChange={(e) => setEnvieATelefono(e.target.value)} placeholder="Telefono" className="bg-white border border-gray-300 rounded-md px-3 py-2" />
-                <input value={envieAEmail} onChange={(e) => setEnvieAEmail(e.target.value)} placeholder="Email" className="bg-white border border-gray-300 rounded-md px-3 py-2" />
+                <input value="Sociedad Inmobiliaria Hormiglass Spa" disabled className="sm:col-span-2 bg-surface-muted border border-line rounded-md px-3 py-2 text-ink font-semibold" />
+                <input value="77.615.313-3" disabled className="bg-surface-muted border border-line rounded-md px-3 py-2 text-ink font-semibold font-mono" />
+                <input value={envieAContacto} onChange={(e) => setEnvieAContacto(e.target.value)} placeholder="Contacto" className="bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent" />
+                <input value={envieADireccion} onChange={(e) => setEnvieADireccion(e.target.value)} placeholder="Dirección" className="sm:col-span-2 bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent" />
+                <input value={envieATelefono} onChange={(e) => setEnvieATelefono(e.target.value)} placeholder="Teléfono" className="bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent" />
+                <input value={envieAEmail} onChange={(e) => setEnvieAEmail(e.target.value)} placeholder="Email" className="bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent" />
               </div>
             </div>
 
-            <div className="bg-white p-4 rounded-lg border border-gray-200 space-y-3">
-              <h4 className="font-black text-[#f97316] uppercase">Pago</h4>
+            <div className="bg-surface p-4 rounded-lg border border-line space-y-3">
+              <h4 className="font-semibold text-accent-ink text-xs uppercase tracking-wide">Condiciones de pago</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input value={condicionPago} onChange={(e) => setCondicionPago(e.target.value)} placeholder="Condicion de pago" className="bg-white border border-gray-300 rounded-md px-3 py-2" />
-                <input value={contactoPagoNombre} onChange={(e) => setContactoPagoNombre(e.target.value)} placeholder="Nombre contacto" className="bg-white border border-gray-300 rounded-md px-3 py-2" />
-                <input value={contactoPagoTelefono} onChange={(e) => setContactoPagoTelefono(e.target.value)} placeholder="Telefono" className="bg-white border border-gray-300 rounded-md px-3 py-2" />
-                <input value={contactoPagoEmail} onChange={(e) => setContactoPagoEmail(e.target.value)} placeholder="Email" className="bg-white border border-gray-300 rounded-md px-3 py-2" />
+                <input value={condicionPago} onChange={(e) => setCondicionPago(e.target.value)} placeholder="Condición de pago" className="bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent" />
+                <input value={contactoPagoNombre} onChange={(e) => setContactoPagoNombre(e.target.value)} placeholder="Nombre contacto" className="bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent" />
+                <input value={contactoPagoTelefono} onChange={(e) => setContactoPagoTelefono(e.target.value)} placeholder="Teléfono" className="bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent" />
+                <input value={contactoPagoEmail} onChange={(e) => setContactoPagoEmail(e.target.value)} placeholder="Email" className="bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent" />
               </div>
             </div>
           </div>
 
-          <div className="space-y-3 bg-white p-4 rounded-lg border border-gray-200">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-              <span className="font-extrabold flex items-center gap-1.5">
-                <Calculator className="w-4 h-4 text-[#f97316]" />
-                <span>Articulos (valores netos en peso chileno)</span>
+          <div className="space-y-3 bg-surface p-4 rounded-lg border border-line">
+            <div className="flex items-center justify-between border-b border-line-subtle pb-2">
+              <span className="font-semibold text-ink flex items-center gap-1.5">
+                <Calculator className="w-4 h-4 text-accent-ink" />
+                <span>Artículos (valores netos en peso chileno)</span>
               </span>
-              <button type="button" onClick={handleAddItem} className="bg-orange-50 hover:bg-[#f97316] text-[#f97316] hover:text-white px-2.5 py-1 rounded-md text-[11px] font-bold border border-orange-200 transition flex items-center gap-1">
+              <Button variant="secondary" size="sm" onClick={handleAddItem}>
                 <Plus className="w-3.5 h-3.5" />
-                <span>Agregar item</span>
-              </button>
+                <span>Agregar ítem</span>
+              </Button>
             </div>
 
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-              <div className="hidden sm:grid grid-cols-12 gap-2 px-2 text-[10px] font-black uppercase tracking-wide text-gray-500">
-                <span className="col-span-2">Codigo</span>
-                <span className="col-span-4">Descripcion</span>
+              <div className="hidden sm:grid grid-cols-12 gap-2 px-2 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                <span className="col-span-2">Código</span>
+                <span className="col-span-4">Descripción</span>
                 <span className="col-span-2 text-right">Cantidad</span>
                 <span className="col-span-2 text-right">Precio Unitario CLP</span>
                 <span className="col-span-1 text-right">Total CLP</span>
                 <span className="col-span-1 text-center">Quitar</span>
               </div>
               {items.map((item, index) => (
-                <div key={index} className="grid grid-cols-12 gap-2 items-center bg-gray-50 p-2.5 rounded-md border border-gray-200">
-                  <select aria-label={`Producto de compra ${index + 1}`} value={item.producto_catalogo_id || ''} onChange={(e) => selectCatalogItem(index, e.target.value)} className="col-span-12 bg-white border border-gray-300 rounded-lg px-2 py-1.5">
+                <div key={index} className="grid grid-cols-12 gap-2 items-center bg-surface-muted p-2.5 rounded-md border border-line">
+                  <select
+                    aria-label={`Producto de compra ${index + 1}`}
+                    value={item.producto_catalogo_id || ''}
+                    onChange={(e) => selectCatalogItem(index, e.target.value)}
+                    className="col-span-12 bg-surface border border-line rounded-md px-2 py-1.5 text-ink font-medium focus:outline-none focus:border-accent"
+                  >
                     <option value="">Partida libre / seleccionar catálogo</option>
                     {catalogo.map((product) => (
                       <option key={product.id} value={product.id}>
@@ -592,20 +615,55 @@ export function OrdenCompraModal({
                     ))}
                   </select>
                   {catalogo.find((p) => p.id === item.producto_catalogo_id)?.requiere_revision && (
-                    <div className="col-span-12 text-[10px] text-amber-800 bg-amber-50 border border-amber-300 rounded px-2 py-1 font-semibold flex items-center gap-1.5">
+                    <div className="col-span-12 text-[11px] text-warning bg-warning-soft border border-warning-line rounded-md px-2.5 py-1.5 font-medium flex items-center gap-1.5">
                       <span>⚠️</span>
                       <span>Producto con costo referencial / OCR. Confirmar costo con la cotización oficial del proveedor antes de emitir la OC.</span>
                     </div>
                   )}
-                  <input value={item.articulo_codigo || ''} onChange={(e) => handleItemChange(index, 'articulo_codigo', e.target.value)} placeholder="Codigo" aria-label="Codigo articulo" className="col-span-12 sm:col-span-2 bg-white border border-gray-300 rounded-lg px-2 py-1.5" />
-                  <input value={item.descripcion} onChange={(e) => handleItemChange(index, 'descripcion', e.target.value)} placeholder="Descripcion" aria-label="Descripcion articulo" className="col-span-12 sm:col-span-4 bg-white border border-gray-300 rounded-lg px-2 py-1.5 font-bold" />
-                  <input type="number" min="0" step="0.01" value={item.cantidad} onChange={(e) => handleItemChange(index, 'cantidad', e.target.value)} aria-label="Cantidad" className="col-span-6 sm:col-span-2 bg-white border border-gray-300 rounded-lg px-2 py-1.5 text-right font-bold" />
+                  <input
+                    value={item.articulo_codigo || ''}
+                    onChange={(e) => handleItemChange(index, 'articulo_codigo', e.target.value)}
+                    placeholder="Código"
+                    aria-label="Código artículo"
+                    className="col-span-12 sm:col-span-2 bg-surface border border-line rounded-md px-2 py-1.5 text-ink font-mono focus:outline-none focus:border-accent"
+                  />
+                  <input
+                    value={item.descripcion}
+                    onChange={(e) => handleItemChange(index, 'descripcion', e.target.value)}
+                    placeholder="Descripción"
+                    aria-label="Descripción artículo"
+                    className="col-span-12 sm:col-span-4 bg-surface border border-line rounded-md px-2 py-1.5 font-semibold text-ink focus:outline-none focus:border-accent"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={item.cantidad}
+                    onChange={(e) => handleItemChange(index, 'cantidad', e.target.value)}
+                    aria-label="Cantidad"
+                    className="col-span-6 sm:col-span-2 bg-surface border border-line rounded-md px-2 py-1.5 text-right font-semibold text-ink t-num focus:outline-none focus:border-accent"
+                  />
                   <div className="col-span-6 sm:col-span-2 relative">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-gray-500">CLP</span>
-                    <input type="number" min="0" step="1" value={item.precio_unitario} onChange={(e) => handleItemChange(index, 'precio_unitario', e.target.value)} aria-label="Precio unitario en pesos chilenos" className="w-full bg-white border border-gray-300 rounded-lg pl-9 pr-2 py-1.5 text-right font-bold" />
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-ink-muted">CLP</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={item.precio_unitario}
+                      onChange={(e) => handleItemChange(index, 'precio_unitario', e.target.value)}
+                      aria-label="Precio unitario en pesos chilenos"
+                      className="w-full bg-surface border border-line rounded-md pl-9 pr-2 py-1.5 text-right font-semibold text-ink t-num focus:outline-none focus:border-accent"
+                    />
                   </div>
-                  <div className="col-span-10 sm:col-span-1 font-black text-right">{formatCLP(Number(item.total_item || 0))}</div>
-                  <button type="button" onClick={() => handleRemoveItem(index)} className="col-span-1 text-gray-400 hover:text-[#213343] flex justify-center">
+                  <div className="col-span-10 sm:col-span-1 font-bold text-right text-ink t-num">
+                    {formatCLP(Number(item.total_item || 0))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveItem(index)}
+                    aria-label="Quitar ítem"
+                    className="col-span-1 text-ink-muted hover:text-danger flex justify-center transition cursor-pointer"
+                  >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -615,88 +673,100 @@ export function OrdenCompraModal({
 
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
             <div>
-              <label className="block font-bold text-gray-700 mb-1">Comentarios o instrucciones especiales</label>
-              <textarea value={instrucciones} onChange={(e) => setInstrucciones(e.target.value)} rows={5} className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2" />
+              <label className="block font-semibold text-ink mb-1">Comentarios o instrucciones especiales</label>
+              <textarea
+                value={instrucciones}
+                onChange={(e) => setInstrucciones(e.target.value)}
+                rows={5}
+                className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent"
+              />
             </div>
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-2">
-              <div className="flex justify-between"><span>Subtotal</span><strong>{formatCLP(subtotal)}</strong></div>
-              <div className="flex justify-between"><span>IVA 19%</span><strong>{formatCLP(montoIva)}</strong></div>
-              <label className="flex items-center justify-between gap-3">
-                <span>Envio</span>
+            <div className="bg-surface-muted border border-line rounded-lg p-4 space-y-2 text-xs">
+              <div className="flex justify-between text-ink"><span className="text-ink-muted">Subtotal</span><strong className="t-num font-semibold">{formatCLP(subtotal)}</strong></div>
+              <div className="flex justify-between text-ink"><span className="text-ink-muted">IVA 19%</span><strong className="t-num font-semibold">{formatCLP(montoIva)}</strong></div>
+              <label className="flex items-center justify-between gap-3 text-ink">
+                <span className="text-ink-muted">Envío</span>
                 <span className="relative w-36">
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-gray-500">CLP</span>
-                  <input type="number" min="0" value={costoEnvio} onChange={(e) => setCostoEnvio(Number(e.target.value) || 0)} aria-label="Envio en pesos chilenos" className="w-full bg-white border border-gray-300 rounded-lg pl-9 pr-2 py-1 text-right font-bold" />
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-ink-muted">CLP</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={costoEnvio}
+                    onChange={(e) => setCostoEnvio(Number(e.target.value) || 0)}
+                    aria-label="Envío en pesos chilenos"
+                    className="w-full bg-surface border border-line rounded-md pl-9 pr-2 py-1 text-right font-semibold text-ink t-num focus:outline-none focus:border-accent"
+                  />
                 </span>
               </label>
-              <label className="flex items-center justify-between gap-3">
-                <span>Otro</span>
+              <label className="flex items-center justify-between gap-3 text-ink">
+                <span className="text-ink-muted">Otro</span>
                 <span className="relative w-36">
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-gray-500">CLP</span>
-                  <input type="number" value={otrosCargos} onChange={(e) => setOtrosCargos(Number(e.target.value) || 0)} aria-label="Otros cargos en pesos chilenos" className="w-full bg-white border border-gray-300 rounded-lg pl-9 pr-2 py-1 text-right font-bold" />
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-ink-muted">CLP</span>
+                  <input
+                    type="number"
+                    value={otrosCargos}
+                    onChange={(e) => setOtrosCargos(Number(e.target.value) || 0)}
+                    aria-label="Otros cargos en pesos chilenos"
+                    className="w-full bg-surface border border-line rounded-md pl-9 pr-2 py-1 text-right font-semibold text-ink t-num focus:outline-none focus:border-accent"
+                  />
                 </span>
               </label>
-              <div className="flex justify-between border-t border-gray-300 pt-3 text-base text-[#f97316] font-black">
+              <div className="flex justify-between border-t border-line pt-3 text-sm text-ink font-bold">
                 <span>Total</span>
-                <span>{formatCLP(montoTotal)}</span>
+                <span className="t-num text-accent-ink font-bold">{formatCLP(montoTotal)}</span>
               </div>
             </div>
           </div>
 
-          <div className="pt-3 flex items-center justify-end gap-3 border-t border-gray-200">
-            <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-bold transition">Cancelar</button>
-            <button type="submit" disabled={loading} className="px-5 py-2 bg-[#f97316] hover:bg-[#ea580c] text-white rounded-md font-extrabold transition shadow-sm flex items-center gap-1.5">
+          <div className="pt-3 flex items-center justify-end gap-3 border-t border-line">
+            <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+            <Button variant="primary" type="submit" disabled={loading}>
               <Save className="w-4 h-4" />
               <span>{loading ? 'Guardando...' : 'Guardar OC'}</span>
-            </button>
+            </Button>
           </div>
         </form>
       </div>
 
       {showVersionConfirmModal && initialOrden && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[60] ">
-          <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-[#213343]">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-              <h3 className="text-base font-extrabold text-[#213343] flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-[#f97316]" />
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4 z-[60]">
+          <div className="bg-surface border border-line rounded-panel max-w-md w-full p-6 space-y-4 shadow-[var(--hg-shadow-popover)] text-ink">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <h3 className="text-base font-bold text-ink flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-warning" />
                 <span>Confirmar Guardado de Cambios</span>
               </h3>
-              <button
-                type="button"
-                onClick={() => setShowVersionConfirmModal(false)}
-                className="text-gray-400 hover:text-[#213343] font-bold"
-              >
-                x
-              </button>
+              <IconButton icon={X} label="Cerrar" onClick={() => setShowVersionConfirmModal(false)} />
             </div>
 
-            <div className="space-y-3 text-xs text-gray-700">
+            <div className="space-y-3 text-xs text-ink">
               <p>
-                Se detectaron cambios en la OC <strong className="font-mono text-[#213343]">{initialOrden.numero_oc} (Version v{initialOrden.version || 1})</strong>.
+                Se detectaron cambios en la OC <CodeStamp>{initialOrden.numero_oc} (v{initialOrden.version || 1})</CodeStamp>.
               </p>
-              <p className="bg-orange-50 p-3 rounded-md border border-orange-200 text-orange-950 font-medium">
-                Puedes guardar como una version nueva incrementada (v{nextVersionPreview || (initialOrden.version || 1) + 1}) o sobreescribir la version actual.
+              <p className="bg-warning-soft p-3 rounded-md border border-warning-line text-warning font-medium">
+                Puedes guardar como una versión nueva incrementada (v{nextVersionPreview || (initialOrden.version || 1) + 1}) o sobreescribir la versión actual.
               </p>
             </div>
 
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-end gap-2 text-xs">
-              <button
-                type="button"
+              <Button
+                variant="secondary"
                 onClick={() => saveOrdenToBackend(false)}
                 disabled={loading}
-                className="w-full sm:w-auto px-4 py-2.5 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-800 font-bold rounded-md border border-gray-300 transition flex items-center justify-center gap-1.5"
+                className="w-full sm:w-auto"
               >
-                <span>Sobreescribir Version Actual</span>
-              </button>
+                Sobreescribir Versión Actual
+              </Button>
 
-              <button
-                type="button"
+              <Button
+                variant="primary"
                 onClick={() => saveOrdenToBackend(true)}
                 disabled={loading}
-                className="w-full sm:w-auto px-4 py-2.5 bg-[#f97316] hover:bg-[#ea580c] disabled:opacity-50 text-white font-extrabold rounded-md transition shadow-sm flex items-center justify-center gap-1.5"
+                className="w-full sm:w-auto"
               >
                 <Save className="w-4 h-4" />
-                <span>Crear Nueva Version (v{nextVersionPreview || (initialOrden.version || 1) + 1})</span>
-              </button>
+                <span>Crear Nueva Versión (v{nextVersionPreview || (initialOrden.version || 1) + 1})</span>
+              </Button>
             </div>
           </div>
         </div>

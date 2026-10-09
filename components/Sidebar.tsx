@@ -1,159 +1,145 @@
 'use client';
 
-import { ROL_NOMBRE } from '../lib/types';
 import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import {
-  Bell, Boxes, CalendarDays, ChartNoAxesCombined, ChevronLeft, ChevronRight,
-  ContactRound, FileText, FolderKanban, Landmark, LayoutDashboard,
-  LogOut, Package, Settings2, ShieldAlert, ShoppingCart, Truck, Users, Wallet, X,
-} from 'lucide-react';
+import clsx from 'clsx';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { ChevronDown, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
 import { useAuth } from '../lib/context/AuthContext';
 import { createClient } from '../lib/supabase/client';
 import { syncSeguimientoNotificaciones } from '../lib/seguimiento-notificaciones';
+import { findActiveItem, navGroupsFor } from '../lib/navigation';
 
-type NavItem = { label: string; href: string; icon: typeof LayoutDashboard; match?: string };
-type NavGroup = { label: string; items: NavItem[] };
+const STORAGE_KEY = 'hg.sidebar';
 
-const mainGroups: NavGroup[] = [
-  { label: 'Inicio', items: [
-    { label: 'Panel operativo', href: '/', icon: LayoutDashboard },
-    { label: 'Pipeline de ventas', href: '/ventas', icon: FolderKanban, match: '/ventas' },
-  ] },
-  { label: 'Comercial', items: [
-    { label: 'Clientes', href: '/clientes', icon: ContactRound },
-    { label: 'Cotizaciones', href: '/cotizaciones', icon: FileText },
-    { label: 'Postventa y Garantías', href: '/postventa', icon: ShieldAlert },
-  ] },
-  { label: 'Compras y catálogo', items: [
-    { label: 'Órdenes de compra', href: '/ordenes-compra', icon: ShoppingCart },
-    { label: 'Proveedores', href: '/proveedores', icon: Boxes },
-    { label: 'Productos e insumos', href: '/productos', icon: Package },
-  ] },
-];
+function readPrefs(): { collapsed?: boolean; closedGroups?: string[] } {
+  try { return JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
+}
 
-const calendars: NavGroup = { label: 'Calendarios', items: [
-  { label: 'Vista general', href: '/calendarios/general', icon: CalendarDays },
-  { label: 'Visitas a terreno', href: '/visitas', icon: CalendarDays },
-  { label: 'Producción y logística', href: '/planificacion/calendario', icon: CalendarDays },
-  { label: 'Programa semanal', href: '/planificacion/semana', icon: CalendarDays },
-  { label: 'Reventa y logística', href: '/reventa/calendario', icon: CalendarDays },
-] };
-
-const finance: NavGroup = { label: 'Finanzas', items: [
-  { label: 'Caja', href: '/caja', icon: Wallet },
-  { label: 'Reportes', href: '/reportes', icon: ChartNoAxesCombined },
-] };
-
-const administration: NavGroup = { label: 'Administración', items: [
-  { label: 'Soc. Comercial', href: '/administracion?empresa=comercial&seccion=cuentas_por_cobrar', icon: Wallet },
-  { label: 'Soc. Transportes', href: '/administracion?empresa=transportes&seccion=cuentas_por_cobrar', icon: Truck },
-  { label: 'Soc. Inmobiliaria', href: '/administracion?empresa=inmobiliaria&seccion=cuentas_por_cobrar', icon: Boxes },
-  { label: 'Recursos humanos', href: '/rrhh', icon: Users },
-] };
-
-const systemItems: NavItem[] = [
-  { label: 'Notificaciones', href: '/notificaciones', icon: Bell },
-  { label: 'Configuración', href: '/configuracion', icon: Settings2 },
-];
+function writePrefs(prefs: { collapsed: boolean; closedGroups: string[] }) {
+  try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs)); } catch { /* sin almacenamiento: no se recuerda */ }
+}
 
 export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const { currentUser, logout } = useAuth();
+  const { currentUser } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const [closedGroups, setClosedGroups] = useState<string[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const supabase = useMemo(() => createClient(), []);
-  const isFieldWorker = currentUser?.rol === 'mano_obra';
-  const isFinanceOrAdmin = currentUser?.rol === 'admin' || currentUser?.rol === 'finanzas';
-  const financeGroup: NavGroup = {
-    label: 'Finanzas',
-    items: [
-      { label: 'Caja', href: '/caja', icon: Wallet },
-      ...(isFinanceOrAdmin ? [{ label: 'Bancos y empresas', href: '/caja/configuracion', icon: Landmark }] : []),
-      { label: 'Reportes', href: '/reportes', icon: ChartNoAxesCombined },
-    ],
-  };
-  const system: NavGroup = { label: 'Sistema', items: isFieldWorker
-    ? systemItems.slice(0, 1)
-    : [...systemItems, ...(currentUser?.rol === 'admin' ? [{ label: 'Usuarios', href: '/usuarios', icon: Users }] : [])] };
-  const groups = isFieldWorker
-    ? [calendars, { ...administration, items: administration.items.slice(3) }, system]
-    : [...mainGroups, calendars, financeGroup, administration, system];
+  const groups = navGroupsFor(currentUser?.rol);
+  const active = findActiveItem(pathname, searchParams.get('empresa'), currentUser?.rol);
+
+  useEffect(() => {
+    const prefs = readPrefs();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- preferencias locales solo disponibles en el cliente
+    setCollapsed(!!prefs.collapsed);
+    setClosedGroups(prefs.closedGroups ?? []);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') onMobileClose?.(); };
+    document.addEventListener('keydown', close);
+    return () => document.removeEventListener('keydown', close);
+  }, [mobileOpen, onMobileClose]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
-    let active = true;
+    let alive = true;
     const userId = currentUser.id;
     async function refresh() {
       await syncSeguimientoNotificaciones(supabase, userId);
       const { count } = await supabase.from('notificaciones').select('id', { count: 'exact', head: true })
         .eq('usuario_id', userId).eq('leido', false);
-      if (active) setUnreadCount(count || 0);
+      if (alive) setUnreadCount(count || 0);
     }
     void refresh();
     const interval = window.setInterval(refresh, 60_000);
     const channel = supabase.channel(`sidebar_notifs_${userId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notificaciones', filter: `usuario_id=eq.${userId}` }, refresh)
       .subscribe();
-    return () => { active = false; window.clearInterval(interval); void supabase.removeChannel(channel); };
+    return () => { alive = false; window.clearInterval(interval); void supabase.removeChannel(channel); };
   }, [currentUser?.id, supabase]);
 
   if (pathname === '/login' || pathname.startsWith('/auth')) return null;
 
-  function isActive(item: NavItem) {
-    if (item.href.startsWith('/administracion?')) {
-      return pathname === '/administracion' && item.href.includes(`empresa=${searchParams.get('empresa') || 'comercial'}&`);
-    }
-    if (item.href === '/') return pathname === '/';
-    if (pathname === item.href) return true;
-    if (item.match) return pathname.startsWith(item.match) &&
-      !calendars.items.some((calendar) => calendar.href === pathname);
-    return pathname.startsWith(`${item.href}/`);
+  function toggleCollapsed() {
+    const next = !collapsed;
+    setCollapsed(next);
+    writePrefs({ collapsed: next, closedGroups });
   }
 
-  async function handleLogout() {
-    await logout();
-    router.replace('/login');
-    router.refresh();
+  function toggleGroup(id: string) {
+    const next = closedGroups.includes(id) ? closedGroups.filter((g) => g !== id) : [...closedGroups, id];
+    setClosedGroups(next);
+    writePrefs({ collapsed, closedGroups: next });
   }
 
   return <>
-    {mobileOpen && <button className="fixed inset-0 z-40 bg-black/35 md:hidden" aria-label="Cerrar menú" onClick={onMobileClose} />}
-    <aside className={`hg-app-sidebar fixed inset-y-0 left-0 z-50 flex flex-col border-r border-[#e5e7e4] bg-[#fbfbfa] transition-all duration-200 md:sticky md:top-0 md:h-screen ${collapsed ? 'w-[76px]' : 'w-[248px]'} ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-      <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-[#e5e7e4] px-4">
-        <Link href="/" onClick={onMobileClose} className="flex min-w-0 items-center gap-2.5">
-          <Image src="/logo-only-h-removebg-preview.png" alt="" width={38} height={38} className="h-9 w-9 object-contain" />
-          {!collapsed && <span className="truncate text-[15px] font-extrabold tracking-tight">Hormiglass <span className="font-medium text-[#8a9390]">CRM</span></span>}
+    {mobileOpen && <button className="fixed inset-0 z-40 bg-ink/30 md:hidden" aria-label="Cerrar menú" onClick={onMobileClose} />}
+    <aside className={clsx(
+      'hg-app-sidebar fixed inset-y-0 left-0 z-50 flex flex-col border-r border-line bg-app transition-[width,transform] duration-200 md:sticky md:top-0 md:h-screen',
+      collapsed ? 'md:w-[72px]' : 'md:w-[240px]',
+      'w-[264px]',
+      mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+    )}>
+      <div className="flex h-14 shrink-0 items-center justify-between gap-2 px-4">
+        <Link href="/" onClick={onMobileClose} className="flex min-w-0 items-center gap-2.5" aria-label="Hormiglass, ir al panel operativo">
+          <Image src="/logo-only-h-removebg-preview.png" alt="" width={32} height={32} className="h-8 w-8 shrink-0 object-contain" />
+          <span className={clsx('truncate text-[15px] font-bold tracking-tight text-ink', collapsed && 'md:hidden')}>Hormiglass</span>
         </Link>
-        <button type="button" onClick={onMobileClose} aria-label="Cerrar menú" className="rounded-lg p-1.5 text-[#66716f] hover:bg-[#f4f5f3] md:hidden"><X size={18} /></button>
+        <button type="button" onClick={onMobileClose} aria-label="Cerrar menú" className="grid h-9 w-9 place-items-center rounded-control text-ink-muted hover:bg-surface-muted md:hidden"><X size={18} aria-hidden /></button>
       </div>
-      <nav aria-label="Navegación principal" className="flex-1 overflow-y-auto px-3 py-4">
-        {groups.map((group) => <div key={group.label} className="mb-5">
-          {!collapsed && <h2 className="hg-overline mb-2 px-3">{group.label}</h2>}
-          <div className="space-y-0.5">
-            {group.items.map((item) => {
-              const Icon = item.icon;
-              const active = isActive(item);
-              return <Link key={item.href} href={item.href} onClick={onMobileClose} title={collapsed ? item.label : undefined} aria-current={active ? 'page' : undefined}
-                className={`flex min-h-9 items-center gap-3 rounded-[10px] px-3 py-2 text-[13px] font-semibold transition-colors ${collapsed ? 'justify-center' : ''} ${active ? 'bg-[#f0eee9] text-[#252b2d]' : 'text-[#66716f] hover:bg-[#f4f5f3] hover:text-[#252b2d]'}`}>
-                <Icon size={18} className={active ? 'text-[#e87622]' : 'text-[#7e8885]'} />
-                {!collapsed && <span className="truncate">{item.label}</span>}
-                {!collapsed && item.href === '/notificaciones' && unreadCount > 0 && <span className="ml-auto rounded-full bg-[#fff1e7] px-2 text-xs text-[#b45316]">{unreadCount}</span>}
-              </Link>;
-            })}
-          </div>
-        </div>)}
+
+      <nav aria-label="Navegación principal" className="flex-1 overflow-y-auto px-3 pb-4 pt-2">
+        {groups.map((group) => {
+          const groupOpen = collapsed || !group.collapsible || !closedGroups.includes(group.id)
+            || group.items.some((item) => item === active?.item);
+          return <div key={group.id} className="mb-4">
+            <div className={clsx(collapsed && 'md:hidden')}>{group.collapsible ? (
+              <button type="button" onClick={() => toggleGroup(group.id)} aria-expanded={groupOpen}
+                className="t-caption mb-1 flex w-full items-center justify-between rounded-control px-3 py-1 hover:bg-surface-muted hover:text-ink">
+                {group.label}
+                <ChevronDown size={14} aria-hidden className={clsx('transition-transform', !groupOpen && '-rotate-90')} />
+              </button>
+            ) : <h2 className="t-caption mb-1 px-3 py-1">{group.label}</h2>}</div>
+            {collapsed && <div className="mx-3 mb-2 hidden border-t border-line md:block" aria-hidden />}
+            {groupOpen && <ul className="space-y-0.5">
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = item === active?.item;
+                const badge = item.href === '/notificaciones' && unreadCount > 0 ? unreadCount : 0;
+                return <li key={item.href}>
+                  <Link href={item.href} onClick={onMobileClose} title={collapsed ? item.label : undefined}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={clsx(
+                      'relative flex min-h-9 items-center gap-3 rounded-control px-3 py-2 text-[13px] font-medium transition-colors',
+                      collapsed && 'md:justify-center',
+                      isActive ? 'bg-surface-muted font-semibold text-ink' : 'text-ink-muted hover:bg-surface-muted hover:text-ink',
+                    )}>
+                    {isActive && <span aria-hidden className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-accent" />}
+                    <Icon size={18} aria-hidden className={isActive ? 'text-ink' : 'text-ink-muted'} />
+                    <span className={clsx('truncate', collapsed && 'md:sr-only')}>{item.label}</span>
+                    {badge > 0 && <span className={clsx(
+                      't-micro t-num rounded-full bg-accent px-1.5 text-on-accent',
+                      collapsed ? 'absolute right-1.5 top-1' : 'ml-auto',
+                    )}>{badge}<span className="sr-only"> sin leer</span></span>}
+                  </Link>
+                </li>;
+              })}
+            </ul>}
+          </div>;
+        })}
       </nav>
-      <div className="shrink-0 border-t border-[#e5e7e4] p-3">
-        <div className="mt-2 flex items-center gap-2 border-t border-[#e5e7e4] pt-3">
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#fff1e7] font-bold text-[#bd5b18]">{currentUser?.nombre?.charAt(0) || 'H'}</div>
-          {!collapsed && <><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">{currentUser?.nombre}</p><p className="text-[11px] text-[#8a9390]">{currentUser ? ROL_NOMBRE[currentUser.rol] ?? currentUser.rol : ""}</p></div><button onClick={handleLogout} title="Cerrar sesión" aria-label="Cerrar sesión" className="rounded-lg p-2 text-[#66716f] hover:bg-[#f4f5f3]"><LogOut size={17} /></button></>}
-        </div>
-        <button type="button" onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? 'Expandir menú' : 'Contraer menú'} className="mt-3 hidden w-full justify-center rounded-lg border border-[#e5e7e4] py-1.5 text-[#66716f] hover:bg-white md:flex">{collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button>
+
+      <div className="hidden shrink-0 border-t border-line p-3 md:block">
+        <button type="button" onClick={toggleCollapsed} aria-label={collapsed ? 'Mostrar barra lateral' : 'Contraer barra lateral'} title={collapsed ? 'Mostrar barra lateral' : 'Contraer barra lateral'}
+          className={clsx('flex min-h-9 w-full items-center gap-3 rounded-control px-3 text-[13px] font-medium text-ink-muted hover:bg-surface-muted hover:text-ink', collapsed && 'justify-center')}>
+          {collapsed ? <PanelLeftOpen size={18} aria-hidden /> : <><PanelLeftClose size={18} aria-hidden />Contraer</>}
+        </button>
       </div>
     </aside>
   </>;

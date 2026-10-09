@@ -1,24 +1,29 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { createClient } from '../../lib/supabase/client';
 import { Proveedor, PedidoProveedor } from '../../lib/types';
 import {
-  Truck,
   Plus,
   Building,
-  Phone,
-  Mail,
   FileText,
-  CheckCircle2,
-  Clock,
-  DollarSign,
 } from 'lucide-react';
 import { Pagination } from '../../components/Pagination';
+import {
+  Button,
+  CodeStamp,
+  Dialog,
+  PageHeader,
+  Panel,
+  StatusBadge,
+} from '../../components/ui/crm';
+import { useToast } from '../../components/ui/feedback';
 
 export default function ProveedoresPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
+  const toast = useToast();
+
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [pedidos, setPedidos] = useState<PedidoProveedor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +69,7 @@ export default function ProveedoresPage() {
           setProveedores(loadedProvs);
           setPedidos(loadedPeds);
           if (loadedProvs.length > 0) {
-            setProveedorId(loadedProvs[0].id);
+            setProveedorId((current) => current || loadedProvs[0].id);
           }
           setLoading(false);
         }
@@ -86,7 +91,7 @@ export default function ProveedoresPage() {
       ignore = true;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [supabase]);
 
   const handleAddProveedor = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,12 +114,16 @@ export default function ProveedoresPage() {
         .select()
         .single();
 
+      if (error) throw error;
+
       if (data) {
         setProveedores([...proveedores, data as Proveedor]);
         if (!proveedorId) setProveedorId((data as Proveedor).id);
+        toast({ message: `Proveedor ${nombreProv} registrado exitosamente.`, tone: 'success' });
       }
     } catch (err) {
       console.error('Error adding proveedor to Supabase:', err);
+      toast({ message: 'No se pudo guardar el proveedor. Revisa los datos.', tone: 'danger' });
     }
 
     setShowProvModal(false);
@@ -148,6 +157,8 @@ export default function ProveedoresPage() {
         .select('*, proveedor:proveedores(*)')
         .single();
 
+      if (error) throw error;
+
       if (data) {
         setPedidos([data as PedidoProveedor, ...pedidos]);
       } else {
@@ -158,8 +169,10 @@ export default function ProveedoresPage() {
         };
         setPedidos([fallbackPed, ...pedidos]);
       }
+      toast({ message: 'Orden de compra rápida generada.', tone: 'success' });
     } catch (err) {
       console.error('Error creating purchase order in Supabase:', err);
+      toast({ message: 'No se pudo generar la orden de compra.', tone: 'danger' });
     }
 
     setShowPedidoModal(false);
@@ -174,274 +187,291 @@ export default function ProveedoresPage() {
   );
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#e5e7e4] pb-5">
-        <div>
-          <h1 className="text-2xl font-extrabold text-[#252b2d] flex items-center gap-2">
-            <Truck className="w-6 h-6 text-[#f97316]" />
-            <span>Proveedores & Órdenes de Compra (OC)</span>
-          </h1>
-          <p className="text-xs text-gray-500 mt-1">
-            Gestión de abastecimiento de materias primas (cemento, agregados, herrajes de aluminio).
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowProvModal(true)}
-            className="bg-[#f4f5f3] hover:bg-gray-700 text-gray-700 font-semibold text-xs px-3.5 py-2.5 rounded-md border border-[#e5e7e4] transition"
-          >
-            + Nuevo Proveedor
-          </button>
-          <button
-            onClick={() => setShowPedidoModal(true)}
-            className="bg-[#f97316] hover:bg-[#ea580c] text-white font-semibold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Generar Orden de Compra</span>
-          </button>
-          <Link
-            href="/ordenes-compra/nuevo"
-            className="bg-white hover:bg-orange-50 text-[#f97316] font-semibold text-xs px-4 py-2.5 rounded-md border border-orange-200 transition flex items-center gap-2"
-          >
-            <FileText className="w-4 h-4" />
-            <span>OC Oficial</span>
-          </Link>
-        </div>
-      </div>
+    <div className="hg-page space-y-6">
+      <PageHeader
+        title="Proveedores & Abastecimiento"
+        description="Gestión de abastecimiento de materias primas (cemento, agregados, herrajes de aluminio) y catálogo de proveedores."
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setShowProvModal(true)}
+              icon={Plus}
+            >
+              Nuevo Proveedor
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setShowPedidoModal(true)}
+            >
+              Generar OC Rápida
+            </Button>
+            <Link href="/ordenes-compra/nuevo">
+              <Button variant="primary" icon={FileText}>
+                OC Oficial
+              </Button>
+            </Link>
+          </>
+        }
+      />
 
       {/* Directorio de Proveedores */}
-      <div className="space-y-4">
-        <h2 className="text-sm font-bold text-[#252b2d] flex items-center gap-2">
-          <Building className="w-4 h-4 text-[#f97316]" />
-          <span>Directorio de Proveedores</span>
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {proveedores.map((prov) => (
-            <div key={prov.id} className="bg-white p-4 rounded-lg border border-[#e5e7e4] flex items-start justify-between">
-              <div className="space-y-1">
-                <h3 className="font-bold text-[#252b2d] text-sm">{prov.nombre}</h3>
-                <p className="text-xs text-gray-500 font-mono">RUT: {prov.rut}</p>
-                <div className="text-xs text-gray-600 pt-2 space-y-0.5">
-                  <p>Contacto: <span className="font-semibold text-[#252b2d]">{prov.contacto || 'General'}</span></p>
-                  <p>Dirección: <span className="text-gray-600">{[prov.direccion, prov.comuna].filter(Boolean).join(', ') || 'No registrada'}</span></p>
-                  <p>Teléfono: <span className="text-gray-600">{prov.telefono}</span></p>
-                  <p>Correo: <span className="text-gray-600">{prov.correo}</span></p>
+      <Panel
+        title={
+          <span className="flex items-center gap-2">
+            <Building className="w-4 h-4 text-accent-ink" />
+            <span>Directorio de Proveedores ({proveedores.length})</span>
+          </span>
+        }
+      >
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {loading ? (
+            <p className="t-caption text-ink-muted col-span-2 py-4 text-center">Cargando directorio de proveedores...</p>
+          ) : proveedores.length === 0 ? (
+            <p className="t-caption text-ink-muted col-span-2 py-4 text-center">No hay proveedores registrados aún.</p>
+          ) : (
+            proveedores.map((prov) => (
+              <div
+                key={prov.id}
+                className="bg-surface-muted p-4 rounded-lg border border-line flex items-start justify-between gap-3"
+              >
+                <div className="space-y-1 min-w-0">
+                  <h3 className="font-semibold text-ink text-sm truncate">{prov.nombre}</h3>
+                  <p className="text-xs text-ink-muted font-mono">
+                    RUT: <CodeStamp>{prov.rut}</CodeStamp>
+                  </p>
+                  <div className="text-xs text-ink-muted pt-2 space-y-0.5">
+                    <p>Contacto: <span className="font-medium text-ink">{prov.contacto || 'General'}</span></p>
+                    <p>Dirección: <span className="text-ink">{[prov.direccion, prov.comuna].filter(Boolean).join(', ') || 'No registrada'}</span></p>
+                    <p>Teléfono: <span className="text-ink">{prov.telefono || 'Sin teléfono'}</span></p>
+                    <p>Correo: <span className="text-ink">{prov.correo || 'Sin correo'}</span></p>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                  <StatusBadge tone="success">Verificado</StatusBadge>
+                  <Link href={`/ordenes-compra/nuevo?proveedor_id=${prov.id}`}>
+                    <Button variant="secondary" size="sm">
+                      Crear OC
+                    </Button>
+                  </Link>
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-2">
-                <span className="text-[10px] font-bold uppercase bg-[#f4f5f3] text-emerald-700 px-2 py-0.5 rounded border border-[#e5e7e4]">
-                  Verificado
-                </span>
-                <Link
-                  href={`/ordenes-compra/nuevo?proveedor_id=${prov.id}`}
-                  className="text-[10px] font-black uppercase bg-orange-50 text-[#f97316] px-2 py-1 rounded-lg border border-orange-200 hover:bg-[#f97316] hover:text-white transition"
-                >
-                  Crear OC
-                </Link>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
-      </div>
+      </Panel>
 
       {/* Historial de Órdenes de Compra */}
-      <div className="hg-list-group space-y-3 p-4">
-        <h2 className="text-sm font-bold text-[#252b2d] flex items-center gap-2 border-b border-[#e5e7e4] pb-3">
-          <FileText className="w-4 h-4 text-[#f97316]" />
-          <span>Órdenes de Compra Registradas ({pedidos.length})</span>
-        </h2>
-
+      <Panel
+        title={
+          <span className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-accent-ink" />
+            <span>Órdenes de Compra Registradas ({pedidos.length})</span>
+          </span>
+        }
+      >
         <div className="overflow-x-auto">
-          <table className="hg-list-table w-full min-w-[700px] text-left text-xs">
-            <thead className="bg-[#f7f7f5] text-gray-500 uppercase text-[10px] tracking-normal border-b border-[#e5e7e4]">
+          <table className="hg-table w-full min-w-[700px] text-left text-xs">
+            <thead>
               <tr>
-                <th className="p-3">Fecha</th>
-                <th className="p-3">Proveedor</th>
-                <th className="p-3">Descripción del Pedido</th>
-                <th className="p-3">Estado OC</th>
-                <th className="p-3 text-right">Monto ($)</th>
+                <th className="py-3 px-4">Fecha</th>
+                <th className="py-3 px-4">Proveedor</th>
+                <th className="py-3 px-4">Descripción del Pedido</th>
+                <th className="py-3 px-4">Estado OC</th>
+                <th className="py-3 px-4 text-right">Monto ($)</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#eff0ee]">
-              {paginatedPedidos.map((ped) => (
-                <tr key={ped.id} className="hover:bg-[#f7f7f5] transition">
-                  <td className="p-3 text-gray-500 font-mono">{ped.fecha}</td>
-                  <td className="p-3 font-semibold text-[#252b2d]">{ped.proveedor?.nombre || 'Proveedor'}</td>
-                  <td className="p-3 text-gray-600">{ped.descripcion}</td>
-                  <td className="p-3">
-                    <span className="text-[10px] font-bold uppercase bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
-                      {ped.estado}
-                    </span>
+            <tbody className="divide-y divide-line-subtle">
+              {paginatedPedidos.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-ink-muted font-medium">
+                    No se han registrado órdenes de compra rápidas.
                   </td>
-                  <td className="p-3 text-right font-bold text-[#252b2d]">${ped.monto.toLocaleString('es-CL')}</td>
                 </tr>
-              ))}
+              ) : (
+                paginatedPedidos.map((ped) => (
+                  <tr key={ped.id} className="hover:bg-surface-muted transition">
+                    <td className="py-3 px-4 text-ink-muted font-mono">{ped.fecha}</td>
+                    <td className="py-3 px-4 font-semibold text-ink">{ped.proveedor?.nombre || 'Proveedor'}</td>
+                    <td className="py-3 px-4 text-ink-muted">{ped.descripcion}</td>
+                    <td className="py-3 px-4">
+                      <StatusBadge
+                        tone={
+                          ped.estado === 'recibido'
+                            ? 'success'
+                            : ped.estado === 'solicitado'
+                            ? 'info'
+                            : 'neutral'
+                        }
+                      >
+                        {ped.estado}
+                      </StatusBadge>
+                    </td>
+                    <td className="py-3 px-4 text-right font-semibold text-ink t-num">
+                      ${ped.monto.toLocaleString('es-CL')}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
-        <div className="pt-2">
-          <Pagination
-            currentPage={currentPage}
-            totalItems={totalItems}
-            itemsPerPage={itemsPerPage}
-            onPageChange={setCurrentPage}
-            onItemsPerPageChange={setItemsPerPage}
-          />
-        </div>
-      </div>
+        <Pagination
+          currentPage={currentPage}
+          totalItems={totalItems}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={setItemsPerPage}
+        />
+      </Panel>
 
       {/* Modal Nuevo Proveedor */}
-      {showProvModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white border border-[#e5e7e4] rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-xs">
-            <h3 className="text-base font-bold text-[#252b2d]">Registrar Proveedor</h3>
-            <form onSubmit={handleAddProveedor} className="space-y-3">
-              <div>
-                <label className="block text-gray-600 mb-1">Nombre Empresa</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej. Cementos Polpaico S.A."
-                  value={nombreProv}
-                  onChange={(e) => setNombreProv(e.target.value)}
-                  className="w-full bg-[#f4f5f3] border border-[#e5e7e4] rounded-md p-2.5 text-[#252b2d]"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-600 mb-1">RUT *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="90.120.000-4"
-                  value={rutProv}
-                  onChange={(e) => setRutProv(e.target.value)}
-                  className="w-full bg-[#f4f5f3] border border-[#e5e7e4] rounded-md p-2.5 text-[#252b2d]"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-600 mb-1">Contacto Comercial</label>
-                <input
-                  type="text"
-                  value={contactoProv}
-                  onChange={(e) => setContactoProv(e.target.value)}
-                  className="w-full bg-[#f4f5f3] border border-[#e5e7e4] rounded-md p-2.5 text-[#252b2d]"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-600 mb-1">Dirección</label>
-                <input
-                  type="text"
-                  value={direccionProv}
-                  onChange={(e) => setDireccionProv(e.target.value)}
-                  className="w-full bg-[#f4f5f3] border border-[#e5e7e4] rounded-md p-2.5 text-[#252b2d]"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-600 mb-1">Comuna</label>
-                <input
-                  type="text"
-                  value={comunaProv}
-                  onChange={(e) => setComunaProv(e.target.value)}
-                  className="w-full bg-[#f4f5f3] border border-[#e5e7e4] rounded-md p-2.5 text-[#252b2d]"
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-gray-600 mb-1">Teléfono</label>
-                  <input
-                    type="text"
-                    value={telefonoProv}
-                    onChange={(e) => setTelefonoProv(e.target.value)}
-                    className="w-full bg-[#f4f5f3] border border-[#e5e7e4] rounded-md p-2.5 text-[#252b2d]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-gray-600 mb-1">Correo</label>
-                  <input
-                    type="email"
-                    value={correoProv}
-                    onChange={(e) => setCorreoProv(e.target.value)}
-                    className="w-full bg-[#f4f5f3] border border-[#e5e7e4] rounded-md p-2.5 text-[#252b2d]"
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowProvModal(false)}
-                  className="px-4 py-2 bg-[#f4f5f3] text-gray-600 rounded-md"
-                >
-                  Cancelar
-                </button>
-                <button type="submit" className="px-4 py-2 bg-[#f97316] text-white font-bold rounded-md">
-                  Guardar
-                </button>
-              </div>
-            </form>
+      <Dialog
+        open={showProvModal}
+        onClose={() => setShowProvModal(false)}
+        title="Registrar Proveedor"
+        description="Agrega un nuevo proveedor al directorio de abastecimiento."
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowProvModal(false)}>
+              Cancelar
+            </Button>
+            <Button variant="primary" type="submit" form="form-proveedor">
+              Guardar Proveedor
+            </Button>
+          </>
+        }
+      >
+        <form id="form-proveedor" onSubmit={handleAddProveedor} className="space-y-3 text-xs">
+          <div>
+            <label className="block text-ink font-semibold mb-1">Nombre Empresa *</label>
+            <input
+              type="text"
+              required
+              placeholder="Ej. Cementos Polpaico S.A."
+              value={nombreProv}
+              onChange={(e) => setNombreProv(e.target.value)}
+              className="hg-field"
+            />
           </div>
-        </div>
-      )}
+          <div>
+            <label className="block text-ink font-semibold mb-1">RUT *</label>
+            <input
+              type="text"
+              required
+              placeholder="90.120.000-4"
+              value={rutProv}
+              onChange={(e) => setRutProv(e.target.value)}
+              className="hg-field font-mono"
+            />
+          </div>
+          <div>
+            <label className="block text-ink font-semibold mb-1">Contacto Comercial</label>
+            <input
+              type="text"
+              value={contactoProv}
+              onChange={(e) => setContactoProv(e.target.value)}
+              className="hg-field"
+            />
+          </div>
+          <div>
+            <label className="block text-ink font-semibold mb-1">Dirección</label>
+            <input
+              type="text"
+              value={direccionProv}
+              onChange={(e) => setDireccionProv(e.target.value)}
+              className="hg-field"
+            />
+          </div>
+          <div>
+            <label className="block text-ink font-semibold mb-1">Comuna</label>
+            <input
+              type="text"
+              value={comunaProv}
+              onChange={(e) => setComunaProv(e.target.value)}
+              className="hg-field"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-ink font-semibold mb-1">Teléfono</label>
+              <input
+                type="text"
+                value={telefonoProv}
+                onChange={(e) => setTelefonoProv(e.target.value)}
+                className="hg-field"
+              />
+            </div>
+            <div>
+              <label className="block text-ink font-semibold mb-1">Correo</label>
+              <input
+                type="email"
+                value={correoProv}
+                onChange={(e) => setCorreoProv(e.target.value)}
+                className="hg-field"
+              />
+            </div>
+          </div>
+        </form>
+      </Dialog>
 
-      {/* Modal Nueva Orden de Compra */}
-      {showPedidoModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white border border-[#e5e7e4] rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-xs">
-            <h3 className="text-base font-bold text-[#252b2d]">Generar Orden de Compra (OC)</h3>
-            <form onSubmit={handleAddPedido} className="space-y-3">
-              <div>
-                <label className="block text-gray-600 mb-1">Proveedor *</label>
-                <select
-                  value={proveedorId}
-                  onChange={(e) => setProveedorId(e.target.value)}
-                  className="w-full bg-[#f4f5f3] border border-[#e5e7e4] rounded-md p-2.5 text-[#252b2d]"
-                >
-                  {proveedores.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nombre} ({p.rut})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-gray-600 mb-1">Descripción del Pedido *</label>
-                <textarea
-                  rows={2}
-                  required
-                  placeholder="Ej. Cemento Portland 50 sacos 25kg"
-                  value={descripcionPedido}
-                  onChange={(e) => setDescripcionPedido(e.target.value)}
-                  className="w-full bg-[#f4f5f3] border border-[#e5e7e4] rounded-md p-2.5 text-[#252b2d]"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-600 mb-1">Monto Total OC ($) *</label>
-                <input
-                  type="number"
-                  required
-                  value={montoPedido}
-                  onChange={(e) => setMontoPedido(Number(e.target.value))}
-                  className="w-full bg-[#f4f5f3] border border-[#e5e7e4] rounded-md p-2.5 text-[#252b2d]"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowPedidoModal(false)}
-                  className="px-4 py-2 bg-[#f4f5f3] text-gray-600 rounded-md"
-                >
-                  Cancelar
-                </button>
-                <button type="submit" className="px-4 py-2 bg-[#f97316] text-white font-bold rounded-md">
-                  Generar OC
-                </button>
-              </div>
-            </form>
+      {/* Modal Nueva Orden de Compra Rápida */}
+      <Dialog
+        open={showPedidoModal}
+        onClose={() => setShowPedidoModal(false)}
+        title="Generar Orden de Compra Rápida"
+        description="Registra un pedido directo a un proveedor existente."
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowPedidoModal(false)}>
+              Cancelar
+            </Button>
+            <Button variant="primary" type="submit" form="form-pedido">
+              Generar OC
+            </Button>
+          </>
+        }
+      >
+        <form id="form-pedido" onSubmit={handleAddPedido} className="space-y-3 text-xs">
+          <div>
+            <label className="block text-ink font-semibold mb-1">Proveedor *</label>
+            <select
+              value={proveedorId}
+              onChange={(e) => setProveedorId(e.target.value)}
+              className="hg-field"
+            >
+              {proveedores.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre} ({p.rut})
+                </option>
+              ))}
+            </select>
           </div>
-        </div>
-      )}
+          <div>
+            <label className="block text-ink font-semibold mb-1">Descripción del Pedido *</label>
+            <textarea
+              rows={2}
+              required
+              placeholder="Ej. Cemento Portland 50 sacos 25kg"
+              value={descripcionPedido}
+              onChange={(e) => setDescripcionPedido(e.target.value)}
+              className="hg-field"
+            />
+          </div>
+          <div>
+            <label className="block text-ink font-semibold mb-1">Monto Total OC ($) *</label>
+            <input
+              type="number"
+              required
+              value={montoPedido}
+              onChange={(e) => setMontoPedido(Number(e.target.value))}
+              className="hg-field t-num"
+            />
+          </div>
+        </form>
+      </Dialog>
     </div>
   );
 }

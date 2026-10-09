@@ -85,7 +85,7 @@ export default function RecuperarPasswordPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#f97316] hover:bg-[#ea580c] text-white font-extrabold py-3 rounded-lg transition shadow-sm disabled:opacity-50 text-sm mt-2"
+              className="w-full bg-accent hover:bg-accent-hover text-on-accent font-extrabold py-3 rounded-lg transition shadow-sm disabled:opacity-50 text-sm mt-2"
             >
               {loading ? 'Enviando...' : 'Enviar link de recuperación'}
             </button>
