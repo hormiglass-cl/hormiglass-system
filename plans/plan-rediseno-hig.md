@@ -416,4 +416,56 @@ Una pantalla se da por migrada cuando no contiene hex sueltos, clases de paleta 
   - `npm run build`: **Compilación exitosa (38/38 rutas)**.
   - Playwright: **7/7 capturas tomadas** en `tests/screenshots/diseno-f6-despues/` con **0 errores de consola**.
 
+### Fase 7 — completada, verificada al 100% (2026-10-08)
+
+- `app/usuarios/page.tsx`:
+  - `PageHeader` estándar con botón primario "+ Invitar usuario" y conteos en tiempo real.
+  - `DataTable` con avatares semánticos, `CodeStamp`, `StatusBadge` para roles y estados.
+  - Modales de invitar y editar migrados a `Dialog` accesible con roles en selector estándar.
+  - Desactivación y reseteo de contraseña protegidos con `useConfirm(destructive: true)` y feedback con `toast()`.
+- `app/caja/page.tsx`:
+  - `PageHeader`, `Tabs` ("Validación de pagos" / "Movimientos de caja") y acciones ("Bancos y empresas", "Ver reportes", "+ Registrar movimiento").
+  - `SummaryLine` accionable de pagos pendientes, validados y cuentas operativas.
+  - Bandeja de abonos con validación/rechazo en línea, selector de banco por fila y signos explícitos (`+`/`−`) en verde/rojo semántico con `tabular-nums`.
+  - Modales de nuevo movimiento y comprobante migrados a `Dialog`.
+- `app/caja/configuracion/page.tsx`:
+  - `PageHeader`, `Tabs` ("Empresas del grupo", "Catálogo bancario", "Matriz EE.RR").
+  - Paneles de cuentas bancarias por empresa con saldos tabulares, selector de banco emisor y modales migrados a `Dialog`.
+  - Matriz de ingresos/egresos con códigos operacionales y categorías.
+- `app/reportes/page.tsx`:
+  - `PageHeader`, `Tabs` ("Márgenes y rentabilidad", "Flujo de caja", "Ventas comerciales"), `FilterBar` con rango de fechas y selectores.
+  - `SummaryLine` con métricas clave de margen bruto, ingresos y egresos.
+  - Tablas analíticas con `tabular-nums`, signos claros y barras de progreso semánticas con tokens.
+  - Exportación a CSV y filtros protegidos.
+- `app/administracion/page.tsx`:
+  - `PageHeader`, selector estándar de empresa del grupo y acciones rápidas ("Subir documento", "+ Nueva task").
+  - Navegación lateral de carpetas societarias (Cuentas por cobrar, Sueldos, Finiquitos, Prevención de riesgos, etc.) con contadores.
+  - 10 `alert()` y `confirm()` nativos eliminados y reemplazados con `useConfirm()` y `useToast()`.
+  - Modales de tareas, subida de documentos e historial migrados a `Dialog`.
+- `app/configuracion/page.tsx`:
+  - `PageHeader`, `Tabs` ("General & Empresa", "Usuarios & Permisos", "Campos personalizados").
+  - Matriz de permisos por rol, interruptores de sincronización con calendarios y preferencias generales con tokens.
+  - Acciones protegidas con `useConfirm()`.
+- `app/rrhh/page.tsx`:
+  - `PageHeader` con botón "+ Nuevo colaborador", `SummaryLine` accionable de 5 métricas (total, disponibles, en terreno, ausencias, nómina mensual).
+  - `FilterBar` con `SearchField`, filtros de Estado y Área, y toggle para alternar entre vista Tabla y Grid de tarjetas.
+  - Fila y tarjetas con `CodeStamp` para RUT, avatares semánticos, selectores en línea de tipo de usuario y disponibilidad con tokens de diseño.
+  - Modal de nuevo colaborador migrado a `Dialog` estructurado en 3 secciones (Datos personales, Cargo/área, Vínculo con cuenta CRM).
+- `app/rrhh/[id]/page.tsx` (2.900 líneas estructuradas):
+  - `PageHeader` con `CodeStamp` para RUT, `StatusBadge` de disponibilidad y migas `Administración › Recursos humanos › Detalle`.
+  - `RecordLayout` en 3 columnas:
+    - **Sidebar:** Ficha de colaborador, botones de acción rápida ("Permiso", "Documento", "Liquidación", "Nota"), selector de disponibilidad en línea, información de contacto, datos bancarios y sueldo base pactado (`tabular-nums`).
+    - **Main:** 6 tabs modulares con contadores en badges (`Carpetas & Contratos`, `Permisos & Ausencias`, `Sueldos & Liquidaciones`, `Tareas & Plazos`, `Asistencia & Jornada`, `Bitácora`).
+    - **Aside:** Tarjeta de vinculación con cuenta de usuario CRM, panel de eventos/faenas asignadas y panel de visitas técnicas.
+  - 7 modales migrados a `Dialog` accesible (`role="dialog"`, Escape, foco retenido).
+  - 4 eliminaciones protegidas con `useConfirm(destructive: true)`.
+  - Mensajes de feedback unificados con `useToast()`.
+- Verificación:
+  - `node scripts/check-design-tokens.mjs`: **✓ 45 archivos migrados sin violaciones de tokens**.
+  - `npx eslint`: **0 errores, 0 warnings** en todos los 8 archivos de Fase 7.
+  - `npx tsc --noEmit`: **0 errores de tipos**.
+  - `npm run build`: **Compilación exitosa (38/38 rutas)**.
+  - Playwright: **8/8 capturas tomadas** en `tests/screenshots/diseno-f7-despues/` con **0 errores de consola**.
+
+
 
