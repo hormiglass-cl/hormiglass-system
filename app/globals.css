@@ -30,11 +30,8 @@
   --hg-radius-lg: 10px;
   --hg-shadow-card: 0 1px 2px rgb(54 54 54 / 5%);
   --hg-shadow-popover: 0 12px 32px rgb(54 54 54 / 14%);
-  /* Legado (se elimina en la fase 8) */
   --background: var(--hg-app-bg);
   --foreground: var(--hg-text);
-  --primary-orange: var(--hg-accent);
-  --text-dark: var(--hg-text);
 }
 
 @theme inline {

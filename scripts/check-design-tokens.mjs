@@ -60,6 +60,10 @@ const MIGRATED = [
   'app/configuracion/page.tsx',
   'app/rrhh/page.tsx',
   'app/rrhh/[id]/page.tsx',
+  // Fase 8
+  'app/login/page.tsx',
+  'app/auth/recuperar/page.tsx',
+  'app/auth/actualizar-password/page.tsx',
 ];
 
 // Fuera de alcance: documentos que genera el sistema (PDF, impresión).

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { createClient } from '../../../lib/supabase/client';
-import { Mail, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Mail, AlertCircle, CheckCircle2, ArrowLeft, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -33,51 +33,57 @@ export default function RecuperarPasswordPage() {
   };
 
   return (
-    <div className="fixed inset-0 bg-[#f7f7f5] z-50 flex items-center justify-center p-4 text-[#252b2d]">
-      <div className="max-w-md w-full bg-white p-8 rounded-2xl border border-[#e5e7e4] shadow-[var(--hg-shadow-card)] space-y-6">
-        <div className="text-center space-y-3">
-          <div className="flex justify-center mb-2">
+    <main className="min-h-screen bg-app flex items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-md bg-surface border border-line rounded-panel p-6 sm:p-8 shadow-sm">
+        <div className="text-center mb-6">
+          <div className="flex items-center justify-center gap-2 mb-4">
             <Image
-              src="/logo-completo-hormiglass.webp"
-              alt="Hormiglass Logo"
-              width={220}
-              height={55}
-              className="h-14 w-auto object-contain"
+              src="/logo-only-h-removebg-preview.png"
+              alt="Hormiglass"
+              width={36}
+              height={36}
+              className="h-9 w-9 object-contain"
               priority
             />
+            <span className="text-[17px] font-bold tracking-tight text-ink">Hormiglass</span>
           </div>
-          <h2 className="text-xl font-extrabold text-[#213343]">Recuperar contraseña</h2>
-          <p className="text-xs text-gray-500 font-medium">
-            Te enviaremos un link para definir una contraseña nueva.
+          <h1 className="t-page mb-1.5 text-ink">Recuperar contraseña</h1>
+          <p className="t-caption text-ink-muted">
+            Te enviaremos un enlace seguro a tu correo para definir una contraseña nueva.
           </p>
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 p-3.5 rounded-lg text-xs flex items-center gap-2 font-medium">
-            <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+          <div role="alert" className="mb-4 bg-danger-soft border border-danger-line text-danger p-3.5 rounded-control text-[13px] flex items-start gap-2.5">
+            <AlertCircle size={16} className="shrink-0 mt-0.5 text-danger" aria-hidden />
             <span>{error}</span>
           </div>
         )}
+
         {ok && (
-          <div className="bg-green-50 border border-green-200 text-green-700 p-3.5 rounded-lg text-xs flex items-center gap-2 font-medium">
-            <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
-            <span>Si el correo está registrado, llegará un link en unos minutos.</span>
+          <div role="status" className="mb-4 bg-success-soft border border-success-line text-success p-3.5 rounded-control text-[13px] flex items-start gap-2.5">
+            <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-success" aria-hidden />
+            <span>Si el correo está registrado en el sistema, recibirás las instrucciones en unos minutos.</span>
           </div>
         )}
 
-        {!ok && (
-          <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+        {!ok ? (
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block font-bold text-gray-700 mb-1">Correo Electrónico</label>
+              <label htmlFor="input-recuperar-email" className="block text-[13px] font-medium text-ink mb-1.5">
+                Correo electrónico registrado
+              </label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
+                <Mail size={16} className="text-ink-muted absolute left-3.5 top-3" aria-hidden />
                 <input
+                  id="input-recuperar-email"
                   type="email"
                   required
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-9 pr-3 py-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                  placeholder="correo@hormiglass.cl"
+                  className="w-full bg-surface border border-line rounded-control pl-10 pr-3.5 py-2 text-[14px] text-ink placeholder:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  placeholder="usuario@hormiglass.cl"
                 />
               </div>
             </div>
@@ -85,19 +91,34 @@ export default function RecuperarPasswordPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-accent hover:bg-accent-hover text-on-accent font-extrabold py-3 rounded-lg transition shadow-sm disabled:opacity-50 text-sm mt-2"
+              className="w-full mt-2 min-h-11 bg-accent text-on-accent hover:bg-accent-hover font-semibold py-2.5 px-4 rounded-control transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 text-[14px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
-              {loading ? 'Enviando...' : 'Enviar link de recuperación'}
+              <span>{loading ? 'Enviando enlace...' : 'Enviar enlace de recuperación'}</span>
+              <ArrowRight size={16} aria-hidden />
             </button>
           </form>
+        ) : (
+          <div className="pt-2">
+            <Link
+              href="/login"
+              className="w-full min-h-11 bg-surface-muted hover:bg-surface border border-line text-ink font-medium py-2.5 px-4 rounded-control transition-colors flex items-center justify-center gap-2 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <ArrowLeft size={15} aria-hidden />
+              <span>Volver a iniciar sesión</span>
+            </Link>
+          </div>
         )}
 
-        <div className="text-center">
-          <Link href="/login" className="text-[11px] font-bold text-[#f97316] hover:underline">
-            Volver al inicio de sesión
+        <div className="text-center pt-6 mt-6 border-t border-line">
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-1.5 text-[12px] font-medium text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-control px-2 py-1"
+          >
+            <ArrowLeft size={14} aria-hidden />
+            <span>Volver al inicio de sesión</span>
           </Link>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

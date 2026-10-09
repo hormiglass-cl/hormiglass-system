@@ -467,5 +467,47 @@ Una pantalla se da por migrada cuando no contiene hex sueltos, clases de paleta 
   - `npm run build`: **Compilación exitosa (38/38 rutas)**.
   - Playwright: **8/8 capturas tomadas** en `tests/screenshots/diseno-f7-despues/` con **0 errores de consola**.
 
+### Ajuste de barra lateral — completado y verificado (2026-10-09)
+
+- `lib/navigation.ts` y `components/Sidebar.tsx`:
+  - Todas las secciones (`Inicio`, `Comercial`, `Compras y catálogo`, `Calendarios`, `Finanzas`, `Administración`, `Sistema`) ahora cuentan con controles de revelación (`collapsible: true`).
+  - Chevron accesible con rotación animada de 90° (`-rotate-90`) y atributos ARIA (`aria-expanded`, `aria-controls`).
+  - Dot indicador de página activa en secciones colapsadas cuando contienen la ruta actual.
+  - Persistencia de secciones abiertas y cerradas en `localStorage` (`hg.sidebar`).
+  - Modo mini (72 px) y responsive 375 px verificados con Playwright (7 pruebas pasadas en `tests/screenshots/sidebar-colapsable/`).
+
+### Fase 8 — completada, verificada al 100% (2026-10-09)
+
+- `app/login/page.tsx`:
+  - Rediseño con layout de dos paneles (split screen) en escritorio y tarjeta centrada en móvil.
+  - Panel izquierdo con identidad Hormiglass, pilares de operación (Despachos, Caja, Garantías) y estampado de marca.
+  - Panel derecho con control segmentado (Iniciar sesión / Crear cuenta), campos accesibles (`autoComplete`, etiquetas claras, botón para mostrar/ocultar contraseña con `aria-label`).
+  - Botón primario de alto contraste (`bg-accent text-on-accent`, 5,2:1) con textos directos ("Iniciar sesión", "Crear cuenta").
+  - Alertas accesibles con tokens de peligro (`bg-danger-soft text-danger border-danger-line`) y éxito (`bg-success-soft text-success border-success-line`).
+  - Temporizador de espera por límite de tasa preservado con formato tabular.
+- `app/auth/recuperar/page.tsx`:
+  - Tarjeta centrada en lienzo mineral `bg-app`, logotipo de marca, títulos claros y textos descriptivos.
+  - Formulario accesible para solicitud de restablecimiento con enlace seguro.
+  - Estados de éxito con mensaje de seguridad estándar ("Si el correo está registrado...").
+  - Botón "Enviar enlace de recuperación" y enlaces de navegación accesibles.
+- `app/auth/actualizar-password/page.tsx`:
+  - Definición de nueva contraseña con validación de longitud mínima (8 caracteres) y coincidencia.
+  - Toggles independientes de visibilidad para ambos campos de contraseña.
+  - Estado de éxito con confirmación y redirección fluida al sistema.
+- `app/globals.css`:
+  - Limpieza de variables legadas (`--primary-orange`, `--text-dark`).
+  - Barandas globales y escala tipográfica 100% respetadas en todas las pantallas.
+- Accesibilidad y teclado:
+  - Recorrido completo con teclado verificado mediante prueba Playwright (`tests/test-a11y-keyboard.mjs`).
+  - Secuencia de tabulación lógica, etiquetas e IDs vinculados, anillos de foco visibles (`focus-visible:ring-accent`).
+  - Adaptabilidad responsive verificada en móvil a 375 px (iPhone) sin desbordamiento.
+- Verificación técnica:
+  - `node scripts/check-design-tokens.mjs`: **✓ 48 archivos migrados sin violaciones de tokens** (0 hex, 0 Tailwind crudo, 0 textos < 11px, 0 fuentes fuera de escala, 0 alert/confirm).
+  - `npx eslint`: **0 errores, 0 warnings** en todos los archivos de autenticación, sidebar y navegación.
+  - `npx tsc --noEmit`: **0 errores de tipos**.
+  - `npm run build`: **Compilación exitosa (38/38 rutas)**.
+  - Playwright: **7/7 capturas previas** (`tests/screenshots/diseno-f8-antes/`) y **7/7 capturas posteriores** (`tests/screenshots/diseno-f8-despues/`) tomadas con 0 errores de consola.
+
+
 
 

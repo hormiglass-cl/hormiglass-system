@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '../../lib/supabase/client';
-import { Mail, Lock, AlertCircle, LogIn, User, Eye, EyeOff, CheckCircle2, UserPlus, Clock } from 'lucide-react';
+import { Mail, Lock, AlertCircle, LogIn, User, Eye, EyeOff, CheckCircle2, UserPlus, Clock, ArrowRight, ShieldCheck, Truck, Receipt } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { mensajeError } from '../../lib/errores';
@@ -12,7 +12,7 @@ function readInactiveNotice(): string {
   if (typeof window === 'undefined') return '';
   const params = new URLSearchParams(window.location.search);
   return params.get('error') === 'inactivo'
-    ? 'Tu cuenta está desactivada. Contacta a un administrador.'
+    ? 'Tu cuenta está desactivada. Contacta a un administrador para reactivar el acceso.'
     : '';
 }
 
@@ -62,7 +62,7 @@ export default function LoginPage() {
         });
 
         if (authError || !data.user) {
-          setError('Correo o contraseña incorrectos.');
+          setError('Correo electrónico o contraseña incorrectos.');
           return;
         }
 
@@ -159,173 +159,259 @@ export default function LoginPage() {
     }
   };
 
+  const activeNotice = cooldownSeconds > 0
+    ? `Límite temporal alcanzado. Tiempo de espera restante: ${formatTimer(cooldownSeconds)} min.`
+    : error || inactiveNotice;
+
   return (
-    <div className="fixed inset-0 bg-[#f7f7f5] z-50 flex items-center justify-center p-4 text-[#252b2d]">
-      <div className="max-w-md w-full bg-white p-8 rounded-2xl border border-[#e5e7e4] shadow-[var(--hg-shadow-card)] space-y-6">
-        <div className="text-center space-y-3">
-          <div className="flex justify-center mb-2">
+    <main className="min-h-screen bg-app flex items-center justify-center p-4 sm:p-6 lg:p-8">
+      <div className="w-full max-w-4xl bg-surface border border-line rounded-panel shadow-sm overflow-hidden grid grid-cols-1 lg:grid-cols-12">
+        {/* Panel lateral de marca Hormiglass (solo en pantallas medianas y grandes) */}
+        <section aria-label="Identidad Hormiglass" className="relative hidden lg:flex lg:col-span-5 flex-col justify-between p-8 bg-surface-muted border-r border-line">
+          <div>
+            <div className="flex items-center gap-2.5 mb-8">
+              <Image
+                src="/logo-only-h-removebg-preview.png"
+                alt="Hormiglass"
+                width={36}
+                height={36}
+                className="h-9 w-9 object-contain"
+                priority
+              />
+              <span className="text-[17px] font-bold tracking-tight text-ink">Hormiglass</span>
+            </div>
+
+            <h2 className="t-page mb-3 text-ink">Control integral de obras y prefabricados</h2>
+            <p className="t-caption text-ink-muted mb-8 leading-relaxed">
+              Plataforma operacional para cotizaciones, seguimiento de fabricación, despacho y postventa técnica.
+            </p>
+
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <span className="grid h-7 w-7 place-items-center rounded-control bg-accent-soft text-accent-ink shrink-0 mt-0.5">
+                  <Truck size={15} aria-hidden />
+                </span>
+                <div>
+                  <p className="text-[13px] font-semibold text-ink">Despachos y logística</p>
+                  <p className="t-caption text-ink-muted">Trazabilidad en tiempo real de guías y vehículos en faena.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <span className="grid h-7 w-7 place-items-center rounded-control bg-accent-soft text-accent-ink shrink-0 mt-0.5">
+                  <Receipt size={15} aria-hidden />
+                </span>
+                <div>
+                  <p className="text-[13px] font-semibold text-ink">Caja y tesorería</p>
+                  <p className="t-caption text-ink-muted">Validación bancaria de comprobantes y órdenes de compra.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <span className="grid h-7 w-7 place-items-center rounded-control bg-accent-soft text-accent-ink shrink-0 mt-0.5">
+                  <ShieldCheck size={15} aria-hidden />
+                </span>
+                <div>
+                  <p className="text-[13px] font-semibold text-ink">Garantías y postventa</p>
+                  <p className="t-caption text-ink-muted">Resolución de casos en terreno con respaldo fotográfico.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-8 border-t border-line mt-8 flex items-center justify-between text-[11px] text-ink-muted">
+            <span className="code-stamp">HORMIGLASS CRM</span>
+            <span>Chile</span>
+          </div>
+        </section>
+
+        {/* Panel de formulario (Login / Registro) */}
+        <section aria-labelledby="form-heading" className="lg:col-span-7 p-6 sm:p-8 lg:p-10 flex flex-col justify-center">
+          {/* Cabecera para dispositivos móviles */}
+          <div className="flex items-center gap-2 mb-6 lg:hidden">
             <Image
-              src="/logo-completo-hormiglass.webp"
-              alt="Hormiglass Logo"
-              width={220}
-              height={55}
-              className="h-14 w-auto object-contain"
+              src="/logo-only-h-removebg-preview.png"
+              alt="Hormiglass"
+              width={32}
+              height={32}
+              className="h-8 w-8 object-contain"
               priority
             />
+            <span className="text-[16px] font-bold tracking-tight text-ink">Hormiglass CRM</span>
           </div>
-          <h2 className="text-xl font-extrabold text-[#213343]">
-            {mode === 'login' ? 'Inicio de Sesión' : 'Crear Nueva Cuenta'}
-          </h2>
-          <p className="text-xs text-gray-500 font-medium">
-            {mode === 'login'
-              ? 'Ingresa tus credenciales para acceder a la plataforma.'
-              : 'Completa tus datos para registrarte en el sistema.'}
-          </p>
-        </div>
 
-        {/* Selector de Pestañas: Login vs Registro */}
-        <div className="flex bg-gray-100 p-1 rounded-lg text-xs font-extrabold">
-          <button
-            type="button"
-            onClick={() => {
-              setMode('login');
-              setError('');
-              setSuccessMsg('');
-            }}
-            className={`flex-1 py-2 rounded-md transition text-center flex items-center justify-center gap-1.5 ${
-              mode === 'login'
-                ? 'bg-white text-[#213343] shadow-sm'
-                : 'text-gray-500 hover:text-gray-800'
-            }`}
-          >
-            <LogIn className="w-3.5 h-3.5" />
-            <span>Iniciar Sesión</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode('register');
-              setError('');
-              setSuccessMsg('');
-            }}
-            className={`flex-1 py-2 rounded-md transition text-center flex items-center justify-center gap-1.5 ${
-              mode === 'register'
-                ? 'bg-white text-[#213343] shadow-sm'
-                : 'text-gray-500 hover:text-gray-800'
-            }`}
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>Crear Cuenta</span>
-          </button>
-        </div>
-
-        {(error || inactiveNotice) && (
-          <div className="bg-red-50 border border-red-200 text-red-700 p-3.5 rounded-lg text-xs flex items-center gap-2 font-medium">
-            <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-            <span>
-              {cooldownSeconds > 0
-                ? `Se alcanzó el límite de registros. Tiempo restante para reintentar: ${formatTimer(cooldownSeconds)}`
-                : error || inactiveNotice}
-            </span>
+          <div className="mb-6">
+            <h1 id="form-heading" className="t-page mb-1 text-ink">
+              {mode === 'login' ? 'Iniciar sesión' : 'Crear nueva cuenta'}
+            </h1>
+            <p className="t-caption text-ink-muted">
+              {mode === 'login'
+                ? 'Ingresa tus credenciales autorizadas para acceder al sistema.'
+                : 'Completa tus datos personales para solicitar acceso.'}
+            </p>
           </div>
-        )}
 
-        {successMsg && (
-          <div className="bg-green-50 border border-green-200 text-green-700 p-3.5 rounded-lg text-xs flex items-center gap-2 font-medium">
-            <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
-            <span>{successMsg}</span>
+          {/* Selector de modo estilo control segmentado */}
+          <div className="grid grid-cols-2 p-1 bg-surface-muted rounded-control mb-5 text-[13px]">
+            <button
+              type="button"
+              onClick={() => {
+                setMode('login');
+                setError('');
+                setSuccessMsg('');
+              }}
+              className={`py-2 px-3 rounded-control transition-colors flex items-center justify-center gap-2 font-medium ${
+                mode === 'login'
+                  ? 'bg-surface text-ink font-semibold shadow-sm'
+                  : 'text-ink-muted hover:text-ink'
+              }`}
+            >
+              <LogIn size={15} aria-hidden />
+              <span>Iniciar sesión</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode('register');
+                setError('');
+                setSuccessMsg('');
+              }}
+              className={`py-2 px-3 rounded-control transition-colors flex items-center justify-center gap-2 font-medium ${
+                mode === 'register'
+                  ? 'bg-surface text-ink font-semibold shadow-sm'
+                  : 'text-ink-muted hover:text-ink'
+              }`}
+            >
+              <UserPlus size={15} aria-hidden />
+              <span>Crear cuenta</span>
+            </button>
           </div>
-        )}
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          {mode === 'register' && (
+          {/* Avisos de error y notificaciones */}
+          {activeNotice && (
+            <div role="alert" className="mb-4 bg-danger-soft border border-danger-line text-danger p-3.5 rounded-control text-[13px] flex items-start gap-2.5">
+              <AlertCircle size={16} className="shrink-0 mt-0.5 text-danger" aria-hidden />
+              <span>{activeNotice}</span>
+            </div>
+          )}
+
+          {successMsg && (
+            <div role="status" className="mb-4 bg-success-soft border border-success-line text-success p-3.5 rounded-control text-[13px] flex items-center gap-2.5">
+              <CheckCircle2 size={16} className="shrink-0 text-success" aria-hidden />
+              <span>{successMsg}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {mode === 'register' && (
+              <div>
+                <label htmlFor="input-nombre" className="block text-[13px] font-medium text-ink mb-1.5">
+                  Nombre completo
+                </label>
+                <div className="relative">
+                  <User size={16} className="text-ink-muted absolute left-3.5 top-3" aria-hidden />
+                  <input
+                    id="input-nombre"
+                    type="text"
+                    required
+                    autoComplete="name"
+                    value={nombre}
+                    onChange={(e) => setNombre(e.target.value)}
+                    className="w-full bg-surface border border-line rounded-control pl-10 pr-3.5 py-2 text-[14px] text-ink placeholder:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    placeholder="Ej: Marcos Catalán"
+                  />
+                </div>
+              </div>
+            )}
+
             <div>
-              <label className="block font-bold text-gray-700 mb-1">Nombre Completo</label>
+              <label htmlFor="input-email" className="block text-[13px] font-medium text-ink mb-1.5">
+                Correo electrónico
+              </label>
               <div className="relative">
-                <User className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
+                <Mail size={16} className="text-ink-muted absolute left-3.5 top-3" aria-hidden />
                 <input
-                  type="text"
+                  id="input-email"
+                  type="email"
                   required
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-9 pr-3 py-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                  placeholder="Ej: Marcos Catalán"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-surface border border-line rounded-control pl-10 pr-3.5 py-2 text-[14px] text-ink placeholder:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  placeholder="usuario@hormiglass.cl"
                 />
               </div>
             </div>
-          )}
 
-          <div>
-            <label className="block font-bold text-gray-700 mb-1">Correo Electrónico</label>
-            <div className="relative">
-              <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-9 pr-3 py-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                placeholder="correo@hormiglass.cl"
-              />
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="input-password" className="block text-[13px] font-medium text-ink">
+                  Contraseña
+                </label>
+                {mode === 'login' && (
+                  <Link
+                    href="/auth/recuperar"
+                    className="text-[12px] font-medium text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-control px-1"
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </Link>
+                )}
+              </div>
+              <div className="relative">
+                <Lock size={16} className="text-ink-muted absolute left-3.5 top-3" aria-hidden />
+                <input
+                  id="input-password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  minLength={6}
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-surface border border-line rounded-control pl-10 pr-10 py-2 text-[14px] text-ink placeholder:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                  className="absolute right-2.5 top-2.5 p-1 rounded-control text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  {showPassword ? <EyeOff size={16} aria-hidden /> : <Eye size={16} aria-hidden />}
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div>
-            <label className="block font-bold text-gray-700 mb-1">Contraseña</label>
-            <div className="relative">
-              <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
-              <input
-                type={showPassword ? 'text' : 'password'}
-                required
-                minLength={6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-9 pr-10 py-2.5 text-[#213343] font-medium focus:outline-none focus:border-[#f97316]"
-                placeholder="••••••••"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:outline-none"
-                title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
+            <button
+              type="submit"
+              disabled={loading || cooldownSeconds > 0}
+              className="w-full mt-2 min-h-11 bg-accent text-on-accent hover:bg-accent-hover font-semibold py-2.5 px-4 rounded-control transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 text-[14px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              {cooldownSeconds > 0 ? (
+                <>
+                  <Clock size={16} className="animate-spin" aria-hidden />
+                  <span>Reintentar en {formatTimer(cooldownSeconds)} min</span>
+                </>
+              ) : mode === 'login' ? (
+                <>
+                  <span>{loading ? 'Iniciando sesión...' : 'Iniciar sesión'}</span>
+                  <ArrowRight size={16} aria-hidden />
+                </>
+              ) : (
+                <>
+                  <UserPlus size={16} aria-hidden />
+                  <span>{loading ? 'Creando cuenta...' : 'Crear cuenta'}</span>
+                </>
+              )}
+            </button>
+          </form>
 
-          {mode === 'login' && (
-            <div className="text-right">
-              <Link href="/auth/recuperar" className="text-[11px] font-bold text-[#f97316] hover:underline">
-                ¿Olvidaste tu contraseña?
-              </Link>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading || cooldownSeconds > 0}
-            className="w-full bg-accent hover:bg-accent-hover text-on-accent font-extrabold py-3 rounded-lg transition shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 text-sm mt-2 cursor-pointer disabled:cursor-not-allowed"
-          >
-            {cooldownSeconds > 0 ? (
-              <>
-                <Clock className="w-4 h-4 animate-spin" />
-                <span>Reintento en {formatTimer(cooldownSeconds)} min</span>
-              </>
-            ) : mode === 'login' ? (
-              <>
-                <LogIn className="w-4 h-4" />
-                <span>{loading ? 'Iniciando Sesión...' : 'Ingresar'}</span>
-              </>
-            ) : (
-              <>
-                <UserPlus className="w-4 h-4" />
-                <span>{loading ? 'Registrando...' : 'Registrar Cuenta'}</span>
-              </>
-            )}
-          </button>
-        </form>
+          <footer className="mt-8 pt-6 border-t border-line text-center">
+            <p className="t-caption text-ink-muted">
+              Hormiglass SPA · Sistema de gestión operacional y comercial
+            </p>
+          </footer>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }
