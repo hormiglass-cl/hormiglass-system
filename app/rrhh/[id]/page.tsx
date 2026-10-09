@@ -99,6 +99,7 @@ const PERMISO_TONE: Record<TipoPermisoAusencia, Tone> = {
   permiso: 'warning',
   licencia_medica: 'accent',
   falta_injustificada: 'danger',
+  dia_administrativo: 'warning',
 };
 
 const URGENCIA_TONE: Record<UrgenciaRecordatorio, Tone> = {
@@ -121,7 +122,7 @@ export default function TrabajadorDetailPage() {
   const params = useParams();
   const workerId = params?.id as string;
   const { currentUser } = useAuth();
-  const { showToast } = useToast();
+  const toast = useToast();
   const confirm = useConfirm();
   const supabase = useMemo(() => createClient(), []);
 
@@ -495,10 +496,13 @@ export default function TrabajadorDetailPage() {
 
     if (error) {
       console.error('Error vinculando usuario:', error);
-      showToast('No se pudo vincular la cuenta', 'error');
+      toast({ message: 'No se pudo vincular la cuenta', tone: 'danger' });
     } else {
       setShowLinkUserModal(false);
-      showToast(newUsuarioId ? 'Usuario vinculado exitosamente' : 'Usuario desvinculado', 'success');
+      toast({
+        message: newUsuarioId ? 'Usuario vinculado exitosamente' : 'Usuario desvinculado',
+        tone: 'success',
+      });
       void loadWorkerFullData();
     }
   };
@@ -510,7 +514,7 @@ export default function TrabajadorDetailPage() {
       void loadWorkerFullData();
     } catch (err) {
       console.error('Error al actualizar recordatorio:', err);
-      showToast('No se pudo actualizar la tarea', 'error');
+      toast({ message: 'No se pudo actualizar la tarea', tone: 'danger' });
     }
   };
 
@@ -554,11 +558,11 @@ export default function TrabajadorDetailPage() {
         fecha_vencimiento: new Date().toISOString().split('T')[0],
         recurrencia: 'ninguna',
       });
-      showToast('Tarea asignada exitosamente', 'success');
+      toast({ message: 'Tarea asignada exitosamente', tone: 'success' });
       void loadWorkerFullData();
     } catch (err) {
       console.error('Error creando recordatorio:', err);
-      showToast('No se pudo crear la tarea', 'error');
+      toast({ message: 'No se pudo crear la tarea', tone: 'danger' });
     } finally {
       setSavingRecordatorio(false);
     }
@@ -569,7 +573,7 @@ export default function TrabajadorDetailPage() {
     const ok = await confirm({
       title: 'Eliminar tarea',
       message: '¿Seguro que deseas eliminar esta tarea asignada al colaborador?',
-      tone: 'danger',
+      destructive: true,
       confirmLabel: 'Eliminar tarea',
     });
     if (!ok) return;
@@ -577,9 +581,9 @@ export default function TrabajadorDetailPage() {
     const { error } = await supabase.from('recordatorios').update({ activo: false }).eq('id', id);
     if (error) {
       console.error(error);
-      showToast('No se pudo eliminar la tarea', 'error');
+      toast({ message: 'No se pudo eliminar la tarea', tone: 'danger' });
     } else {
-      showToast('Tarea eliminada', 'success');
+      toast({ message: 'Tarea eliminada', tone: 'success' });
       void loadWorkerFullData();
     }
   };
@@ -620,11 +624,11 @@ export default function TrabajadorDetailPage() {
         minutos_atraso: 0,
         observaciones: '',
       });
-      showToast('Marcaje de asistencia guardado', 'success');
+      toast({ message: 'Marcaje de asistencia guardado', tone: 'success' });
       void loadWorkerFullData();
     } catch (err) {
       console.error('Error registrando asistencia:', err);
-      showToast('No se pudo registrar la asistencia', 'error');
+      toast({ message: 'No se pudo registrar la asistencia', tone: 'danger' });
     } finally {
       setSavingAsistencia(false);
     }
@@ -635,7 +639,7 @@ export default function TrabajadorDetailPage() {
     const ok = await confirm({
       title: 'Eliminar marcaje',
       message: '¿Seguro que deseas eliminar este registro de asistencia?',
-      tone: 'danger',
+      destructive: true,
       confirmLabel: 'Eliminar marcaje',
     });
     if (!ok) return;
@@ -643,9 +647,9 @@ export default function TrabajadorDetailPage() {
     const { error } = await supabase.from('trabajador_asistencia').delete().eq('id', id);
     if (error) {
       console.error(error);
-      showToast('No se pudo eliminar el marcaje', 'error');
+      toast({ message: 'No se pudo eliminar el marcaje', tone: 'danger' });
     } else {
-      showToast('Marcaje eliminado', 'success');
+      toast({ message: 'Marcaje eliminado', tone: 'success' });
       void loadWorkerFullData();
     }
   };
@@ -662,10 +666,13 @@ export default function TrabajadorDetailPage() {
 
     if (error) {
       console.error('Error actualizando disponibilidad:', error);
-      showToast('No se pudo actualizar la disponibilidad', 'error');
+      toast({ message: 'No se pudo actualizar la disponibilidad', tone: 'danger' });
       void loadWorkerFullData();
     } else {
-      showToast(`Disponibilidad actualizada a ${DISPONIBILIDAD_LABELS[nuevoEstado]}`, 'success');
+      toast({
+        message: `Disponibilidad actualizada a ${DISPONIBILIDAD_LABELS[nuevoEstado]}`,
+        tone: 'success',
+      });
     }
   };
 
@@ -705,11 +712,11 @@ export default function TrabajadorDetailPage() {
 
       setShowEditInfoModal(false);
       setSavingEdit(false);
-      showToast('Ficha actualizada exitosamente', 'success');
+      toast({ message: 'Ficha actualizada exitosamente', tone: 'success' });
       void loadWorkerFullData();
     } catch (err) {
       console.error('Error guardando perfil:', err);
-      showToast('No se pudo guardar la ficha', 'error');
+      toast({ message: 'No se pudo guardar la ficha', tone: 'danger' });
       setSavingEdit(false);
     }
   };
@@ -744,11 +751,11 @@ export default function TrabajadorDetailPage() {
       });
       setShowNewDocModal(false);
       setSavingDoc(false);
-      showToast('Documento registrado exitosamente', 'success');
+      toast({ message: 'Documento registrado exitosamente', tone: 'success' });
       void loadWorkerFullData();
     } catch (err) {
       console.error('Error guardando documento:', err);
-      showToast('No se pudo guardar el documento', 'error');
+      toast({ message: 'No se pudo guardar el documento', tone: 'danger' });
       setSavingDoc(false);
     }
   };
@@ -758,18 +765,18 @@ export default function TrabajadorDetailPage() {
     const ok = await confirm({
       title: 'Eliminar documento',
       message: '¿Estás seguro de que deseas eliminar este documento de la carpeta laboral?',
-      tone: 'danger',
+      destructive: true,
       confirmLabel: 'Eliminar documento',
     });
     if (!ok) return;
 
     try {
       await supabase.from('trabajador_documentos').delete().eq('id', docId);
-      showToast('Documento eliminado', 'success');
+      toast({ message: 'Documento eliminado', tone: 'success' });
       void loadWorkerFullData();
     } catch (err) {
       console.error('Error eliminando documento:', err);
-      showToast('No se pudo eliminar el documento', 'error');
+      toast({ message: 'No se pudo eliminar el documento', tone: 'danger' });
     }
   };
 
@@ -810,11 +817,11 @@ export default function TrabajadorDetailPage() {
 
       setShowNewPermisoModal(false);
       setSavingPermiso(false);
-      showToast('Permiso registrado exitosamente', 'success');
+      toast({ message: 'Permiso registrado exitosamente', tone: 'success' });
       void loadWorkerFullData();
     } catch (err) {
       console.error('Error registrando permiso:', err);
-      showToast('No se pudo registrar el permiso', 'error');
+      toast({ message: 'No se pudo registrar el permiso', tone: 'danger' });
       setSavingPermiso(false);
     }
   };
@@ -824,18 +831,18 @@ export default function TrabajadorDetailPage() {
     const ok = await confirm({
       title: 'Eliminar permiso',
       message: '¿Estás seguro de que deseas eliminar este registro de permiso o ausencia?',
-      tone: 'danger',
+      destructive: true,
       confirmLabel: 'Eliminar permiso',
     });
     if (!ok) return;
 
     try {
       await supabase.from('trabajador_permisos_ausencias').delete().eq('id', permisoId);
-      showToast('Permiso eliminado', 'success');
+      toast({ message: 'Permiso eliminado', tone: 'success' });
       void loadWorkerFullData();
     } catch (err) {
       console.error('Error eliminando permiso:', err);
-      showToast('No se pudo eliminar el permiso', 'error');
+      toast({ message: 'No se pudo eliminar el permiso', tone: 'danger' });
     }
   };
 
@@ -864,11 +871,11 @@ export default function TrabajadorDetailPage() {
 
       setShowNewLiquidacionModal(false);
       setSavingLiquidacion(false);
-      showToast('Liquidación de sueldo registrada', 'success');
+      toast({ message: 'Liquidación de sueldo registrada', tone: 'success' });
       void loadWorkerFullData();
     } catch (err) {
       console.error('Error guardando liquidación:', err);
-      showToast('No se pudo guardar la liquidación', 'error');
+      toast({ message: 'No se pudo guardar la liquidación', tone: 'danger' });
       setSavingLiquidacion(false);
     }
   };
@@ -893,11 +900,11 @@ export default function TrabajadorDetailPage() {
 
       setNewNotaText('');
       setSavingNota(false);
-      showToast('Nota publicada en la bitácora', 'success');
+      toast({ message: 'Nota publicada en la bitácora', tone: 'success' });
       void loadWorkerFullData();
     } catch (err) {
       console.error('Error guardando nota:', err);
-      showToast('No se pudo guardar la nota', 'error');
+      toast({ message: 'No se pudo guardar la nota', tone: 'danger' });
       setSavingNota(false);
     }
   };
