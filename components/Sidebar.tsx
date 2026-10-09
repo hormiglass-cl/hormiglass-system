@@ -96,41 +96,75 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: bo
 
       <nav aria-label="Navegación principal" className="flex-1 overflow-y-auto px-3 pb-4 pt-2">
         {groups.map((group) => {
-          const groupOpen = collapsed || !group.collapsible || !closedGroups.includes(group.id)
-            || group.items.some((item) => item === active?.item);
-          return <div key={group.id} className="mb-4">
-            <div className={clsx(collapsed && 'md:hidden')}>{group.collapsible ? (
-              <button type="button" onClick={() => toggleGroup(group.id)} aria-expanded={groupOpen}
-                className="t-caption mb-1 flex w-full items-center justify-between rounded-control px-3 py-1 hover:bg-surface-muted hover:text-ink">
-                {group.label}
-                <ChevronDown size={14} aria-hidden className={clsx('transition-transform', !groupOpen && '-rotate-90')} />
-              </button>
-            ) : <h2 className="t-caption mb-1 px-3 py-1">{group.label}</h2>}</div>
-            {collapsed && <div className="mx-3 mb-2 hidden border-t border-line md:block" aria-hidden />}
-            {groupOpen && <ul className="space-y-0.5">
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                const isActive = item === active?.item;
-                const badge = item.href === '/notificaciones' && unreadCount > 0 ? unreadCount : 0;
-                return <li key={item.href}>
-                  <Link href={item.href} onClick={onMobileClose} title={collapsed ? item.label : undefined}
-                    aria-current={isActive ? 'page' : undefined}
+          const isCollapsible = group.collapsible !== false;
+          const isClosed = isCollapsible && closedGroups.includes(group.id);
+          const groupOpen = collapsed || !isClosed;
+          const hasActiveItem = group.items.some((item) => item === active?.item);
+
+          return <div key={group.id} className="mb-3">
+            <div className={clsx(collapsed && 'md:hidden')}>
+              {isCollapsible ? (
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.id)}
+                  aria-expanded={groupOpen}
+                  aria-controls={`sidebar-group-${group.id}`}
+                  className="t-caption mb-1 flex w-full items-center justify-between rounded-control px-3 py-1.5 text-left transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  <span className="flex items-center gap-1.5 truncate font-medium">
+                    {group.label}
+                    {!groupOpen && hasActiveItem && (
+                      <span
+                        className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
+                        title="Contiene la página activa"
+                        aria-hidden
+                      />
+                    )}
+                  </span>
+                  <ChevronDown
+                    size={14}
+                    aria-hidden
                     className={clsx(
-                      'relative flex min-h-9 items-center gap-3 rounded-control px-3 py-2 text-[13px] font-medium transition-colors',
-                      collapsed && 'md:justify-center',
-                      isActive ? 'bg-surface-muted font-semibold text-ink' : 'text-ink-muted hover:bg-surface-muted hover:text-ink',
-                    )}>
-                    {isActive && <span aria-hidden className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-accent" />}
-                    <Icon size={18} aria-hidden className={isActive ? 'text-ink' : 'text-ink-muted'} />
-                    <span className={clsx('truncate', collapsed && 'md:sr-only')}>{item.label}</span>
-                    {badge > 0 && <span className={clsx(
-                      't-micro t-num rounded-full bg-accent px-1.5 text-on-accent',
-                      collapsed ? 'absolute right-1.5 top-1' : 'ml-auto',
-                    )}>{badge}<span className="sr-only"> sin leer</span></span>}
-                  </Link>
-                </li>;
-              })}
-            </ul>}
+                      'shrink-0 text-ink-muted transition-transform duration-200',
+                      !groupOpen && '-rotate-90',
+                    )}
+                  />
+                </button>
+              ) : (
+                <h2 className="t-caption mb-1 px-3 py-1.5 font-medium">{group.label}</h2>
+              )}
+            </div>
+            {collapsed && <div className="mx-3 mb-2 hidden border-t border-line md:block" aria-hidden />}
+            {groupOpen && (
+              <ul id={`sidebar-group-${group.id}`} className="space-y-0.5">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = item === active?.item;
+                  const badge = item.href === '/notificaciones' && unreadCount > 0 ? unreadCount : 0;
+                  return <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      onClick={onMobileClose}
+                      title={collapsed ? item.label : undefined}
+                      aria-current={isActive ? 'page' : undefined}
+                      className={clsx(
+                        'relative flex min-h-9 items-center gap-3 rounded-control px-3 py-2 text-[13px] font-medium transition-colors',
+                        collapsed && 'md:justify-center',
+                        isActive ? 'bg-surface-muted font-semibold text-ink' : 'text-ink-muted hover:bg-surface-muted hover:text-ink',
+                      )}
+                    >
+                      {isActive && <span aria-hidden className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-accent" />}
+                      <Icon size={18} aria-hidden className={isActive ? 'text-ink' : 'text-ink-muted'} />
+                      <span className={clsx('truncate', collapsed && 'md:sr-only')}>{item.label}</span>
+                      {badge > 0 && <span className={clsx(
+                        't-micro t-num rounded-full bg-accent px-1.5 text-on-accent',
+                        collapsed ? 'absolute right-1.5 top-1' : 'ml-auto',
+                      )}>{badge}<span className="sr-only"> sin leer</span></span>}
+                    </Link>
+                  </li>;
+                })}
+              </ul>
+            )}
           </div>;
         })}
       </nav>
