@@ -129,7 +129,7 @@ type ReclamoActividadRow = {
 const STAGE_CONFIG: Record<string, { label: string; area: string; tone: Tone }> = {
   nueva: { label: 'Nueva oportunidad', area: 'Comercial', tone: 'neutral' },
   pagada: { label: 'Pago validado', area: 'Comercial', tone: 'info' },
-  entregada: { label: 'Venta cerrada', area: 'Comercial', tone: 'success' },
+  entregada: { label: 'Venta aprobada', area: 'Comercial', tone: 'success' },
 
   prod_pendiente: { label: 'Pendiente planif.', area: 'Producción', tone: 'warning' },
   prod_cola: { label: 'En cola', area: 'Producción', tone: 'info' },
@@ -159,6 +159,8 @@ function getEtapaObraIndex(estado?: string | null): number {
       return 0;
     case 'pagada':
       return 1;
+    case 'entregada':
+      return 2;
     case 'prod_pendiente':
     case 'prod_cola':
     case 'prod_fabricacion':
@@ -167,7 +169,7 @@ function getEtapaObraIndex(estado?: string | null): number {
     case 'rev_listo_retiro':
     case 'programada':
     case 'en_fabricacion':
-      return 2;
+      return 3;
     case 'rev_listo_despacho':
     case 'lista_despacho':
       return 3;
@@ -178,7 +180,6 @@ function getEtapaObraIndex(estado?: string | null): number {
     case 'prod_finalizado':
     case 'rev_entregado':
     case 'rev_postventa':
-    case 'entregada':
     case 'venta_cerrada':
       return 5;
     default:
@@ -376,7 +377,7 @@ export default function ClienteDetailPage() {
               (currentCli.rut && o.cliente?.rut === currentCli.rut) ||
               (currentCli.nombre && o.cliente?.nombre === currentCli.nombre)
           );
-          const closedIds = matchedOps.filter((op) => ['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline)).map((op) => op.id);
+          const closedIds = matchedOps.filter((op) => ['prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline)).map((op) => op.id);
           const { data: accreditationRows, error: accreditationError } = closedIds.length
             ? await supabase.rpc('estado_entrega_acreditada', { p_ventas: closedIds })
             : { data: [], error: null };
@@ -966,7 +967,7 @@ export default function ClienteDetailPage() {
                       tone: 'neutral' as Tone,
                     };
                     const closeWithoutEvidence =
-                      ['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline) &&
+                      ['prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline) &&
                       deliveryAccreditation[op.id] !== true;
 
                     return (

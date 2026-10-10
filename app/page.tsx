@@ -94,7 +94,7 @@ export default function Dashboard() {
         supabase.from('usuarios').select('*').eq('activo', true),
         supabase.from('eventos_produccion_logistica').select('*, responsable:usuarios!responsable_id(*)'),
         recordatoriosQuery,
-        supabase.from('abonos').select('*').eq('estado', 'pendiente_validacion'),
+        supabase.from('abonos').select('*').eq('estado', 'pendiente'),
         supabase.from('postventa_casos').select('*').in('estado', ['abierto', 'programado', 'en_curso']),
       ]);
 
@@ -102,7 +102,7 @@ export default function Dashboard() {
       if (queryError) throw queryError;
 
       const closedIds = ((opRes.data || []) as OportunidadVenta[])
-        .filter((op) => ['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline))
+        .filter((op) => ['prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline))
         .map((op) => op.id);
 
       const { data: accreditationRows, error: accreditationError } = closedIds.length
@@ -287,9 +287,10 @@ export default function Dashboard() {
     const etapas = [
       { id: 'cotizacion', label: 'Cotización', stages: ['nueva'] },
       { id: 'venta', label: 'Venta', stages: ['pagada'] },
+      { id: 'aprobada', label: 'Venta Aprobada', stages: ['entregada'] },
       { id: 'abastecimiento', label: 'Fabricación', stages: ['programada', 'prod_fabricacion'] },
       { id: 'despacho', label: 'Despacho', stages: ['prod_instalacion'] },
-      { id: 'entrega', label: 'Entrega / Cierre', stages: ['entregada', 'prod_finalizado', 'rev_entregado'] },
+      { id: 'entrega', label: 'Entrega / Cierre', stages: ['prod_finalizado', 'rev_entregado'] },
     ];
 
     return etapas.map((e) => {
@@ -556,11 +557,12 @@ export default function Dashboard() {
   const { funnelStages, totalPipelineNominal, totalPipelineWeighted } = useMemo(() => {
     const stageDefs: { id: string; label: string; prob: number; color: string; bg: string }[] = [
       { id: 'nueva', label: '1. Nuevas oportunidades', prob: 20, color: 'var(--hg-warning)', bg: 'var(--hg-surface-muted)' },
-      { id: 'pagada', label: '2. Pago validado', prob: 90, color: 'var(--hg-info)', bg: 'var(--hg-surface-muted)' },
-      { id: 'programada', label: '3. En programación', prob: 70, color: 'var(--hg-accent)', bg: 'var(--hg-surface-muted)' },
-      { id: 'prod_fabricacion', label: '4. En fabricación', prob: 80, color: 'var(--hg-accent-line)', bg: 'var(--hg-surface-muted)' },
-      { id: 'prod_instalacion', label: '5. En instalación & obra', prob: 90, color: 'var(--hg-info)', bg: 'var(--hg-surface-muted)' },
-      { id: 'entregada', label: '6. Entregadas & cierre', prob: 100, color: 'var(--hg-success)', bg: 'var(--hg-surface-muted)' },
+      { id: 'pagada', label: '2. Pago validado', prob: 70, color: 'var(--hg-info)', bg: 'var(--hg-surface-muted)' },
+      { id: 'entregada', label: '3. Venta aprobada', prob: 85, color: 'var(--hg-accent)', bg: 'var(--hg-surface-muted)' },
+      { id: 'programada', label: '4. En programación', prob: 80, color: 'var(--hg-accent-line)', bg: 'var(--hg-surface-muted)' },
+      { id: 'prod_fabricacion', label: '5. En fabricación', prob: 85, color: 'var(--hg-accent-line)', bg: 'var(--hg-surface-muted)' },
+      { id: 'prod_instalacion', label: '6. En instalación & obra', prob: 90, color: 'var(--hg-info)', bg: 'var(--hg-surface-muted)' },
+      { id: 'cierre', label: '7. Entregadas & cierre', prob: 100, color: 'var(--hg-success)', bg: 'var(--hg-surface-muted)' },
       { id: 'sin_acreditar', label: 'Entregas históricas sin acreditar', prob: 0, color: 'var(--hg-warning)', bg: 'var(--hg-surface-muted)' },
     ];
 
@@ -570,10 +572,13 @@ export default function Dashboard() {
     const stages: FunnelStageData[] = stageDefs.map((def) => {
       const opsInStage = filteredOportunidades.filter((o) => {
         if (def.id === 'entregada') {
-          return ['entregada', 'prod_finalizado', 'rev_entregado'].includes(o.estado_pipeline) && deliveryAccreditation[o.id] === true;
+          return o.estado_pipeline === 'entregada';
+        }
+        if (def.id === 'cierre') {
+          return ['prod_finalizado', 'rev_entregado'].includes(o.estado_pipeline) && deliveryAccreditation[o.id] === true;
         }
         if (def.id === 'sin_acreditar') {
-          return ['entregada', 'prod_finalizado', 'rev_entregado'].includes(o.estado_pipeline) && deliveryAccreditation[o.id] !== true;
+          return ['prod_finalizado', 'rev_entregado'].includes(o.estado_pipeline) && deliveryAccreditation[o.id] !== true;
         }
         return o.estado_pipeline === def.id;
       });

@@ -53,19 +53,19 @@ const PIPELINE_STAGES = [
   { id: 'nueva', label: 'Nueva' },
   { id: 'cotizacion', label: 'Cotización' },
   { id: 'pagada', label: 'Abono / Pago' },
+  { id: 'aprobada', label: 'Venta Aprobada' },
   { id: 'operacion', label: 'Abastecimiento' },
-  { id: 'despacho', label: 'Logística' },
   { id: 'entregada', label: 'Cierre / Entrega' },
 ] as const;
 
 function getStageIndex(estado: EstadoPipeline): number {
   if (estado === 'nueva') return 0;
   if (estado === 'pagada') return 2;
+  if (estado === 'entregada') return 3;
   if (estado.startsWith('prod_') || estado.startsWith('rev_') || estado === 'programada') {
-    if (estado === 'prod_finalizado' || estado === 'rev_entregado') return 4;
-    return 3;
+    if (estado === 'prod_finalizado' || estado === 'rev_entregado') return 5;
+    return 4;
   }
-  if (estado === 'entregada') return 5;
   return 1;
 }
 
@@ -76,6 +76,25 @@ function getStageTone(estado: EstadoPipeline): 'neutral' | 'accent' | 'success' 
   if (estado.startsWith('prod_') || estado.startsWith('rev_')) return 'warning';
   return 'neutral';
 }
+
+const STAGE_LABELS: Record<string, string> = {
+  nueva: 'Nueva Oportunidad',
+  pagada: 'Pago Validado',
+  programada: 'En Programación',
+  entregada: 'Venta Aprobada',
+  prod_pendiente: 'Pendiente Planif.',
+  prod_cola: 'Cola Fabricación',
+  prod_fabricacion: 'En Fabricación',
+  prod_listo_instalacion: 'Listo p/ Instal.',
+  prod_instalacion: 'En Instalación',
+  prod_finalizado: 'Finalizado / Entregado',
+  rev_coordinacion: 'Coord. Proveedor',
+  rev_stock: 'Confirm. Stock',
+  rev_listo_retiro: 'Listo Retiro',
+  rev_listo_despacho: 'Listo Despacho',
+  rev_entregado: 'Entregado al Cliente',
+  rev_postventa: 'Postventa',
+};
 
 const money = (val: number) => `$${Number(val || 0).toLocaleString('es-CL')}`;
 
@@ -182,7 +201,7 @@ export default function FichaOportunidadPage() {
   const handleCambiarEtapa = async (nuevaEtapa: EstadoPipeline) => {
     if (!op || op.estado_pipeline === nuevaEtapa) return;
 
-    if (['entregada', 'prod_finalizado', 'rev_entregado'].includes(nuevaEtapa) && !deliveryAccredited) {
+    if (['prod_finalizado', 'rev_entregado'].includes(nuevaEtapa) && !deliveryAccredited) {
       toast({
         message: 'La venta aún no tiene entrega completa acreditada. Revisa guías o excepciones en la vista operativa.',
         tone: 'warning',
@@ -637,13 +656,13 @@ export default function FichaOportunidadPage() {
           <Panel title="Control de Etapa" className="p-4 space-y-3">
             <div>
               <span className="t-micro text-ink-muted block mb-1">Etapa actual</span>
-              <StatusBadge tone={stageTone}>{op.estado_pipeline}</StatusBadge>
+              <StatusBadge tone={stageTone}>{STAGE_LABELS[op.estado_pipeline] || op.estado_pipeline}</StatusBadge>
             </div>
 
             <div className="space-y-1.5 pt-2 border-t border-line-subtle">
               <span className="t-micro text-ink-muted block">Mover a otra etapa:</span>
               <div className="grid grid-cols-2 gap-1.5 text-xs">
-                {(['nueva', 'pagada', 'prod_cola', 'prod_fabricacion', 'prod_finalizado', 'entregada'] as EstadoPipeline[]).map(
+                {(['nueva', 'pagada', 'entregada', 'prod_cola', 'prod_fabricacion', 'prod_finalizado'] as EstadoPipeline[]).map(
                   (stage) => (
                     <button
                       key={stage}
@@ -655,7 +674,7 @@ export default function FichaOportunidadPage() {
                           : 'border-line bg-surface text-ink hover:bg-surface-muted'
                       }`}
                     >
-                      {stage}
+                      {STAGE_LABELS[stage] || stage}
                     </button>
                   )
                 )}

@@ -19,6 +19,9 @@ import {
   HardHat,
   ToggleLeft,
   ToggleRight,
+  AlertTriangle,
+  RefreshCw,
+  ShieldAlert,
 } from 'lucide-react';
 import { mensajeError } from '../../lib/errores';
 import {
@@ -95,8 +98,14 @@ export default function ConfiguracionPage() {
   const toast = useToast();
   const confirm = useConfirm();
 
-  // Modo de Pestaña Principal (Campos vs Usuarios y Accesos)
-  const [mainTab, setMainTab] = useState<'usuarios' | 'campos'>('usuarios');
+  // Modo de Pestaña Principal (Campos vs Usuarios y Accesos vs Zona de Peligro)
+  const [mainTab, setMainTab] = useState<'usuarios' | 'campos' | 'peligro'>('usuarios');
+
+  // Zona de Peligro: Reset de Datos de Operación
+  const [resetDryRunLoading, setResetDryRunLoading] = useState(false);
+  const [resetDryRunData, setResetDryRunData] = useState<Record<string, number> | null>(null);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetExecuting, setResetExecuting] = useState(false);
 
   // Campos Custom State
   const [fields, setFields] = useState<FieldDefinition[]>([]);
@@ -433,6 +442,79 @@ export default function ConfiguracionPage() {
     }
   };
 
+  const handleSimularReset = async () => {
+    try {
+      setResetDryRunLoading(true);
+      const { data, error } = await supabase.rpc('reset_datos_operacion', {
+        p_confirmacion: '',
+        p_dry_run: true,
+      });
+      if (error) throw error;
+      const res = data as { dry_run: boolean; conteos: Record<string, number>; mensaje: string };
+      setResetDryRunData(res.conteos);
+      toast({
+        message: 'Simulación de reset ejecutada con éxito. Revisa el resumen de registros.',
+        tone: 'info',
+      });
+    } catch (err: unknown) {
+      console.error('Error al simular reset:', err);
+      toast({ message: mensajeError(err, 'Error al simular reset de operaciones.'), tone: 'danger' });
+    } finally {
+      setResetDryRunLoading(false);
+    }
+  };
+
+  const handleEjecutarReset = async () => {
+    if (resetConfirmText.trim() !== 'BORRAR OPERACION HORMIGLASS') {
+      toast({
+        message: 'Debe escribir exactamente la frase de confirmación: BORRAR OPERACION HORMIGLASS',
+        tone: 'warning',
+      });
+      return;
+    }
+
+    const ok = await confirm({
+      title: '¿Confirmar eliminación masiva de datos demo de operación?',
+      message: (
+        <div className="space-y-2 text-xs text-ink-muted">
+          <p className="font-semibold text-danger">
+            ¡ATENCIÓN! Esta acción es destructiva e irreversible.
+          </p>
+          <p>
+            Se eliminarán permanentemente todas las oportunidades, cotizaciones, órdenes de compra, guías, abonos y movimientos de caja de prueba. Los 348 productos, cuentas bancarias y catálogos maestros permanecerán intactos.
+          </p>
+        </div>
+      ),
+      confirmLabel: 'Sí, borrar datos de operación',
+      cancelLabel: 'Cancelar',
+      destructive: true,
+    });
+
+    if (!ok) return;
+
+    try {
+      setResetExecuting(true);
+      const { data, error } = await supabase.rpc('reset_datos_operacion', {
+        p_confirmacion: 'BORRAR OPERACION HORMIGLASS',
+        p_dry_run: false,
+      });
+      if (error) throw error;
+      const res = data as { dry_run: boolean; conteos_eliminados: Record<string, number>; mensaje: string };
+      toast({
+        message: res?.mensaje || 'Datos operativos eliminados correctamente. El sistema está limpio para iniciar la operación real.',
+        tone: 'success',
+        duration: 7000,
+      });
+      setResetConfirmText('');
+      setResetDryRunData(null);
+    } catch (err: unknown) {
+      console.error('Error al ejecutar reset de operaciones:', err);
+      toast({ message: mensajeError(err, 'Error al ejecutar la eliminación de datos de operación.'), tone: 'danger' });
+    } finally {
+      setResetExecuting(false);
+    }
+  };
+
   const filteredFields = fields.filter((f) => f.entidad === activeEntityTab);
 
   // Pagination for Users
@@ -456,7 +538,7 @@ export default function ConfiguracionPage() {
             >
               Registrar usuario
             </Button>
-          ) : (
+          ) : mainTab === 'campos' ? (
             <Button
               variant="primary"
               icon={Plus}
@@ -464,7 +546,7 @@ export default function ConfiguracionPage() {
             >
               Nuevo campo
             </Button>
-          )
+          ) : null
         }
       />
 
@@ -473,9 +555,12 @@ export default function ConfiguracionPage() {
         items={[
           { id: 'usuarios', label: 'Usuarios, accesos y calendarios', count: usersList.length },
           { id: 'campos', label: 'Campos del sistema y módulos', count: fields.length },
+          ...(currentUser?.rol === 'admin'
+            ? [{ id: 'peligro', label: 'Zona de peligro (Mantenimiento)' }]
+            : []),
         ]}
         active={mainTab}
-        onChange={(id) => setMainTab(id as 'usuarios' | 'campos')}
+        onChange={(id) => setMainTab(id as 'usuarios' | 'campos' | 'peligro')}
       />
 
       {/* ========================================================= */}
@@ -780,6 +865,126 @@ export default function ConfiguracionPage() {
                 </table>
               </div>
             )}
+          </Panel>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* PESTAÑA 3: ZONA DE PELIGRO (RESET DE OPERACIÓN)           */}
+      {/* ========================================================= */}
+      {mainTab === 'peligro' && currentUser?.rol === 'admin' && (
+        <div className="space-y-5">
+          {/* Panel Principal de Zona de Peligro */}
+          <Panel
+            className="border-danger/30 bg-danger-subtle/10"
+            title={
+              <span className="flex items-center gap-2 text-danger">
+                <ShieldAlert className="w-4 h-4 text-danger" />
+                <span className="font-semibold">Zona de Peligro: Limpieza y Reinicio de Operación</span>
+              </span>
+            }
+          >
+            <div className="p-4 space-y-4">
+              <div className="flex items-start gap-3 p-3 rounded-container border border-danger/20 bg-surface">
+                <AlertTriangle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
+                <div className="space-y-1 text-xs">
+                  <p className="font-semibold text-danger">
+                    Depuración masiva de transacciones de prueba (Puesta a punto para operación real)
+                  </p>
+                  <p className="text-ink-muted leading-relaxed">
+                    Esta herramienta ejecuta un reset integral de todas las tablas operativas: clientes de prueba,
+                    oportunidades del pipeline, cotizaciones, órdenes de compra, guías de despacho, abonos y movimientos de caja.
+                  </p>
+                  <div className="pt-2 text-ink text-xs">
+                    <span className="font-semibold text-success">Datos protegidos que NO se eliminan:</span>
+                    <ul className="list-disc list-inside mt-1 text-ink-muted space-y-0.5">
+                      <li>Catálogo maestro de productos (348 ítems).</li>
+                      <li>Usuarios y credenciales de acceso al sistema.</li>
+                      <li>Empresas del holding y sus 8 cuentas bancarias oficiales.</li>
+                      <li>Categorías y subcategorías de caja.</li>
+                      <li>Fichas y registros de Recursos Humanos.</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botón de Simulación Dry-Run */}
+              <div className="flex items-center justify-between p-3 rounded-container bg-surface border border-line-subtle">
+                <div>
+                  <h4 className="text-xs font-semibold text-ink">Paso 1: Simulación de conteos (Dry Run)</h4>
+                  <p className="text-xs text-ink-muted">
+                    Consulta la base de datos para cuantificar con exactitud los registros que se eliminarían, sin alterar ningún dato.
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  icon={RefreshCw}
+                  disabled={resetDryRunLoading}
+                  onClick={() => void handleSimularReset()}
+                >
+                  {resetDryRunLoading ? 'Simulando…' : 'Simular reset'}
+                </Button>
+              </div>
+
+              {/* Resultados de Simulación */}
+              {resetDryRunData && (
+                <div className="p-4 rounded-container bg-surface border border-line-subtle space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-ink">
+                      Resumen de registros detectados para depuración:
+                    </span>
+                    <StatusBadge tone="info">Simulación activa</StatusBadge>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-xs">
+                    {Object.entries(resetDryRunData).map(([tabla, conteo]) => (
+                      <div
+                        key={tabla}
+                        className="flex items-center justify-between p-2 rounded border border-line-subtle bg-surface-muted"
+                      >
+                        <span className="font-mono text-ink-muted truncate mr-2" title={tabla}>
+                          {tabla}
+                        </span>
+                        <span className={conteo > 0 ? 'text-danger font-semibold' : 'text-ink-muted'}>
+                          <CodeStamp>{conteo}</CodeStamp>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Paso 2: Ejecución Real con Frase de Confirmación */}
+              <div className="p-4 rounded-container bg-surface border border-danger/30 space-y-3">
+                <h4 className="text-xs font-semibold text-danger">Paso 2: Confirmación y ejecución definitiva</h4>
+                <p className="text-xs text-ink-muted">
+                  Para proceder con la eliminación definitiva de todos los datos transaccionales, escriba la siguiente frase exactamente:
+                  <br />
+                  <span className="font-mono font-bold text-ink select-all bg-surface-muted px-1.5 py-0.5 rounded border border-line-subtle mt-1 inline-block">
+                    BORRAR OPERACION HORMIGLASS
+                  </span>
+                </p>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
+                  <div className="flex-1">
+                    <TextInput
+                      type="text"
+                      placeholder="Escriba aquí la frase de confirmación..."
+                      value={resetConfirmText}
+                      onChange={(e) => setResetConfirmText(e.target.value)}
+                      className="text-xs font-mono"
+                    />
+                  </div>
+                  <Button
+                    variant="destructive"
+                    icon={Trash2}
+                    disabled={resetConfirmText.trim() !== 'BORRAR OPERACION HORMIGLASS' || resetExecuting}
+                    onClick={() => void handleEjecutarReset()}
+                  >
+                    {resetExecuting ? 'Depurando…' : 'Ejecutar limpieza de operación'}
+                  </Button>
+                </div>
+              </div>
+            </div>
           </Panel>
         </div>
       )}

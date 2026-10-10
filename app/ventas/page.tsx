@@ -156,19 +156,19 @@ const PIPELINE_STAGES = [
   { id: 'nueva', label: 'Nueva' },
   { id: 'cotizacion', label: 'Cotización' },
   { id: 'pagada', label: 'Abono / Pago' },
+  { id: 'aprobada', label: 'Venta Aprobada' },
   { id: 'operacion', label: 'Abastecimiento' },
-  { id: 'despacho', label: 'Logística' },
   { id: 'entregada', label: 'Cierre / Entrega' },
 ] as const;
 
 function getStageIndex(estado: EstadoPipeline): number {
   if (estado === 'nueva') return 0;
   if (estado === 'pagada') return 2;
+  if (estado === 'entregada') return 3;
   if (estado.startsWith('prod_') || estado.startsWith('rev_') || estado === 'programada') {
-    if (estado === 'prod_finalizado' || estado === 'rev_entregado') return 4;
-    return 3;
+    if (estado === 'prod_finalizado' || estado === 'rev_entregado') return 5;
+    return 4;
   }
-  if (estado === 'entregada') return 5;
   return 1;
 }
 
@@ -861,7 +861,7 @@ export default function PipelineVentasPage() {
           let mergedOps: OportunidadVenta[] = [];
           if (opRes.data) {
             const rawOps = opRes.data as OportunidadVenta[];
-            const closedIds = rawOps.filter((op) => ['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline)).map((op) => op.id);
+            const closedIds = rawOps.filter((op) => ['prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline)).map((op) => op.id);
             const { data: accreditationRows, error: accreditationError } = closedIds.length
               ? await supabase.rpc('estado_entrega_acreditada', { p_ventas: closedIds })
               : { data: [], error: null };
@@ -1182,7 +1182,7 @@ export default function PipelineVentasPage() {
         { id: 'nueva' as EstadoPipeline, label: 'Nueva Oportunidad', color: 'border-warning/30 text-warning-ink', bg: 'bg-warning-soft' },
         { id: 'pagada' as EstadoPipeline, label: 'Pago Validado', color: 'border-info/30 text-info', bg: 'bg-info-soft' },
         { id: 'programada' as EstadoPipeline, label: 'En Programación', color: 'border-line text-ink', bg: 'bg-surface-muted' },
-        { id: 'entregada' as EstadoPipeline, label: 'Venta Cerrada', color: 'border-success/30 text-success', bg: 'bg-success-soft' },
+        { id: 'entregada' as EstadoPipeline, label: 'Venta Aprobada', color: 'border-success/30 text-success', bg: 'bg-success-soft' },
       ],
     },
     {
@@ -1758,7 +1758,7 @@ export default function PipelineVentasPage() {
     const targetOp = oportunidades.find((o) => o.id === opId);
     if (!targetOp || targetOp.estado_pipeline === targetState) return;
 
-    if (['entregada', 'prod_finalizado', 'rev_entregado'].includes(targetState)) {
+    if (['prod_finalizado', 'rev_entregado'].includes(targetState)) {
       const { data: accredited, error: deliveryError } = await supabase.rpc('entrega_acreditada', { p_venta: opId });
       if (deliveryError || !accredited) {
         toast({ message: mensajeError(deliveryError, 'La venta aún no tiene entrega completa acreditada. Revisa guías y excepciones en la vista operativa.'), tone: 'warning' });
@@ -1777,7 +1777,7 @@ export default function PipelineVentasPage() {
       return;
     }
 
-    // Si se mueve a Venta Cerrada (entregada) y no tiene rama_destino aún, abrir modal de elección
+    // Si se mueve a Venta Aprobada (entregada) y no tiene rama_destino aún, abrir modal de elección
     if (targetState === 'entregada' && !targetOp.rama_destino) {
       setRamaChoiceModal({ op: targetOp, targetState });
       return;
@@ -2316,7 +2316,7 @@ export default function PipelineVentasPage() {
   };
 
   const isUnaccreditedClose = (op: OportunidadVenta) =>
-    ['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline) && deliveryAccreditation[op.id] !== true;
+    ['prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline) && deliveryAccreditation[op.id] !== true;
   const filteredOportunidades = oportunidades.filter((op) => {
     // 1. Text Search (código, título, cliente nombre, cliente rut)
     if (filterSearch.trim()) {
@@ -2574,7 +2574,7 @@ export default function PipelineVentasPage() {
                             <h4 className="text-sm font-semibold text-[var(--color-ink)]">{stage.label}</h4>
                           </div>
                           <span className="text-[11px] font-mono font-bold text-ink-muted">
-                            {stage.id === 'entregada'
+                            {stage.id === 'prod_finalizado' || stage.id === 'rev_entregado'
                               ? `${colOps.filter((op) => !isUnaccreditedClose(op)).length} acreditadas · ${colOps.length} registros`
                               : colOps.length}
                           </span>
@@ -2787,7 +2787,7 @@ export default function PipelineVentasPage() {
                               </span>
 
                               <span className="hg-list-count">
-                                {col.id === 'entregada'
+                                {col.id === 'prod_finalizado' || col.id === 'rev_entregado'
                                   ? `${rawOps.filter((op) => !isUnaccreditedClose(op)).length} acreditadas · ${rawOps.length} registros`
                                   : rawOps.length}
                               </span>
@@ -6483,7 +6483,7 @@ export default function PipelineVentasPage() {
 
             <div className="space-y-3 text-xs">
               <p className="text-ink font-medium leading-relaxed">
-                Para cambiar la oportunidad <strong className="font-mono text-accent-ink">{abonoWarningModal.op.codigo}</strong> al estado de Venta Cerrada o Producción, se requiere registrar un abono equivalente a al menos el <strong className="text-warning-ink font-bold">50% o 100%</strong> del monto total.
+                Para cambiar la oportunidad <strong className="font-mono text-accent-ink">{abonoWarningModal.op.codigo}</strong> al estado de Venta Aprobada o Producción, se requiere registrar un abono equivalente a al menos el <strong className="text-warning-ink font-bold">50% o 100%</strong> del monto total.
               </p>
 
               <div className="bg-surface-muted p-3.5 rounded-lg border border-line space-y-2 font-mono text-xs">

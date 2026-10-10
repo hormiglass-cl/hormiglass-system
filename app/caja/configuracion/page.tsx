@@ -25,6 +25,7 @@ import {
   TrendingDown,
   TrendingUp,
   AlertCircle,
+  Trash2,
 } from 'lucide-react';
 import {
   PageHeader,
@@ -39,7 +40,8 @@ import {
   TextInput,
   Select,
 } from '../../../components/ui/crm';
-import { useToast } from '../../../components/ui/feedback';
+import { useToast, useConfirm } from '../../../components/ui/feedback';
+import { logSistema } from '../../../lib/logger';
 
 const TIPOS_CUENTA: { id: TipoCuentaBancaria; label: string }[] = [
   { id: 'corriente', label: 'Cuenta Corriente' },
@@ -94,6 +96,7 @@ export default function CajaConfiguracionPage() {
   const { currentUser } = useAuth();
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
   const supabase = useMemo(() => createClient(), []);
 
   // Tabs
@@ -226,12 +229,29 @@ export default function CajaConfiguracionPage() {
           .update(payload)
           .eq('id', editingCuenta.id);
         if (error) throw error;
+        await logSistema({
+          tipo_accion: 'actualizacion',
+          entidad: 'cuentas_bancarias',
+          entidad_id: editingCuenta.id,
+          descripcion: `Cuenta bancaria "${payload.alias}" actualizada`,
+          datos_anteriores: editingCuenta,
+          datos_nuevos: payload,
+        });
         toast({ message: `Cuenta "${payload.alias}" actualizada correctamente.`, tone: 'success' });
       } else {
-        const { error } = await supabase
+        const { data: inserted, error } = await supabase
           .from('cuentas_bancarias')
-          .insert([payload]);
+          .insert([payload])
+          .select()
+          .single();
         if (error) throw error;
+        await logSistema({
+          tipo_accion: 'creacion',
+          entidad: 'cuentas_bancarias',
+          entidad_id: inserted?.id,
+          descripcion: `Cuenta bancaria "${payload.alias}" (${payload.banco}) registrada`,
+          datos_nuevos: inserted || payload,
+        });
         toast({ message: `Cuenta "${payload.alias}" registrada exitosamente.`, tone: 'success' });
       }
 
@@ -264,6 +284,77 @@ export default function CajaConfiguracionPage() {
     } catch (err: unknown) {
       console.error('Error cambiando estado:', err);
       const message = err instanceof Error ? err.message : 'Error al cambiar estado';
+      toast({ message, tone: 'danger' });
+    }
+  };
+
+  const handleDeleteCuenta = async (cuenta: CuentaBancaria) => {
+    try {
+      // 1. Verificación defensiva previa de movimientos y abonos
+      const [{ count: movCount, error: movErr }, { count: abonoCount, error: abonoErr }] =
+        await Promise.all([
+          supabase
+            .from('caja_movimientos')
+            .select('id', { count: 'exact', head: true })
+            .eq('cuenta_bancaria_id', cuenta.id),
+          supabase
+            .from('abonos')
+            .select('id', { count: 'exact', head: true })
+            .eq('cuenta_bancaria_id', cuenta.id),
+        ]);
+
+      if (movErr) throw movErr;
+      if (abonoErr) throw abonoErr;
+
+      const totalAsociados = (movCount || 0) + (abonoCount || 0);
+      if (totalAsociados > 0) {
+        toast({
+          message: `No se puede eliminar la cuenta "${cuenta.alias}" porque tiene ${totalAsociados} registro(s) contables asociados (${movCount || 0} movimientos, ${abonoCount || 0} abonos). Desactívela en su lugar para mantener la integridad histórica.`,
+          tone: 'warning',
+        });
+        return;
+      }
+
+      // 2. Diálogo de confirmación accesible e irreversible
+      const ok = await confirm({
+        title: `¿Eliminar cuenta "${cuenta.alias}"?`,
+        message: (
+          <p className="text-xs text-ink-muted leading-relaxed">
+            Esta cuenta no registra movimientos y será eliminada permanentemente del catálogo de bancos. Esta acción no se puede deshacer.
+          </p>
+        ),
+        confirmLabel: 'Eliminar cuenta',
+        cancelLabel: 'Cancelar',
+        destructive: true,
+      });
+
+      if (!ok) return;
+
+      // 3. Ejecutar eliminación
+      const { error: delErr } = await supabase
+        .from('cuentas_bancarias')
+        .delete()
+        .eq('id', cuenta.id);
+
+      if (delErr) throw delErr;
+
+      // 4. Registro de auditoría
+      await logSistema({
+        tipo_accion: 'eliminacion',
+        entidad: 'cuentas_bancarias',
+        entidad_id: cuenta.id,
+        descripcion: `Cuenta bancaria "${cuenta.alias}" (${cuenta.banco}) eliminada del catálogo`,
+        datos_anteriores: cuenta,
+      });
+
+      setCuentas((prev) => prev.filter((c) => c.id !== cuenta.id));
+      toast({
+        message: `Cuenta "${cuenta.alias}" eliminada correctamente.`,
+        tone: 'success',
+      });
+    } catch (err: unknown) {
+      console.error('Error al eliminar cuenta bancaria:', err);
+      const message = err instanceof Error ? err.message : 'Error al eliminar la cuenta bancaria';
       toast({ message, tone: 'danger' });
     }
   };
@@ -507,11 +598,21 @@ export default function CajaConfiguracionPage() {
                             </button>
                           </td>
                           <td className="p-3 text-right">
-                            <IconButton
-                              icon={Edit2}
-                              label="Editar cuenta"
-                              onClick={() => handleOpenEditModal(c)}
-                            />
+                            <div className="flex items-center justify-end gap-1">
+                              <IconButton
+                                icon={Edit2}
+                                label="Editar cuenta"
+                                onClick={() => handleOpenEditModal(c)}
+                              />
+                              {isAuthorized && (
+                                <IconButton
+                                  icon={Trash2}
+                                  label="Eliminar cuenta"
+                                  className="hover:text-danger hover:bg-danger-subtle"
+                                  onClick={() => void handleDeleteCuenta(c)}
+                                />
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );

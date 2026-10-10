@@ -146,7 +146,7 @@ export type TipoDocumento = 'boleta' | 'factura' | 'factura_anticipo' | 'nota_ve
 export type EstadoPipeline =
   | 'nueva'
   | 'pagada'
-  | 'entregada'
+  | 'entregada' // Venta Aprobada (cierre comercial; avanza a producción/reventa sin exigir guía previa)
   | 'prod_pendiente'
   | 'prod_cola'
   | 'prod_fabricacion'

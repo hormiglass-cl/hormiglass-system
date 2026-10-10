@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '../../lib/supabase/client';
 import {
   Abono,
@@ -48,11 +48,17 @@ import { useToast } from '../../components/ui/feedback';
 export default function CajaPage() {
   const { currentUser } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const supabase = useMemo(() => createClient(), []);
 
+  const tabParam = searchParams.get('tab');
+  const abonoParam = searchParams.get('abono');
+
   // Tabs
-  const [activeTab, setActiveTab] = useState<'validacion' | 'movimientos'>('validacion');
+  const [activeTab, setActiveTab] = useState<'validacion' | 'movimientos'>(
+    tabParam === 'movimientos' ? 'movimientos' : 'validacion'
+  );
 
   // Estados principales
   const [movimientos, setMovimientos] = useState<MovimientoCaja[]>([]);
@@ -162,6 +168,16 @@ export default function CajaPage() {
     };
   }, [loadData, supabase]);
 
+  useEffect(() => {
+    if (tabParam === 'movimientos' || tabParam === 'validacion') {
+      setActiveTab(tabParam);
+    }
+    if (abonoParam) {
+      setSearchTerm(abonoParam);
+      setFiltroEstadoAbono('todos');
+    }
+  }, [tabParam, abonoParam]);
+
   // Asignar banco por defecto a abonos pendientes cuando se cargan las cuentas
   useEffect(() => {
     if (cuentas.length > 0 && abonos.length > 0) {
@@ -248,8 +264,9 @@ export default function CajaPage() {
 
       if (error) throw error;
 
+      const estadoEtapa = data?.estado_pipeline === 'pagada' ? ' · Oportunidad en Pago Validado' : '';
       toast({
-        message: `Pago validado exitosamente. Ingresado a ${data?.cuenta_bancaria_alias || 'Banco'}.`,
+        message: `Pago validado exitosamente. Ingresado a ${data?.cuenta_bancaria_alias || 'Banco'}${estadoEtapa}.`,
         tone: 'success',
       });
       await loadData();

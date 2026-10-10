@@ -26,6 +26,8 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { currentUser } = useAuth();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [isMac, setIsMac] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- la plataforma solo se conoce en el cliente
@@ -39,6 +41,23 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
     window.addEventListener('keydown', keydown);
     return () => window.removeEventListener('keydown', keydown);
   }, []);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    let alive = true;
+    const userId = currentUser.id;
+    async function refresh() {
+      const { count } = await supabase.from('notificaciones').select('id', { count: 'exact', head: true })
+        .eq('usuario_id', userId).eq('leido', false);
+      if (alive) setUnreadCount(count || 0);
+    }
+    void refresh();
+    const interval = window.setInterval(refresh, 60_000);
+    const channel = supabase.channel(`navbar_notifs_${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notificaciones', filter: `usuario_id=eq.${userId}` }, refresh)
+      .subscribe();
+    return () => { alive = false; window.clearInterval(interval); void supabase.removeChannel(channel); };
+  }, [currentUser?.id, supabase]);
 
   if (pathname === '/login' || pathname.startsWith('/auth')) return null;
 
@@ -79,7 +98,19 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
     </button>
     <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Buscar" className="grid h-9 w-9 place-items-center rounded-control text-ink-muted hover:bg-surface-muted lg:hidden"><Search size={19} aria-hidden /></button>
 
-    <Link href="/notificaciones" aria-label="Notificaciones" title="Notificaciones" className="grid h-9 w-9 place-items-center rounded-control text-ink-muted hover:bg-surface-muted hover:text-ink"><Bell size={19} aria-hidden /></Link>
+    <Link
+      href="/notificaciones"
+      aria-label="Notificaciones"
+      title="Notificaciones"
+      className="relative grid h-9 w-9 place-items-center rounded-control text-ink-muted hover:bg-surface-muted hover:text-ink"
+    >
+      <Bell size={19} aria-hidden />
+      {unreadCount > 0 && (
+        <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 t-micro t-num font-bold text-on-accent">
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </span>
+      )}
+    </Link>
     <UserMenu />
 
     {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}

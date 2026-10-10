@@ -28,6 +28,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: bo
   const [collapsed, setCollapsed] = useState(false);
   const [closedGroups, setClosedGroups] = useState<string[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [pendingAbonosCount, setPendingAbonosCount] = useState(0);
   const supabase = useMemo(() => createClient(), []);
   const groups = navGroupsFor(currentUser?.rol);
   const active = findActiveItem(pathname, searchParams.get('empresa'), currentUser?.rol);
@@ -63,6 +64,33 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: bo
       .subscribe();
     return () => { alive = false; window.clearInterval(interval); void supabase.removeChannel(channel); };
   }, [currentUser?.id, supabase]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const isFinanzasAdmin = ['admin', 'finanzas'].includes(currentUser.rol || '');
+    if (!isFinanzasAdmin) return;
+    let alive = true;
+
+    async function refreshPendingAbonos() {
+      const { count } = await supabase
+        .from('abonos')
+        .select('id', { count: 'exact', head: true })
+        .eq('estado', 'pendiente');
+      if (alive) setPendingAbonosCount(count || 0);
+    }
+
+    void refreshPendingAbonos();
+    const interval = window.setInterval(refreshPendingAbonos, 60_000);
+    const channel = supabase.channel('sidebar_abonos_pendientes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'abonos' }, refreshPendingAbonos)
+      .subscribe();
+
+    return () => {
+      alive = false;
+      window.clearInterval(interval);
+      void supabase.removeChannel(channel);
+    };
+  }, [currentUser?.id, currentUser?.rol, supabase]);
 
   if (pathname === '/login' || pathname.startsWith('/auth')) return null;
 
@@ -140,7 +168,13 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: bo
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const isActive = item === active?.item;
-                  const badge = item.href === '/notificaciones' && unreadCount > 0 ? unreadCount : 0;
+                  const isNotifications = item.href === '/notificaciones';
+                  const isCaja = item.href === '/caja';
+                  const badge = isNotifications && unreadCount > 0
+                    ? unreadCount
+                    : isCaja && pendingAbonosCount > 0 && ['admin', 'finanzas'].includes(currentUser?.rol || '')
+                    ? pendingAbonosCount
+                    : 0;
                   return <li key={item.href}>
                     <Link
                       href={item.href}
@@ -159,7 +193,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: bo
                       {badge > 0 && <span className={clsx(
                         't-micro t-num rounded-full bg-accent px-1.5 text-on-accent',
                         collapsed ? 'absolute right-1.5 top-1' : 'ml-auto',
-                      )}>{badge}<span className="sr-only"> sin leer</span></span>}
+                      )}>{badge}<span className="sr-only">{isCaja ? ' abonos pendientes de validar' : ' sin leer'}</span></span>}
                     </Link>
                   </li>;
                 })}

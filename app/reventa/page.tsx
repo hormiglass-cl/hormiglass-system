@@ -144,7 +144,7 @@ export default function ReventaPage() {
             'coordinacion_proveedor',
           proveedor_nombre: revRecord?.proveedor_nombre || undefined,
           fecha_despacho: revRecord?.fecha_despacho || undefined,
-          observaciones: revRecord?.observaciones || 'Vinculado desde Venta Cerrada.',
+          observaciones: revRecord?.observaciones || 'Vinculado desde Venta Aprobada.',
           notas_postventa: revRecord?.notas_postventa || undefined,
           oportunidad: op,
         });

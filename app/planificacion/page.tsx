@@ -141,7 +141,7 @@ export default function PlanificacionPage() {
             'pendiente',
           fecha_estimada_produccion: planRecord?.fecha_estimada_produccion || undefined,
           fecha_estimada_instalacion: planRecord?.fecha_estimada_instalacion || undefined,
-          observaciones: planRecord?.observaciones || 'Vinculado desde Venta Cerrada.',
+          observaciones: planRecord?.observaciones || 'Vinculado desde Venta Aprobada.',
           oportunidad: op,
         });
       });

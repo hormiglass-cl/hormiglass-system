@@ -16,6 +16,7 @@ interface LogSistemaParams {
     | 'recordatorios'
     | 'usuarios'
     | 'trabajadores'
+    | 'cuentas_bancarias'
     | 'sistema';
   entidad_id?: string;
   descripcion: string;

@@ -359,7 +359,7 @@ export default function OperacionVentaPage() {
         </div>
       )}
 
-      {op && ['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline) && !delivered && (
+      {op && ['prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline) && !delivered && (
         <div role="alert" className="rounded-lg border border-warning/30 bg-warning-soft p-3 text-sm text-warning-ink font-medium">
           Esta venta figura como entregada en el historial, pero no tiene acreditación completa bajo las reglas actuales. Revisa las guías o solicita una excepción administrativa.
         </div>
