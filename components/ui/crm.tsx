@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import {
   AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Info,
@@ -463,11 +464,22 @@ export function Dialog({ open, title, description, children, footer, onClose, si
   const ref = useRef<HTMLElement>(null);
   const titleId = useId();
   const descriptionId = useId();
-  useDialogBehavior(open, onClose, ref);
-  if (!open) return null;
+  const [mounted, setMounted] = useState(false);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useDialogBehavior(open, onClose, ref);
+  if (!open || !mounted) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-xs p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section
         ref={ref}
         role="dialog"
@@ -476,7 +488,7 @@ export function Dialog({ open, title, description, children, footer, onClose, si
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         className={clsx(
-          'flex max-h-[calc(100vh-2rem)] w-full flex-col overflow-hidden rounded-panel border border-line bg-surface shadow-[var(--hg-shadow-popover)] outline-none',
+          'flex max-h-[calc(100vh-2rem)] w-full flex-col overflow-hidden rounded-panel border border-line bg-surface shadow-[var(--hg-shadow-popover)] outline-none animate-in fade-in zoom-in-95 duration-150',
           size === 'sm' ? 'max-w-md' : size === 'lg' ? 'max-w-3xl' : 'max-w-lg',
         )}
       >
@@ -490,7 +502,8 @@ export function Dialog({ open, title, description, children, footer, onClose, si
         {children && <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>}
         {footer && <footer className="flex justify-end gap-2 border-t border-line-subtle bg-app px-5 py-3">{footer}</footer>}
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -505,11 +518,22 @@ export function Sheet({ open, title, children, footer, onClose, width = 'md' }: 
 }) {
   const ref = useRef<HTMLElement>(null);
   const titleId = useId();
-  useDialogBehavior(open, onClose, ref);
-  if (!open) return null;
+  const [mounted, setMounted] = useState(false);
 
-  return (
-    <div className="fixed inset-0 z-50 bg-ink/30" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useDialogBehavior(open, onClose, ref);
+  if (!open || !mounted) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-xs"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <aside
         ref={ref}
         role="dialog"
@@ -517,7 +541,7 @@ export function Sheet({ open, title, children, footer, onClose, width = 'md' }: 
         aria-labelledby={titleId}
         tabIndex={-1}
         className={clsx(
-          'absolute right-0 top-0 flex h-full w-full flex-col border-l border-line bg-surface shadow-[var(--hg-shadow-popover)] outline-none',
+          'absolute right-0 top-0 flex h-full w-full flex-col border-l border-line bg-surface shadow-[var(--hg-shadow-popover)] outline-none animate-in slide-in-from-right duration-200',
           width === 'lg' ? 'max-w-3xl' : 'max-w-xl',
         )}
       >
@@ -528,7 +552,8 @@ export function Sheet({ open, title, children, footer, onClose, width = 'md' }: 
         <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {footer && <footer className="flex justify-end gap-2 border-t border-line-subtle bg-app px-5 py-3">{footer}</footer>}
       </aside>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -657,3 +682,16 @@ export function Pagination({ currentPage, totalItems, itemsPerPage, onPageChange
     </nav>
   );
 }
+
+/* ─── Primitivas Next-Gen (Attio / Twenty / Folk / Tremor) ─────────────── */
+export { AvatarBadge } from './AvatarBadge';
+export type { AvatarBadgeProps } from './AvatarBadge';
+export { FloatingActionBar } from './FloatingActionBar';
+export type { FloatingActionBarProps } from './FloatingActionBar';
+export { FilterPills } from './FilterPills';
+export type { FilterPillsProps, FilterDefinition, FilterOption } from './FilterPills';
+export { MetricCard } from './MetricCard';
+export type { MetricCardProps } from './MetricCard';
+export { SlideOverDrawer } from './SlideOverDrawer';
+export type { SlideOverDrawerProps } from './SlideOverDrawer';
+

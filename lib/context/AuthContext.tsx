@@ -6,10 +6,22 @@ import { Usuario, UserRole } from '../types';
 import { createClient } from '../supabase/client';
 import { mensajeError } from '../errores';
 
+export interface AddUserInput {
+  nombre: string;
+  email: string;
+  password?: string;
+  rol: UserRole;
+  activo?: boolean;
+  calendario_visitas?: boolean;
+  calendario_produccion?: boolean;
+  calendario_reventa?: boolean;
+  rut?: string;
+}
+
 interface AuthContextType {
   currentUser: Usuario | null;
   usersList: Usuario[];
-  addUser: (user: { nombre: string; email: string; password?: string; rol: UserRole; activo?: boolean }) => Promise<void>;
+  addUser: (user: AddUserInput) => Promise<void>;
   updateUserRole: (id: string, newRole: UserRole, active: boolean) => Promise<void>;
   updateUser: (id: string, updates: { nombre?: string; rol?: UserRole; activo?: boolean }) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
@@ -115,18 +127,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [supabase, loadProfileForSession, fetchUsers]);
 
-  const addUser = async (userData: { nombre: string; email: string; password?: string; rol: UserRole; activo?: boolean }) => {
-    if (!userData.password) {
-      throw new Error('Por favor ingresa una contraseña para el nuevo usuario.');
-    }
+  const addUser = async (userData: AddUserInput) => {
+    // Si no se proporcionó una contraseña explícita, generamos una clave temporal criptográfica
+    const tempPassword =
+      userData.password && userData.password.trim().length >= 6
+        ? userData.password.trim()
+        : `Hormi_${crypto.randomUUID()}!${Math.random().toString(36).slice(2, 8)}`;
 
-    // El alta administrativa debe ser atómica en Auth y usuarios. Un signUp desde
-    // este cliente podría reemplazar la sesión del administrador y perder el rol.
+    // El alta administrativa es atómica en Auth, usuarios y trabajadores.
     const { data: createdUser, error: rpcError } = await supabase.rpc('create_user_admin', {
       p_email: userData.email.trim(),
-      p_password: userData.password,
+      p_password: tempPassword,
       p_nombre: userData.nombre.trim(),
       p_rol: userData.rol || 'user',
+      p_cal_visitas: userData.calendario_visitas ?? true,
+      p_cal_produccion: userData.calendario_produccion ?? true,
+      p_cal_reventa: userData.calendario_reventa ?? true,
+      p_rut: userData.rut ? userData.rut.trim() : null,
     });
 
     if (rpcError) {
@@ -138,6 +155,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!createdUser || createdUser.success !== true || !createdUser.user_id) {
       throw new Error('El alta de usuario no devolvió una confirmación válida.');
+    }
+
+    // Si la contraseña no fue ingresada manualmente, enviar correo para que el usuario defina su contraseña
+    if (!userData.password && typeof window !== 'undefined') {
+      try {
+        const origin = window.location.origin;
+        const { error: inviteError } = await supabase.auth.resetPasswordForEmail(
+          userData.email.trim(),
+          {
+            redirectTo: `${origin}/auth/callback?next=/auth/actualizar-password`,
+          }
+        );
+        if (inviteError) {
+          console.warn('Aviso: No se pudo enviar el correo de invitación automático:', inviteError.message);
+        }
+      } catch (inviteErr) {
+        console.warn('Aviso al solicitar correo de invitación:', inviteErr);
+      }
     }
 
     await fetchUsers();

@@ -44,6 +44,7 @@ import {
   Select,
 } from '../../components/ui/crm';
 import { useToast } from '../../components/ui/feedback';
+import { swrCache } from '../../lib/cache/swr-cache';
 
 export default function CajaPage() {
   const { currentUser } = useAuth();
@@ -60,11 +61,11 @@ export default function CajaPage() {
     tabParam === 'movimientos' ? 'movimientos' : 'validacion'
   );
 
-  // Estados principales
-  const [movimientos, setMovimientos] = useState<MovimientoCaja[]>([]);
-  const [abonos, setAbonos] = useState<Abono[]>([]);
-  const [cuentas, setCuentas] = useState<CuentaBancaria[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Estados principales con SWR para render instantáneo
+  const [movimientos, setMovimientos] = useState<MovimientoCaja[]>(() => swrCache.get('caja:movimientos') || []);
+  const [abonos, setAbonos] = useState<Abono[]>(() => swrCache.get('caja:abonos') || []);
+  const [cuentas, setCuentas] = useState<CuentaBancaria[]>(() => swrCache.get('caja:cuentas') || []);
+  const [loading, setLoading] = useState<boolean>(() => !swrCache.has('caja:cuentas'));
 
   // Mapeo de banco seleccionado por abono pendiente: { [abonoId]: cuentaBancariaId }
   const [selectedBanks, setSelectedBanks] = useState<Record<string, string>>({});
@@ -96,51 +97,52 @@ export default function CajaPage() {
   const [abonosPage, setAbonosPage] = useState(1);
   const [abonosPerPage, setAbonosPerPage] = useState(10);
 
-  // Cargar datos
+  // Cargar datos en paralelo con Promise.all
   const loadData = useCallback(async () => {
     try {
-      setLoading(true);
+      const [cuentasRes, movsRes, abonosRes] = await Promise.all([
+        supabase
+          .from('cuentas_bancarias')
+          .select('*, empresa:empresas(*)')
+          .eq('activo', true)
+          .order('alias'),
+        supabase
+          .from('caja_movimientos')
+          .select('*, cuenta_bancaria:cuentas_bancarias(id, alias, banco, empresa:empresas(slug, razon_social))')
+          .order('fecha', { ascending: false }),
+        supabase
+          .from('abonos')
+          .select(`
+            *,
+            cuenta_bancaria:cuentas_bancarias(id, alias, banco),
+            oportunidad:oportunidades(
+              id,
+              codigo,
+              titulo,
+              cliente:clientes(id, nombre, apellido_razon_social, rut)
+            )
+          `)
+          .order('fecha', { ascending: false }),
+      ]);
 
-      // 1. Cuentas bancarias activas
-      const { data: cuentasData } = await supabase
-        .from('cuentas_bancarias')
-        .select('*, empresa:empresas(*)')
-        .eq('activo', true)
-        .order('alias');
-
-      if (cuentasData) {
-        setCuentas(cuentasData as CuentaBancaria[]);
+      if (cuentasRes.data) {
+        const cuentasData = cuentasRes.data as CuentaBancaria[];
+        setCuentas(cuentasData);
+        swrCache.set('caja:cuentas', cuentasData);
       }
 
-      // 2. Movimientos de caja
-      const { data: movsData } = await supabase
-        .from('caja_movimientos')
-        .select('*, cuenta_bancaria:cuentas_bancarias(id, alias, banco, empresa:empresas(slug, razon_social))')
-        .order('fecha', { ascending: false });
-
-      if (movsData) {
-        setMovimientos(movsData as MovimientoCaja[]);
+      if (movsRes.data) {
+        const movsData = movsRes.data as MovimientoCaja[];
+        setMovimientos(movsData);
+        swrCache.set('caja:movimientos', movsData);
       }
 
-      // 3. Abonos
-      const { data: abonosData, error: abonosErr } = await supabase
-        .from('abonos')
-        .select(`
-          *,
-          cuenta_bancaria:cuentas_bancarias(id, alias, banco),
-          oportunidad:oportunidades(
-            id,
-            codigo,
-            titulo,
-            cliente:clientes(id, nombre, apellido_razon_social, rut)
-          )
-        `)
-        .order('fecha', { ascending: false });
-
-      if (abonosErr) {
-        console.error('Error cargando abonos:', abonosErr);
-      } else if (abonosData) {
-        setAbonos(abonosData as Abono[]);
+      if (abonosRes.error) {
+        console.error('Error cargando abonos:', abonosRes.error);
+      } else if (abonosRes.data) {
+        const abonosData = abonosRes.data as Abono[];
+        setAbonos(abonosData);
+        swrCache.set('caja:abonos', abonosData);
       }
     } catch (err) {
       console.error('Error cargando datos de caja:', err);
@@ -151,19 +153,25 @@ export default function CajaPage() {
   }, [supabase, toast]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      void loadData();
-    }, 0);
+    void loadData();
 
-    // Suscripción Realtime para abonos y movimientos
+    // Suscripción Realtime para abonos y movimientos con debounce
+    let debounceTimer: number | null = null;
+    const triggerDebouncedReload = () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        void loadData();
+      }, 300);
+    };
+
     const channel = supabase
       .channel('caja_full_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'caja_movimientos' }, () => void loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'abonos' }, () => void loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'caja_movimientos' }, triggerDebouncedReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'abonos' }, triggerDebouncedReload)
       .subscribe();
 
     return () => {
-      clearTimeout(timer);
+      if (debounceTimer) window.clearTimeout(debounceTimer);
       void supabase.removeChannel(channel);
     };
   }, [loadData, supabase]);

@@ -1,7 +1,7 @@
 import {
   Bell, Briefcase, Building2, CalendarDays, CalendarRange, ChartNoAxesCombined, Container,
   ContactRound, Factory, FileText, FolderKanban, Handshake, Landmark, LayoutDashboard, MapPin,
-  Package, Settings2, ShieldAlert, ShoppingCart, Truck, UserCog, Users, Wallet,
+  Package, Settings2, ShieldAlert, ShoppingCart, Truck, Users, Wallet,
 } from 'lucide-react';
 import type { UserRole } from './types';
 
@@ -63,7 +63,6 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: 'sistema', label: 'Sistema', collapsible: true, items: [
     { label: 'Notificaciones', href: '/notificaciones', icon: Bell },
     { label: 'Configuración', href: '/configuracion', icon: Settings2, roles: TODOS_MENOS_CAMPO },
-    { label: 'Usuarios', href: '/usuarios', icon: UserCog, roles: ['admin'] },
   ] },
 ];
 

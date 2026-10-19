@@ -45,10 +45,10 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f7f7f5] text-[#252b2d]">
+      <div className="min-h-screen flex items-center justify-center bg-app text-ink hg-page-transition">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-[#f97316] border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs font-bold text-gray-300">Cargando Hormiglass CRM...</p>
+          <div className="w-10 h-10 border-4 border-accent border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs font-semibold text-ink-muted">Cargando Hormiglass CRM...</p>
         </div>
       </div>
     );

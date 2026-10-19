@@ -26,12 +26,14 @@ import {
   RecurrenciaRecordatorio,
   SeccionAdministracionEmpresa,
   ROL_NOMBRE,
+  OportunidadVenta,
 } from '../../../lib/types';
 import { completeRecordatorio } from '../../../lib/recordatorios';
 import {
   ArrowLeft,
   Edit,
   DollarSign,
+  Coins,
   FileText,
   Clock,
   CheckCircle2,
@@ -137,10 +139,12 @@ export default function TrabajadorDetailPage() {
   const [usuariosList, setUsuariosList] = useState<Usuario[]>([]);
   const [eventosAsociados, setEventosAsociados] = useState<EventoProduccionLogistica[]>([]);
   const [visitasAsociadas, setVisitasAsociadas] = useState<VisitaTerreno[]>([]);
+  const [comisionesVentas, setComisionesVentas] = useState<OportunidadVenta[]>([]);
+  const [liquidandoComisionId, setLiquidandoComisionId] = useState<string | null>(null);
 
   // Pestaña activa
   const [activeTab, setActiveTab] = useState<
-    'documentos' | 'permisos' | 'liquidaciones' | 'recordatorios' | 'asistencia' | 'bitacora'
+    'documentos' | 'permisos' | 'liquidaciones' | 'comisiones' | 'recordatorios' | 'asistencia' | 'bitacora'
   >('documentos');
   const [categoriaDocFiltro, setCategoriaDocFiltro] = useState<string>('todas');
 
@@ -304,7 +308,7 @@ export default function TrabajadorDetailPage() {
         monto_liquido: Number(w.sueldo_base || 0),
       }));
 
-      const [docRes, permRes, liqRes, notRes, asistRes, usrsRes, evRes, visRes, recRes] =
+      const [docRes, permRes, liqRes, notRes, asistRes, usrsRes, evRes, visRes, recRes, opRes] =
         await Promise.all([
           supabase
             .from('trabajador_documentos')
@@ -349,6 +353,10 @@ export default function TrabajadorDetailPage() {
                 .eq('activo', true)
                 .order('fecha_vencimiento', { ascending: true })
             : Promise.resolve({ data: [] }),
+          supabase
+            .from('oportunidades')
+            .select('*, cliente:clientes(nombre, apellido_razon_social, rut)')
+            .order('created_at', { ascending: false }),
         ]);
 
       if (docRes.data) setDocumentos(docRes.data as TrabajadorDocumento[]);
@@ -358,6 +366,29 @@ export default function TrabajadorDetailPage() {
       if (asistRes.data) setAsistencias(asistRes.data as TrabajadorAsistencia[]);
       if (usrsRes.data) setUsuariosList(usrsRes.data as Usuario[]);
       if (recRes.data) setRecordatorios(recRes.data as Recordatorio[]);
+
+      if (opRes?.data) {
+        const allOps = opRes.data as OportunidadVenta[];
+        const matchedOps = allOps.filter((op) => {
+          if (
+            w.usuario_id &&
+            (op.asignado_a === w.usuario_id || op.responsable_operativo_id === w.usuario_id)
+          ) {
+            return true;
+          }
+          const matchedUser = (usrsRes.data as Usuario[])?.find((u) => u.id === op.asignado_a);
+          if (matchedUser) {
+            if (matchedUser.email && w.email && matchedUser.email.toLowerCase() === w.email.toLowerCase()) {
+              return true;
+            }
+            if (matchedUser.nombre && w.nombre && matchedUser.nombre.toLowerCase().trim() === w.nombre.toLowerCase().trim()) {
+              return true;
+            }
+          }
+          return false;
+        });
+        setComisionesVentas(matchedOps);
+      }
 
       if (evRes.data) {
         const evList = evRes.data as EventoProduccionLogistica[];
@@ -909,6 +940,38 @@ export default function TrabajadorDetailPage() {
     }
   };
 
+  // Liquidar Comisión de Oportunidad desde la Ficha del Trabajador
+  const handleLiquidarComisionEnPerfil = async (op: OportunidadVenta) => {
+    const pct = typeof op.comision_porcentaje === 'number' && op.comision_porcentaje >= 0 ? op.comision_porcentaje : 3;
+    const comisionEstimada =
+      typeof op.comision_monto === 'number' && op.comision_monto >= 0
+        ? op.comision_monto
+        : Math.round(((op.monto_estimado || 0) * pct) / 100);
+
+    const ok = await confirm({
+      title: 'Liquidar comisión de venta',
+      message: `¿Confirmas liquidar y marcar como pagada la comisión de $${comisionEstimada.toLocaleString('es-CL')} para la oportunidad "${op.titulo || op.codigo || op.id}"? Esta acción registrará el pago bajo tu cuenta.`,
+      confirmLabel: 'Confirmar pago',
+      cancelLabel: 'Cancelar',
+    });
+    if (!ok) return;
+
+    try {
+      setLiquidandoComisionId(op.id);
+      const { error } = await supabase.rpc('marcar_comision_pagada', {
+        p_oportunidad_id: op.id,
+      });
+      if (error) throw error;
+      toast({ message: 'Comisión liquidada y marcada como pagada exitosamente.', tone: 'success' });
+      await loadWorkerFullData();
+    } catch (err: unknown) {
+      console.error('Error liquidando comisión:', err);
+      toast({ message: (err as Error)?.message || 'No se pudo liquidar la comisión.', tone: 'danger' });
+    } finally {
+      setLiquidandoComisionId(null);
+    }
+  };
+
   // Filtrado de documentos por subcategoría
   const filteredDocs = useMemo(() => {
     if (categoriaDocFiltro === 'todas') return documentos;
@@ -980,6 +1043,56 @@ export default function TrabajadorDetailPage() {
     const puntualidad = total > 0 ? Math.round((presentes / total) * 100) : 100;
     return { total, presentes, atrasos, minutosAtraso, puntualidad };
   }, [asistencias]);
+
+  // Métricas de comisiones comerciales
+  const statsComisiones = useMemo(() => {
+    const totalVentas = comisionesVentas.length;
+    let montoTotalVentas = 0;
+    let comisionTotal = 0;
+    let comisionPendiente = 0;
+    let comisionListaPago = 0;
+    let comisionPagada = 0;
+    let countPendiente = 0;
+    let countListaPago = 0;
+    let countPagada = 0;
+
+    for (const op of comisionesVentas) {
+      const montoEstimado = Number(op.monto_estimado || 0);
+      montoTotalVentas += montoEstimado;
+      const pct = typeof op.comision_porcentaje === 'number' && op.comision_porcentaje >= 0 ? op.comision_porcentaje : 3;
+      const comision =
+        typeof op.comision_monto === 'number' && op.comision_monto >= 0
+          ? op.comision_monto
+          : Math.round((montoEstimado * pct) / 100);
+
+      comisionTotal += comision;
+      const estado = op.comision_estado || 'pendiente';
+      if (estado === 'pagada') {
+        comisionPagada += comision;
+        countPagada += 1;
+      } else if (estado === 'lista_para_pago') {
+        comisionListaPago += comision;
+        countListaPago += 1;
+      } else {
+        comisionPendiente += comision;
+        countPendiente += 1;
+      }
+    }
+
+    return {
+      totalVentas,
+      montoTotalVentas,
+      comisionTotal,
+      comisionPendiente,
+      comisionListaPago,
+      comisionPagada,
+      countPendiente,
+      countListaPago,
+      countPagada,
+    };
+  }, [comisionesVentas]);
+
+  const canManageComisiones = currentUser?.rol === 'admin' || currentUser?.rol === 'finanzas';
 
   // Usuario vinculado en el CRM
   const linkedUsuario = useMemo(() => {
@@ -1331,6 +1444,11 @@ export default function TrabajadorDetailPage() {
               { id: 'permisos', label: 'Permisos & Ausencias', count: permisos.length },
               { id: 'liquidaciones', label: 'Sueldos', count: liquidaciones.length },
               {
+                id: 'comisiones',
+                label: 'Comisiones',
+                count: statsComisiones.countListaPago > 0 ? statsComisiones.countListaPago : comisionesVentas.length,
+              },
+              {
                 id: 'recordatorios',
                 label: 'Tareas',
                 count: statsRecordatorios.pendientes,
@@ -1619,6 +1737,197 @@ export default function TrabajadorDetailPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </Panel>
+          )}
+
+          {/* TAB: COMISIONES COMERCIALES */}
+          {activeTab === 'comisiones' && (
+            <Panel
+              title="Comisiones Comerciales"
+              actions={
+                <span className="t-caption text-ink-muted">
+                  Regla estándar: 3% del monto estimado cotizado
+                </span>
+              }
+              className="p-4 space-y-4"
+            >
+              {/* Tarjetas KPI de Comisiones */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                <div className="p-3 rounded-panel border border-line-subtle bg-surface-muted">
+                  <span className="t-caption block text-ink-muted">Comisión proyectada</span>
+                  <span className="t-num text-lg font-semibold text-ink">
+                    ${statsComisiones.comisionTotal.toLocaleString('es-CL')}
+                  </span>
+                  <span className="t-caption block text-ink-muted mt-0.5">
+                    {statsComisiones.totalVentas}{' '}
+                    {statsComisiones.totalVentas === 1 ? 'oportunidad' : 'oportunidades'}
+                  </span>
+                </div>
+                <div className="p-3 rounded-panel border border-line-subtle bg-surface-muted">
+                  <span className="t-caption block text-ink-muted">Listas para pago</span>
+                  <span className="t-num text-lg font-semibold text-warning">
+                    ${statsComisiones.comisionListaPago.toLocaleString('es-CL')}
+                  </span>
+                  <span className="t-caption block text-ink-muted mt-0.5">
+                    {statsComisiones.countListaPago} por liquidar
+                  </span>
+                </div>
+                <div className="p-3 rounded-panel border border-line-subtle bg-surface-muted">
+                  <span className="t-caption block text-ink-muted">Pagadas / Liquidadas</span>
+                  <span className="t-num text-lg font-semibold text-success">
+                    ${statsComisiones.comisionPagada.toLocaleString('es-CL')}
+                  </span>
+                  <span className="t-caption block text-ink-muted mt-0.5">
+                    {statsComisiones.countPagada} liquidadas
+                  </span>
+                </div>
+                <div className="p-3 rounded-panel border border-line-subtle bg-surface-muted">
+                  <span className="t-caption block text-ink-muted">En proceso / Pendientes</span>
+                  <span className="t-num text-lg font-semibold text-ink-muted">
+                    ${statsComisiones.comisionPendiente.toLocaleString('es-CL')}
+                  </span>
+                  <span className="t-caption block text-ink-muted mt-0.5">
+                    {statsComisiones.countPendiente} pendientes
+                  </span>
+                </div>
+              </div>
+
+              {/* Banner de aviso si no tiene usuario CRM vinculado */}
+              {!trabajador.usuario_id && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-panel border border-warning/30 bg-warning-soft text-xs text-warning">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>
+                      Este colaborador aún no está vinculado a un usuario del sistema CRM. Vincula
+                      su cuenta para asociar automáticamente las ventas a su perfil.
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={Link2}
+                    onClick={() => setShowLinkUserModal(true)}
+                  >
+                    Vincular usuario
+                  </Button>
+                </div>
+              )}
+
+              {/* Lista de comisiones / oportunidades */}
+              {comisionesVentas.length === 0 ? (
+                <div className="p-8 text-center text-ink-muted t-caption italic">
+                  No hay ventas ni comisiones registradas para este colaborador.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-control border border-line-subtle">
+                  <table className="w-full text-xs text-left">
+                    <thead className="border-b border-line-subtle bg-surface-muted text-ink-muted font-semibold">
+                      <tr>
+                        <th className="py-2.5 px-3">Oportunidad / Venta</th>
+                        <th className="py-2.5 px-3">Cliente</th>
+                        <th className="py-2.5 px-3 text-right">Monto Venta</th>
+                        <th className="py-2.5 px-3 text-center">% Com.</th>
+                        <th className="py-2.5 px-3 text-right">Monto Comisión</th>
+                        <th className="py-2.5 px-3 text-center">Estado</th>
+                        <th className="py-2.5 px-3 text-right">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line-subtle bg-surface">
+                      {comisionesVentas.map((op) => {
+                        const pct =
+                          typeof op.comision_porcentaje === 'number' && op.comision_porcentaje >= 0
+                            ? op.comision_porcentaje
+                            : 3;
+                        const montoComision =
+                          typeof op.comision_monto === 'number' && op.comision_monto >= 0
+                            ? op.comision_monto
+                            : Math.round(((op.monto_estimado || 0) * pct) / 100);
+                        const estado = op.comision_estado || 'pendiente';
+                        const tone: Tone =
+                          estado === 'pagada'
+                            ? 'success'
+                            : estado === 'lista_para_pago'
+                            ? 'warning'
+                            : 'neutral';
+                        const isLiquidando = liquidandoComisionId === op.id;
+
+                        return (
+                          <tr key={op.id} className="hover:bg-surface-muted transition-colors">
+                            <td className="py-2.5 px-3">
+                              <Link
+                                href={`/ventas/${op.id}`}
+                                className="font-semibold text-accent hover:underline inline-flex items-center gap-1.5"
+                              >
+                                <span>{op.titulo || op.codigo || op.id.slice(0, 8)}</span>
+                                <ExternalLink className="w-3 h-3 text-ink-muted" />
+                              </Link>
+                              {op.codigo && (
+                                <span className="t-caption font-mono text-ink-muted block mt-0.5">
+                                  {op.codigo}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-ink">
+                              <div>
+                                {op.cliente?.nombre ||
+                                  op.cliente?.apellido_razon_social ||
+                                  'Cliente directo'}
+                              </div>
+                              {op.cliente?.rut && (
+                                <div className="t-caption text-ink-muted font-mono">
+                                  {op.cliente.rut}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-ink tabular-nums">
+                              ${Number(op.monto_estimado || 0).toLocaleString('es-CL')}
+                            </td>
+                            <td className="py-2.5 px-3 text-center font-mono text-ink-muted tabular-nums">
+                              {pct}%
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono font-semibold text-ink tabular-nums">
+                              ${montoComision.toLocaleString('es-CL')}
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <StatusBadge tone={tone} icon={false}>
+                                {estado === 'lista_para_pago'
+                                  ? 'Lista para pago'
+                                  : estado === 'pagada'
+                                  ? 'Pagada'
+                                  : 'Pendiente'}
+                              </StatusBadge>
+                              {estado === 'pagada' && op.comision_fecha_pago && (
+                                <span className="t-caption font-mono text-ink-muted block mt-0.5">
+                                  {op.comision_fecha_pago.split('T')[0]}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              {estado === 'lista_para_pago' && canManageComisiones ? (
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  icon={Coins}
+                                  disabled={isLiquidando}
+                                  onClick={() => void handleLiquidarComisionEnPerfil(op)}
+                                >
+                                  {isLiquidando ? 'Pagando...' : 'Liquidar'}
+                                </Button>
+                              ) : estado === 'pagada' ? (
+                                <span className="t-caption text-success font-medium inline-flex items-center gap-1">
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> Liquidada
+                                </span>
+                              ) : (
+                                <span className="t-caption text-ink-muted italic">En proceso</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </Panel>

@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
+import clsx from 'clsx';
 import { createClient } from '../../lib/supabase/client';
 import {
   Cliente,
@@ -34,6 +35,7 @@ import { logSistema } from '../../lib/logger';
 import { playNotificationSound } from '../../lib/audio';
 import { cotizacionVigente, totalAbonado, totalComercial } from '../../lib/oportunidad-finanzas';
 import {
+  ArrowLeft,
   TrendingUp,
   GripVertical,
   Calendar,
@@ -95,8 +97,11 @@ import {
 import { useSearchParams } from 'next/navigation';
 import { CotizacionModal } from '../../components/CotizacionModal';
 import { mensajeError } from '../../lib/errores';
-import { CodeStamp, StageRail, StatusBadge } from '../../components/ui/crm';
+import { CodeStamp, StageRail, StatusBadge, FilterPills, type FilterDefinition, FloatingActionBar, AvatarBadge } from '../../components/ui/crm';
+import { KanbanCard } from '../../components/ventas/KanbanCard';
 import { useConfirm, useToast } from '../../components/ui/feedback';
+import { useBreadcrumb } from '../../lib/context/BreadcrumbContext';
+import { swrCache } from '../../lib/cache/swr-cache';
 
 function AreaCardHeader({
   icon: Icon,
@@ -177,9 +182,10 @@ export default function PipelineVentasPage() {
   const searchParams = useSearchParams();
   const confirmDialog = useConfirm();
   const toast = useToast();
-  const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
-  const [deliveryAccreditation, setDeliveryAccreditation] = useState<Record<string, boolean>>({});
-  const [allCotizaciones, setAllCotizaciones] = useState<Cotizacion[]>([]);
+  const { setCustomTitle, setOnBack } = useBreadcrumb();
+  const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>(() => swrCache.get('ventas:oportunidades') || []);
+  const [deliveryAccreditation, setDeliveryAccreditation] = useState<Record<string, boolean>>(() => swrCache.get('ventas:accreditation') || {});
+  const [allCotizaciones, setAllCotizaciones] = useState<Cotizacion[]>(() => swrCache.get('ventas:allCotizaciones') || []);
 
   // Una versión nueva reemplaza a la anterior en los importes comerciales.
   const getOportunidadTotalValue = (op: OportunidadVenta): number => {
@@ -197,7 +203,7 @@ export default function PipelineVentasPage() {
   };
   const [usuariosApp, setUsuariosApp] = useState<Usuario[]>([]);
   const [personalTerrenoList, setPersonalTerrenoList] = useState<Usuario[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(() => !swrCache.has('ventas:oportunidades'));
   const [activeTab, setActiveTab] = useState<'lista' | 'tablero'>('lista');
 
   // Advanced Filters for List & Board View
@@ -752,6 +758,45 @@ export default function PipelineVentasPage() {
     }
   };
 
+  useEffect(() => {
+    const handlePopState = () => {
+      const targetOpId = new URLSearchParams(window.location.search).get('oportunidad');
+      if (targetOpId) {
+        const found = oportunidades.find((o) => o.id === targetOpId);
+        if (found) {
+          handleOpenOportunidad(found);
+        }
+      } else {
+        setSelectedOp(null);
+        setMargenOp(null);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [oportunidades]);
+
+  useEffect(() => {
+    if (selectedOp) {
+      setCustomTitle(selectedOp.titulo || selectedOp.codigo || 'Oportunidad');
+      setOnBack(() => handleCloseOportunidad);
+    } else {
+      setCustomTitle(null);
+      setOnBack(null);
+    }
+    return () => {
+      setCustomTitle(null);
+      setOnBack(null);
+    };
+  }, [selectedOp, setCustomTitle, setOnBack]);
+
+  useEffect(() => {
+    const targetOpId = searchParams.get('oportunidad');
+    if (!targetOpId && selectedOp) {
+      setSelectedOp(null);
+      setMargenOp(null);
+    }
+  }, [searchParams, selectedOp]);
+
   // Cotización seleccionada para previsualización modal
   const [previewCotizacion, setPreviewCotizacion] = useState<Cotizacion | null>(null);
 
@@ -830,7 +875,7 @@ export default function PipelineVentasPage() {
     }
   }, [selectedOp?.id, selectedOp?.chat_interno?.length]);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     let ignore = false;
@@ -865,14 +910,15 @@ export default function PipelineVentasPage() {
             const { data: accreditationRows, error: accreditationError } = closedIds.length
               ? await supabase.rpc('estado_entrega_acreditada', { p_ventas: closedIds })
               : { data: [], error: null };
-            if (accreditationError) throw accreditationError;
-            setDeliveryAccreditation(Object.fromEntries(((accreditationRows || []) as { venta_id: string; acreditada: boolean }[]).map((row) => [row.venta_id, row.acreditada])));
+            const accreditationMap = Object.fromEntries(((accreditationRows || []) as { venta_id: string; acreditada: boolean }[]).map((row) => [row.venta_id, row.acreditada]));
+            setDeliveryAccreditation(accreditationMap);
+            swrCache.set('ventas:accreditation', accreditationMap);
             const allQuotes = (cotRes.data || []) as Cotizacion[];
             const allDbAct = actRes.data || [];
 
             mergedOps = rawOps.map((op) => {
               const jsonChat: ChatMensaje[] = Array.isArray(op.chat_interno) ? op.chat_interno : [];
-              const tableChat: ChatMensaje[] = allDbAct
+              const tableChat = allDbAct
                 .filter((a: any) => a.oportunidad_id === op.id)
                 .map((a: any) => ({
                   id: a.id || `db-${a.created_at}`,
@@ -894,13 +940,16 @@ export default function PipelineVentasPage() {
             });
 
             setOportunidades(mergedOps);
+            swrCache.set('ventas:oportunidades', mergedOps);
           } else {
             setOportunidades([]);
             setDeliveryAccreditation({});
           }
 
           if (cotRes.data) {
-            setAllCotizaciones(cotRes.data as Cotizacion[]);
+            const allQuotes = cotRes.data as Cotizacion[];
+            setAllCotizaciones(allQuotes);
+            swrCache.set('ventas:allCotizaciones', allQuotes);
           } else {
             setAllCotizaciones([]);
           }
@@ -2364,6 +2413,47 @@ export default function PipelineVentasPage() {
     (event) => event.contexto === 'reventa_logistica'
   );
 
+  const ventasFilterDefs: FilterDefinition[] = useMemo(() => [
+    {
+      id: 'estado',
+      label: 'Estado',
+      options: pipelineStates.map((st) => ({
+        value: st.id,
+        label: st.label,
+        count: oportunidades.filter((o) => o.estado_pipeline === st.id).length,
+      })),
+    },
+    {
+      id: 'tipo_venta',
+      label: 'Tipo de venta',
+      options: [
+        { value: 'Instalación', label: 'Instalación' },
+        { value: 'Suministro', label: 'Suministro' },
+        { value: 'Reventa de Material', label: 'Reventa de Material' },
+      ],
+    },
+    {
+      id: 'prioridad',
+      label: 'Prioridad',
+      options: [
+        { value: 'Normal / Baja', label: 'Normal / Baja' },
+        { value: 'Alta', label: 'Alta' },
+        { value: 'Urgente', label: 'Urgente' },
+      ],
+    },
+    {
+      id: 'asignado',
+      label: 'Asignado a',
+      options: [
+        ...(currentUser ? [{ value: 'me', label: '👤 Asignadas a mí' }] : []),
+        ...usuariosApp.map((u) => ({
+          value: u.id,
+          label: u.nombre || u.email,
+        })),
+      ],
+    },
+  ], [pipelineStates, oportunidades, currentUser, usuariosApp]);
+
   return (
     <div className="space-y-6 text-ink relative">
       {/* Toast Alert Flotante Superior Derecho */}
@@ -2382,7 +2472,9 @@ export default function PipelineVentasPage() {
         </div>
       )}
 
-      {/* Header */}
+      {!selectedOp ? (
+        <>
+          {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-line pb-5">
         <div>
           <h1 className="text-2xl font-semibold text-ink flex items-center gap-2">
@@ -2426,113 +2518,52 @@ export default function PipelineVentasPage() {
         </div>
       </div>
 
-      {/* Barra de Filtros Avanzados (Ajustes 11 - Req 5) */}
-      <div className="hg-list-toolbar text-xs">
-        <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
-          {/* Búsqueda por Texto */}
-          <div className="relative flex-[2] min-w-[220px]">
-            <Search className="w-4 h-4 text-ink-subtle absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Buscar por código, cliente, título, RUT..."
-              value={filterSearch}
-              onChange={(e) => setFilterSearch(e.target.value)}
-              className="hg-list-search w-full pl-9 pr-8 py-2 text-[var(--color-ink)] font-medium placeholder-gray-400"
-            />
-            {filterSearch && (
-              <button
-                onClick={() => setFilterSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-subtle hover:text-ink-muted cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Filtro Estado */}
-          <select
-            value={filterEstado}
-            onChange={(e) => setFilterEstado(e.target.value)}
-            className="bg-surface-muted border border-line rounded-md px-3 py-2 font-bold text-ink focus:outline-none focus:border-accent cursor-pointer"
-          >
-            <option value="todos">Todos los Estados</option>
-            {pipelineStates.map((etapa) => (
-              <option key={etapa.id} value={etapa.id}>{etapa.label}</option>
-            ))}
-          </select>
-
-          {/* Filtro Tipo Venta */}
-          <select
-            value={filterTipoVenta}
-            onChange={(e) => setFilterTipoVenta(e.target.value)}
-            className="bg-surface-muted border border-line rounded-md px-3 py-2 font-bold text-ink focus:outline-none focus:border-accent cursor-pointer"
-          >
-            <option value="todos">Todos los Tipos de Venta</option>
-            <option value="Instalación">Instalación</option>
-            <option value="Suministro">Suministro</option>
-            <option value="Reventa de Material">Reventa de Material</option>
-          </select>
-
-          {/* Filtro Prioridad */}
-          <select
-            value={filterPrioridad}
-            onChange={(e) => setFilterPrioridad(e.target.value)}
-            className="bg-surface-muted border border-line rounded-md px-3 py-2 font-bold text-ink focus:outline-none focus:border-accent cursor-pointer"
-          >
-            <option value="todos">Todas las Prioridades</option>
-            <option value="Normal / Baja">Normal / Baja</option>
-            <option value="Alta">Alta</option>
-            <option value="Urgente">Urgente</option>
-          </select>
-
-          {/* Filtro Asignado */}
-          <select
-            value={filterAsignado}
-            onChange={(e) => setFilterAsignado(e.target.value)}
-            className="bg-surface-muted border border-line rounded-md px-3 py-2 font-bold text-ink focus:outline-none focus:border-accent cursor-pointer"
-          >
-            <option value="todos">Todos los Asignados</option>
-            {currentUser && <option value="me">👤 Asignados a mí</option>}
-            {usuariosApp.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.nombre} ({u.email})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Acciones de Filtro y Contador */}
-        <div className="flex items-center gap-3">
-          {(filterSearch || filterEstado !== 'todos' || filterTipoVenta !== 'todos' || filterPrioridad !== 'todos' || filterAsignado !== 'todos') && (
+      {/* Barra de Filtros Next-Gen (Attio & Twenty Style) */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-surface p-3 rounded-panel border border-line shadow-xs">
+        <div className="relative flex-1 min-w-[220px] max-w-md">
+          <Search className="w-4 h-4 text-ink-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden />
+          <input
+            type="search"
+            placeholder="Buscar por código, cliente, título, RUT..."
+            value={filterSearch}
+            onChange={(e) => setFilterSearch(e.target.value)}
+            className="w-full pl-9 pr-8 py-1.5 text-xs bg-app border border-line rounded-control text-ink placeholder:text-ink-muted focus:outline-none focus:border-accent"
+          />
+          {filterSearch && (
             <button
-              onClick={() => {
-                setFilterSearch('');
-                setFilterEstado('todos');
-                setFilterTipoVenta('todos');
-                setFilterPrioridad('todos');
-                setFilterAsignado('todos');
-              }}
-              className="text-ink-muted hover:text-danger font-bold transition flex items-center gap-1 cursor-pointer"
+              onClick={() => setFilterSearch('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
-              <span>Limpiar Filtros</span>
             </button>
           )}
-
-          <span className="font-semibold text-ink-muted bg-surface-muted px-3 py-1.5 rounded-md border border-line">
-            Mostrando <strong className="text-accent-ink">{filteredOportunidades.length}</strong> de {oportunidades.length}
-          </span>
         </div>
+
+        <FilterPills
+          filters={ventasFilterDefs}
+          activeFilters={{
+            estado: filterEstado,
+            tipo_venta: filterTipoVenta,
+            prioridad: filterPrioridad,
+            asignado: filterAsignado,
+          }}
+          onFilterChange={(id, value) => {
+            if (id === 'estado') setFilterEstado(value);
+            if (id === 'tipo_venta') setFilterTipoVenta(value);
+            if (id === 'prioridad') setFilterPrioridad(value);
+            if (id === 'asignado') setFilterAsignado(value);
+          }}
+          onClearAll={() => {
+            setFilterSearch('');
+            setFilterEstado('todos');
+            setFilterTipoVenta('todos');
+            setFilterPrioridad('todos');
+            setFilterAsignado('todos');
+          }}
+          totalResults={oportunidades.length}
+          filteredResults={filteredOportunidades.length}
+        />
       </div>
-
-      {activeTab === 'lista' && (filterEstado !== 'todos' || filterTipoVenta !== 'todos' || filterPrioridad !== 'todos' || filterAsignado !== 'todos') && (
-        <div className="flex flex-wrap items-center gap-2" aria-label="Filtros activos">
-          {filterEstado !== 'todos' && <button type="button" onClick={() => setFilterEstado('todos')} className="hg-list-meta hover:bg-[var(--color-surface-muted)]">Estado: {SECCIONES_PIPELINE.flatMap((section) => section.etapas).find((stage) => stage.id === filterEstado)?.label || filterEstado} <X className="h-3 w-3" /></button>}
-          {filterTipoVenta !== 'todos' && <button type="button" onClick={() => setFilterTipoVenta('todos')} className="hg-list-meta hover:bg-[var(--color-surface-muted)]">{filterTipoVenta} <X className="h-3 w-3" /></button>}
-          {filterPrioridad !== 'todos' && <button type="button" onClick={() => setFilterPrioridad('todos')} className="hg-list-meta hover:bg-[var(--color-surface-muted)]">Prioridad: {filterPrioridad} <X className="h-3 w-3" /></button>}
-          {filterAsignado !== 'todos' && <button type="button" onClick={() => setFilterAsignado('todos')} className="hg-list-meta hover:bg-[var(--color-surface-muted)]">{filterAsignado === 'me' ? 'Asignadas a mí' : usuariosApp.find((user) => user.id === filterAsignado)?.nombre || 'Responsable'} <X className="h-3 w-3" /></button>}
-        </div>
-      )}
 
       {loading ? (
         <div className="py-12 text-center text-ink-muted font-medium text-xs">
@@ -2556,31 +2587,38 @@ export default function PipelineVentasPage() {
                   {activeSection.etapas.map((stage) => {
                     const colOps = filteredOportunidades.filter((o) => o.estado_pipeline === stage.id);
                     const isTargetColumn = dragOverColumn === stage.id;
+                    const totalColMonto = colOps.reduce((acc, curr) => acc + getOportunidadTotalValue(curr), 0);
 
                     return (
                       <div
                         key={stage.id}
                         onDragOver={(e) => handleDragOver(e, stage.id)}
                         onDrop={(e) => handleDrop(e, stage.id)}
-                        className={`rounded-xl border p-3 min-h-[470px] transition ${
+                        className={clsx(
+                          'rounded-panel border p-3 min-h-[500px] transition flex flex-col',
                           isTargetColumn
-                            ? 'bg-accent-soft border-accent ring-2 ring-[var(--color-accent)]/20'
-                            : 'bg-[var(--color-surface-muted)] border-[var(--color-line)]'
-                        }`}
+                            ? 'bg-accent-soft border-accent ring-2 ring-accent/20'
+                            : 'bg-surface-muted/30 border-line'
+                        )}
                       >
-                        <div className="flex items-center justify-between border-b border-line pb-2 mb-3">
-                          <div className="flex items-center gap-2">
-                            <span className={`w-2.5 h-2.5 rounded-full border ${stage.color}`} />
-                            <h4 className="text-sm font-semibold text-[var(--color-ink)]">{stage.label}</h4>
+                        {/* Cabecera de Etapa (Folk & Attio Style) */}
+                        <div className="flex items-center justify-between border-b border-line pb-2.5 mb-3 shrink-0">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className={clsx('w-2 h-2 rounded-full shrink-0', stage.color)} />
+                            <h4 className="text-xs font-bold text-ink truncate">{stage.label}</h4>
+                            <span className="text-[11px] font-semibold text-ink-muted bg-surface px-1.5 py-0.2 rounded-full border border-line shrink-0">
+                              {colOps.length}
+                            </span>
                           </div>
-                          <span className="text-[11px] font-mono font-bold text-ink-muted">
-                            {stage.id === 'prod_finalizado' || stage.id === 'rev_entregado'
-                              ? `${colOps.filter((op) => !isUnaccreditedClose(op)).length} acreditadas · ${colOps.length} registros`
-                              : colOps.length}
-                          </span>
+                          {totalColMonto > 0 && (
+                            <span className="t-num text-[11px] font-semibold text-ink-muted shrink-0" title={`Total acumulado: $${totalColMonto.toLocaleString('es-CL')}`}>
+                              ${Math.round(totalColMonto / 1000).toLocaleString('es-CL')}k
+                            </span>
+                          )}
                         </div>
 
-                        <div className="space-y-3">
+                        {/* Listado de Tarjetas Modulares Compactas */}
+                        <div className="space-y-2.5 flex-1 overflow-y-auto">
                           {colOps.map((op) => {
                             const latestQuote = getActiveQuote(op);
                             const montoTotal = getOportunidadTotalValue(op);
@@ -2589,128 +2627,29 @@ export default function PipelineVentasPage() {
                             const isBeingDragged = draggedOpId === op.id;
 
                             return (
-                              <div
+                              <KanbanCard
                                 key={op.id}
-                                draggable={true}
+                                oportunidad={op}
+                                assignedUser={usuariosApp.find((u) => u.id === op.asignado_a)}
+                                montoTotal={montoTotal}
+                                montoAbonado={montoAbonado}
+                                saldoPendiente={saldoPendiente}
+                                latestQuoteVersion={latestQuote?.version}
+                                isUnaccredited={isUnaccreditedClose(op)}
+                                isBeingDragged={isBeingDragged}
                                 onDragStart={(e) => handleDragStart(e, op.id)}
                                 onDragEnd={handleDragEnd}
                                 onClick={() => handleOpenOportunidad(op)}
-                                onKeyDown={(event) => {
-                                  if (event.target !== event.currentTarget) return;
-                                  if (event.key === 'Enter' || event.key === ' ') {
-                                    event.preventDefault();
-                                    handleOpenOportunidad(op);
-                                  }
+                                onDelete={() => {
+                                  setDeleteOpError('');
+                                  setOpToDelete(op);
                                 }}
-                                role="button"
-                                tabIndex={0}
-                                aria-label={`Abrir oportunidad ${op.codigo}: ${op.titulo}`}
-                                className={`bg-surface p-3.5 rounded-xl border border-line space-y-2.5 shadow-xs hover:shadow-md hover:border-accent transition cursor-pointer active:cursor-grabbing relative group ${
-                                  isBeingDragged ? 'opacity-40 border-dashed border-accent' : ''
-                                }`}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <GripVertical className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
-                                    <CodeStamp>{op.codigo}</CodeStamp>
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    {latestQuote && (
-                                      <span className="t-micro font-semibold text-info">
-                                        Cot. v{latestQuote.version || 1}
-                                      </span>
-                                    )}
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setDeleteOpError('');
-                                        setOpToDelete(op);
-                                      }}
-                                      className="p-1 text-ink-subtle hover:text-danger rounded transition"
-                                      title="Eliminar Oportunidad"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <p className="text-sm font-semibold text-ink leading-snug group-hover:text-accent-ink transition">
-                                    {op.titulo}
-                                  </p>
-                                  {isUnaccreditedClose(op) && (
-                                    <span className="mt-1 inline-block rounded bg-warning-soft px-2 py-0.5 t-micro font-semibold text-warning-ink">
-                                      Entrega sin acreditar
-                                    </span>
-                                  )}
-                                  <div className="mt-1 flex items-center gap-1 text-xs text-accent-ink font-semibold hover:underline" onClick={(e) => e.stopPropagation()}>
-                                    <Building className="w-3.5 h-3.5 shrink-0" />
-                                    <Link href={`/clientes/${op.cliente_id}`}>
-                                      {op.cliente?.nombre || 'Ver Ficha Cliente'}
-                                    </Link>
-                                  </div>
-                                </div>
-
-                                <div className="py-1">
-                                  <StageRail current={getStageIndex(op.estado_pipeline)} stages={PIPELINE_STAGES} size="mini" />
-                                </div>
-
-                                <div className="bg-surface-muted p-2.5 rounded-md text-xs space-y-1 border border-line-subtle">
-                                  <div className="flex items-center justify-between text-ink-muted">
-                                    <span>Inicio</span>
-                                    <span className="font-mono text-ink font-medium">{op.fecha_inicio}</span>
-                                  </div>
-                                  {op.fecha_limite && (
-                                    <div className="flex items-center justify-between text-ink-muted">
-                                      <span>Límite</span>
-                                      <span className="font-mono font-semibold text-warning-ink">{op.fecha_limite}</span>
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="pt-2 border-t border-line-subtle text-xs space-y-1">
-                                  <div className="flex justify-between text-ink font-medium">
-                                    <span className="text-ink-muted">Total</span>
-                                    <span className="t-num font-semibold">${montoTotal.toLocaleString('es-CL')}</span>
-                                  </div>
-                                  <div className="flex justify-between text-success font-medium">
-                                    <span className="text-ink-muted">Abonado</span>
-                                    <span className="t-num font-semibold">${montoAbonado.toLocaleString('es-CL')}</span>
-                                  </div>
-                                  {saldoPendiente > 0 && (
-                                    <div className="flex justify-between text-accent-ink font-medium">
-                                      <span className="text-ink-muted">Saldo</span>
-                                      <span className="t-num font-semibold">${saldoPendiente.toLocaleString('es-CL')}</span>
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="flex items-center justify-between pt-2 border-t border-line-subtle text-xs">
-                                  <Link
-                                    href={`/ventas/${op.id}`}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="t-micro text-accent-ink hover:underline font-semibold flex items-center gap-0.5"
-                                  >
-                                    <span>Ficha completa</span>
-                                    <ChevronRight className="w-3 h-3" />
-                                  </Link>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleOpenOportunidad(op);
-                                    }}
-                                    className="t-micro text-ink-muted hover:text-ink font-medium"
-                                  >
-                                    Vista rápida
-                                  </button>
-                                </div>
-                              </div>
+                              />
                             );
                           })}
 
                           {colOps.length === 0 && (
-                            <div className="min-h-32 border border-dashed border-line rounded-lg flex items-center justify-center text-xs text-ink-subtle font-medium bg-surface-muted">
+                            <div className="min-h-24 border border-dashed border-line rounded-control flex items-center justify-center text-xs text-ink-muted font-medium bg-surface/50">
                               Sin oportunidades
                             </div>
                           )}
@@ -2859,65 +2798,62 @@ export default function PipelineVentasPage() {
 	        })}
         </div>
       )}
-
-      {/* Pop Up / Modal Enriquecido Oportunidad de Venta (Estilo Workspace Minimalista Homologado con Tasks) */}
-      {selectedOp && (
+      </>
+      ) : (
+        /* Vista Nativa de Oportunidad de Venta (Directa en página, sin modal flotante) */
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) handleCloseOportunidad();
-          }}
+          ref={modalContainerRef}
+          className="bg-surface text-ink border border-line rounded-xl w-full p-4 sm:p-6 shadow-xs flex flex-col lg:flex-row gap-0 relative min-h-[calc(100vh-10rem)]"
         >
+          {/* Columna Izquierda: Breadcrumb + Título + Accordions (Ancho Resizable) */}
           <div
-            ref={modalContainerRef}
-            className="bg-surface text-ink border border-line rounded-lg max-w-[96vw] lg:max-w-[86vw] w-full p-4 sm:p-6 shadow-2xl h-[95vh] overflow-y-auto lg:overflow-hidden flex flex-col lg:flex-row gap-0 relative"
+            style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${modalLeftColRatio}%` : '100%' }}
+            className="flex flex-col min-h-0 lg:h-full overflow-hidden pr-0 lg:pr-3 shrink-0"
           >
-            {/* Columna Izquierda: Breadcrumb + Título + Accordions (Ancho Resizable) */}
-            <div
-              style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${modalLeftColRatio}%` : '100%' }}
-              className="flex flex-col h-[70vh] lg:h-full overflow-hidden pr-3 shrink-0"
-            >
-              {/* Header Superior con Breadcrumb y Botón Eliminar Oportunidad */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3 text-sm shrink-0">
-                <div className="flex items-center gap-2.5 text-ink-muted font-medium">
-                  <Building className="w-4 h-4 text-accent-ink" />
-                  <Link href={`/clientes/${selectedOp.cliente_id}`} className="hover:text-accent-ink text-ink transition underline font-bold text-sm">
-                    {selectedOp.cliente?.nombre || 'Cliente'}
-                  </Link>
-                  <span className="text-ink-subtle">/</span>
-                  <span className="text-ink-muted font-bold font-mono text-sm">{selectedOp.codigo}</span>
-                  <button
-                    type="button"
-                    onClick={() => setOpenSections((prev) => ({ ...prev, antecedentes: true }))}
-                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-surface-muted hover:bg-accent-soft text-ink hover:text-accent-ink border border-line hover:border-accent/30 font-mono transition"
-                    title={`${opAntecedentesList.length} archivo(s) adjunto(s) - Clic para ver`}
-                  >
-                    <Paperclip className="w-3 h-3 text-accent-ink" />
-                    <span>{opAntecedentesList.length}</span>
-                  </button>
-                </div>
+            {/* Header Superior con Flecha Atrás, Breadcrumb y Botones de Acción */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3 text-sm shrink-0">
+              <div className="flex items-center gap-2.5 text-ink-muted font-medium">
+                <button
+                  type="button"
+                  onClick={handleCloseOportunidad}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-control border border-line bg-surface hover:bg-surface-muted text-ink font-semibold text-xs transition shadow-xs cursor-pointer mr-1"
+                  title="Volver al panel de ventas"
+                >
+                  <ArrowLeft className="w-4 h-4 text-ink-muted" />
+                  <span>Volver al panel</span>
+                </button>
 
-                <div className="flex items-center gap-3">
-                  <Link href={`/ventas/${selectedOp.id}`} className="px-3 py-1.5 hg-button-primary rounded-md font-semibold text-xs flex items-center gap-1.5"><span>Ficha completa</span><ExternalLink className="w-3.5 h-3.5" /></Link>
-                  <Link href={`/ventas/${selectedOp.id}/operacion`} className="px-3 py-1.5 bg-accent-soft hover:bg-accent-soft text-accent-ink rounded-md border border-accent/30 font-bold text-xs">Producción y entregas</Link>
-                  <button
-                    onClick={() => { setDeleteOpError(''); setOpToDelete(selectedOp); }}
-                    className="px-3 py-1.5 bg-danger-soft hover:bg-danger-soft text-danger rounded-md transition border border-danger/30 font-bold text-xs flex items-center gap-1.5"
-                    title="Eliminar oportunidad"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Eliminar</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCloseOportunidad}
-                    className="rounded-md border border-line p-2 text-ink-muted hover:bg-surface-muted lg:hidden"
-                    aria-label="Cerrar oportunidad"
-                  >
-                    ✕
-                  </button>
-                </div>
+                <Building className="w-4 h-4 text-accent-ink" />
+                <Link href={`/clientes/${selectedOp.cliente_id}`} className="hover:text-accent-ink text-ink transition underline font-bold text-sm">
+                  {selectedOp.cliente?.nombre || 'Cliente'}
+                </Link>
+                <span className="text-ink-subtle">/</span>
+                <span className="text-ink-muted font-bold font-mono text-sm">{selectedOp.codigo}</span>
+                <button
+                  type="button"
+                  onClick={() => setOpenSections((prev) => ({ ...prev, antecedentes: true }))}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-surface-muted hover:bg-accent-soft text-ink hover:text-accent-ink border border-line hover:border-accent/30 font-mono transition"
+                  title={`${opAntecedentesList.length} archivo(s) adjunto(s) - Clic para ver`}
+                >
+                  <Paperclip className="w-3 h-3 text-accent-ink" />
+                  <span>{opAntecedentesList.length}</span>
+                </button>
               </div>
+
+              <div className="flex items-center gap-2 sm:gap-3">
+                <Link href={`/ventas/${selectedOp.id}/operacion`} className="px-3 py-1.5 bg-accent-soft hover:bg-accent-soft text-accent-ink rounded-md border border-accent/30 font-bold text-xs">
+                  Producción y entregas
+                </Link>
+                <button
+                  onClick={() => { setDeleteOpError(''); setOpToDelete(selectedOp); }}
+                  className="px-3 py-1.5 bg-danger-soft hover:bg-danger-soft text-danger rounded-md transition border border-danger/30 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+                  title="Eliminar oportunidad"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Eliminar</span>
+                </button>
+              </div>
+            </div>
 
               {/* Título Principal Editable Inline */}
               <div className="py-3 border-b border-line flex items-center justify-between shrink-0 mb-4">
@@ -6200,8 +6136,7 @@ export default function PipelineVentasPage() {
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* Cotización Modal Unificado */}
       <CotizacionModal

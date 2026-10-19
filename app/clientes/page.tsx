@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { createClient } from '../../lib/supabase/client';
 import { Cliente, NICHOS_CLIENTE_DEFAULT, OportunidadVenta, Usuario } from '../../lib/types';
@@ -23,6 +23,11 @@ import { REGIONES_CHILE, TODAS_COMUNAS_CHILE } from '../../lib/chile-data';
 import { mensajeError } from '../../lib/errores';
 import { Button, CodeStamp, PageHeader, Panel, StatusBadge } from '../../components/ui/crm';
 import { useConfirm, useToast } from '../../components/ui/feedback';
+import { AvatarBadge } from '../../components/ui/AvatarBadge';
+import { FloatingActionBar } from '../../components/ui/FloatingActionBar';
+import { FilterPills, FilterDefinition } from '../../components/ui/FilterPills';
+import { ClienteDrawer } from '../../components/clientes/ClienteDrawer';
+import clsx from 'clsx';
 
 interface ColumnState {
   rut: boolean;
@@ -40,14 +45,18 @@ const DEFAULT_CLIENT_COLUMNS: ColumnState = {
   contacto: true,
 };
 
+import { swrCache } from '../../lib/cache/swr-cache';
+
 export default function ClientesPage() {
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>(() => swrCache.get('clientes:list') || []);
+  const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>(() => swrCache.get('clientes:oportunidades') || []);
   const [usuariosList, setUsuariosList] = useState<Usuario[]>([]);
   const [nichos, setNichos] = useState<string[]>(NICHOS_CLIENTE_DEFAULT);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(() => !swrCache.has('clientes:list'));
   const [search, setSearch] = useState('');
   const [nichoFiltro, setNichoFiltro] = useState<string>('todos');
+  const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
+  const [drawerCliente, setDrawerCliente] = useState<Cliente | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [showColumnMenu, setShowColumnMenu] = useState(false);
   const [duplicateError, setDuplicateError] = useState('');
@@ -103,7 +112,7 @@ export default function ClientesPage() {
   const [comuna, setComuna] = useState('');
   const [region, setRegion] = useState('');
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   // Helper para normalizar RUT chileno
   const normalizeRut = (rutStr: string): string => {
@@ -158,12 +167,18 @@ export default function ClientesPage() {
 
         if (!ignore) {
           if (cliRes.data) {
-            setClientes(cliRes.data as Cliente[]);
-            const dbNichos = Array.from(new Set(cliRes.data.map((c: Cliente) => c.nicho).filter(Boolean)));
+            const cliData = cliRes.data as Cliente[];
+            setClientes(cliData);
+            swrCache.set('clientes:list', cliData);
+            const dbNichos = Array.from(new Set(cliData.map((c: Cliente) => c.nicho).filter(Boolean)));
             const allNichos = Array.from(new Set([...NICHOS_CLIENTE_DEFAULT, ...dbNichos]));
             setNichos(allNichos as string[]);
           }
-          if (opRes.data) setOportunidades(opRes.data as OportunidadVenta[]);
+          if (opRes.data) {
+            const opData = opRes.data as OportunidadVenta[];
+            setOportunidades(opData);
+            swrCache.set('clientes:oportunidades', opData);
+          }
           if (usrRes.data) setUsuariosList(usrRes.data as Usuario[]);
           setLoading(false);
         }
@@ -202,22 +217,50 @@ export default function ClientesPage() {
     setShowAddNichoInput(false);
   };
 
-  const filteredClientes = clientes.filter((c) => {
-    const q = search.toLowerCase();
-    const rutClean = (c.rut || '').replace(/[^0-9kK]/g, '').toLowerCase();
-    const searchClean = q.replace(/[^0-9kK]/g, '');
+  const filterDefinitions: FilterDefinition[] = useMemo(() => [
+    {
+      id: 'nicho',
+      label: 'Nicho',
+      allLabel: 'Todos los nichos',
+      options: nichos.map((n) => ({ value: n, label: n })),
+    },
+    {
+      id: 'ejecutivo',
+      label: 'Ejecutivo',
+      allLabel: 'Todos los ejecutivos',
+      options: [
+        { value: 'sin_asignar', label: 'Sin asignar' },
+        ...usuariosList.map((u) => ({ value: u.id, label: u.nombre })),
+      ],
+    },
+  ], [nichos, usuariosList]);
 
-    const matchSearch =
-      c.nombre.toLowerCase().includes(q) ||
-      (c.apellido_razon_social && c.apellido_razon_social.toLowerCase().includes(q)) ||
-      (c.correo && c.correo.toLowerCase().includes(q)) ||
-      (c.telefono && c.telefono.includes(q)) ||
-      (searchClean && rutClean.includes(searchClean));
+  const filteredClientes = useMemo(() => {
+    return clientes.filter((c) => {
+      const q = search.toLowerCase();
+      const rutClean = (c.rut || '').replace(/[^0-9kK]/g, '').toLowerCase();
+      const searchClean = q.replace(/[^0-9kK]/g, '');
 
-    const matchNicho = nichoFiltro === 'todos' || c.nicho === nichoFiltro;
+      const matchSearch =
+        !q ||
+        c.nombre.toLowerCase().includes(q) ||
+        (c.apellido_razon_social && c.apellido_razon_social.toLowerCase().includes(q)) ||
+        (c.correo && c.correo.toLowerCase().includes(q)) ||
+        (c.telefono && c.telefono.includes(q)) ||
+        (searchClean && rutClean.includes(searchClean));
 
-    return matchSearch && matchNicho;
-  });
+      const nichoVal = activeFilters.nicho || (nichoFiltro !== 'todos' ? nichoFiltro : undefined);
+      const matchNicho = !nichoVal || nichoVal === 'todos' || c.nicho === nichoVal;
+
+      const ejecVal = activeFilters.ejecutivo;
+      const matchEjecutivo =
+        !ejecVal ||
+        ejecVal === 'todos' ||
+        (ejecVal === 'sin_asignar' ? !c.asignado_a : c.asignado_a === ejecVal);
+
+      return matchSearch && matchNicho && matchEjecutivo;
+    });
+  }, [clientes, search, activeFilters, nichoFiltro]);
 
   // Calculate pagination
   const totalItems = filteredClientes.length;
@@ -449,146 +492,150 @@ export default function ClientesPage() {
         }
       />
 
-      {/* Barra de Filtros, Búsqueda y Personalización de Columnas */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative w-full sm:max-w-md">
-          <Search className="w-4 h-4 text-ink-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+      {/* Barra de Filtros, Búsqueda y Columnas Next-Gen (Attio / Twenty Style) */}
+      <FilterPills
+        filters={filterDefinitions}
+        activeFilters={activeFilters}
+        onFilterChange={(id, val) => setActiveFilters((prev) => ({ ...prev, [id]: val }))}
+        onClearAll={() => {
+          setActiveFilters({});
+          setNichoFiltro('todos');
+          setSearch('');
+        }}
+        totalResults={clientes.length}
+        filteredResults={filteredClientes.length}
+      >
+        <div className="relative flex-1 min-w-[240px] max-w-md">
+          <Search className="w-3.5 h-3.5 text-ink-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             placeholder="Buscar por nombre, razón social o RUT..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm bg-surface border border-line rounded-md text-ink placeholder:text-ink-muted focus:outline-none focus:border-accent"
+            className="w-full pl-8 pr-3 py-1.5 text-xs bg-surface border border-line rounded-control text-ink placeholder:text-ink-muted focus:outline-none focus:border-accent"
           />
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-ink-muted font-medium">Nicho:</span>
-            <select
-              value={nichoFiltro}
-              onChange={(e) => setNichoFiltro(e.target.value)}
-              className="bg-surface text-ink border border-line text-xs rounded-md px-3 py-2 focus:outline-none focus:border-accent font-medium"
-            >
-              <option value="todos">Todos los nichos ({clientes.length})</option>
-              {nichos.map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Menú para Escoger Columnas Visibles */}
-          <div className="relative">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setShowColumnMenu(!showColumnMenu)}
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-accent-ink" />
-              <span>Columnas</span>
-            </Button>
-
-            {showColumnMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-surface border border-line rounded-lg shadow-sm p-3 z-30 space-y-2 text-xs">
-                <p className="font-semibold text-ink border-b border-line pb-1">Columnas Visibles</p>
-                <div className="space-y-1 text-ink">
-                  <label className="flex items-center gap-2 p-1.5 hover:bg-surface-muted rounded cursor-pointer font-medium">
-                    <input
-                      type="checkbox"
-                      checked={columns.rut}
-                      onChange={() => toggleColumn('rut')}
-                      className="rounded accent-accent"
-                    />
-                    <span>RUT</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 p-1.5 hover:bg-surface-muted rounded cursor-pointer font-medium">
-                    <input
-                      type="checkbox"
-                      checked={columns.ejecutivo}
-                      onChange={() => toggleColumn('ejecutivo')}
-                      className="rounded accent-accent"
-                    />
-                    <span>Ejecutivo asignado</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 p-1.5 hover:bg-surface-muted rounded cursor-pointer font-medium">
-                    <input
-                      type="checkbox"
-                      checked={columns.nicho}
-                      onChange={() => toggleColumn('nicho')}
-                      className="rounded accent-accent"
-                    />
-                    <span>Nicho de mercado</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 p-1.5 hover:bg-surface-muted rounded cursor-pointer font-medium">
-                    <input
-                      type="checkbox"
-                      checked={columns.cant_oportunidades}
-                      onChange={() => toggleColumn('cant_oportunidades')}
-                      className="rounded accent-accent"
-                    />
-                    <span>Oportunidades de venta</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 p-1.5 hover:bg-surface-muted rounded cursor-pointer font-medium">
-                    <input
-                      type="checkbox"
-                      checked={columns.contacto}
-                      onChange={() => toggleColumn('contacto')}
-                      className="rounded accent-accent"
-                    />
-                    <span>Contacto (tel/emails)</span>
-                  </label>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {nichoFiltro !== 'todos' && (
-        <div aria-label="Filtros activos" className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setNichoFiltro('todos')}
-            className="text-xs bg-surface-muted border border-line px-2.5 py-1 rounded-md text-ink hover:bg-line-subtle transition"
+        {/* Menú para Escoger Columnas Visibles */}
+        <div className="relative shrink-0 ml-auto">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setShowColumnMenu(!showColumnMenu)}
           >
-            Nicho: {nichoFiltro} ✕
-          </button>
+            <SlidersHorizontal className="w-3.5 h-3.5 text-accent-ink" />
+            <span>Columnas</span>
+          </Button>
+
+          {showColumnMenu && (
+            <div className="absolute right-0 mt-2 w-56 bg-surface border border-line rounded-panel shadow-sm p-3 z-30 space-y-2 text-xs">
+              <p className="font-semibold text-ink border-b border-line pb-1">Columnas Visibles</p>
+              <div className="space-y-1 text-ink">
+                <label className="flex items-center gap-2 p-1.5 hover:bg-surface-muted rounded cursor-pointer font-medium">
+                  <input
+                    type="checkbox"
+                    checked={columns.rut}
+                    onChange={() => toggleColumn('rut')}
+                    className="rounded accent-accent"
+                  />
+                  <span>RUT</span>
+                </label>
+
+                <label className="flex items-center gap-2 p-1.5 hover:bg-surface-muted rounded cursor-pointer font-medium">
+                  <input
+                    type="checkbox"
+                    checked={columns.ejecutivo}
+                    onChange={() => toggleColumn('ejecutivo')}
+                    className="rounded accent-accent"
+                  />
+                  <span>Ejecutivo asignado</span>
+                </label>
+
+                <label className="flex items-center gap-2 p-1.5 hover:bg-surface-muted rounded cursor-pointer font-medium">
+                  <input
+                    type="checkbox"
+                    checked={columns.nicho}
+                    onChange={() => toggleColumn('nicho')}
+                    className="rounded accent-accent"
+                  />
+                  <span>Nicho de mercado</span>
+                </label>
+
+                <label className="flex items-center gap-2 p-1.5 hover:bg-surface-muted rounded cursor-pointer font-medium">
+                  <input
+                    type="checkbox"
+                    checked={columns.cant_oportunidades}
+                    onChange={() => toggleColumn('cant_oportunidades')}
+                    className="rounded accent-accent"
+                  />
+                  <span>Oportunidades de venta</span>
+                </label>
+
+                <label className="flex items-center gap-2 p-1.5 hover:bg-surface-muted rounded cursor-pointer font-medium">
+                  <input
+                    type="checkbox"
+                    checked={columns.contacto}
+                    onChange={() => toggleColumn('contacto')}
+                    className="rounded accent-accent"
+                  />
+                  <span>Contacto (tel/emails)</span>
+                </label>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </FilterPills>
 
       {/* Lista de Clientes */}
       <Panel className="overflow-hidden">
         <div className="md:hidden divide-y divide-line-subtle">
           {loading ? (
-            <p className="p-5 text-sm text-ink-muted">Cargando clientes…</p>
+            [...Array(4)].map((_, idx) => (
+              <div key={`skel-cli-mob-${idx}`} className="p-4 space-y-2 animate-pulse">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="h-4 w-40 rounded bg-surface-muted hg-skeleton" />
+                    <div className="h-3 w-28 rounded bg-surface-muted hg-skeleton" />
+                  </div>
+                  <div className="h-4 w-14 rounded bg-surface-muted hg-skeleton" />
+                </div>
+              </div>
+            ))
           ) : paginatedClientes.length === 0 ? (
             <p className="p-5 text-sm text-ink-muted">No se encontraron clientes.</p>
           ) : (
             paginatedClientes.map((cli) => (
-              <div key={cli.id} className="p-4 space-y-2 hover:bg-surface-muted transition">
+              <div
+                key={cli.id}
+                onClick={() => setDrawerCliente(cli)}
+                className="p-3 space-y-2 hover:bg-surface-muted/60 transition cursor-pointer"
+              >
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={selectedClientIds.includes(cli.id)}
-                      onChange={() => toggleSelectClient(cli.id)}
-                      aria-label={`Seleccionar ${cli.nombre}`}
-                      className="shrink-0 accent-accent"
-                    />
-                    <Link href={`/clientes/${cli.id}`} className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-ink hover:text-accent">{cli.nombre}</span>
-                      <span className="block truncate text-xs text-ink-muted t-num">{formatRutClean(cli.rut)} · {cli.nicho || 'Sin nicho'}</span>
-                    </Link>
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedClientIds.includes(cli.id)}
+                        onChange={() => toggleSelectClient(cli.id)}
+                        aria-label={`Seleccionar ${cli.nombre}`}
+                        className="shrink-0 accent-accent"
+                      />
+                    </div>
+                    <AvatarBadge name={cli.nombre} size="sm" className="shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-semibold text-ink hover:text-accent">
+                        {cli.nombre}
+                      </span>
+                      <span className="block truncate text-[11px] text-ink-muted t-num">
+                        {formatRutClean(cli.rut)} · {cli.nicho || 'Sin nicho'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-ink-muted t-num font-semibold">{getOportunidadesCount(cli.id)} ops</span>
-                    <Link href={`/clientes/${cli.id}`}>
-                      <ChevronRight className="h-4 w-4 text-ink-muted hover:text-accent" />
-                    </Link>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[11px] text-ink-muted t-num font-semibold">
+                      {getOportunidadesCount(cli.id)} ops
+                    </span>
+                    <ChevronRight className="h-3.5 w-3.5 text-ink-muted hover:text-accent" />
                   </div>
                 </div>
               </div>
@@ -599,8 +646,8 @@ export default function ClientesPage() {
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-left min-w-[900px] text-xs">
             <thead>
-              <tr className="bg-surface-muted text-ink-muted text-[11px] font-semibold border-b border-line uppercase tracking-normal">
-                <th className="py-3.5 px-4 w-12 text-center">
+              <tr className="bg-surface-muted/50 text-ink-muted text-[11px] font-semibold border-b border-line uppercase tracking-normal">
+                <th className="py-2.5 px-3 w-10 text-center">
                   <input
                     type="checkbox"
                     checked={isAllSelected}
@@ -608,22 +655,63 @@ export default function ClientesPage() {
                     className="rounded cursor-pointer accent-accent"
                   />
                 </th>
-                <th className="py-3.5 px-6 min-w-[200px] text-ink">Cliente / Razón social</th>
-                {columns.rut && <th className="py-3.5 px-6 min-w-[130px] text-ink">RUT</th>}
-                {columns.ejecutivo && <th className="py-3.5 px-6 min-w-[170px] text-ink">Ejecutivo asignado</th>}
-                {columns.nicho && <th className="py-3.5 px-6 min-w-[160px] text-ink">Nicho de mercado</th>}
-                {columns.cant_oportunidades && <th className="py-3.5 px-6 min-w-[180px] text-ink">Oportunidades de venta</th>}
-                {columns.contacto && <th className="py-3.5 px-6 min-w-[200px] text-ink">Contacto</th>}
-                <th className="py-3.5 px-6 text-right min-w-[120px] text-ink">Acciones</th>
+                <th className="py-2.5 px-3 min-w-[220px] text-ink">Cliente / Razón social</th>
+                {columns.rut && <th className="py-2.5 px-3 min-w-[120px] text-ink">RUT</th>}
+                {columns.ejecutivo && <th className="py-2.5 px-3 min-w-[160px] text-ink">Ejecutivo asignado</th>}
+                {columns.nicho && <th className="py-2.5 px-3 min-w-[150px] text-ink">Nicho</th>}
+                {columns.cant_oportunidades && <th className="py-2.5 px-3 min-w-[120px] text-ink">Oportunidades</th>}
+                {columns.contacto && <th className="py-2.5 px-3 min-w-[180px] text-ink">Contacto</th>}
+                <th className="py-2.5 px-3 text-right min-w-[80px] text-ink">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line-subtle text-xs text-ink">
               {loading ? (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-ink-muted font-medium">
-                    Cargando directorio de clientes...
-                  </td>
-                </tr>
+                [...Array(6)].map((_, idx) => (
+                  <tr key={`skel-cli-${idx}`} className="animate-pulse">
+                    <td className="py-2 px-3 text-center">
+                      <div className="w-4 h-4 rounded bg-surface-muted hg-skeleton mx-auto" />
+                    </td>
+                    <td className="py-2 px-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-surface-muted hg-skeleton shrink-0" />
+                        <div className="space-y-1 flex-1">
+                          <div className="h-3.5 w-36 rounded bg-surface-muted hg-skeleton" />
+                          <div className="h-2.5 w-24 rounded bg-surface-muted hg-skeleton" />
+                        </div>
+                      </div>
+                    </td>
+                    {columns.rut && (
+                      <td className="py-2 px-3">
+                        <div className="h-3.5 w-20 rounded bg-surface-muted hg-skeleton" />
+                      </td>
+                    )}
+                    {columns.ejecutivo && (
+                      <td className="py-2 px-3">
+                        <div className="h-3.5 w-28 rounded bg-surface-muted hg-skeleton" />
+                      </td>
+                    )}
+                    {columns.nicho && (
+                      <td className="py-2 px-3">
+                        <div className="h-4 w-20 rounded-full bg-surface-muted hg-skeleton" />
+                      </td>
+                    )}
+                    {columns.cant_oportunidades && (
+                      <td className="py-2 px-3">
+                        <div className="h-3.5 w-12 rounded bg-surface-muted hg-skeleton" />
+                      </td>
+                    )}
+                    {columns.contacto && (
+                      <td className="py-2 px-3">
+                        <div className="space-y-1">
+                          <div className="h-3 w-28 rounded bg-surface-muted hg-skeleton" />
+                        </div>
+                      </td>
+                    )}
+                    <td className="py-2 px-3 text-right">
+                      <div className="h-6 w-12 rounded-control bg-surface-muted hg-skeleton ml-auto" />
+                    </td>
+                  </tr>
+                ))
               ) : filteredClientes.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-ink-muted font-medium">
@@ -634,11 +722,19 @@ export default function ClientesPage() {
                 paginatedClientes.map((cli) => {
                   const oportunidadesCount = getOportunidadesCount(cli.id);
                   const isSelected = selectedClientIds.includes(cli.id);
+                  const ejecutivoAsignado = usuariosList.find((u) => u.id === cli.asignado_a);
 
                   return (
-                    <tr key={cli.id} className={`hover:bg-surface-muted/50 transition group ${isSelected ? 'bg-surface-muted' : ''}`}>
+                    <tr
+                      key={cli.id}
+                      onClick={() => setDrawerCliente(cli)}
+                      className={clsx(
+                        'hover:bg-surface-muted/60 transition group cursor-pointer border-b border-line-subtle',
+                        isSelected ? 'bg-surface-muted/90' : ''
+                      )}
+                    >
                       {/* Checkbox Selección Individual */}
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -647,62 +743,71 @@ export default function ClientesPage() {
                         />
                       </td>
 
-                      {/* Cliente / Razón Social */}
-                      <td className="py-3.5 px-6 font-semibold">
-                        <Link
-                          href={`/clientes/${cli.id}`}
-                          className="text-ink hover:text-accent transition flex flex-col"
-                        >
-                          <span className="text-sm font-semibold leading-tight group-hover:underline">{cli.nombre}</span>
-                          {cli.apellido_razon_social && cli.apellido_razon_social !== cli.nombre && (
-                            <span className="text-xs text-ink-muted font-normal">{cli.apellido_razon_social}</span>
-                          )}
-                        </Link>
+                      {/* Cliente / Razón Social con AvatarBadge */}
+                      <td className="py-2 px-3 font-semibold">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <AvatarBadge name={cli.nombre} size="sm" className="shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs font-semibold leading-tight text-ink group-hover:text-accent transition truncate block">
+                              {cli.nombre}
+                            </span>
+                            {cli.apellido_razon_social && cli.apellido_razon_social !== cli.nombre && (
+                              <span className="text-[11px] text-ink-muted font-normal truncate block">
+                                {cli.apellido_razon_social}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </td>
 
                       {/* RUT */}
                       {columns.rut && (
-                        <td className="py-3.5 px-6 font-medium text-xs">
+                        <td className="py-2 px-3 font-medium text-xs">
                           <CodeStamp>{formatRutClean(cli.rut)}</CodeStamp>
                         </td>
                       )}
 
                       {/* Ejecutivo Asignado */}
                       {columns.ejecutivo && (
-                        <td className="py-3.5 px-6">
-                          <select
-                            value={cli.asignado_a || ''}
-                            onChange={async (e) => {
-                              const newUid = e.target.value || null;
-                              setClientes((prev) =>
-                                prev.map((c) => (c.id === cli.id ? { ...c, asignado_a: newUid } : c))
-                              );
-                              try {
-                                const { error } = await supabase.from('clientes').update({ asignado_a: newUid }).eq('id', cli.id);
-                                if (error) console.error('Error updating asignado_a on cliente:', error);
-                              } catch (err) {
-                                console.error('Error updating asignado_a on cliente:', err);
-                              }
-                            }}
-                            className="text-xs font-medium px-2 py-1 rounded-md bg-surface border border-line text-ink focus:outline-none focus:border-accent cursor-pointer min-w-[140px] truncate"
-                          >
-                            <option value="">-- Sin asignar --</option>
-                            {usuariosList.map((u) => (
-                              <option key={u.id} value={u.id}>
-                                {u.nombre}
-                              </option>
-                            ))}
-                          </select>
+                        <td className="py-2 px-3" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {ejecutivoAsignado && (
+                              <AvatarBadge name={ejecutivoAsignado.nombre} size="xs" className="shrink-0" />
+                            )}
+                            <select
+                              value={cli.asignado_a || ''}
+                              onChange={async (e) => {
+                                const newUid = e.target.value || null;
+                                setClientes((prev) =>
+                                  prev.map((c) => (c.id === cli.id ? { ...c, asignado_a: newUid } : c))
+                                );
+                                try {
+                                  const { error } = await supabase.from('clientes').update({ asignado_a: newUid }).eq('id', cli.id);
+                                  if (error) console.error('Error updating asignado_a on cliente:', error);
+                                } catch (err) {
+                                  console.error('Error updating asignado_a on cliente:', err);
+                                }
+                              }}
+                              className="text-xs font-medium px-2 py-0.5 rounded-control bg-surface border border-line text-ink focus:outline-none focus:border-accent cursor-pointer min-w-[130px] truncate"
+                            >
+                              <option value="">-- Sin asignar --</option>
+                              {usuariosList.map((u) => (
+                                <option key={u.id} value={u.id}>
+                                  {u.nombre}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         </td>
                       )}
 
                       {/* Nicho de Mercado */}
                       {columns.nicho && (
-                        <td className="py-3.5 px-6">
+                        <td className="py-2 px-3" onClick={(e) => e.stopPropagation()}>
                           <select
                             value={cli.nicho || 'Constructora B2B'}
                             onChange={(e) => handleUpdateNicho(cli.id, e.target.value)}
-                            className="text-xs font-medium px-2 py-1 rounded-md bg-surface border border-line text-ink focus:outline-none focus:border-accent cursor-pointer min-w-[140px]"
+                            className="text-xs font-medium px-2 py-0.5 rounded-control bg-surface border border-line text-ink focus:outline-none focus:border-accent cursor-pointer min-w-[130px]"
                           >
                             {nichos.map((n) => (
                               <option key={n} value={n}>{n}</option>
@@ -713,55 +818,45 @@ export default function ClientesPage() {
 
                       {/* Cantidad de oportunidades de venta */}
                       {columns.cant_oportunidades && (
-                        <td className="py-3.5 px-6">
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-surface-muted text-ink border border-line rounded-md font-medium text-xs">
-                            <TrendingUp className="w-3.5 h-3.5 text-accent-ink" />
-                            <span className="t-num">{oportunidadesCount} {oportunidadesCount === 1 ? 'oportunidad' : 'oportunidades'}</span>
+                        <td className="py-2 px-3">
+                          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-surface-muted text-ink border border-line rounded-full font-medium text-xs">
+                            <TrendingUp className="w-3 h-3 text-accent-ink" />
+                            <span className="t-num">{oportunidadesCount}</span>
                           </div>
                         </td>
                       )}
 
                       {/* Contacto */}
                       {columns.contacto && (
-                        <td className="py-3.5 px-6 space-y-1">
-                          {cli.telefono && (
-                            <p className="flex items-center gap-1.5 text-ink">
-                              <Phone className="w-3 h-3 text-ink-muted shrink-0" />
-                              <span className="t-num">{cli.telefono}</span>
-                            </p>
-                          )}
-                          {cli.correo && (
-                            <p className="flex items-center gap-1.5 text-ink font-medium">
-                              <Mail className="w-3 h-3 text-accent-ink shrink-0" />
-                              <span className="truncate max-w-[150px]" title={`Correo Primario: ${cli.correo}`}>{cli.correo}</span>
-                            </p>
-                          )}
-                          {cli.correos_secundarios && cli.correos_secundarios.length > 0 && (
-                            <div className="text-[11px] text-ink-muted">
-                              +{cli.correos_secundarios.length} correo(s) sec.
-                            </div>
-                          )}
+                        <td className="py-2 px-3">
+                          <div className="flex flex-col gap-0.5">
+                            {cli.telefono && (
+                              <span className="flex items-center gap-1 text-[11px] text-ink t-num">
+                                <Phone className="w-2.5 h-2.5 text-ink-muted shrink-0" />
+                                <span>{cli.telefono}</span>
+                              </span>
+                            )}
+                            {cli.correo && (
+                              <span className="flex items-center gap-1 text-[11px] text-ink font-medium truncate max-w-[150px]" title={cli.correo}>
+                                <Mail className="w-2.5 h-2.5 text-accent-ink shrink-0" />
+                                <span className="truncate">{cli.correo}</span>
+                              </span>
+                            )}
+                          </div>
                         </td>
                       )}
 
                       {/* Acciones */}
-                      <td className="py-3.5 px-6 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                      <td className="py-2 px-3 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
                           <Link
                             href={`/clientes/${cli.id}`}
-                            className="inline-flex items-center gap-1 text-accent-ink font-semibold hover:underline"
+                            className="inline-flex items-center gap-0.5 text-accent-ink text-xs font-semibold hover:underline px-1.5 py-0.5 rounded-control hover:bg-surface"
+                            title="Ir a Ficha Completa"
                           >
                             <span>Ficha</span>
-                            <ChevronRight className="w-4 h-4" />
+                            <ChevronRight className="w-3.5 h-3.5" />
                           </Link>
-                          <Button
-                            variant="subtle"
-                            size="sm"
-                            onClick={() => handleDeleteClient(cli)}
-                            title="Eliminar Cliente"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-danger" />
-                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -1095,6 +1190,31 @@ export default function ClientesPage() {
           </div>
         </div>
       )}
+
+      {/* Barra de Acciones Masivas Flotante (Twenty CRM Style) */}
+      <FloatingActionBar
+        selectedCount={selectedClientIds.length}
+        onClearSelection={() => setSelectedClientIds([])}
+        itemLabel="clientes"
+      >
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={handleDeleteSelected}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+          <span>Eliminar ({selectedClientIds.length})</span>
+        </Button>
+      </FloatingActionBar>
+
+      {/* Slide-over Drawer para Ficha Rápida del Cliente (Attio Style) */}
+      <ClienteDrawer
+        cliente={drawerCliente}
+        open={!!drawerCliente}
+        onClose={() => setDrawerCliente(null)}
+        oportunidades={oportunidades}
+        usuarios={usuariosList}
+      />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { createClient } from '../../../../lib/supabase/client';
 import { cotizacionVigente, saldoPendiente } from '../../../../lib/oportunidad-finanzas';
 import type { Cotizacion, GuiaDespacho, GuiaDespachoDocumento, OperacionExcepcion, OrdenProduccion, OportunidadVenta, PostventaCaso, ProduccionDiaria } from '../../../../lib/types';
 import { useAuth } from '../../../../lib/context/AuthContext';
+import { useBreadcrumb } from '../../../../lib/context/BreadcrumbContext';
 import { mensajeError } from '../../../../lib/errores';
 import { PageHeader, Panel, Button, StatusBadge, CodeStamp } from '../../../../components/ui/crm';
 
@@ -16,6 +17,7 @@ export default function OperacionVentaPage() {
   const { id } = useParams<{ id: string }>();
   const supabase = useMemo(() => createClient(), []);
   const { currentUser } = useAuth();
+  const { setCustomTitle } = useBreadcrumb();
   const [op, setOp] = useState<OportunidadVenta | null>(null);
   const [quotes, setQuotes] = useState<Cotizacion[]>([]);
   const [orders, setOrders] = useState<OrdenProduccion[]>([]);
@@ -82,6 +84,17 @@ export default function OperacionVentaPage() {
     const timer = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  useEffect(() => {
+    if (op) {
+      setCustomTitle(`${op.titulo || op.codigo} · Producción y entregas`);
+    } else {
+      setCustomTitle(null);
+    }
+    return () => {
+      setCustomTitle(null);
+    };
+  }, [op, setCustomTitle]);
 
   const currentQuote = op ? cotizacionVigente(op, quotes) : undefined;
   const quoteItems = currentQuote?.items || [];

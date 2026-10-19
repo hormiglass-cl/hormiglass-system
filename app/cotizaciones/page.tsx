@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { createClient } from '../../lib/supabase/client';
 import { useAuth } from '../../lib/context/AuthContext';
@@ -24,13 +24,19 @@ import { Pagination } from '../../components/Pagination';
 import { mensajeError } from '../../lib/errores';
 import { Button, CodeStamp, PageHeader, Panel, StatusBadge } from '../../components/ui/crm';
 import { useConfirm, useToast } from '../../components/ui/feedback';
+import { AvatarBadge } from '../../components/ui/AvatarBadge';
+import { FloatingActionBar } from '../../components/ui/FloatingActionBar';
+import { FilterPills, FilterDefinition } from '../../components/ui/FilterPills';
+import clsx from 'clsx';
+import { swrCache } from '../../lib/cache/swr-cache';
 
 export default function CotizacionesPage() {
-  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
-  const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>(() => swrCache.get('cotizaciones:list') || []);
+  const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>(() => swrCache.get('cotizaciones:oportunidades') || []);
+  const [loading, setLoading] = useState<boolean>(() => !swrCache.has('cotizaciones:list'));
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [previewCotizacion, setPreviewCotizacion] = useState<Cotizacion | null>(null);
 
@@ -45,7 +51,7 @@ export default function CotizacionesPage() {
   const confirmDialog = useConfirm();
   const toast = useToast();
   const { currentUser } = useAuth();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const isUUID = (str?: string | null): boolean => {
     if (!str) return false;
@@ -54,6 +60,8 @@ export default function CotizacionesPage() {
 
   useEffect(() => {
     let ignore = false;
+    let debounceTimer: number | null = null;
+
     async function getCotizaciones() {
       try {
         const [cotRes, opRes] = await Promise.all([
@@ -69,31 +77,31 @@ export default function CotizacionesPage() {
 
         if (!ignore) {
           setLoadError(null);
-          if (cotRes.data) {
-            setCotizaciones(cotRes.data as Cotizacion[]);
-          } else {
-            setCotizaciones([]);
-          }
-
-          if (opRes.data) {
-            setOportunidades(opRes.data as OportunidadVenta[]);
-          } else {
-            setOportunidades([]);
-          }
+          const cotData = (cotRes.data || []) as Cotizacion[];
+          const opData = (opRes.data || []) as OportunidadVenta[];
+          setCotizaciones(cotData);
+          setOportunidades(opData);
+          swrCache.set('cotizaciones:list', cotData);
+          swrCache.set('cotizaciones:oportunidades', opData);
           setLoading(false);
         }
       } catch (err) {
         console.error('Error fetching cotizaciones from Supabase:', err);
         if (!ignore) {
           setLoadError('No se pudieron cargar las cotizaciones. Reintenta más tarde.');
-          setCotizaciones([]);
-          setOportunidades([]);
           setLoading(false);
         }
       }
     }
 
-    getCotizaciones();
+    void getCotizaciones();
+
+    const triggerDebouncedReload = () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        void getCotizaciones();
+      }, 300);
+    };
 
     const channel = supabase
       .channel('realtime_cotizaciones')
@@ -104,25 +112,49 @@ export default function CotizacionesPage() {
           schema: 'public',
           table: 'cotizaciones',
         },
-        () => {
-          getCotizaciones();
-        }
+        triggerDebouncedReload
       )
       .subscribe();
 
     return () => {
       ignore = true;
+      if (debounceTimer) window.clearTimeout(debounceTimer);
       supabase.removeChannel(channel);
     };
   }, [supabase]);
 
-  const filtered = cotizaciones.filter(
-    (c) =>
-      c.numero_cotizacion.toLowerCase().includes(search.toLowerCase()) ||
-      (c.referencia_cliente && c.referencia_cliente.toLowerCase().includes(search.toLowerCase())) ||
-      (c.cliente && c.cliente.nombre.toLowerCase().includes(search.toLowerCase())) ||
-      (c.cliente && c.cliente.rut.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filterDefinitions: FilterDefinition[] = useMemo(() => [
+    {
+      id: 'estado',
+      label: 'Estado',
+      allLabel: 'Todos los estados',
+      options: [
+        { value: 'borrador', label: 'Borrador' },
+        { value: 'enviada', label: 'Enviada' },
+        { value: 'aprobada', label: 'Aprobada' },
+        { value: 'rechazada', label: 'Rechazada' },
+        { value: 'declinada', label: 'Declinada' },
+      ],
+    },
+  ], []);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    const estadoFiltro = activeFilters.estado;
+
+    return cotizaciones.filter((c) => {
+      const matchSearch =
+        !q ||
+        c.numero_cotizacion.toLowerCase().includes(q) ||
+        (c.referencia_cliente && c.referencia_cliente.toLowerCase().includes(q)) ||
+        (c.cliente && c.cliente.nombre.toLowerCase().includes(q)) ||
+        (c.cliente && c.cliente.rut.toLowerCase().includes(q));
+
+      const matchEstado = !estadoFiltro || estadoFiltro === 'todos' || c.estado === estadoFiltro;
+
+      return matchSearch && matchEstado;
+    });
+  }, [cotizaciones, search, activeFilters]);
 
   // Calculate pagination
   const totalItems = filtered.length;
@@ -258,25 +290,29 @@ export default function CotizacionesPage() {
         }
       />
 
-      {/* Barra Búsqueda y Selección */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative w-full sm:max-w-md">
-          <Search className="w-4 h-4 text-ink-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+      {/* Barra Búsqueda y Filtros Next-Gen (Attio Style) */}
+      <FilterPills
+        filters={filterDefinitions}
+        activeFilters={activeFilters}
+        onFilterChange={(id, val) => setActiveFilters((prev) => ({ ...prev, [id]: val }))}
+        onClearAll={() => {
+          setActiveFilters({});
+          setSearch('');
+        }}
+        totalResults={cotizaciones.length}
+        filteredResults={filtered.length}
+      >
+        <div className="relative flex-1 min-w-[240px] max-w-md">
+          <Search className="w-3.5 h-3.5 text-ink-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             placeholder="Buscar por N° cotización, cliente o RUT..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm bg-surface border border-line rounded-md text-ink placeholder:text-ink-muted focus:outline-none focus:border-accent"
+            className="w-full pl-8 pr-3 py-1.5 text-xs bg-surface border border-line rounded-control text-ink placeholder:text-ink-muted focus:outline-none focus:border-accent"
           />
         </div>
-
-        {!loadError && (
-          <div className="text-xs text-ink-muted font-medium self-end sm:self-center">
-            Mostrando <span className="font-semibold text-ink t-num">{filtered.length}</span> cotizaciones {selectedIds.length > 0 && `(${selectedIds.length} seleccionadas)`}
-          </div>
-        )}
-      </div>
+      </FilterPills>
 
       {loadError && (
         <div role="alert" className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-medium text-danger">
@@ -333,9 +369,9 @@ export default function CotizacionesPage() {
 
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-left text-xs min-w-[950px]">
-            <thead className="bg-surface-muted text-ink-muted uppercase text-[11px] tracking-normal border-b border-line">
+            <thead className="bg-surface-muted/50 text-ink-muted uppercase text-[11px] font-semibold tracking-normal border-b border-line">
               <tr>
-                <th className="py-3.5 px-4 w-10 text-center">
+                <th className="py-2.5 px-3 w-10 text-center">
                   <button onClick={toggleSelectAll} className="text-ink-muted hover:text-accent" aria-label="Seleccionar todas las cotizaciones">
                     {selectedIds.length === filtered.length && filtered.length > 0 ? (
                       <CheckSquare className="w-4 h-4 text-accent" />
@@ -344,22 +380,51 @@ export default function CotizacionesPage() {
                     )}
                   </button>
                 </th>
-                <th className="py-3.5 px-4 font-semibold text-ink">N° Cotización</th>
-                <th className="py-3.5 px-4 font-semibold text-ink">Versión</th>
-                <th className="py-3.5 px-4 font-semibold text-ink">Cliente & RUT</th>
-                <th className="py-3.5 px-4 font-semibold text-ink">Oportunidad de Venta</th>
-                <th className="py-3.5 px-4 font-semibold text-ink">Estado</th>
-                <th className="py-3.5 px-4 text-right font-semibold text-ink">Monto Total</th>
-                <th className="py-3.5 px-4 text-center font-semibold text-ink">Acciones</th>
+                <th className="py-2.5 px-3 font-semibold text-ink">N° Cotización</th>
+                <th className="py-2.5 px-3 font-semibold text-ink">Versión</th>
+                <th className="py-2.5 px-3 font-semibold text-ink">Cliente & RUT</th>
+                <th className="py-2.5 px-3 font-semibold text-ink">Oportunidad de Venta</th>
+                <th className="py-2.5 px-3 font-semibold text-ink">Estado</th>
+                <th className="py-2.5 px-3 text-right font-semibold text-ink">Monto Total</th>
+                <th className="py-2.5 px-3 text-center font-semibold text-ink">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-line-subtle">
+            <tbody className="divide-y divide-line-subtle text-xs">
               {loading ? (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-ink-muted font-medium">
-                    Cargando cotizaciones...
-                  </td>
-                </tr>
+                [...Array(6)].map((_, idx) => (
+                  <tr key={`skel-cot-${idx}`} className="animate-pulse">
+                    <td className="py-2 px-3 text-center">
+                      <div className="w-4 h-4 rounded bg-surface-muted hg-skeleton mx-auto" />
+                    </td>
+                    <td className="py-2 px-3">
+                      <div className="h-4 w-24 rounded bg-surface-muted hg-skeleton" />
+                    </td>
+                    <td className="py-2 px-3">
+                      <div className="h-3.5 w-8 rounded bg-surface-muted hg-skeleton" />
+                    </td>
+                    <td className="py-2 px-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full bg-surface-muted hg-skeleton shrink-0" />
+                        <div className="space-y-1 flex-1">
+                          <div className="h-3.5 w-32 rounded bg-surface-muted hg-skeleton" />
+                          <div className="h-2.5 w-20 rounded bg-surface-muted hg-skeleton" />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-2 px-3">
+                      <div className="h-3.5 w-28 rounded bg-surface-muted hg-skeleton" />
+                    </td>
+                    <td className="py-2 px-3">
+                      <div className="h-4 w-16 rounded-full bg-surface-muted hg-skeleton" />
+                    </td>
+                    <td className="py-2 px-3 text-right">
+                      <div className="h-4 w-20 rounded bg-surface-muted hg-skeleton ml-auto" />
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      <div className="h-6 w-16 rounded-control bg-surface-muted hg-skeleton mx-auto" />
+                    </td>
+                  </tr>
+                ))
               ) : loadError ? null : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-ink-muted font-medium">
@@ -376,11 +441,12 @@ export default function CotizacionesPage() {
                   return (
                     <tr
                       key={cot.id}
-                      className={`hover:bg-surface-muted/50 transition ${
-                        isSelected ? 'bg-surface-muted font-medium' : ''
-                      }`}
+                      className={clsx(
+                        'hover:bg-surface-muted/60 transition group border-b border-line-subtle',
+                        isSelected ? 'bg-surface-muted/90' : ''
+                      )}
                     >
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-2 px-3 text-center">
                         <button
                           onClick={() => toggleSelectOne(cot.id)}
                           className="text-ink-muted hover:text-accent"
@@ -392,46 +458,43 @@ export default function CotizacionesPage() {
                           )}
                         </button>
                       </td>
-                      <td className="py-3.5 px-4 font-semibold text-ink">
+                      <td className="py-2 px-3 font-semibold text-ink">
                         <CodeStamp>{cot.numero_cotizacion}</CodeStamp>
                       </td>
-                      <td className="py-3.5 px-4">
-                        <span className="text-[11px] font-medium text-ink-muted bg-surface-muted border border-line px-2 py-0.5 rounded-md">
+                      <td className="py-2 px-3">
+                        <span className="text-[11px] font-semibold text-ink-muted bg-surface-muted border border-line px-1.5 py-0.5 rounded-control">
                           v{cot.version || 1}
                         </span>
                       </td>
 
-                      {/* Cliente & RUT */}
-                      <td className="py-3.5 px-4">
+                      {/* Cliente & RUT con AvatarBadge */}
+                      <td className="py-2 px-3">
                         <Link
                           href={`/clientes/${cot.cliente_id}`}
-                          className="group flex flex-col hover:text-accent transition"
+                          className="group flex items-center gap-2 hover:text-accent transition min-w-0"
                         >
-                          <div className="flex items-center gap-1.5 font-semibold text-ink group-hover:text-accent">
-                            <Building className="w-3.5 h-3.5 text-ink-muted" />
-                            <span>{cot.cliente?.nombre || 'Cliente Registrado'}</span>
+                          <AvatarBadge name={cot.cliente?.nombre || 'Cliente'} size="xs" className="shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs font-semibold text-ink group-hover:text-accent truncate block">
+                              {cot.cliente?.nombre || 'Cliente Registrado'}
+                            </span>
+                            <span className="text-[11px] text-ink-muted t-num block truncate">
+                              RUT: {cot.cliente?.rut || 'Sin RUT'}
+                            </span>
                           </div>
-                          <span className="text-[11px] text-ink-muted t-num pl-5">
-                            RUT: {cot.cliente?.rut || 'Sin RUT'}
-                          </span>
                         </Link>
                       </td>
 
                       {/* Oportunidad Vinculada */}
-                      <td className="py-3.5 px-4 max-w-[240px]">
+                      <td className="py-2 px-3 max-w-[240px]">
                         {linkedOp ? (
                           <Link
                             href={`/ventas/${linkedOp.id}`}
-                            className="flex flex-col text-xs text-ink hover:text-accent transition font-medium group"
+                            className="flex items-center gap-1.5 text-xs text-ink hover:text-accent transition font-medium group truncate"
                           >
-                            <div className="flex items-center gap-1.5">
-                              <TrendingUp className="w-3.5 h-3.5 text-accent shrink-0" />
-                              <CodeStamp>{linkedOp.codigo}</CodeStamp>
-                              <StatusBadge tone="neutral">{linkedOp.estado_pipeline}</StatusBadge>
-                            </div>
-                            <span className="text-[11px] text-ink-muted truncate mt-0.5" title={linkedOp.titulo}>
-                              {linkedOp.titulo}
-                            </span>
+                            <TrendingUp className="w-3.5 h-3.5 text-accent-ink shrink-0" />
+                            <CodeStamp>{linkedOp.codigo}</CodeStamp>
+                            <StatusBadge tone="neutral">{linkedOp.estado_pipeline}</StatusBadge>
                           </Link>
                         ) : (
                           <div className="space-y-1">
@@ -462,7 +525,7 @@ export default function CotizacionesPage() {
                                   setCotizaciones((prev) => prev.map((c) => c.id === cot.id ? { ...c, oportunidad_id: cot.oportunidad_id } : c));
                                 }
                               }}
-                              className="bg-surface border border-line rounded-md px-2 py-1 text-[11px] text-ink font-medium focus:outline-none focus:border-accent w-full"
+                              className="bg-surface border border-line rounded-control px-2 py-0.5 text-[11px] text-ink font-medium focus:outline-none focus:border-accent w-full"
                             >
                               <option value="">-- Asignar Oportunidad --</option>
                               {oportunidades.map((op) => (
@@ -476,11 +539,11 @@ export default function CotizacionesPage() {
                       </td>
 
                       {/* Selector de Estado */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-2 px-3">
                         <select
                           value={cot.estado}
                           onChange={(e) => handleChangeStatus(cot.id, e.target.value as EstadoCotizacion)}
-                          className="text-[11px] font-semibold bg-surface border border-line rounded-md px-2 py-1 text-ink focus:outline-none focus:border-accent cursor-pointer"
+                          className="text-[11px] font-semibold bg-surface border border-line rounded-control px-2 py-0.5 text-ink focus:outline-none focus:border-accent cursor-pointer"
                         >
                           <option value="borrador">Borrador</option>
                           <option value="enviada">Enviada</option>
@@ -489,11 +552,11 @@ export default function CotizacionesPage() {
                         </select>
                       </td>
 
-                      <td className="py-3.5 px-4 text-right font-semibold text-ink text-sm t-num">
+                      <td className="py-2 px-3 text-right font-bold text-ink text-xs t-num">
                         ${(cot.monto_total || 0).toLocaleString('es-CL')}
                       </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
+                      <td className="py-2 px-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
                           <Button
                             variant="subtle"
                             size="sm"
@@ -569,6 +632,18 @@ export default function CotizacionesPage() {
         cotizacion={previewCotizacion}
         onClose={() => setPreviewCotizacion(null)}
       />
+
+      {/* Barra de Acciones Masivas Flotante (Twenty CRM Style) */}
+      <FloatingActionBar
+        selectedCount={selectedIds.length}
+        onClearSelection={() => setSelectedIds([])}
+        itemLabel="cotizaciones"
+      >
+        <Button variant="secondary" size="sm" onClick={handleDownloadSelected}>
+          <Download className="w-3.5 h-3.5 text-accent-ink" />
+          <span>Ver PDF ({selectedIds.length})</span>
+        </Button>
+      </FloatingActionBar>
     </div>
   );
 }

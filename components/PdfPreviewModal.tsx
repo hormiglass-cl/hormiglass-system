@@ -77,7 +77,7 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
 
   const totals = calculateTotals(cotizacion);
   const items = cotizacion.items || [];
-  const isSpecimen = cotizacion.estado === 'borrador';
+  const estadoLabel = cotizacion.estado === 'borrador' ? 'Borrador' : cotizacion.estado === 'aprobada' ? 'Aprobada' : 'Emitida';
 
   // Format dates
   const fechaCotizacion = formatDateCL(cotizacion.created_at);
@@ -190,7 +190,7 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
               font-size: 14px;
               font-weight: bold;
               margin-bottom: 6px;
-              ${isSpecimen ? 'color: #991b1b;' : 'color: #111827;'}
+              color: #111827;
             }
             .meta-line {
               margin-bottom: 2px;
@@ -387,7 +387,7 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
               </div>
               <div class="top-right">
                 <div class="doc-title">
-                  ${isSpecimen ? 'Cotización SPECIMEN - No validado' : `Cotización N° ${escapeHtml(cotizacion.numero_cotizacion)}`}
+                  Cotización N° ${escapeHtml(cotizacion.numero_cotizacion)}
                 </div>
                 <div class="meta-line">
                   <span class="meta-label">Ref. cliente :</span>
@@ -409,12 +409,12 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
               <div class="entity-col-de">
                 <div class="entity-header-label">De</div>
                 <div class="box-de">
-                  <div class="company-name">Hormiglass</div>
-                  <div>Portezuelo #1502 San Bernardo</div>
-                  <div>8050000 San Bernardo</div>
-                  <div style="margin-top: 6px;">Teléfono: 2-27253725</div>
+                  <div class="company-name">Sociedad Inmobiliaria Hormiglass spa</div>
+                  <div>RUT: 77.615.313-3</div>
+                  <div>Giro: COMPRA, VENTA Y ALQUILER (EXCEPTO AMOBLADOS) DE INMUEBLES</div>
+                  <div style="margin-top: 4px;">Dirección: Portezuelo #1502</div>
+                  <div>Comuna: San Bernardo</div>
                   <div>Correo: hormiglass@gmail.com</div>
-                  <div>Web: www.hormiglass.cl</div>
                 </div>
               </div>
               <div class="entity-col-sep"></div>
@@ -457,6 +457,15 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
                 ${commentText ? `<div class="comment-section">${escapeHtml(commentText)}</div>` : ''}
                 <div><strong>Retraso disponible:</strong> ${escapeHtml(cotizacion.plazo_entrega || 'Inmediato')}</div>
                 <div style="margin-top: 4px;"><strong>Términos de pago:</strong> ${escapeHtml(cotizacion.condiciones_pago || 'Acuse de recibo')}</div>
+
+                <div class="transfer-box" style="margin-top: 12px; border: 1px solid #9ca3af; background-color: #f9fafb; border-radius: 3px; padding: 7px 10px; font-size: 9.5px; line-height: 1.35;">
+                  <div style="font-weight: bold; color: #111827; text-transform: uppercase; font-size: 9px; margin-bottom: 2px;">Datos para transferencia bancaria:</div>
+                  <div style="color: #1f2937; font-weight: bold;">Sociedad Inmobiliaria Hormiglass spa</div>
+                  <div style="color: #374151;">RUT: 77.615.313-3</div>
+                  <div style="color: #374151;">Cuenta Corriente N° <strong>0-000-8836639-5</strong></div>
+                  <div style="color: #374151; font-weight: bold;">Banco Santander</div>
+                  <div style="color: #4b5563; margin-top: 2px;">Comprobantes: <strong>comprobantes@hormiglass.cl</strong></div>
+                </div>
               </div>
               <div class="bottom-sep"></div>
               <div class="bottom-right">
@@ -524,11 +533,9 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
                 <span className="text-[10px] font-extrabold uppercase bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md">
                   v{cotizacion.version || 1}
                 </span>
-                {isSpecimen && (
-                  <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md">
-                    Borrador / Especimen
-                  </span>
-                )}
+                <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md">
+                  {estadoLabel}
+                </span>
               </div>
               <h3 className="text-lg font-bold text-[#252b2d]">
                 Cotización N° {cotizacion.numero_cotizacion}
@@ -571,14 +578,8 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
                 />
               </div>
               <div className="w-1/2 text-right space-y-0.5 text-[11px]">
-                <div
-                  className={`text-[13px] font-bold mb-1.5 ${
-                    isSpecimen ? 'text-red-800' : 'text-gray-900'
-                  }`}
-                >
-                  {isSpecimen
-                    ? 'Cotización SPECIMEN - No validado'
-                    : `Cotización N° ${cotizacion.numero_cotizacion}`}
+                <div className="text-[13px] font-bold mb-1.5 text-gray-900">
+                  Cotización N° {cotizacion.numero_cotizacion}
                 </div>
                 <div>
                   <span className="text-gray-600">Ref. cliente :</span>{' '}
@@ -600,12 +601,12 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
               <div>
                 <div className="text-[10px] text-gray-600 mb-1">De</div>
                 <div className="bg-gray-100/90 border border-gray-200 rounded p-2.5 space-y-0.5 min-h-[110px]">
-                  <div className="font-bold text-gray-900">Hormiglass</div>
-                  <div className="text-gray-700">Portezuelo #1502 San Bernardo</div>
-                  <div className="text-gray-700">8050000 San Bernardo</div>
-                  <div className="text-gray-700 pt-1.5">Teléfono: 2-27253725</div>
+                  <div className="font-bold text-gray-900">Sociedad Inmobiliaria Hormiglass spa</div>
+                  <div className="text-gray-700">RUT: 77.615.313-3</div>
+                  <div className="text-gray-700">Giro: COMPRA, VENTA Y ALQUILER (EXCEPTO AMOBLADOS) DE INMUEBLES</div>
+                  <div className="text-gray-700 pt-1">Dirección: Portezuelo #1502</div>
+                  <div className="text-gray-700">Comuna: San Bernardo</div>
                   <div className="text-gray-700">Correo: hormiglass@gmail.com</div>
-                  <div className="text-gray-700">Web: www.hormiglass.cl</div>
                 </div>
               </div>
 
@@ -693,6 +694,16 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
                 <div>
                   <span className="font-bold">Términos de pago:</span>{' '}
                   <span>{cotizacion.condiciones_pago || 'Acuse de recibo'}</span>
+                </div>
+
+                {/* Recuadro Datos Transferencia Santander */}
+                <div className="mt-3 p-2 bg-gray-50 border border-gray-300 rounded text-[9.5px] space-y-0.5">
+                  <div className="font-bold text-gray-900 uppercase text-[9px] tracking-wider">Datos para transferencia bancaria:</div>
+                  <div className="text-gray-900 font-semibold">Sociedad Inmobiliaria Hormiglass spa</div>
+                  <div className="text-gray-700">RUT: <span className="font-mono">77.615.313-3</span></div>
+                  <div className="text-gray-700">Cuenta Corriente N° <span className="font-mono font-bold text-gray-900">0-000-8836639-5</span></div>
+                  <div className="text-gray-700 font-semibold">Banco Santander</div>
+                  <div className="text-gray-600 pt-0.5">Comprobantes: <span className="font-mono font-medium text-gray-800">comprobantes@hormiglass.cl</span></div>
                 </div>
               </div>
 

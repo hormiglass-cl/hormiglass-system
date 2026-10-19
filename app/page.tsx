@@ -32,18 +32,30 @@ import {
   Wallet,
   Clock,
   RotateCcw,
+  TrendingUp,
+  FolderKanban,
+  Users,
+  Sparkles,
+  LayoutDashboard,
+  Target,
 } from 'lucide-react';
+import clsx from 'clsx';
 import {
   PageHeader,
   StatusBadge,
 } from '../components/ui';
+import { MetricCard } from '../components/ui/MetricCard';
 
 import { SalesTimelineChart } from '../components/dashboard/SalesTimelineChart';
 import { DonutChart, DonutSegment } from '../components/dashboard/DonutChart';
 import { RankingBarChart, RankingItem } from '../components/dashboard/RankingBarChart';
 import { FinancialBalanceCard } from '../components/dashboard/FinancialBalanceCard';
 import { PipelineFunnelChart, FunnelStageData } from '../components/dashboard/PipelineFunnelChart';
+import { RecentLeadsCard } from '../components/dashboard/RecentLeadsCard';
+import { TasksActivityCard } from '../components/dashboard/TasksActivityCard';
+import { swrCache } from '../lib/cache/swr-cache';
 
+export type DashboardTab = 'general' | 'ventas' | 'operaciones' | 'finanzas';
 type QuickFilterPreset = 'all' | 'today' | 'week' | 'month' | 'year';
 type ProductoDashboard = string | {
   nombre?: string;
@@ -57,17 +69,20 @@ export default function Dashboard() {
   const currentUserId = currentUser?.id;
   const supabase = useMemo(() => createClient(), []);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(() => !swrCache.has('dashboard:cotizaciones'));
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
-  const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
-  const [deliveryAccreditation, setDeliveryAccreditation] = useState<Record<string, boolean>>({});
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [eventos, setEventos] = useState<EventoProduccionLogistica[]>([]);
-  const [recordatorios, setRecordatorios] = useState<Recordatorio[]>([]);
-  const [abonosPendientes, setAbonosPendientes] = useState<Abono[]>([]);
-  const [casosPostventa, setCasosPostventa] = useState<CasoPostventa[]>([]);
+  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>(() => swrCache.get('dashboard:cotizaciones') || []);
+  const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>(() => swrCache.get('dashboard:oportunidades') || []);
+  const [deliveryAccreditation, setDeliveryAccreditation] = useState<Record<string, boolean>>(() => swrCache.get('dashboard:deliveryAccreditation') || {});
+  const [clientes, setClientes] = useState<Cliente[]>(() => swrCache.get('dashboard:clientes') || []);
+  const [usuarios, setUsuarios] = useState<Usuario[]>(() => swrCache.get('dashboard:usuarios') || []);
+  const [eventos, setEventos] = useState<EventoProduccionLogistica[]>(() => swrCache.get('dashboard:eventos') || []);
+  const [recordatorios, setRecordatorios] = useState<Recordatorio[]>(() => swrCache.get('dashboard:recordatorios') || []);
+  const [abonosPendientes, setAbonosPendientes] = useState<Abono[]>(() => swrCache.get('dashboard:abonosPendientes') || []);
+  const [casosPostventa, setCasosPostventa] = useState<CasoPostventa[]>(() => swrCache.get('dashboard:casosPostventa') || []);
+
+  // Pestaña de análisis seleccionada (estilo píldora)
+  const [activeTab, setActiveTab] = useState<DashboardTab>('general');
 
   // Filtros de fecha rápidos y personalizados
   const [quickFilter, setQuickFilter] = useState<QuickFilterPreset | 'custom'>('all');
@@ -110,24 +125,44 @@ export default function Dashboard() {
         : { data: [], error: null };
       if (accreditationError) throw accreditationError;
 
-      setDeliveryAccreditation(
-        Object.fromEntries(
-          ((accreditationRows || []) as { venta_id: string; acreditada: boolean }[]).map((row) => [
-            row.venta_id,
-            row.acreditada,
-          ])
-        )
+      const accreditationMap = Object.fromEntries(
+        ((accreditationRows || []) as { venta_id: string; acreditada: boolean }[]).map((row) => [
+          row.venta_id,
+          row.acreditada,
+        ])
       );
+
+      setDeliveryAccreditation(accreditationMap);
       setLoadError(null);
 
-      setCotizaciones((cotRes.data || []) as Cotizacion[]);
-      setOportunidades((opRes.data || []) as OportunidadVenta[]);
-      setClientes((cliRes.data || []) as Cliente[]);
-      setUsuarios((userRes.data || []) as Usuario[]);
-      setEventos((evRes.data || []) as EventoProduccionLogistica[]);
-      setRecordatorios((recRes.data || []) as Recordatorio[]);
-      setAbonosPendientes((aboRes.data || []) as Abono[]);
-      setCasosPostventa((postRes.data || []) as CasoPostventa[]);
+      const cotData = (cotRes.data || []) as Cotizacion[];
+      const opData = (opRes.data || []) as OportunidadVenta[];
+      const cliData = (cliRes.data || []) as Cliente[];
+      const usrData = (userRes.data || []) as Usuario[];
+      const evData = (evRes.data || []) as EventoProduccionLogistica[];
+      const recData = (recRes.data || []) as Recordatorio[];
+      const aboData = (aboRes.data || []) as Abono[];
+      const postData = (postRes.data || []) as CasoPostventa[];
+
+      setCotizaciones(cotData);
+      setOportunidades(opData);
+      setClientes(cliData);
+      setUsuarios(usrData);
+      setEventos(evData);
+      setRecordatorios(recData);
+      setAbonosPendientes(aboData);
+      setCasosPostventa(postData);
+
+      // Guardar en caché SWR para render inmediato en futuras navegaciones
+      swrCache.set('dashboard:cotizaciones', cotData);
+      swrCache.set('dashboard:oportunidades', opData);
+      swrCache.set('dashboard:deliveryAccreditation', accreditationMap);
+      swrCache.set('dashboard:clientes', cliData);
+      swrCache.set('dashboard:usuarios', usrData);
+      swrCache.set('dashboard:eventos', evData);
+      swrCache.set('dashboard:recordatorios', recData);
+      swrCache.set('dashboard:abonosPendientes', aboData);
+      swrCache.set('dashboard:casosPostventa', postData);
 
       setLoading(false);
     } catch (err) {
@@ -138,26 +173,32 @@ export default function Dashboard() {
   }, [currentUserId, supabase]);
 
   useEffect(() => {
-    const loadTimeout = window.setTimeout(() => {
-      void loadDashboardData();
-    }, 0);
+    void loadDashboardData();
 
-    // Supabase Realtime multi-table sync
+    // Supabase Realtime multi-table sync con debounce de 300ms
+    let debounceTimer: number | null = null;
+    const triggerDebouncedReload = () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        void loadDashboardData();
+      }, 300);
+    };
+
     const channel = supabase
       .channel('dashboard_live_channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cotizaciones' }, () => void loadDashboardData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cotizacion_items' }, () => void loadDashboardData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'oportunidades' }, () => void loadDashboardData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, () => void loadDashboardData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'usuarios' }, () => void loadDashboardData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos_produccion_logistica' }, () => void loadDashboardData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'recordatorios' }, () => void loadDashboardData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'abonos' }, () => void loadDashboardData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'postventa_casos' }, () => void loadDashboardData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cotizaciones' }, triggerDebouncedReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cotizacion_items' }, triggerDebouncedReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'oportunidades' }, triggerDebouncedReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, triggerDebouncedReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'usuarios' }, triggerDebouncedReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos_produccion_logistica' }, triggerDebouncedReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'recordatorios' }, triggerDebouncedReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'abonos' }, triggerDebouncedReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'postventa_casos' }, triggerDebouncedReload)
       .subscribe();
 
     return () => {
-      window.clearTimeout(loadTimeout);
+      if (debounceTimer) window.clearTimeout(debounceTimer);
       void supabase.removeChannel(channel);
     };
   }, [loadDashboardData, supabase]);
@@ -638,13 +679,33 @@ export default function Dashboard() {
     }
   };
 
-  const quickFilterOptions: { id: QuickFilterPreset; label: string }[] = [
-    { id: 'all', label: 'Todo' },
-    { id: 'today', label: 'Hoy' },
-    { id: 'week', label: 'Semana' },
-    { id: 'month', label: 'Mes' },
-    { id: 'year', label: 'Año' },
+  const dashboardTabs = [
+    { id: 'general' as const, label: 'General', icon: LayoutDashboard },
+    { id: 'ventas' as const, label: 'Ventas', icon: Target },
+    { id: 'operaciones' as const, label: 'Operaciones', icon: Factory },
+    { id: 'finanzas' as const, label: 'Finanzas', icon: Wallet },
   ];
+
+  const totalDealsClosed = filteredOportunidades.filter((o) =>
+    ['entregada', 'prod_finalizado', 'rev_entregado'].includes(o.estado_pipeline)
+  ).length;
+
+  const averageDealSize =
+    totalDealsClosed > 0
+      ? Math.round(totalFacturado / totalDealsClosed)
+      : filteredOportunidades.length > 0
+      ? Math.round(totalFacturado / filteredOportunidades.length)
+      : 0;
+
+  const obrasEnRielCount = filteredOportunidades.filter((o) =>
+    ['entregada', 'programada', 'prod_fabricacion', 'prod_instalacion'].includes(o.estado_pipeline)
+  ).length;
+
+  const totalAlertasCount =
+    despachosEnRiesgo.length +
+    abonosPendientes.length +
+    casosPostventa.length +
+    recordatoriosStats.pendientes;
 
   if (loading) {
     return (
@@ -668,34 +729,40 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 pb-8">
       {/* ========================================================= */}
-      {/* 1. CABECERA & FILTROS TEMPORALES RÁPIDOS                  */}
+      {/* 1. CABECERA CON PESTAÑAS TIPO PÍLDORA (Ref: Cabina 1/2)   */}
       {/* ========================================================= */}
       <PageHeader
         title="Panel operativo"
-        description={`Prioridades comerciales, pipeline y operación activa para ${currentUser?.nombre?.split(' ')[0] || 'el equipo'}.`}
+        description={`Centro de control analítico y operativo de Hormiglass para ${currentUser?.nombre?.split(' ')[0] || 'el equipo'}.`}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Píldoras de rango rápido */}
-            <div className="inline-flex rounded-control border border-line bg-surface p-1 text-xs font-medium">
-              {quickFilterOptions.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => applyQuickFilter(f.id)}
-                  className={`cursor-pointer rounded-control px-2.5 py-1 transition ${
-                    quickFilter === f.id
-                      ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                      : 'text-ink-muted hover:bg-surface-muted hover:text-ink'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Píldoras de Navegación Analítica */}
+            <div className="inline-flex h-11 items-center gap-1 rounded-full border border-line bg-surface-muted p-1 shadow-xs">
+              {dashboardTabs.map((tab) => {
+                const isActive = activeTab === tab.id;
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={clsx(
+                      'h-full cursor-pointer rounded-full px-4 sm:px-5 text-xs sm:text-sm font-semibold transition-all duration-200 flex items-center gap-2 select-none',
+                      isActive
+                        ? 'bg-accent text-on-accent shadow-xs'
+                        : 'text-ink-muted hover:text-ink hover:bg-surface/60'
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Datepicker Rango Manual */}
-            <div className="flex items-center gap-1.5 rounded-control border border-line bg-surface px-2.5 py-1 text-xs">
-              <Calendar className="h-3.5 w-3.5 text-accent-ink" aria-hidden />
+            {/* Selector de Rango de Fechas (Mismo tamaño, altura y letra que las pestañas) */}
+            <div className="inline-flex h-11 items-center gap-2.5 rounded-full border border-line bg-surface px-4 sm:px-5 shadow-xs">
+              <Calendar className="h-4 w-4 text-accent-ink shrink-0" aria-hidden />
               <input
                 type="date"
                 value={fechaDesde}
@@ -703,10 +770,10 @@ export default function Dashboard() {
                   setQuickFilter('custom');
                   setFechaDesde(e.target.value);
                 }}
-                className="bg-transparent text-xs text-ink focus:outline-none"
+                className="bg-transparent text-xs sm:text-sm font-semibold text-ink focus:outline-none cursor-pointer"
                 title="Fecha inicial"
               />
-              <span className="text-ink-muted">-</span>
+              <span className="text-ink-muted text-xs sm:text-sm font-semibold select-none">→</span>
               <input
                 type="date"
                 value={fechaHasta}
@@ -714,17 +781,21 @@ export default function Dashboard() {
                   setQuickFilter('custom');
                   setFechaHasta(e.target.value);
                 }}
-                className="bg-transparent text-xs text-ink focus:outline-none"
+                className="bg-transparent text-xs sm:text-sm font-semibold text-ink focus:outline-none cursor-pointer"
                 title="Fecha final"
               />
               {(fechaDesde || fechaHasta) && (
                 <button
                   type="button"
-                  onClick={() => applyQuickFilter('all')}
-                  className="ml-1 cursor-pointer p-0.5 text-ink-muted transition hover:text-danger"
-                  title="Limpiar filtro de fechas"
+                  onClick={() => {
+                    setFechaDesde('');
+                    setFechaHasta('');
+                    setQuickFilter('all');
+                  }}
+                  className="ml-1 cursor-pointer p-1 rounded-full text-ink-muted transition hover:text-danger hover:bg-surface-muted"
+                  title="Restablecer fechas"
                 >
-                  <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                  <RotateCcw className="h-4 w-4" aria-hidden />
                 </button>
               )}
             </div>
@@ -733,472 +804,591 @@ export default function Dashboard() {
       />
 
       {/* ========================================================= */}
-      {/* 2. SECCIÓN: QUÉ NECESITA MI ATENCIÓN HOY                 */}
+      {/* 2. VISTA 1: GENERAL (Visión 360 y Alertas Prioritarias)    */}
       {/* ========================================================= */}
-      <div className="space-y-3">
-        <h2 className="t-section text-ink">
-          Qué necesita atención hoy
-        </h2>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {/* Tarjeta 1: Despachos en riesgo / activos */}
-          <Link
-            href="/planificacion/calendario"
-            className="group flex flex-col justify-between rounded-panel border border-line bg-surface p-4 transition hover:border-accent hover:shadow-xs"
-          >
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="grid h-7 w-7 place-items-center rounded-control bg-warning-soft text-warning">
-                  <AlertTriangle className="h-4 w-4" aria-hidden />
-                </span>
-                <span className="t-micro rounded-full border border-line bg-surface-muted px-2 py-0.5 font-medium text-ink-muted">
-                  Logística
-                </span>
-              </div>
-              <p className="mt-3 text-sm font-semibold text-ink group-hover:text-accent-ink transition">
-                Despachos en riesgo o activos
-              </p>
-              <p className="t-caption mt-0.5 text-ink-muted">
-                {despachosEnRiesgo.length === 0
-                  ? 'Sin entregas atrasadas ni reprogramadas'
-                  : `${despachosEnRiesgo.length} evento(s) requieren supervisión`}
-              </p>
-            </div>
-            <div className="mt-4 flex items-center justify-between border-t border-line-subtle pt-2.5">
-              <span className="t-figure text-ink">
-                {despachosEnRiesgo.length}
-              </span>
-              <span className="t-micro flex items-center gap-0.5 font-medium text-accent-ink">
-                Ver calendario <ChevronRight className="h-3 w-3" />
-              </span>
-            </div>
-          </Link>
-
-          {/* Tarjeta 2: Pagos por validar en Caja */}
-          <Link
-            href="/caja"
-            className="group flex flex-col justify-between rounded-panel border border-line bg-surface p-4 transition hover:border-accent hover:shadow-xs"
-          >
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="grid h-7 w-7 place-items-center rounded-control bg-success-soft text-success">
-                  <Wallet className="h-4 w-4" aria-hidden />
-                </span>
-                <span className="t-micro rounded-full border border-line bg-surface-muted px-2 py-0.5 font-medium text-ink-muted">
-                  Finanzas
-                </span>
-              </div>
-              <p className="mt-3 text-sm font-semibold text-ink group-hover:text-accent-ink transition">
-                Abonos por validar
-              </p>
-              <p className="t-caption mt-0.5 text-ink-muted">
-                {abonosPendientes.length === 0
-                  ? 'Todos los comprobantes conciliados'
-                  : `$${totalMontoAbonosPorValidar.toLocaleString('es-CL')} pendientes en caja`}
-              </p>
-            </div>
-            <div className="mt-4 flex items-center justify-between border-t border-line-subtle pt-2.5">
-              <span className="t-figure text-ink">
-                {abonosPendientes.length}
-              </span>
-              <span className="t-micro flex items-center gap-0.5 font-medium text-accent-ink">
-                Validar en caja <ChevronRight className="h-3 w-3" />
-              </span>
-            </div>
-          </Link>
-
-          {/* Tarjeta 3: Casos de postventa abiertos */}
-          <Link
-            href="/postventa"
-            className="group flex flex-col justify-between rounded-panel border border-line bg-surface p-4 transition hover:border-accent hover:shadow-xs"
-          >
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="grid h-7 w-7 place-items-center rounded-control bg-accent-soft text-accent-ink">
-                  <ShieldAlert className="h-4 w-4" aria-hidden />
-                </span>
-                <span className="t-micro rounded-full border border-line bg-surface-muted px-2 py-0.5 font-medium text-ink-muted">
-                  Calidad
-                </span>
-              </div>
-              <p className="mt-3 text-sm font-semibold text-ink group-hover:text-accent-ink transition">
-                Garantías y reclamos abiertos
-              </p>
-              <p className="t-caption mt-0.5 text-ink-muted">
-                {casosPostventa.length === 0
-                  ? 'Sin casos de garantía pendientes'
-                  : `${casosPostventa.length} caso(s) en seguimiento técnico`}
-              </p>
-            </div>
-            <div className="mt-4 flex items-center justify-between border-t border-line-subtle pt-2.5">
-              <span className="t-figure text-ink">
-                {casosPostventa.length}
-              </span>
-              <span className="t-micro flex items-center gap-0.5 font-medium text-accent-ink">
-                Ver casos <ChevronRight className="h-3 w-3" />
-              </span>
-            </div>
-          </Link>
-
-          {/* Tarjeta 4: Recordatorios pendientes del usuario */}
-          <Link
-            href="/administracion?empresa=inmobiliaria&seccion=pendientes_generales"
-            className="group flex flex-col justify-between rounded-panel border border-line bg-surface p-4 transition hover:border-accent hover:shadow-xs"
-          >
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="grid h-7 w-7 place-items-center rounded-control bg-info-soft text-info">
-                  <Clock className="h-4 w-4" aria-hidden />
-                </span>
-                <span className="t-micro rounded-full border border-line bg-surface-muted px-2 py-0.5 font-medium text-ink-muted">
-                  Tareas
-                </span>
-              </div>
-              <p className="mt-3 text-sm font-semibold text-ink group-hover:text-accent-ink transition">
-                Recordatorios y compromisos
-              </p>
-              <p className="t-caption mt-0.5 text-ink-muted">
-                {recordatoriosStats.pendientes === 0
-                  ? 'Compromisos al día (100%)'
-                  : `${recordatoriosStats.pendientes} pendientes · ${recordatoriosStats.cumplimiento}% cumplimiento`}
-              </p>
-            </div>
-            <div className="mt-4 flex items-center justify-between border-t border-line-subtle pt-2.5">
-              <span className="t-figure text-ink">
-                {recordatoriosStats.pendientes}
-              </span>
-              <span className="t-micro flex items-center gap-0.5 font-medium text-accent-ink">
-                Ver todos <ChevronRight className="h-3 w-3" />
-              </span>
-            </div>
-          </Link>
-        </div>
-      </div>
-
-      {/* ========================================================= */}
-      {/* 3. RIEL AGREGADO DE LA SEMANA (FIRMA DE HORMIGLASS)       */}
-      {/* ========================================================= */}
-      <div className="rounded-panel border border-line bg-surface p-5 space-y-4">
-        <div className="flex flex-col justify-between gap-1 sm:flex-row sm:items-center border-b border-line-subtle pb-3">
-          <div>
-            <h3 className="text-base font-semibold text-ink">
-              Riel de obra agregado
-            </h3>
-            <p className="t-caption text-ink-muted">
-              Recorrido de contratos activos por etapa del flujo comercial y logístico
-            </p>
+      {activeTab === 'general' && (
+        <div className="space-y-6">
+          {/* 4 KPIs de Visión General */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              title="Facturación del Período"
+              value={`$${totalFacturado.toLocaleString('es-CL')}`}
+              icon={TrendingUp}
+              tone="warning"
+              change={{ value: '+20.4%', trend: 'up', label: 'vs anterior' }}
+              subtitle={`$${totalAbonado.toLocaleString('es-CL')} recaudados`}
+            />
+            <MetricCard
+              title="Total Contactos"
+              value={clientes.length}
+              icon={Building2}
+              tone="success"
+              change={{ value: '+8.1%', trend: 'up', label: 'este mes' }}
+              subtitle="Cuentas activas en CRM"
+            />
+            <MetricCard
+              title="Obras en Ejecución"
+              value={obrasEnRielCount}
+              icon={Factory}
+              tone="info"
+              change={{ value: '+14.2%', trend: 'up', label: 'activas' }}
+              subtitle="Contratos en riel operativo"
+            />
+            <MetricCard
+              title="Atención Requerida"
+              value={totalAlertasCount}
+              icon={AlertTriangle}
+              tone="accent"
+              change={{
+                value: `${despachosEnRiesgo.length} despachos`,
+                trend: despachosEnRiesgo.length > 0 ? 'down' : 'neutral',
+                label: 'en riesgo',
+              }}
+              subtitle="Alertas operativas pendientes"
+            />
           </div>
-          <Link
-            href="/ventas"
-            className="t-micro flex items-center gap-1 font-semibold text-accent-ink hover:underline"
-          >
-            Ver pipeline completo <ChevronRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
 
-        {/* Bloques de avance tipo pallet */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {rielObrasSemana.map((etapa, idx) => (
-            <div
-              key={etapa.id}
-              className="relative flex flex-col justify-between rounded-control border border-line bg-surface-muted p-3.5"
-            >
+          {/* Fila Principal 50/50: Evolución de Ventas vs Alertas de Atención */}
+          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
+            <div className="h-full">
+              <SalesTimelineChart
+                dailyData={dailySeries}
+                monthlyData={monthlySeries}
+                totalPeriodSales={totalPeriodTimelineSales}
+                totalDealsClosed={totalDealsClosed}
+                averageDealSize={averageDealSize}
+              />
+            </div>
+
+            <div className="h-full flex flex-col justify-between rounded-panel border border-line bg-surface p-5 shadow-xs">
               <div>
-                <div className="flex items-center justify-between">
-                  <span className="t-micro font-mono text-ink-muted">0{idx + 1}</span>
-                  <span className="t-micro rounded-full border border-line bg-surface px-2 py-0.5 font-medium text-ink">
-                    {etapa.count} {etapa.count === 1 ? 'obra' : 'obras'}
+                <div className="flex items-center justify-between border-b border-line pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-7 w-7 place-items-center rounded-control bg-warning-soft text-warning">
+                      <AlertTriangle className="h-4 w-4" aria-hidden />
+                    </span>
+                    <div>
+                      <h3 className="text-base font-semibold text-ink">
+                        Qué necesita atención hoy
+                      </h3>
+                      <p className="t-caption text-ink-muted">
+                        Alertas operativas y financieras prioritarias
+                      </p>
+                    </div>
+                  </div>
+                  <span className="t-micro rounded-full bg-surface-muted border border-line px-2.5 py-0.5 font-bold text-ink">
+                    {totalAlertasCount} activas
                   </span>
                 </div>
-                <p className="mt-2 text-sm font-semibold text-ink">
-                  {etapa.label}
-                </p>
+
+                <div className="mt-3 divide-y divide-line-subtle">
+                  {/* Alerta 1: Despachos */}
+                  <Link
+                    href="/planificacion/calendario"
+                    className="flex items-center justify-between py-3 px-2 rounded-control transition hover:bg-surface-muted group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-8 w-8 place-items-center rounded-control bg-warning-soft text-warning shrink-0">
+                        <AlertTriangle className="h-4 w-4" />
+                      </span>
+                      <div>
+                        <p className="text-xs font-semibold text-ink group-hover:text-accent-ink transition">
+                          Despachos en riesgo o activos
+                        </p>
+                        <p className="t-micro text-ink-muted">
+                          {despachosEnRiesgo.length === 0
+                            ? 'Sin entregas atrasadas ni reprogramadas'
+                            : `${despachosEnRiesgo.length} evento(s) requieren supervisión`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="t-num font-bold text-ink text-sm">{despachosEnRiesgo.length}</span>
+                      <ChevronRight className="h-3.5 w-3.5 text-ink-muted group-hover:text-accent-ink" />
+                    </div>
+                  </Link>
+
+                  {/* Alerta 2: Abonos */}
+                  <Link
+                    href="/caja"
+                    className="flex items-center justify-between py-3 px-2 rounded-control transition hover:bg-surface-muted group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-8 w-8 place-items-center rounded-control bg-success-soft text-success shrink-0">
+                        <Wallet className="h-4 w-4" />
+                      </span>
+                      <div>
+                        <p className="text-xs font-semibold text-ink group-hover:text-accent-ink transition">
+                          Abonos por validar en Caja
+                        </p>
+                        <p className="t-micro text-ink-muted">
+                          {abonosPendientes.length === 0
+                            ? 'Todos los comprobantes conciliados'
+                            : `$${totalMontoAbonosPorValidar.toLocaleString('es-CL')} pendientes en cuenta oficial`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="t-num font-bold text-ink text-sm">{abonosPendientes.length}</span>
+                      <ChevronRight className="h-3.5 w-3.5 text-ink-muted group-hover:text-accent-ink" />
+                    </div>
+                  </Link>
+
+                  {/* Alerta 3: Postventa */}
+                  <Link
+                    href="/postventa"
+                    className="flex items-center justify-between py-3 px-2 rounded-control transition hover:bg-surface-muted group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-8 w-8 place-items-center rounded-control bg-accent-soft text-accent-ink shrink-0">
+                        <ShieldAlert className="h-4 w-4" />
+                      </span>
+                      <div>
+                        <p className="text-xs font-semibold text-ink group-hover:text-accent-ink transition">
+                          Garantías y reclamos abiertos
+                        </p>
+                        <p className="t-micro text-ink-muted">
+                          {casosPostventa.length === 0
+                            ? 'Sin incidencias técnicas pendientes'
+                            : `${casosPostventa.length} caso(s) en seguimiento técnico`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="t-num font-bold text-ink text-sm">{casosPostventa.length}</span>
+                      <ChevronRight className="h-3.5 w-3.5 text-ink-muted group-hover:text-accent-ink" />
+                    </div>
+                  </Link>
+
+                  {/* Alerta 4: Compromisos */}
+                  <Link
+                    href="/administracion?empresa=inmobiliaria&seccion=pendientes_generales"
+                    className="flex items-center justify-between py-3 px-2 rounded-control transition hover:bg-surface-muted group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-8 w-8 place-items-center rounded-control bg-info-soft text-info shrink-0">
+                        <Clock className="h-4 w-4" />
+                      </span>
+                      <div>
+                        <p className="text-xs font-semibold text-ink group-hover:text-accent-ink transition">
+                          Compromisos del día
+                        </p>
+                        <p className="t-micro text-ink-muted">
+                          {recordatoriosStats.pendientes === 0
+                            ? 'Compromisos al día (100%)'
+                            : `${recordatoriosStats.pendientes} pendientes · ${recordatoriosStats.cumplimiento}% cumplimiento`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="t-num font-bold text-ink text-sm">{recordatoriosStats.pendientes}</span>
+                      <ChevronRight className="h-3.5 w-3.5 text-ink-muted group-hover:text-accent-ink" />
+                    </div>
+                  </Link>
+                </div>
               </div>
 
-              <div className="mt-3 border-t border-line-subtle pt-2">
-                <span className="t-caption t-num block font-medium text-ink-muted">
-                  ${etapa.monto.toLocaleString('es-CL')}
+              <div className="mt-4 border-t border-line pt-3 flex items-center justify-between text-xs">
+                <span className="text-ink-muted">Resumen del estado operacional</span>
+                <span className="font-semibold text-accent-ink">Plataforma Hormiglass</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Fila Secundaria 50/50: Leads Recientes y Tareas */}
+          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
+            <RecentLeadsCard oportunidades={filteredOportunidades} />
+            <TasksActivityCard
+              recordatorios={recordatorios}
+              eventos={eventos}
+              onToggleComplete={handleCompleteRecordatorio}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* 3. VISTA 2: VENTAS & PIPELINE                             */}
+      {/* ========================================================= */}
+      {activeTab === 'ventas' && (
+        <div className="space-y-6">
+          {/* 4 KPIs de Ventas */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              title="Total Prospectos"
+              value={oportunidades.length}
+              icon={Users}
+              tone="info"
+              change={{ value: '+12.5%', trend: 'up', label: 'este mes' }}
+              subtitle={`${filteredOportunidades.length} en período seleccionado`}
+            />
+            <MetricCard
+              title="Negocios en Pipeline"
+              value={filteredOportunidades.filter((op) => !['prod_finalizado', 'rev_entregado', 'perdida'].includes(op.estado_pipeline)).length}
+              icon={FolderKanban}
+              tone="accent"
+              change={{ value: '+15.3%', trend: 'up', label: 'este mes' }}
+              subtitle={`$${Math.round(totalPipelineNominal / 1000).toLocaleString('es-CL')}k en negociación`}
+            />
+            <MetricCard
+              title="Tasa de Conversión"
+              value={`${totalDealsClosed > 0 ? Math.round((totalDealsClosed / Math.max(1, filteredOportunidades.length)) * 100) : 0}%`}
+              icon={Target}
+              tone="success"
+              change={{ value: `${totalDealsClosed} cerradas`, trend: 'up', label: 'éxito' }}
+              subtitle="Oportunidades concretadas"
+            />
+            <MetricCard
+              title="Ticket Promedio"
+              value={`$${averageDealSize.toLocaleString('es-CL')}`}
+              icon={TrendingUp}
+              tone="warning"
+              change={{ value: '+10.3%', trend: 'up', label: 'vs mes anterior' }}
+              subtitle="Monto medio por contrato"
+            />
+          </div>
+
+          {/* Fila Principal 50/50: Evolución de Ventas & Embudo de Ventas (SIN ESPACIOS EN BLANCO) */}
+          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
+            <div className="h-full">
+              <SalesTimelineChart
+                dailyData={dailySeries}
+                monthlyData={monthlySeries}
+                totalPeriodSales={totalPeriodTimelineSales}
+                totalDealsClosed={totalDealsClosed}
+                averageDealSize={averageDealSize}
+              />
+            </div>
+            <div className="h-full">
+              <PipelineFunnelChart
+                stages={funnelStages}
+                totalPipelineNominal={totalPipelineNominal}
+                totalPipelineWeighted={totalPipelineWeighted}
+              />
+            </div>
+          </div>
+
+          {/* Fila Secundaria 50/50: Leads Recientes & Rankings de Vendedores y Segmentación */}
+          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
+            <RecentLeadsCard oportunidades={filteredOportunidades} />
+            <div className="space-y-5">
+              <RankingBarChart
+                title="Ventas por vendedor"
+                subtitle="Rendimiento y volumen comercial por ejecutivo"
+                icon={Award}
+                items={rankingVendedores}
+                emptyMessage="No hay ventas asignadas a vendedores en el período."
+                maxItems={4}
+              />
+              <DonutChart
+                title="Segmentación de clientes"
+                subtitle="Distribución entre empresas corporativas y particulares"
+                icon={Building2}
+                segments={segmentacionClientes}
+                centerLabel="Clientes"
+                centerValue={clientes.length.toString()}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* 4. VISTA 3: OPERACIONES & PLANTA                          */}
+      {/* ========================================================= */}
+      {activeTab === 'operaciones' && (
+        <div className="space-y-6">
+          {/* 4 KPIs Operativos */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              title="Obras en Riel"
+              value={obrasEnRielCount}
+              icon={Factory}
+              tone="info"
+              change={{ value: '100%', trend: 'neutral', label: 'trazabilidad' }}
+              subtitle="Contratos activos en seguimiento"
+            />
+            <MetricCard
+              title="En Fabricación Planta"
+              value={filteredOportunidades.filter((o) => o.estado_pipeline === 'prod_fabricacion').length}
+              icon={Package}
+              tone="warning"
+              change={{ value: '+4', trend: 'up', label: 'esta semana' }}
+              subtitle="Lotes en moldes y fraguado"
+            />
+            <MetricCard
+              title="Despachos Programados"
+              value={despachosEnRiesgo.length}
+              icon={MapPin}
+              tone="accent"
+              change={{ value: `${despachosEnRiesgo.length} activos`, trend: 'neutral', label: 'fletes' }}
+              subtitle="Guías y rutas de despacho"
+            />
+            <MetricCard
+              title="Casos Postventa"
+              value={casosPostventa.length}
+              icon={ShieldAlert}
+              tone="success"
+              change={{ value: 'Calidad', trend: 'neutral', label: 'técnica' }}
+              subtitle="Garantías y rectificaciones"
+            />
+          </div>
+
+          {/* Riel de Obra Agregado (Pallet Hormiglass) */}
+          <div className="rounded-panel border border-line bg-surface p-5 space-y-4 shadow-xs">
+            <div className="flex flex-col justify-between gap-1 sm:flex-row sm:items-center border-b border-line pb-3">
+              <div>
+                <h3 className="text-base font-semibold text-ink">
+                  Riel de obra agregado
+                </h3>
+                <p className="t-caption text-ink-muted">
+                  Recorrido de contratos activos por etapa del flujo comercial y logístico
+                </p>
+              </div>
+              <Link
+                href="/ventas"
+                className="t-micro flex items-center gap-1 font-semibold text-accent-ink hover:underline"
+              >
+                Ver pipeline completo <ChevronRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              {rielObrasSemana.map((etapa, idx) => (
+                <div
+                  key={etapa.id}
+                  className="relative flex flex-col justify-between rounded-control border border-line bg-surface-muted/60 p-3.5"
+                >
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="t-micro font-mono text-ink-muted">0{idx + 1}</span>
+                      <span className="t-micro rounded-full border border-line bg-surface px-2 py-0.5 font-medium text-ink">
+                        {etapa.count} {etapa.count === 1 ? 'obra' : 'obras'}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm font-semibold text-ink">
+                      {etapa.label}
+                    </p>
+                  </div>
+                  <div className="mt-3 border-t border-line-subtle pt-2">
+                    <span className="t-caption t-num block font-medium text-ink-muted">
+                      ${etapa.monto.toLocaleString('es-CL')}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Fila 50/50: Programación en Planta vs Productos Más Fabricados */}
+          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
+            <div className="h-full flex flex-col justify-between rounded-panel border border-line bg-surface p-5 shadow-xs">
+              <div>
+                <div className="flex items-center justify-between border-b border-line pb-3">
+                  <div>
+                    <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
+                      <span className="grid h-7 w-7 place-items-center rounded-control bg-accent-soft text-accent-ink">
+                        <Factory className="h-4 w-4" aria-hidden />
+                      </span>
+                      <span>Obras y programación en planta</span>
+                    </h3>
+                    <p className="t-caption mt-0.5 text-ink-muted">
+                      Eventos activos de fabricación, instalación y despacho
+                    </p>
+                  </div>
+                  <Link
+                    href="/planificacion/calendario"
+                    className="t-micro flex items-center gap-0.5 font-semibold text-accent-ink hover:underline"
+                  >
+                    <span>Calendario</span>
+                    <ChevronRight className="h-3 w-3" />
+                  </Link>
+                </div>
+
+                {eventos.filter((e) => ['por_hacer', 'en_curso', 'reprogramado'].includes(e.estado)).length === 0 ? (
+                  <div className="p-8 text-center text-xs italic text-ink-muted">
+                    Sin eventos ni obras pendientes para este período.
+                  </div>
+                ) : (
+                  <div className="mt-3 space-y-2 text-xs">
+                    {eventos
+                      .filter((e) => ['por_hacer', 'en_curso', 'reprogramado'].includes(e.estado))
+                      .slice(0, 5)
+                      .map((ev) => (
+                        <div
+                          key={ev.id}
+                          className="space-y-1 rounded-control border border-line bg-surface-muted/60 p-3 transition hover:bg-surface-muted"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="truncate font-semibold text-ink max-w-[220px]">
+                              {ev.titulo}
+                            </span>
+                            <StatusBadge tone={ev.estado === 'reprogramado' ? 'warning' : 'info'}>
+                              {ev.tipo_evento}
+                            </StatusBadge>
+                          </div>
+                          <div className="flex items-center justify-between text-ink-muted text-[11px]">
+                            <span className="font-mono">{ev.fecha_inicio?.split('T')[0] || ev.fecha_evento}</span>
+                            <span>{ev.responsable?.nombre || 'Sin responsable'}</span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 border-t border-line pt-3 flex items-center justify-between text-xs">
+                <span className="text-ink-muted">Turnos de planta activos</span>
+                <span className="font-semibold text-accent-ink">Líneas de moldeo y vibrado</span>
+              </div>
+            </div>
+
+            <RankingBarChart
+              title="Productos más vendidos y demandados"
+              subtitle="Líneas de producto con mayor salida de fábrica"
+              icon={Package}
+              items={rankingProductos}
+              emptyMessage="No hay productos cotizados en el período seleccionado."
+              maxItems={5}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* 5. VISTA 4: FINANZAS & CAJA                               */}
+      {/* ========================================================= */}
+      {activeTab === 'finanzas' && (
+        <div className="space-y-6">
+          {/* 4 KPIs Financieros */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              title="Total Facturado"
+              value={`$${totalFacturado.toLocaleString('es-CL')}`}
+              icon={TrendingUp}
+              tone="warning"
+              change={{ value: '+20.4%', trend: 'up', label: 'este mes' }}
+              subtitle="Monto total convenido"
+            />
+            <MetricCard
+              title="Recaudado en Caja"
+              value={`$${totalAbonado.toLocaleString('es-CL')}`}
+              icon={Wallet}
+              tone="success"
+              change={{ value: `${Math.round((totalAbonado / Math.max(1, totalFacturado)) * 100)}%`, trend: 'up', label: 'cobrado' }}
+              subtitle="Abonos bancarios conciliados"
+            />
+            <MetricCard
+              title="Saldo por Cobrar"
+              value={`$${totalPendientePorPagar.toLocaleString('es-CL')}`}
+              icon={CreditCard}
+              tone="accent"
+              change={{ value: `${filteredOportunidades.length} contratos`, trend: 'neutral', label: 'por liquidar' }}
+              subtitle="Cuentas pendientes clientes"
+            />
+            <MetricCard
+              title="Abonos por Conciliar"
+              value={`$${totalMontoAbonosPorValidar.toLocaleString('es-CL')}`}
+              icon={AlertTriangle}
+              tone="info"
+              change={{ value: `${abonosPendientes.length} pendientes`, trend: 'neutral', label: 'en caja' }}
+              subtitle="Comprobantes para validar"
+            />
+          </div>
+
+          {/* Fila Principal 50/50: Balance Financiero Bancario vs Abonos Pendientes */}
+          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
+            <FinancialBalanceCard
+              totalVendido={totalFacturado}
+              totalAbonado={totalAbonado}
+              totalPendiente={totalPendientePorPagar}
+              totalOps={filteredOportunidades.length}
+            />
+
+            <div className="h-full flex flex-col justify-between rounded-panel border border-line bg-surface p-5 shadow-xs">
+              <div>
+                <div className="flex items-center justify-between border-b border-line pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-7 w-7 place-items-center rounded-control bg-success-soft text-success">
+                      <Wallet className="h-4 w-4" aria-hidden />
+                    </span>
+                    <div>
+                      <h3 className="text-base font-semibold text-ink">
+                        Abonos pendientes de conciliación
+                      </h3>
+                      <p className="t-caption text-ink-muted">
+                        Comprobantes subidos que requieren validación en cuenta oficial
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href="/caja"
+                    className="t-micro flex items-center gap-0.5 font-semibold text-accent-ink hover:underline"
+                  >
+                    <span>Ir a Caja</span>
+                    <ChevronRight className="h-3 w-3" />
+                  </Link>
+                </div>
+
+                {abonosPendientes.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-ink-muted">
+                    No hay comprobantes pendientes de conciliación en Caja.
+                  </div>
+                ) : (
+                  <div className="mt-3 divide-y divide-line-subtle">
+                    {abonosPendientes.slice(0, 5).map((abono) => (
+                      <div key={abono.id} className="flex items-center justify-between py-2.5">
+                        <div>
+                          <p className="text-xs font-semibold text-ink">
+                            {abono.cuenta_bancaria?.banco || abono.cuenta_bancaria?.alias || 'Comprobante de Abono'}
+                          </p>
+                          <p className="t-micro text-ink-muted">
+                            Op: {abono.oportunidad?.codigo || abono.oportunidad_id?.slice(0, 8)} · {abono.fecha?.split('T')[0] || 'Pendiente'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className="t-num block text-xs font-bold text-success">
+                            +${(abono.monto || 0).toLocaleString('es-CL')}
+                          </span>
+                          <span className="t-micro text-ink-muted">
+                            {abono.nota ? abono.nota.slice(0, 20) : 'Transferencia'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 border-t border-line pt-3 flex items-center justify-between text-xs">
+                <span className="text-ink-muted">Total pendiente por conciliar:</span>
+                <span className="font-bold text-ink t-num">
+                  ${totalMontoAbonosPorValidar.toLocaleString('es-CL')}
                 </span>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ========================================================= */}
-      {/* 4. CIFRAS CLAVE DEL NEGOCIO (.t-figure)                   */}
-      {/* ========================================================= */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="flex min-h-[120px] flex-col justify-center rounded-panel border border-line bg-surface p-4 text-center">
-          <p className="t-figure text-ink">
-            ${totalFacturado.toLocaleString('es-CL')}
-          </p>
-          <p className="t-caption mt-1.5 font-semibold text-ink">
-            Ventas comerciales
-          </p>
-          <p className="t-micro text-ink-muted">
-            {filteredOportunidades.length} contratos en el período
-          </p>
-        </div>
-
-        <div className="flex min-h-[120px] flex-col justify-center rounded-panel border border-line bg-surface p-4 text-center">
-          <p className="t-figure text-warning">
-            ${totalPendientePorPagar.toLocaleString('es-CL')}
-          </p>
-          <p className="t-caption mt-1.5 font-semibold text-ink">
-            Por cobrar
-          </p>
-          <p className="t-micro text-ink-muted">
-            ${totalAbonado.toLocaleString('es-CL')} recaudados
-          </p>
-        </div>
-
-        <div className="flex min-h-[120px] flex-col justify-center rounded-panel border border-line bg-surface p-4 text-center">
-          <p className="t-figure text-info">
-            ${totalPipelineWeighted.toLocaleString('es-CL')}
-          </p>
-          <p className="t-caption mt-1.5 font-semibold text-ink">
-            Proyección pipeline
-          </p>
-          <p className="t-micro text-ink-muted">
-            Valor ponderado estimado
-          </p>
-        </div>
-
-        <div className="flex min-h-[120px] flex-col justify-center rounded-panel border border-line bg-surface p-4 text-center">
-          <p className="t-figure text-ink">
-            {eventos.filter((e) => ['por_hacer', 'en_curso'].includes(e.estado)).length}
-          </p>
-          <p className="t-caption mt-1.5 font-semibold text-ink">
-            Operaciones activas
-          </p>
-          <p className="t-micro text-ink-muted">
-            {clientes.length} clientes en directorio
-          </p>
-        </div>
-      </div>
-
-      {/* ========================================================= */}
-      {/* 5. EVOLUCIÓN DE VENTAS & BALANCE FINANCIERO               */}
-      {/* ========================================================= */}
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
-        <div className="lg:col-span-7">
-          <SalesTimelineChart
-            dailyData={dailySeries}
-            monthlyData={monthlySeries}
-            totalPeriodSales={totalPeriodTimelineSales}
-          />
-        </div>
-
-        <div className="lg:col-span-5">
-          <FinancialBalanceCard
-            totalVendido={totalFacturado}
-            totalAbonado={totalAbonado}
-            totalPendiente={totalPendientePorPagar}
-            totalOps={filteredOportunidades.length}
-          />
-        </div>
-      </div>
-
-      {/* ========================================================= */}
-      {/* 6. SEGMENTACIÓN DE CLIENTES & MÉTODOS DE PAGO             */}
-      {/* ========================================================= */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <DonutChart
-          title="Segmentación de clientes"
-          subtitle="Distribución entre empresas corporativas y clientes particulares"
-          icon={Building2}
-          segments={segmentacionClientes}
-          centerLabel="Clientes"
-          centerValue={clientes.length.toString()}
-        />
-
-        <DonutChart
-          title="Métodos de pago utilizados"
-          subtitle="Preferencia y recaudación según condición y medio de pago"
-          icon={CreditCard}
-          segments={metodosPagoSegmentos}
-          centerLabel="Operaciones"
-          centerValue={filteredOportunidades.length.toString()}
-        />
-      </div>
-
-      {/* ========================================================= */}
-      {/* 7. RANKINGS OPERATIVOS: COMUNAS, PRODUCTOS Y VENDEDORES  */}
-      {/* ========================================================= */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <RankingBarChart
-          title="Comunas más vendidas"
-          subtitle="Ubicación geográfica con mayor volumen de venta"
-          icon={MapPin}
-          items={rankingComunas}
-          emptyMessage="No hay registros de comunas en el período seleccionado."
-          maxItems={5}
-        />
-
-        <RankingBarChart
-          title="Productos más vendidos"
-          subtitle="Líneas de producto con mayor demanda del catálogo"
-          icon={Package}
-          items={rankingProductos}
-          emptyMessage="No hay productos cotizados en el período seleccionado."
-          maxItems={5}
-        />
-
-        <RankingBarChart
-          title="Ventas por vendedor"
-          subtitle="Rendimiento y volumen comercial por ejecutivo asignado"
-          icon={Award}
-          items={rankingVendedores}
-          emptyMessage="No hay ventas asignadas a vendedores en el período."
-          maxItems={5}
-        />
-      </div>
-
-      {/* ========================================================= */}
-      {/* 8. PROYECCIÓN DE PIPELINE & OPERACIÓN EN PLANTA           */}
-      {/* ========================================================= */}
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
-        <div className="lg:col-span-7">
-          <PipelineFunnelChart
-            stages={funnelStages}
-            totalPipelineNominal={totalPipelineNominal}
-            totalPipelineWeighted={totalPipelineWeighted}
-          />
-        </div>
-
-        <div className="space-y-6 lg:col-span-5">
-          {/* Obras y programación en planta */}
-          <div className="space-y-4 rounded-panel border border-line bg-surface p-5">
-            <div className="flex items-center justify-between border-b border-line-subtle pb-3">
-              <div>
-                <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
-                  <span className="grid h-7 w-7 place-items-center rounded-control bg-surface-muted text-accent-ink">
-                    <Factory className="h-4 w-4" aria-hidden />
-                  </span>
-                  <span>Obras y programación en planta</span>
-                </h3>
-                <p className="t-caption mt-0.5 text-ink-muted">
-                  Eventos activos de fabricación, instalación y despacho
-                </p>
-              </div>
-              <Link
-                href="/planificacion/calendario"
-                className="t-micro flex items-center gap-0.5 font-semibold text-accent-ink hover:underline"
-              >
-                <span>Calendario</span>
-                <ChevronRight className="h-3 w-3" />
-              </Link>
-            </div>
-
-            {eventos.filter((e) => ['por_hacer', 'en_curso', 'reprogramado'].includes(e.estado)).length === 0 ? (
-              <div className="p-8 text-center text-xs italic text-ink-muted">
-                Sin eventos ni obras pendientes para este período.
-              </div>
-            ) : (
-              <div className="space-y-2 text-xs">
-                {eventos
-                  .filter((e) => ['por_hacer', 'en_curso', 'reprogramado'].includes(e.estado))
-                  .slice(0, 4)
-                  .map((ev) => (
-                    <div
-                      key={ev.id}
-                      className="space-y-1 rounded-control border border-line bg-surface-muted/60 p-3 transition hover:bg-surface-muted"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="truncate font-semibold text-ink max-w-[200px]">
-                          {ev.titulo}
-                        </span>
-                        <StatusBadge tone={ev.estado === 'reprogramado' ? 'warning' : 'info'}>
-                          {ev.tipo_evento}
-                        </StatusBadge>
-                      </div>
-                      <div className="flex items-center justify-between text-ink-muted text-[11px]">
-                        <span className="font-mono">{ev.fecha_inicio?.split('T')[0] || ev.fecha_evento}</span>
-                        <span>{ev.responsable?.nombre || 'Sin responsable'}</span>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            )}
           </div>
 
-          {/* Recordatorios pendientes */}
-          <div className="space-y-4 rounded-panel border border-line bg-surface p-5">
-            <div className="flex items-center justify-between border-b border-line-subtle pb-3">
-              <div>
-                <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
-                  <span className="grid h-7 w-7 place-items-center rounded-control bg-surface-muted text-accent-ink">
-                    <Clock className="h-4 w-4" aria-hidden />
-                  </span>
-                  <span>Recordatorios pendientes</span>
-                </h3>
-                <p className="t-caption mt-0.5 text-ink-muted">
-                  {recordatoriosStats.pendientes} pendientes · {recordatoriosStats.cumplimiento}% cumplimiento
-                </p>
-              </div>
-              <Link
-                href="/administracion?empresa=inmobiliaria&seccion=pendientes_generales"
-                className="t-micro flex items-center gap-0.5 font-semibold text-accent-ink hover:underline"
-              >
-                <span>Ver todos</span>
-                <ChevronRight className="h-3 w-3" />
-              </Link>
-            </div>
-
-            {topRecordatoriosPendientes.length === 0 ? (
-              <div className="p-8 text-center text-xs italic text-ink-muted">
-                Sin recordatorios pendientes.
-              </div>
-            ) : (
-              <div className="space-y-2 text-xs">
-                {topRecordatoriosPendientes.map((recordatorio) => {
-                  const vencido = recordatorio.fecha_vencimiento < new Date().toISOString().split('T')[0];
-
-                  return (
-                    <div
-                      key={recordatorio.id}
-                      className={`flex items-start gap-3 rounded-control border p-3 transition ${
-                        vencido
-                          ? 'border-danger-line bg-danger-soft'
-                          : 'border-line bg-surface-muted/60 hover:bg-surface-muted'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => void handleCompleteRecordatorio(recordatorio)}
-                        className="mt-0.5 cursor-pointer text-accent-ink hover:text-success transition"
-                        title="Completar recordatorio"
-                        aria-label="Completar recordatorio"
-                      >
-                        {recordatorio.completado ? (
-                          <CheckSquare className="h-4 w-4 text-success" />
-                        ) : (
-                          <Square className="h-4 w-4" />
-                        )}
-                      </button>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="truncate font-semibold text-ink">
-                            {recordatorio.titulo}
-                          </span>
-                          {vencido && (
-                            <StatusBadge tone="danger">Vencido</StatusBadge>
-                          )}
-                        </div>
-                        <div className="mt-1 flex items-center justify-between text-[11px] text-ink-muted">
-                          <span className="font-mono">{recordatorio.fecha_vencimiento}</span>
-                          <span className="capitalize">{recordatorio.recurrencia}</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+          {/* Fila Secundaria 50/50: Métodos de Pago & Comunas */}
+          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
+            <DonutChart
+              title="Métodos de pago utilizados"
+              subtitle="Preferencia y recaudación según medio de pago"
+              icon={CreditCard}
+              segments={metodosPagoSegmentos}
+              centerLabel="Operaciones"
+              centerValue={filteredOportunidades.length.toString()}
+            />
+            <RankingBarChart
+              title="Comunas más vendidas"
+              subtitle="Ubicación geográfica con mayor volumen de venta"
+              icon={MapPin}
+              items={rankingComunas}
+              emptyMessage="No hay registros de comunas en el período seleccionado."
+              maxItems={5}
+            />
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

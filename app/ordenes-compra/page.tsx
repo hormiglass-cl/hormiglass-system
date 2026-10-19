@@ -34,6 +34,11 @@ import {
   Dialog,
 } from '../../components/ui/crm';
 import { useConfirm, useToast } from '../../components/ui/feedback';
+import { AvatarBadge } from '../../components/ui/AvatarBadge';
+import { FilterPills, FilterDefinition } from '../../components/ui/FilterPills';
+import clsx from 'clsx';
+
+import { swrCache } from '../../lib/cache/swr-cache';
 
 export default function OrdenesCompraPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -41,9 +46,10 @@ export default function OrdenesCompraPage() {
   const confirm = useConfirm();
   const toast = useToast();
 
-  const [ordenes, setOrdenes] = useState<OrdenCompra[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [ordenes, setOrdenes] = useState<OrdenCompra[]>(() => swrCache.get('ordenes:list') || []);
+  const [loading, setLoading] = useState<boolean>(() => !swrCache.has('ordenes:list'));
   const [search, setSearch] = useState('');
+  const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
   const [previewOrden, setPreviewOrden] = useState<OrdenCompra | null>(null);
   const [editingOrden, setEditingOrden] = useState<OrdenCompra | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -68,13 +74,16 @@ export default function OrdenesCompraPage() {
       console.error('Error loading ordenes de compra:', error);
       setOrdenes([]);
     } else {
-      setOrdenes((data || []) as OrdenCompra[]);
+      const ocData = (data || []) as OrdenCompra[];
+      setOrdenes(ocData);
+      swrCache.set('ordenes:list', ocData);
     }
     setLoading(false);
   }, [supabase]);
 
   useEffect(() => {
     let ignore = false;
+    let debounceTimer: number | null = null;
 
     async function initialLoad() {
       if (!ignore) await loadOrdenes();
@@ -82,29 +91,59 @@ export default function OrdenesCompraPage() {
 
     initialLoad();
 
+    const triggerDebouncedReload = () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        void loadOrdenes();
+      }, 300);
+    };
+
     const channel = supabase
       .channel('realtime_ordenes_compra')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes_compra' }, () => loadOrdenes())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orden_compra_items' }, () => loadOrdenes())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes_compra' }, triggerDebouncedReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orden_compra_items' }, triggerDebouncedReload)
       .subscribe();
 
     return () => {
       ignore = true;
+      if (debounceTimer) window.clearTimeout(debounceTimer);
       supabase.removeChannel(channel);
     };
   }, [loadOrdenes, supabase]);
 
+  const filterDefinitions: FilterDefinition[] = useMemo(() => [
+    {
+      id: 'estado',
+      label: 'Estado',
+      allLabel: 'Todos los estados',
+      options: [
+        { value: 'borrador', label: 'Borrador' },
+        { value: 'emitida', label: 'Emitida' },
+        { value: 'aprobada', label: 'Aprobada' },
+        { value: 'recibida', label: 'Recibida' },
+        { value: 'pagada', label: 'Pagada en Caja' },
+        { value: 'cancelada', label: 'Cancelada' },
+      ],
+    },
+  ], []);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return ordenes;
-    return ordenes.filter(
-      (orden) =>
+    const estadoFiltro = activeFilters.estado;
+
+    return ordenes.filter((orden) => {
+      const matchSearch =
+        !q ||
         orden.numero_oc.toLowerCase().includes(q) ||
         orden.estado.toLowerCase().includes(q) ||
         (orden.proveedor?.nombre || '').toLowerCase().includes(q) ||
-        (orden.proveedor?.rut || '').toLowerCase().includes(q)
-    );
-  }, [ordenes, search]);
+        (orden.proveedor?.rut || '').toLowerCase().includes(q);
+
+      const matchEstado = !estadoFiltro || estadoFiltro === 'todos' || orden.estado === estadoFiltro;
+
+      return matchSearch && matchEstado;
+    });
+  }, [ordenes, search, activeFilters]);
 
   const totalItems = filtered.length;
   const paginatedOrdenes = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -225,30 +264,42 @@ export default function OrdenesCompraPage() {
         }
       />
 
-      <FilterBar>
-        <SearchField
-          placeholder="Buscar por OC #, proveedor o RUT..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </FilterBar>
+      <FilterPills
+        filters={filterDefinitions}
+        activeFilters={activeFilters}
+        onFilterChange={(id, val) => setActiveFilters((prev) => ({ ...prev, [id]: val }))}
+        onClearAll={() => {
+          setActiveFilters({});
+          setSearch('');
+        }}
+        totalResults={ordenes.length}
+        filteredResults={filtered.length}
+      >
+        <div className="relative flex-1 min-w-[240px] max-w-md">
+          <SearchField
+            placeholder="Buscar por OC #, proveedor o RUT..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </FilterPills>
 
       <Panel>
         <div className="overflow-x-auto">
-          <table className="hg-table w-full text-left text-xs min-w-[980px]">
-            <thead>
+          <table className="w-full text-left text-xs min-w-[980px]">
+            <thead className="bg-surface-muted/50 text-ink-muted uppercase text-[11px] font-semibold tracking-normal border-b border-line">
               <tr>
-                <th className="py-3 px-4">OC #</th>
-                <th className="py-3 px-4">Versión</th>
-                <th className="py-3 px-4">Fecha</th>
-                <th className="py-3 px-4">Proveedor & RUT</th>
-                <th className="py-3 px-4">Estado</th>
-                <th className="py-3 px-4 text-right">Subtotal</th>
-                <th className="py-3 px-4 text-right">Total</th>
-                <th className="py-3 px-4 text-center">Acciones</th>
+                <th className="py-2.5 px-3 font-semibold text-ink">OC #</th>
+                <th className="py-2.5 px-3 font-semibold text-ink">Versión</th>
+                <th className="py-2.5 px-3 font-semibold text-ink">Fecha</th>
+                <th className="py-2.5 px-3 font-semibold text-ink">Proveedor & RUT</th>
+                <th className="py-2.5 px-3 font-semibold text-ink">Estado</th>
+                <th className="py-2.5 px-3 text-right font-semibold text-ink">Subtotal</th>
+                <th className="py-2.5 px-3 text-right font-semibold text-ink">Total</th>
+                <th className="py-2.5 px-3 text-center font-semibold text-ink">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-line-subtle">
+            <tbody className="divide-y divide-line-subtle text-xs">
               {loading ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-ink-muted font-medium">
@@ -263,26 +314,32 @@ export default function OrdenesCompraPage() {
                 </tr>
               ) : (
                 paginatedOrdenes.map((orden) => (
-                  <tr key={orden.id} className="hover:bg-surface-muted transition">
-                    <td className="py-3 px-4">
+                  <tr key={orden.id} className="hover:bg-surface-muted/60 transition group border-b border-line-subtle">
+                    <td className="py-2 px-3 font-semibold text-ink">
                       <CodeStamp>{orden.numero_oc}</CodeStamp>
                     </td>
-                    <td className="py-3 px-4 text-ink-muted font-mono">v{orden.version || 1}</td>
-                    <td className="py-3 px-4 text-ink-muted font-mono">
+                    <td className="py-2 px-3">
+                      <span className="text-[11px] font-semibold text-ink-muted bg-surface-muted border border-line px-1.5 py-0.5 rounded-control">
+                        v{orden.version || 1}
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 text-ink-muted text-xs t-num">
                       {new Date(`${orden.fecha_emision}T00:00:00`).toLocaleDateString('es-CL')}
                     </td>
-                    <td className="py-3 px-4">
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-1.5 font-semibold text-ink">
-                          <Building className="w-3.5 h-3.5 text-accent-ink shrink-0" />
-                          <span>{orden.proveedor?.nombre || 'Proveedor'}</span>
+                    <td className="py-2 px-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <AvatarBadge name={orden.proveedor?.nombre || 'Proveedor'} size="xs" className="shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <span className="text-xs font-semibold text-ink truncate block">
+                            {orden.proveedor?.nombre || 'Proveedor'}
+                          </span>
+                          <span className="text-[11px] text-ink-muted t-num block truncate">
+                            RUT: {orden.proveedor?.rut || 'Sin RUT'}
+                          </span>
                         </div>
-                        <span className="text-[11px] text-ink-muted font-mono pl-5">
-                          RUT: {orden.proveedor?.rut || 'Sin RUT'}
-                        </span>
                       </div>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-2 px-3">
                       {orden.estado === 'pagada' ? (
                         <StatusBadge tone="success">Pagada en Caja</StatusBadge>
                       ) : (
@@ -290,7 +347,7 @@ export default function OrdenesCompraPage() {
                           value={orden.estado}
                           aria-label={`Estado de OC ${orden.numero_oc}`}
                           onChange={(e) => handleChangeStatus(orden, e.target.value as EstadoOrdenCompra)}
-                          className="text-[11px] font-semibold uppercase px-2 py-1 rounded-md border border-line bg-surface text-ink cursor-pointer focus:outline-none focus:border-accent"
+                          className="text-[11px] font-semibold bg-surface border border-line rounded-control px-2 py-0.5 text-ink focus:outline-none focus:border-accent cursor-pointer"
                         >
                           <option value="borrador">Borrador</option>
                           <option value="emitida">Emitida</option>
@@ -301,30 +358,30 @@ export default function OrdenesCompraPage() {
                         </select>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-right font-medium text-ink-muted t-num">
+                    <td className="py-2 px-3 text-right font-medium text-ink-muted text-xs t-num">
                       ${Number(orden.subtotal || 0).toLocaleString('es-CL')}
                     </td>
-                    <td className="py-3 px-4 text-right font-bold text-sm text-ink t-num">
+                    <td className="py-2 px-3 text-right font-bold text-xs text-ink t-num">
                       ${Number(orden.monto_total || 0).toLocaleString('es-CL')}
                     </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center justify-center gap-1.5">
+                    <td className="py-2 px-3 text-center">
+                      <div className="flex items-center justify-center gap-1">
                         {orden.estado !== 'pagada' && orden.estado !== 'cancelada' && (
                           <Button
                             variant="secondary"
                             size="sm"
                             onClick={() => handleOpenPayModal(orden)}
                             title="Pagar Orden de Compra en Caja"
-                            className="text-success border-success-line hover:bg-success-soft"
+                            className="text-success border-success-line hover:bg-success-soft text-xs py-0.5 px-2"
                           >
-                            <CreditCard size={14} className="shrink-0" />
+                            <CreditCard size={13} className="shrink-0" />
                             <span>Pagar</span>
                           </Button>
                         )}
 
                         <Link
                           href={`/ordenes-compra/${orden.id}/asignaciones`}
-                          className="text-xs font-semibold text-accent-ink hover:underline px-1.5 py-1"
+                          className="text-xs font-semibold text-accent-ink hover:underline px-1.5 py-0.5 rounded-control hover:bg-surface"
                           title="Distribuir OC entre ventas"
                         >
                           Asignar

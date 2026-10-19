@@ -434,6 +434,13 @@ export interface OportunidadVenta {
   comuna?: string;
   region?: string;
   direccion?: string;
+  /** Comisiones del equipo de venta */
+  comision_porcentaje?: number;
+  comision_monto?: number;
+  comision_estado?: 'pendiente' | 'lista_para_pago' | 'pagada';
+  comision_fecha_pago?: string | null;
+  comision_pagada_por?: string | null;
+  comision_notas?: string | null;
   /** @deprecated No existe como columna en public.oportunidades — usar monto_estimado. */
   monto?: number;
   monto_estimado?: number;
@@ -493,6 +500,13 @@ export interface Venta {
   aprobado_admin?: boolean;
   incluye_escombros?: boolean;
   comision_registrada?: boolean;
+  comision_porcentaje?: number;
+  comision_monto?: number;
+  comision_estado?: 'pendiente' | 'lista_para_pago' | 'pagada';
+  comision_fecha_pago?: string | null;
+  comision_pagada_por?: string | null;
+  comision_notas?: string | null;
+  responsable_operativo_id?: string;
   poliza_emitida?: boolean;
   created_at?: string;
   cliente?: Cliente;

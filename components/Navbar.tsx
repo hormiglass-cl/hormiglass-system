@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Bell, ChevronRight, ContactRound, FolderKanban, LogOut, Menu, Search, Settings2 } from 'lucide-react';
+import { Bell, ChevronRight, ContactRound, FileText, FolderKanban, LogOut, Menu, Search, Settings2, ShoppingCart } from 'lucide-react';
 import { useAuth } from '../lib/context/AuthContext';
+import { useBreadcrumb } from '../lib/context/BreadcrumbContext';
 import { createClient } from '../lib/supabase/client';
 import { ROL_NOMBRE } from '../lib/types';
 import { findActiveItem, navDestinations } from '../lib/navigation';
@@ -59,18 +60,28 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
     return () => { alive = false; window.clearInterval(interval); void supabase.removeChannel(channel); };
   }, [currentUser?.id, supabase]);
 
+  const { customTitle, onBack } = useBreadcrumb();
+
   if (pathname === '/login' || pathname.startsWith('/auth')) return null;
 
   const active = findActiveItem(pathname, searchParams.get('empresa'), currentUser?.rol);
-  const crumbs: { label: string; href?: string }[] = [];
+  const crumbs: { label: string; href?: string; onAction?: () => void }[] = [];
   if (active) {
     crumbs.push({ label: active.group.label });
     const [itemPath] = active.item.href.split('?');
-    const deeper = pathname !== itemPath && itemPath !== '/' && pathname.startsWith(`${itemPath}/`);
-    crumbs.push({ label: active.item.label, href: deeper ? active.item.href : undefined });
-    if (deeper) crumbs.push({ label: EXTRA_TITLES[pathname] ?? 'Detalle' });
+    const deeper = (pathname !== itemPath && itemPath !== '/' && pathname.startsWith(`${itemPath}/`)) || Boolean(customTitle);
+    crumbs.push({
+      label: active.item.label,
+      href: deeper ? active.item.href : undefined,
+      onAction: deeper && onBack ? onBack : undefined,
+    });
+    if (customTitle) {
+      crumbs.push({ label: customTitle });
+    } else if (deeper) {
+      crumbs.push({ label: EXTRA_TITLES[pathname] ?? 'Detalle' });
+    }
   } else if (pathname !== '/') {
-    crumbs.push({ label: EXTRA_TITLES[pathname] ?? 'Hormiglass' });
+    crumbs.push({ label: customTitle || (EXTRA_TITLES[pathname] ?? 'Hormiglass') });
   }
 
   return <header className="hg-app-header sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-line bg-surface/95 px-4 backdrop-blur-sm sm:px-6">
@@ -83,7 +94,19 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
           return <li key={`${crumb.label}-${index}`} className={clsx('flex min-w-0 items-center gap-1.5', !last && 'hidden sm:flex')}>
             {index > 0 && <ChevronRight size={14} aria-hidden className="shrink-0 text-ink-muted" />}
             {crumb.href
-              ? <Link href={crumb.href} className="truncate text-ink-muted hover:text-ink hover:underline">{crumb.label}</Link>
+              ? <Link
+                  href={crumb.href}
+                  prefetch={true}
+                  onClick={(e) => {
+                    if (crumb.onAction) {
+                      e.preventDefault();
+                      crumb.onAction();
+                    }
+                  }}
+                  className="truncate text-ink-muted hover:text-ink hover:underline"
+                >
+                  {crumb.label}
+                </Link>
               : <span className={clsx('truncate', last ? 'font-semibold text-ink' : 'text-ink-muted')} aria-current={last ? 'page' : undefined}>{crumb.label}</span>}
           </li>;
         })}
@@ -100,6 +123,7 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
 
     <Link
       href="/notificaciones"
+      prefetch={true}
       aria-label="Notificaciones"
       title="Notificaciones"
       className="relative grid h-9 w-9 place-items-center rounded-control text-ink-muted hover:bg-surface-muted hover:text-ink"
@@ -196,11 +220,15 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
     const q = recordQuery;
     let alive = true;
     const timer = window.setTimeout(async () => {
-      const [clientes, oportunidades] = await Promise.all([
+      const [clientes, oportunidades, cotizaciones, ordenes] = await Promise.all([
         supabase.from('clientes').select('id, nombre, apellido_razon_social, rut')
-          .or(`nombre.ilike.%${q}%,apellido_razon_social.ilike.%${q}%,rut.ilike.%${q}%`).limit(5),
+          .or(`nombre.ilike.%${q}%,apellido_razon_social.ilike.%${q}%,rut.ilike.%${q}%`).limit(4),
         supabase.from('oportunidades').select('id, codigo, titulo')
-          .or(`codigo.ilike.%${q}%,titulo.ilike.%${q}%`).limit(5),
+          .or(`codigo.ilike.%${q}%,titulo.ilike.%${q}%`).limit(4),
+        supabase.from('cotizaciones').select('id, numero_cotizacion, monto_total')
+          .ilike('numero_cotizacion', `%${q}%`).limit(3),
+        supabase.from('ordenes_compra').select('id, numero_oc, total')
+          .ilike('numero_oc', `%${q}%`).limit(3),
       ]);
       if (!alive) return;
       setFound({ q, items: [
@@ -211,6 +239,14 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
         ...(oportunidades.data ?? []).map((o: { id: string; codigo: string; titulo: string }) => ({
           id: `o-${o.id}`, kind: 'Oportunidades', icon: FolderKanban, href: `/ventas?oportunidad=${o.id}`,
           label: o.titulo, detail: o.codigo,
+        })),
+        ...(cotizaciones.data ?? []).map((cot: { id: string; numero_cotizacion: string; monto_total: number }) => ({
+          id: `cot-${cot.id}`, kind: 'Cotizaciones', icon: FileText, href: '/cotizaciones',
+          label: cot.numero_cotizacion, detail: `$${Number(cot.monto_total || 0).toLocaleString('es-CL')}`,
+        })),
+        ...(ordenes.data ?? []).map((oc: { id: string; numero_oc: string; total: number }) => ({
+          id: `oc-${oc.id}`, kind: 'Órdenes de Compra', icon: ShoppingCart, href: '/ordenes-compra',
+          label: oc.numero_oc, detail: `$${Number(oc.total || 0).toLocaleString('es-CL')}`,
         })),
       ] });
     }, 200);

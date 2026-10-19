@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '../../../lib/supabase/client';
@@ -37,7 +37,7 @@ function NuevaCotizacionForm() {
   const paramEditCotId = searchParams.get('edit_cot_id');
 
   const { currentUser } = useAuth();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [catalogo, setCatalogo] = useState<ProductoCatalogo[]>([]);

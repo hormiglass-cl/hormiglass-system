@@ -21,23 +21,38 @@ function writePrefs(prefs: { collapsed: boolean; closedGroups: string[] }) {
   try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs)); } catch { /* sin almacenamiento: no se recuerda */ }
 }
 
-export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
+const DEFAULT_CLOSED_GROUPS = ['inicio', 'comercial', 'compras', 'calendarios', 'finanzas', 'administracion', 'sistema'];
+
+export function Sidebar({
+  mobileOpen = false,
+  onMobileClose,
+  onNavigate,
+}: {
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { currentUser } = useAuth();
+  const groups = useMemo(() => navGroupsFor(currentUser?.rol), [currentUser?.rol]);
+  const active = findActiveItem(pathname, searchParams.get('empresa'), currentUser?.rol);
+
   const [collapsed, setCollapsed] = useState(false);
-  const [closedGroups, setClosedGroups] = useState<string[]>([]);
+  // Por defecto, todos los grupos colapsables inician contraídos a menos que el usuario guarde preferencias
+  const [closedGroups, setClosedGroups] = useState<string[]>(DEFAULT_CLOSED_GROUPS);
   const [unreadCount, setUnreadCount] = useState(0);
   const [pendingAbonosCount, setPendingAbonosCount] = useState(0);
   const supabase = useMemo(() => createClient(), []);
-  const groups = navGroupsFor(currentUser?.rol);
-  const active = findActiveItem(pathname, searchParams.get('empresa'), currentUser?.rol);
 
   useEffect(() => {
     const prefs = readPrefs();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- preferencias locales solo disponibles en el cliente
-    setCollapsed(!!prefs.collapsed);
-    setClosedGroups(prefs.closedGroups ?? []);
+    if (typeof prefs.collapsed === 'boolean') {
+      setCollapsed(prefs.collapsed);
+    }
+    if (Array.isArray(prefs.closedGroups)) {
+      setClosedGroups(prefs.closedGroups);
+    }
   }, []);
 
   useEffect(() => {
@@ -51,16 +66,20 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: bo
     if (!currentUser?.id) return;
     let alive = true;
     const userId = currentUser.id;
-    async function refresh() {
-      await syncSeguimientoNotificaciones(supabase, userId);
+
+    async function refreshCount() {
       const { count } = await supabase.from('notificaciones').select('id', { count: 'exact', head: true })
         .eq('usuario_id', userId).eq('leido', false);
       if (alive) setUnreadCount(count || 0);
     }
-    void refresh();
-    const interval = window.setInterval(refresh, 60_000);
+
+    // Sincronizar seguimientos una sola vez al inicio de sesión de forma desacoplada
+    void syncSeguimientoNotificaciones(supabase, userId);
+    void refreshCount();
+
+    const interval = window.setInterval(refreshCount, 60_000);
     const channel = supabase.channel(`sidebar_notifs_${userId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notificaciones', filter: `usuario_id=eq.${userId}` }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notificaciones', filter: `usuario_id=eq.${userId}` }, refreshCount)
       .subscribe();
     return () => { alive = false; window.clearInterval(interval); void supabase.removeChannel(channel); };
   }, [currentUser?.id, supabase]);
@@ -115,7 +134,15 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: bo
       mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
     )}>
       <div className="flex h-14 shrink-0 items-center justify-between gap-2 px-4">
-        <Link href="/" onClick={onMobileClose} className="flex min-w-0 items-center gap-2.5" aria-label="Hormiglass, ir al panel operativo">
+        <Link
+          href="/"
+          onClick={() => {
+            onMobileClose?.();
+            if (pathname !== '/') onNavigate?.();
+          }}
+          className="flex min-w-0 items-center gap-2.5"
+          aria-label="Hormiglass, ir al panel operativo"
+        >
           <Image src="/logo-only-h-removebg-preview.png" alt="" width={32} height={32} className="h-8 w-8 shrink-0 object-contain" />
           <span className={clsx('truncate text-[15px] font-bold tracking-tight text-ink', collapsed && 'md:hidden')}>Hormiglass</span>
         </Link>
@@ -164,7 +191,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: bo
             </div>
             {collapsed && <div className="mx-3 mb-2 hidden border-t border-line md:block" aria-hidden />}
             {groupOpen && (
-              <ul id={`sidebar-group-${group.id}`} className="space-y-0.5">
+              <ul id={`sidebar-group-${group.id}`} className="space-y-0.5 hg-accordion-enter">
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const isActive = item === active?.item;
@@ -178,7 +205,11 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: bo
                   return <li key={item.href}>
                     <Link
                       href={item.href}
-                      onClick={onMobileClose}
+                      prefetch={true}
+                      onClick={() => {
+                        onMobileClose?.();
+                        if (!isActive) onNavigate?.();
+                      }}
                       title={collapsed ? item.label : undefined}
                       aria-current={isActive ? 'page' : undefined}
                       className={clsx(

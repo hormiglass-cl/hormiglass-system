@@ -10,6 +10,13 @@ import { fileURLToPath } from 'node:url';
 const MIGRATED = [
   'components/ui/crm.tsx',
   'components/ui/feedback.tsx',
+  'components/ui/AvatarBadge.tsx',
+  'components/ui/FloatingActionBar.tsx',
+  'components/ui/FilterPills.tsx',
+  'components/ui/MetricCard.tsx',
+  'components/ui/SlideOverDrawer.tsx',
+  'components/ventas/KanbanCard.tsx',
+  'components/clientes/ClienteDrawer.tsx',
   'components/Pagination.tsx',
   'app/diseno/page.tsx',
   // Fase 1
@@ -24,6 +31,8 @@ const MIGRATED = [
   'components/dashboard/PipelineFunnelChart.tsx',
   'components/dashboard/RankingBarChart.tsx',
   'components/dashboard/SalesTimelineChart.tsx',
+  'components/dashboard/RecentLeadsCard.tsx',
+  'components/dashboard/TasksActivityCard.tsx',
   // Fase 3
   'app/ventas/page.tsx',
   'app/ventas/[id]/page.tsx',

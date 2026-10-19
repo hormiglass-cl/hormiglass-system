@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { createClient } from '../../../lib/supabase/client';
 import { useAuth } from '../../../lib/context/AuthContext';
+import { useBreadcrumb } from '../../../lib/context/BreadcrumbContext';
 import {
   cotizacionVigente,
   saldoPendiente,
@@ -34,9 +35,11 @@ import {
 } from '../../../components/ui/crm';
 import { useConfirm, useToast } from '../../../components/ui/feedback';
 import {
+  ArrowLeft,
   Building2,
   Calendar,
   Clock,
+  Coins,
   Download,
   ExternalLink,
   FileCheck2,
@@ -104,6 +107,7 @@ export default function FichaOportunidadPage() {
   const { currentUser, usersList } = useAuth();
   const confirmDialog = useConfirm();
   const toast = useToast();
+  const { setCustomTitle } = useBreadcrumb();
 
   const [op, setOp] = useState<OportunidadVenta | null>(null);
   const [quotes, setQuotes] = useState<Cotizacion[]>([]);
@@ -196,6 +200,17 @@ export default function FichaOportunidadPage() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadData]);
+
+  useEffect(() => {
+    if (op) {
+      setCustomTitle(op.titulo || op.codigo || 'Oportunidad');
+    } else {
+      setCustomTitle(null);
+    }
+    return () => {
+      setCustomTitle(null);
+    };
+  }, [op, setCustomTitle]);
 
   // Cambiar etapa
   const handleCambiarEtapa = async (nuevaEtapa: EstadoPipeline) => {
@@ -327,6 +342,34 @@ export default function FichaOportunidadPage() {
     }
   };
 
+  const [liquidandoComision, setLiquidandoComision] = useState(false);
+
+  const handleLiquidarComision = async () => {
+    if (!op) return;
+    const montoComision = op.comision_monto || Math.round((op.monto_estimado || 0) * ((op.comision_porcentaje || 3) / 100));
+    const ok = await confirmDialog({
+      title: '¿Confirmar liquidación de comisión?',
+      message: `Se marcará como pagada la comisión por ${money(montoComision)} correspondiente al ejecutivo comercial ${asignadoUser?.nombre || 'asignado'}.`,
+      confirmLabel: 'Confirmar pago de comisión',
+      cancelLabel: 'Cancelar',
+    });
+    if (!ok) return;
+
+    try {
+      setLiquidandoComision(true);
+      const { error } = await supabase.rpc('marcar_comision_pagada', {
+        p_oportunidad_id: op.id,
+      });
+      if (error) throw error;
+      toast({ message: 'Comisión liquidada y marcada como pagada exitosamente.', tone: 'success' });
+      await loadData();
+    } catch (err: unknown) {
+      toast({ message: mensajeError(err, 'No se pudo liquidar la comisión.'), tone: 'danger' });
+    } finally {
+      setLiquidandoComision(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="py-20 text-center text-sm text-ink-muted">
@@ -355,6 +398,8 @@ export default function FichaOportunidadPage() {
   const stageIndex = getStageIndex(op.estado_pipeline);
   const stageTone = getStageTone(op.estado_pipeline);
   const asignadoUser = (usersList as Usuario[])?.find((u) => u.id === op.asignado_a);
+  const gestorObraUser = (usersList as Usuario[])?.find((u) => u.id === op.responsable_operativo_id);
+  const nombreGestorObra = gestorObraUser?.nombre || 'Edith Tapia (Jefa de Patio & Logística)';
 
   return (
     <div className="space-y-6 text-ink">
@@ -401,8 +446,9 @@ export default function FichaOportunidadPage() {
               </Button>
             </Link>
             <Link href="/ventas">
-              <Button variant="secondary" size="sm">
-                ← Pipeline
+              <Button variant="secondary" size="sm" className="flex items-center gap-1.5">
+                <ArrowLeft size={14} aria-hidden />
+                <span>Volver al panel</span>
               </Button>
             </Link>
           </div>
@@ -480,8 +526,12 @@ export default function FichaOportunidadPage() {
                     </StatusBadge>
                   </div>
                   <div>
-                    <span className="text-ink-muted">Responsable comercial:</span>{' '}
+                    <span className="text-ink-muted">Responsable comercial (comisión):</span>{' '}
                     <span className="font-semibold text-ink">{asignadoUser?.nombre || 'Sin asignar'}</span>
+                  </div>
+                  <div>
+                    <span className="text-ink-muted">Gestión de obra / faena:</span>{' '}
+                    <span className="font-semibold text-ink">{nombreGestorObra}</span>
                   </div>
                 </div>
               </div>
@@ -688,6 +738,82 @@ export default function FichaOportunidadPage() {
                   Ver entregas y logística
                 </Button>
               </Link>
+            </div>
+          </Panel>
+
+          {/* Panel de Comisión Comercial */}
+          <Panel
+            title={
+              <div className="flex items-center justify-between w-full">
+                <span className="flex items-center gap-1.5">
+                  <Coins size={15} className="text-accent-ink" />
+                  <span>Comisión Comercial</span>
+                </span>
+                <StatusBadge
+                  tone={
+                    op.comision_estado === 'pagada'
+                      ? 'success'
+                      : op.comision_estado === 'lista_para_pago'
+                      ? 'accent'
+                      : 'warning'
+                  }
+                >
+                  {op.comision_estado === 'pagada'
+                    ? 'Pagada'
+                    : op.comision_estado === 'lista_para_pago'
+                    ? 'Lista para pago'
+                    : 'Pendiente'}
+                </StatusBadge>
+              </div>
+            }
+            className="p-4 space-y-3"
+          >
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-ink-muted">Ejecutivo acreedor:</span>
+                <span className="font-semibold text-ink">{asignadoUser?.nombre || 'Sin asignar'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-ink-muted">Gestor de obra en patio:</span>
+                <span className="font-semibold text-ink">{nombreGestorObra}</span>
+              </div>
+              <div className="flex items-center justify-between pt-1.5 border-t border-line-subtle">
+                <span className="text-ink-muted">Porcentaje pactado:</span>
+                <span className="font-mono font-semibold text-ink">{op.comision_porcentaje || 3}%</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-ink-muted">Monto comisión:</span>
+                <span className="font-mono font-bold text-accent-ink">
+                  {money(op.comision_monto || Math.round((op.monto_estimado || 0) * ((op.comision_porcentaje || 3) / 100)))}
+                </span>
+              </div>
+
+              {op.comision_estado === 'lista_para_pago' && (currentUser?.rol === 'admin' || currentUser?.rol === 'finanzas') && (
+                <div className="pt-2 border-t border-line-subtle">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="w-full justify-center"
+                    onClick={() => void handleLiquidarComision()}
+                    disabled={liquidandoComision}
+                  >
+                    <Coins size={14} className="mr-1" />
+                    {liquidandoComision ? 'Liquidando...' : 'Liquidar y marcar pagada'}
+                  </Button>
+                </div>
+              )}
+
+              {op.comision_estado === 'pagada' && (
+                <div className="pt-1.5 border-t border-line-subtle text-success text-[11px] font-semibold flex items-center gap-1">
+                  ✓ Comisión liquidada por Finanzas
+                </div>
+              )}
+
+              {op.comision_estado === 'pendiente' && (
+                <div className="text-[11px] text-ink-subtle">
+                  Pasa automáticamente a &quot;Lista para pago&quot; cuando la venta esté cerrada y 100% pagada.
+                </div>
+              )}
             </div>
           </Panel>
 

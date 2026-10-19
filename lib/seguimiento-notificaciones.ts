@@ -15,21 +15,26 @@ export function seguimientosParaUsuario(
   });
 }
 
+const syncingUsers = new Set<string>();
+
 /** Materializa los seguimientos próximos del usuario al abrir el CRM. */
 export async function syncSeguimientoNotificaciones(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<void> {
-  const [opsResult, noticesResult] = await Promise.all([
-    supabase.from('oportunidades')
-      .select('id, titulo, estado_pipeline, asignado_a, seguimiento_responsable_id, proxima_accion, proxima_accion_fecha')
-      .not('proxima_accion_fecha', 'is', null),
-    supabase.from('notificaciones')
-      .select('id, mensaje, entidad_relacionada')
-      .eq('usuario_id', userId)
-      .eq('tipo', 'seguimiento'),
-  ]);
-  if (opsResult.error || noticesResult.error) return;
+  if (syncingUsers.has(userId)) return;
+  syncingUsers.add(userId);
+  try {
+    const [opsResult, noticesResult] = await Promise.all([
+      supabase.from('oportunidades')
+        .select('id, titulo, estado_pipeline, asignado_a, seguimiento_responsable_id, proxima_accion, proxima_accion_fecha')
+        .not('proxima_accion_fecha', 'is', null),
+      supabase.from('notificaciones')
+        .select('id, mensaje, entidad_relacionada')
+        .eq('usuario_id', userId)
+        .eq('tipo', 'seguimiento'),
+    ]);
+    if (opsResult.error || noticesResult.error) return;
 
   const notices = noticesResult.data || [];
   const candidates = seguimientosParaUsuario((opsResult.data || []) as OportunidadVenta[], userId);
@@ -57,5 +62,8 @@ export async function syncSeguimientoNotificaciones(
         link_url: `/ventas?oportunidad=${op.id}`,
       });
     }
+  }
+  } finally {
+    syncingUsers.delete(userId);
   }
 }
