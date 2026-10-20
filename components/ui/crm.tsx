@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import {
   AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Info,
-  MoreHorizontal, Search, X, XCircle,
+  MoreHorizontal, MoreVertical, Search, X, XCircle,
 } from 'lucide-react';
 
 /* Componentes base del CRM sobre los tokens de app/globals.css (plans/plan-rediseno-hig.md).
@@ -386,11 +386,28 @@ export const TextInput = React.forwardRef<HTMLInputElement, React.InputHTMLAttri
   },
 );
 
-export function Select({ className, children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+export function Select({
+  className,
+  selectClassName,
+  children,
+  ...props
+}: React.SelectHTMLAttributes<HTMLSelectElement> & { selectClassName?: string }) {
   return (
     <div className={clsx('relative', className)}>
-      <select className="hg-field appearance-none pr-9" {...props}>{children}</select>
-      <ChevronDown size={16} aria-hidden className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+      <select
+        className={clsx(
+          'hg-field appearance-none pr-8 cursor-pointer transition-colors',
+          selectClassName,
+        )}
+        {...props}
+      >
+        {children}
+      </select>
+      <ChevronDown
+        size={14}
+        aria-hidden
+        className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted"
+      />
     </div>
   );
 }
@@ -581,7 +598,15 @@ export function EmptyState({ icon: Icon, title, description, action }: {
   );
 }
 
-export function ActionMenu({ label = 'Más acciones', children }: { label?: string; children: React.ReactNode }) {
+export function ActionMenu({
+  label = 'Más acciones',
+  icon: Icon = MoreHorizontal,
+  children,
+}: {
+  label?: string;
+  icon?: typeof MoreHorizontal;
+  children: React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -597,9 +622,9 @@ export function ActionMenu({ label = 'Más acciones', children }: { label?: stri
 
   return (
     <div ref={ref} className="relative inline-flex">
-      <IconButton icon={MoreHorizontal} label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)} />
+      <IconButton icon={Icon} label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)} />
       {open && (
-        <div role="menu" onClick={() => setOpen(false)} className="absolute right-0 top-full z-20 mt-1 min-w-48 rounded-panel border border-line bg-surface p-1 shadow-[var(--hg-shadow-popover)]">
+        <div role="menu" onClick={() => setOpen(false)} className="absolute right-0 top-full z-30 mt-1 min-w-48 rounded-panel border border-line bg-surface p-1 shadow-[var(--hg-shadow-popover)]">
           {children}
         </div>
       )}
@@ -607,7 +632,13 @@ export function ActionMenu({ label = 'Más acciones', children }: { label?: stri
   );
 }
 
-export function ActionMenuItem({ icon: Icon, destructive, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+export function ActionMenuItem({
+  icon: Icon,
+  destructive,
+  className,
+  children,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   icon?: typeof Info;
   destructive?: boolean;
 }) {
@@ -616,13 +647,14 @@ export function ActionMenuItem({ icon: Icon, destructive, children, ...props }: 
       type="button"
       role="menuitem"
       className={clsx(
-        'flex w-full items-center gap-2 rounded-control px-3 py-2 text-left text-sm hover:bg-surface-muted',
-        destructive ? 'text-danger' : 'text-ink',
+        'flex w-full items-center gap-2 rounded-control px-3 py-2 text-left text-xs font-medium transition-colors hover:bg-surface-muted',
+        destructive ? 'text-danger hover:bg-danger-soft' : 'text-ink',
+        className,
       )}
       {...props}
     >
-      {Icon && <Icon size={16} aria-hidden />}
-      {children}
+      {Icon && <Icon size={15} aria-hidden />}
+      <span>{children}</span>
     </button>
   );
 }
@@ -645,14 +677,17 @@ export function Pagination({ currentPage, totalItems, itemsPerPage, onPageChange
     <nav aria-label="Paginación" className="flex flex-col items-center justify-between gap-3 border-t border-line-subtle px-4 py-3 text-[13px] text-ink-muted sm:flex-row">
       <div className="flex items-center gap-2">
         <label htmlFor={selectId}>Filas por página</label>
-        <select
-          id={selectId}
-          value={itemsPerPage}
-          onChange={(event) => { onItemsPerPageChange(Number(event.target.value)); onPageChange(1); }}
-          className="hg-field min-h-8 w-auto py-1"
-        >
-          {[10, 20, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
-        </select>
+        <div className="relative inline-flex items-center">
+          <select
+            id={selectId}
+            value={itemsPerPage}
+            onChange={(event) => { onItemsPerPageChange(Number(event.target.value)); onPageChange(1); }}
+            className="hg-field min-h-8 h-8 w-auto appearance-none py-1 pl-2.5 pr-7 text-xs font-medium cursor-pointer"
+          >
+            {[10, 20, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+          <ChevronDown size={14} aria-hidden className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-ink-muted" />
+        </div>
       </div>
       <div className="flex items-center gap-3">
         <span className="t-num">

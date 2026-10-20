@@ -18,6 +18,9 @@ import {
   ToggleLeft,
   ToggleRight,
   Mail,
+  MoreVertical,
+  UserCheck,
+  UserX,
 } from 'lucide-react';
 import { mensajeError } from '../../lib/errores';
 import {
@@ -30,6 +33,8 @@ import {
   Field,
   TextInput,
   Select,
+  ActionMenu,
+  ActionMenuItem,
 } from '../../components/ui/crm';
 import { useToast, useConfirm } from '../../components/ui/feedback';
 
@@ -296,7 +301,7 @@ export default function ConfiguracionPage() {
             </span>
           }
         >
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto min-h-[280px]">
             <table className="hg-table w-full text-left text-xs min-w-[950px]">
               <thead>
                 <tr>
@@ -325,16 +330,18 @@ export default function ConfiguracionPage() {
 
                     {/* Rol de Acceso */}
                     <td className="p-3">
-                      <select
-                        value={usr.rol}
-                        onChange={(e) => void updateUserRole(usr.id, e.target.value as UserRole, usr.activo)}
-                        className="hg-field py-1 text-xs"
-                      >
-                        <option value="admin">Administrador</option>
-                        <option value="user">Ejecutivo Comercial</option>
-                        <option value="finanzas">Finanzas y Caja</option>
-                        <option value="mano_obra">Mano de Obra</option>
-                      </select>
+                      <div className="w-full min-w-[150px] max-w-[170px]">
+                        <Select
+                          value={usr.rol}
+                          onChange={(e) => void updateUserRole(usr.id, e.target.value as UserRole, usr.activo)}
+                          selectClassName="!min-h-[32px] !h-8 !py-1 text-xs font-medium cursor-pointer"
+                        >
+                          <option value="admin">Administrador</option>
+                          <option value="user">Ejecutivo Comercial</option>
+                          <option value="finanzas">Finanzas y Caja</option>
+                          <option value="mano_obra">Mano de Obra</option>
+                        </Select>
+                      </div>
                     </td>
 
                     {/* Cal. Visitas Toggle */}
@@ -342,17 +349,17 @@ export default function ConfiguracionPage() {
                       <button
                         type="button"
                         onClick={() => void handleToggleUserCalendar(usr.id, 'calendario_visitas', usr.calendario_visitas)}
-                        className="cursor-pointer"
+                        className="cursor-pointer transition-transform active:scale-95"
                         title="Alternar presencia en Calendario de Visitas"
                       >
                         {(usr.calendario_visitas ?? true) ? (
-                          <span className="inline-flex items-center gap-1 t-micro font-semibold text-accent-ink bg-accent-soft border border-accent-line px-2 py-0.5 rounded-full">
-                            <ToggleRight className="w-4 h-4" />
+                          <span className="inline-flex items-center gap-1 t-micro font-semibold text-success bg-success-soft border border-success-line px-2 py-0.5 rounded-full">
+                            <ToggleRight className="w-4 h-4 text-success" />
                             <span>Activo</span>
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 t-micro text-ink-muted bg-surface-muted border border-line px-2 py-0.5 rounded-full">
-                            <ToggleLeft className="w-4 h-4" />
+                            <ToggleLeft className="w-4 h-4 text-ink-muted" />
                             <span>Oculto</span>
                           </span>
                         )}
@@ -364,17 +371,17 @@ export default function ConfiguracionPage() {
                       <button
                         type="button"
                         onClick={() => void handleToggleUserCalendar(usr.id, 'calendario_produccion', usr.calendario_produccion)}
-                        className="cursor-pointer"
+                        className="cursor-pointer transition-transform active:scale-95"
                         title="Alternar presencia en Calendario de Producción"
                       >
                         {(usr.calendario_produccion ?? true) ? (
-                          <span className="inline-flex items-center gap-1 t-micro font-semibold text-accent-ink bg-accent-soft border border-accent-line px-2 py-0.5 rounded-full">
-                            <ToggleRight className="w-4 h-4" />
+                          <span className="inline-flex items-center gap-1 t-micro font-semibold text-success bg-success-soft border border-success-line px-2 py-0.5 rounded-full">
+                            <ToggleRight className="w-4 h-4 text-success" />
                             <span>Activo</span>
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 t-micro text-ink-muted bg-surface-muted border border-line px-2 py-0.5 rounded-full">
-                            <ToggleLeft className="w-4 h-4" />
+                            <ToggleLeft className="w-4 h-4 text-ink-muted" />
                             <span>Oculto</span>
                           </span>
                         )}
@@ -386,17 +393,17 @@ export default function ConfiguracionPage() {
                       <button
                         type="button"
                         onClick={() => void handleToggleUserCalendar(usr.id, 'calendario_reventa', usr.calendario_reventa)}
-                        className="cursor-pointer"
+                        className="cursor-pointer transition-transform active:scale-95"
                         title="Alternar presencia en Calendario de Reventa"
                       >
                         {(usr.calendario_reventa ?? true) ? (
-                          <span className="inline-flex items-center gap-1 t-micro font-semibold text-accent-ink bg-accent-soft border border-accent-line px-2 py-0.5 rounded-full">
-                            <ToggleRight className="w-4 h-4" />
+                          <span className="inline-flex items-center gap-1 t-micro font-semibold text-success bg-success-soft border border-success-line px-2 py-0.5 rounded-full">
+                            <ToggleRight className="w-4 h-4 text-success" />
                             <span>Activo</span>
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 t-micro text-ink-muted bg-surface-muted border border-line px-2 py-0.5 rounded-full">
-                            <ToggleLeft className="w-4 h-4" />
+                            <ToggleLeft className="w-4 h-4 text-ink-muted" />
                             <span>Oculto</span>
                           </span>
                         )}
@@ -412,32 +419,37 @@ export default function ConfiguracionPage() {
 
                     {/* Acciones */}
                     <td className="p-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <IconButton
-                          icon={Mail}
-                          label="Reenviar invitación de acceso por correo"
-                          onClick={() => void handleResendInvite(usr)}
-                        />
+                      <div className="flex items-center justify-end">
+                        <ActionMenu icon={MoreVertical} label={`Acciones para ${usr.nombre}`}>
+                          <ActionMenuItem
+                            icon={Edit2}
+                            onClick={() => handleOpenEditUser(usr)}
+                          >
+                            Editar usuario
+                          </ActionMenuItem>
 
-                        <IconButton
-                          icon={Edit2}
-                          label="Editar usuario"
-                          onClick={() => handleOpenEditUser(usr)}
-                        />
+                          <ActionMenuItem
+                            icon={Mail}
+                            onClick={() => void handleResendInvite(usr)}
+                          >
+                            Reenviar invitación
+                          </ActionMenuItem>
 
-                        <Button
-                          size="sm"
-                          variant="subtle"
-                          onClick={() => void updateUserRole(usr.id, usr.rol, !usr.activo)}
-                        >
-                          {usr.activo ? 'Desactivar' : 'Activar'}
-                        </Button>
+                          <ActionMenuItem
+                            icon={usr.activo ? UserX : UserCheck}
+                            onClick={() => void updateUserRole(usr.id, usr.rol, !usr.activo)}
+                          >
+                            {usr.activo ? 'Desactivar usuario' : 'Activar usuario'}
+                          </ActionMenuItem>
 
-                        <IconButton
-                          icon={Trash2}
-                          label="Eliminar usuario"
-                          onClick={() => void handleDeleteUser(usr)}
-                        />
+                          <ActionMenuItem
+                            icon={Trash2}
+                            destructive
+                            onClick={() => void handleDeleteUser(usr)}
+                          >
+                            Eliminar usuario
+                          </ActionMenuItem>
+                        </ActionMenu>
                       </div>
                     </td>
                   </tr>
