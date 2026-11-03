@@ -99,6 +99,7 @@ import { CotizacionModal } from '../../components/CotizacionModal';
 import { mensajeError } from '../../lib/errores';
 import { CodeStamp, StageRail, StatusBadge, FilterPills, type FilterDefinition, FloatingActionBar, AvatarBadge } from '../../components/ui/crm';
 import { KanbanCard } from '../../components/ventas/KanbanCard';
+import { CapturedDataPending, OpportunityActivity } from '../../components/whatsapp/OpportunityActivity';
 import { useConfirm, useToast } from '../../components/ui/feedback';
 import { useBreadcrumb } from '../../lib/context/BreadcrumbContext';
 import { swrCache } from '../../lib/cache/swr-cache';
@@ -2892,6 +2893,7 @@ export default function PipelineVentasPage() {
               <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-2 text-sm">
               {isUnaccreditedClose(selectedOp) && <p role="alert" className="rounded-md border border-warning/30 bg-warning-soft p-3 text-sm font-semibold text-warning-ink">Esta venta figura cerrada en el historial, pero su entrega no tiene respaldo acreditado. La cobranza automática permanece suspendida.</p>}
               {/* Resumen visible: campos de decisión y seguimiento rápido */}
+              {selectedOp.origen?.trim().toLowerCase() === 'whatsapp' && <CapturedDataPending />}
               <section aria-label="Resumen de la oportunidad" className="rounded-xl border border-line bg-[var(--color-surface-muted)] p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <h3 className="text-xs font-bold uppercase tracking-wide text-ink-muted">Resumen de la oportunidad</h3>
@@ -5534,6 +5536,7 @@ export default function PipelineVentasPage() {
               style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${100 - modalLeftColRatio}%` : '100%' }}
               className="flex-1 bg-surface-muted rounded-lg border border-line p-4 sm:p-5 flex flex-col justify-between h-[45vh] lg:h-full overflow-hidden shadow-xs shrink-0"
             >
+              <OpportunityActivity key={selectedOp.id} onClose={handleCloseOportunidad}>
               <div className="space-y-3.5 flex-1 flex flex-col overflow-hidden">
                 {/* Header de Actividad con Título e Íconos ClickUp */}
                 <div className="flex items-center justify-between border-b border-line pb-3">
@@ -6134,6 +6137,7 @@ export default function PipelineVentasPage() {
                   </div>
                 </div>
               </div>
+              </OpportunityActivity>
             </div>
           </div>
         )}

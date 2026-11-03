@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
+import { ConversationProvider } from '../lib/whatsapp/store';
 import { BreadcrumbProvider } from '../lib/context/BreadcrumbContext';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -19,6 +20,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (pathname === '/login' || pathname.startsWith('/auth')) return <main>{children}</main>;
 
   return (
+    <ConversationProvider>
     <BreadcrumbProvider>
       <div className="flex min-h-screen bg-app">
         {/* Barra de progreso de navegación superior instantánea */}
@@ -44,5 +46,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </div>
     </BreadcrumbProvider>
+    </ConversationProvider>
   );
 }

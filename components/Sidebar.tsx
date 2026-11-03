@@ -9,6 +9,7 @@ import { ChevronDown, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
 import { useAuth } from '../lib/context/AuthContext';
 import { createClient } from '../lib/supabase/client';
 import { syncSeguimientoNotificaciones } from '../lib/seguimiento-notificaciones';
+import { useConversations } from '../lib/whatsapp/store';
 import { findActiveItem, navGroupsFor } from '../lib/navigation';
 
 const STORAGE_KEY = 'hg.sidebar';
@@ -35,6 +36,8 @@ export function Sidebar({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { currentUser } = useAuth();
+  const { chats } = useConversations();
+  const demoUnreadCount = chats.reduce((total, chat) => total + chat.unread, 0);
   const groups = useMemo(() => navGroupsFor(currentUser?.rol), [currentUser?.rol]);
   const active = findActiveItem(pathname, searchParams.get('empresa'), currentUser?.rol);
 
@@ -197,7 +200,7 @@ export function Sidebar({
                   const isActive = item === active?.item;
                   const isNotifications = item.href === '/notificaciones';
                   const isCaja = item.href === '/caja';
-                  const badge = isNotifications && unreadCount > 0
+                  const badge = item.href === '/conversaciones' ? demoUnreadCount : isNotifications && unreadCount > 0
                     ? unreadCount
                     : isCaja && pendingAbonosCount > 0 && ['admin', 'finanzas'].includes(currentUser?.rol || '')
                     ? pendingAbonosCount

@@ -1,7 +1,7 @@
 import {
   Bell, Briefcase, Building2, CalendarDays, CalendarRange, ChartNoAxesCombined, Container,
   ContactRound, Factory, FileText, FolderKanban, Handshake, Landmark, LayoutDashboard, MapPin,
-  Package, Settings2, ShieldAlert, ShoppingCart, Truck, Users, Wallet,
+  MessageSquare, Package, Settings2, ShieldAlert, ShoppingCart, Truck, Users, Wallet,
 } from 'lucide-react';
 import type { UserRole } from './types';
 
@@ -33,6 +33,7 @@ export const NAV_GROUPS: NavGroup[] = [
     { label: 'Pipeline de ventas', href: '/ventas', icon: FolderKanban, match: '/ventas', roles: TODOS_MENOS_CAMPO },
   ] },
   { id: 'comercial', label: 'Comercial', collapsible: true, items: [
+    { label: 'Conversaciones', href: '/conversaciones', icon: MessageSquare, roles: TODOS_MENOS_CAMPO },
     { label: 'Clientes', href: '/clientes', icon: ContactRound, roles: TODOS_MENOS_CAMPO },
     { label: 'Cotizaciones', href: '/cotizaciones', icon: FileText, roles: TODOS_MENOS_CAMPO },
     { label: 'Postventa y garantías', href: '/postventa', icon: ShieldAlert, roles: TODOS_MENOS_CAMPO },
