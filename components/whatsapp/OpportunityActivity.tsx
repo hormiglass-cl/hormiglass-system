@@ -31,7 +31,7 @@ export function OpportunityActivity({ children, onClose }: { children: ReactNode
         <DemoNotice />
         <p className="text-xs font-semibold text-ink-muted">Conversación ficticia de Camila · sin vínculo con esta venta</p>
         <Button size="sm" onClick={() => setDemo(false)}>Salir de la demo</Button>
-        <div className="flex min-h-[540px] flex-1 flex-col"><ChatWorkspace conversationId="demo-1" /></div>
+        <div className="flex h-[clamp(360px,60dvh,640px)] shrink-0 flex-col"><ChatWorkspace conversationId="demo-1" /></div>
       </> : <UnlinkedChat onDemo={() => { openChat('demo-1'); setDemo(true); }} />}
     </div>}
   </>;

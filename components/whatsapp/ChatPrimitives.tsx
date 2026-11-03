@@ -21,20 +21,20 @@ export function ChatHeader({ chat, now, onAction, onHistory }: {
   chat: Conversation; now: number; onAction: (action: ChatAction) => void; onHistory: () => void;
 }) {
   const seconds = Math.max(0, Math.ceil(((chat.pausedUntil ?? now) - now) / 1000));
-  return <header className="shrink-0 space-y-2 border-b border-line p-3 text-sm text-ink">
+  return <header className="shrink-0 space-y-2 border-b border-line px-3 py-2 text-sm text-ink">
     <div className="flex flex-wrap items-start justify-between gap-2">
-      <div><h2 className="font-semibold">{chat.contact.name}</h2><p className="text-ink-muted">{chat.contact.phone}</p></div>
+      <div><h2 className="font-semibold leading-5">{chat.contact.name}</h2><p className="text-xs text-ink-muted">{chat.contact.phone}</p></div>
       <ChatStateBadge state={chat.state} />
     </div>
-    {chat.state === 'seller' ? <p className="text-success">Asistente en pausa · <span className="font-mono">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</span>. Si vence el plazo, el asistente retoma solo.</p>
-      : chat.state === 'closed' ? <p className="text-ink-muted">Si el cliente vuelve a escribir, la conversación se reabre con el asistente y queda en la misma ficha.</p>
-      : <p className="text-ink-muted">Al tomarla, el asistente se pausa por 60 min y respondes tú.</p>}
-    <div className="flex flex-wrap gap-2">
+    {chat.state === 'seller' ? <p className="text-xs text-success">Asistente en pausa · <span className="font-mono">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</span><span className="sr-only">. Si vence el plazo, el asistente retoma solo.</span></p>
+      : chat.state === 'closed' ? <p className="text-xs text-ink-muted">Si el cliente vuelve a escribir, la conversación se reabre con el asistente y queda en la misma ficha.</p>
+      : <p className="sr-only">Al tomarla, el asistente se pausa por 60 min y respondes tú.</p>}
+    <div className="flex flex-wrap gap-1.5">
       {chat.state !== 'closed' && (chat.state === 'seller'
         ? <Button size="sm" onClick={() => onAction('release')}>Devolver al asistente</Button>
-        : <Button size="sm" variant="primary" onClick={() => onAction('claim')}>Tomar conversación</Button>)}
+        : <Button size="sm" variant="primary" aria-label="Tomar conversación" title="Al tomarla, el asistente se pausa por 60 min y respondes tú." onClick={() => onAction('claim')}>Tomar chat</Button>)}
       {chat.state !== 'closed' && <Button size="sm" onClick={() => onAction('close')}>Cerrar</Button>}
-      <Button size="sm" onClick={onHistory}>Ver historial</Button>
+      <Button size="sm" aria-label="Ver historial" onClick={onHistory}>Historial</Button>
     </div>
   </header>;
 }
@@ -46,11 +46,11 @@ const authors: Record<ChatMessage['kind'], string> = {
 export function ChatThread({ messages, unreadAt, unreadCount = 0 }: {
   messages: ChatMessage[]; unreadAt?: string; unreadCount?: number;
 }) {
-  return <ol aria-label="Mensajes de demostración" className="min-h-32 space-y-3 p-4 text-sm">
+  return <ol aria-label="Mensajes de demostración" className="min-h-32 space-y-2.5 p-3 text-sm leading-relaxed">
     {messages.map(message => <Fragment key={message.id}>
-      {message.id === unreadAt && <li className="border-y border-accent-line bg-accent-soft py-2 text-center text-xs font-semibold text-accent-ink">{unreadCount} {unreadCount === 1 ? 'MENSAJE NUEVO' : 'MENSAJES NUEVOS'}</li>}
-      <li className={message.kind === 'event' ? 'px-2 py-1 text-center text-xs text-ink-muted' : `max-w-[92%] rounded-panel border border-line p-3 ${message.kind === 'customer' ? 'mr-auto bg-surface text-ink' : 'ml-auto bg-accent-soft text-ink'}`}>
-        <p className="mb-1 text-[11px] font-semibold">{authors[message.kind]}</p>
+      {message.id === unreadAt && <li className="border-y border-accent-line bg-accent-soft py-1 text-center text-xs font-semibold text-accent-ink">{unreadCount} {unreadCount === 1 ? 'MENSAJE NUEVO' : 'MENSAJES NUEVOS'}</li>}
+      <li className={message.kind === 'event' ? 'px-2 py-1 text-center text-xs text-ink-muted' : `w-fit max-w-[88%] rounded-panel border border-line px-3 py-2 ${message.kind === 'customer' ? 'mr-auto bg-surface text-ink' : 'ml-auto bg-accent-soft text-ink'}`}>
+        <p className={message.kind === 'event' ? 'sr-only' : 'mb-0.5 text-[11px] font-semibold'}>{authors[message.kind]}</p>
         <p className="whitespace-pre-wrap break-words">{message.kind === 'file' && <span aria-hidden>▤ </span>}{message.text}</p>
         {message.kind === 'file' && <p className="mt-1 text-xs text-ink-muted">Vista de ejemplo · archivo no disponible para descargar</p>}
         <p className="mt-1 flex justify-end gap-2 text-[11px] text-ink-muted">
@@ -64,18 +64,15 @@ export function ChatThread({ messages, unreadAt, unreadCount = 0 }: {
 
 export function ChatComposer({ locked, onSend }: { locked: boolean; onSend: (text: string) => boolean }) {
   const [draft, setDraft] = useState('');
-  return <form className="shrink-0 space-y-2 border-t border-line bg-surface p-3 text-sm" onSubmit={event => { event.preventDefault(); if (onSend(draft)) setDraft(''); }}>
-    <div className="flex gap-2 overflow-x-auto whitespace-nowrap pb-1 [&>button]:shrink-0" role="group" aria-label="Respuestas rápidas">
+  return <form className="shrink-0 space-y-1 border-t border-line bg-surface p-2 text-sm" onSubmit={event => { event.preventDefault(); if (onSend(draft)) setDraft(''); }}>
+    <div className="flex gap-1.5 overflow-x-auto whitespace-nowrap [&>button]:shrink-0 [&>button]:text-xs" role="group" aria-label="Respuestas rápidas">
       {['Agendar visita a terreno', 'Enviar ficha técnica', 'Cotización en preparación'].map(reply => <Button key={reply} size="sm" disabled={locked} onClick={() => setDraft(reply)}>{reply}</Button>)}
     </div>
-    <label className="block text-ink">
-      <span className="mb-1 block font-semibold">Mensaje de demostración</span>
-      <textarea rows={2} className="hg-field h-14 min-h-0 w-full resize-none" disabled={locked} value={draft} onChange={event => setDraft(event.target.value)} placeholder={locked ? 'Toma la conversación para responder al cliente.' : 'Escribe tu respuesta…'} />
-    </label>
-    {locked && <p className="text-xs text-ink-muted">Toma la conversación para responder al cliente.</p>}
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <p className="text-[11px] text-ink-muted">Se envía por WhatsApp desde el número de Hormiglass<br /><strong>Demo: no se envían mensajes reales.</strong></p>
-      <Button size="sm" type="submit" variant="primary" disabled={locked}>Enviar demo</Button>
-    </div>
+    <div className="flex items-end gap-2"><label className="block min-w-0 flex-1 text-ink">
+      <span className="sr-only">Mensaje de demostración</span>
+      <textarea rows={2} className="hg-field block h-14 min-h-0 w-full resize-none text-sm" disabled={locked} value={draft} onChange={event => setDraft(event.target.value)} placeholder={locked ? 'Toma la conversación para responder al cliente.' : 'Escribe tu respuesta…'} />
+    </label><Button size="sm" type="submit" variant="primary" disabled={locked}>Enviar demo</Button></div>
+    {locked && <p className="sr-only">Toma la conversación para responder al cliente.</p>}
+    <details className="text-[11px] leading-4 text-ink-muted"><summary className="min-h-6 cursor-pointer py-1">Demo: no se envían mensajes reales.</summary><p>Se envía por WhatsApp desde el número de Hormiglass</p></details>
   </form>;
 }

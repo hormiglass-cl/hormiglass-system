@@ -14,9 +14,9 @@ const root = path.resolve(import.meta.dirname, '..');
 
 // Only the isolated render harness is served: never start Next, auth or the CRM.
 test('isolated real WhatsApp frontend interactions (S1–S6)', { timeout: 25000 }, async t => {
-  await mkdir(path.join(root, '.next'), { recursive: true });
-  const scratch = await mkdtemp(path.join(root, '.next/whatsapp-browser-'));
-  const review = path.join(root, '.next/whatsapp-review');
+  await mkdir(path.join(root, 'node_modules/.cache'), { recursive: true });
+  const scratch = await mkdtemp(path.join(root, 'node_modules/.cache/whatsapp-harness-'));
+  const review = path.join(root, 'node_modules/.cache/whatsapp-review');
   await mkdir(review, { recursive: true });
   let server, browser, page, completed = false;
   const errors = [], external = [], requestErrors = [];
@@ -37,6 +37,7 @@ import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ConversationProvider } from ${JSON.stringify(path.join(root, 'lib/whatsapp/store.tsx'))};
 import ConversacionesPage from ${JSON.stringify(path.join(root, 'app/conversaciones/page.tsx'))};
+import { ChatWorkspace } from ${JSON.stringify(path.join(root, 'components/whatsapp/ChatWorkspace.tsx'))};
 import { OpportunityActivity } from ${JSON.stringify(path.join(root, 'components/whatsapp/OpportunityActivity.tsx'))};
 function Harness() {
   const [id, setId] = useState(1), [actions, setActions] = useState(0), [closed, setClosed] = useState(false);
@@ -47,7 +48,7 @@ function Harness() {
       <OpportunityActivity key={id} onClose={() => setClosed(true)}>
         <button onClick={() => setActions(actions + 1)}>Existing activity action: {actions}</button>
       </OpportunityActivity>
-    </section></ConversationProvider>;
+    </section><div id="narrow-workspace" style={{ display: 'flex', width: 320, height: 420 }}><ChatWorkspace conversationId="demo-2" /></div></ConversationProvider>;
 }
 createRoot(document.getElementById('root')!).render(<Harness />);`);
   let webpack;
@@ -59,7 +60,7 @@ createRoot(document.getElementById('root')!).render(<Harness />);`);
   const compiler = webpack({ mode: 'development', devtool: false, entry: path.join(scratch, 'entry.tsx'),
     output: { path: scratch, filename: 'bundle.js' },
     resolve: { extensions: ['.tsx', '.ts', '.js'], modules: [path.join(root, 'node_modules')] },
-    module: { rules: [{ test: /\.tsx?$/, exclude: /node_modules/, use: path.join(scratch, 'loader.cjs') }] },
+    module: { rules: [{ test: /\.tsx?$/, include: [scratch, path.join(root, 'app'), path.join(root, 'components'), path.join(root, 'lib')], use: path.join(scratch, 'loader.cjs') }] },
     // Installed React's browser entry also checks process.env beyond NODE_ENV.
     // Supply only a fixed synthetic environment, never the host environment.
     plugins: [new webpack.DefinePlugin({ 'process.env': JSON.stringify({ NODE_ENV: 'development' }) })],
@@ -79,7 +80,12 @@ createRoot(document.getElementById('root')!).render(<Harness />);`);
   const devCss = [...await cssFiles(path.join(root, '.next/dev/static/css')), ...await cssFiles(path.join(root, '.next/dev/static/chunks'))];
   const loadedCss = devCss.length ? devCss : [...await cssFiles(path.join(root, '.next/static/css')), ...await cssFiles(path.join(root, '.next/static/chunks'))];
   assert.ok(loadedCss.length, 'Actual compiled CSS required for visual evidence');
-  const css = (await Promise.all(loadedCss.map(file => readFile(file, 'utf8')))).join('\n');
+  // Compile the current CRM stylesheet so newly authored utilities are represented,
+  // without requesting authenticated routes or relying on a stale dev CSS chunk.
+  const postcss = require('postcss');
+  const tailwind = require('@tailwindcss/postcss');
+  const globals = path.join(root, 'app/globals.css');
+  const css = (await postcss([tailwind()]).process(await readFile(globals, 'utf8'), { from: globals })).css;
   console.log(JSON.stringify({ loadedCss }));
   // Fonts/assets are deliberately not loaded; only already-built CSS may be served.
   const safeCss = css.replace(/@font-face\s*\{[^}]*\}/g, '') + isolatedFrameCss;
@@ -198,6 +204,18 @@ createRoot(document.getElementById('root')!).render(<Harness />);`);
   await expect(opportunity.getByText('No hay un chat de WhatsApp vinculado', { exact: true })).toBeVisible();
   console.log('Behavior assertions S1–S6 passed; checking initial layout S7');
   assertLayout(measurements);
+  for (const width of [320, 400]) {
+    const narrow = page.locator('#narrow-workspace');
+    await narrow.evaluate((element, width) => { element.style.width = `${width}px`; }, width);
+    const geometry = await narrow.evaluate(element => {
+      const chat = element.firstElementChild, form = chat.querySelector('form');
+      const messages = chat.querySelector('ol').parentElement;
+      return { width: chat.clientWidth, scrollWidth: chat.scrollWidth, messages: messages.clientHeight, bottom: form.getBoundingClientRect().bottom - element.getBoundingClientRect().top };
+    });
+    assert.ok(geometry.scrollWidth <= geometry.width && geometry.messages >= 130 && geometry.bottom <= 420, JSON.stringify(geometry));
+    await narrow.screenshot({ path: path.join(review, `after-shared-${width}.png`) });
+    console.log(JSON.stringify({ sharedWorkspace: { width, ...geometry } }));
+  }
   await list.getByRole('button', { name: /Camila Rojas/ }).click();
   await assertMobileNavigation(page);
   assert.deepEqual(errors, [], 'No browser errors');
