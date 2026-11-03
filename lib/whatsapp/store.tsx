@@ -7,6 +7,8 @@ import type { ConversationRepository } from './types';
 
 function useMockStore() {
   const repository = useRef<ConversationRepository | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selection, setSelection] = useState<{ id: string; unreadAt?: string; unreadCount: number } | null>(null);
   const [snapshot, setSnapshot] = useState(() => ({ chats: [] as ReturnType<ConversationRepository['list']>, notices: [] as ReturnType<ConversationRepository['notices']>, now: 0 }));
   const refresh = useCallback(() => {
     const repo = repository.current;
@@ -22,11 +24,28 @@ function useMockStore() {
     return () => clearInterval(timer);
   }, [refresh]);
   const act = useCallback((action: (repo: ConversationRepository, now: number) => void) => {
-    if (!repository.current) return;
-    action(repository.current, Date.now());
-    refresh();
+    if (!repository.current) return false;
+    try {
+      action(repository.current, Date.now());
+      setError(null);
+      refresh();
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo completar la acción.');
+      refresh();
+      return false;
+    }
   }, [refresh]);
-  return { ...snapshot, act };
+  const openChat = useCallback((id: string) => {
+    act(repo => {
+      const chat = repo.get(id);
+      if (!chat) throw new Error('Conversación no encontrada.');
+      const incoming = chat.messages.filter(message => message.kind === 'customer');
+      setSelection({ id, unreadAt: chat.unread ? incoming[Math.max(0, incoming.length - chat.unread)]?.id : undefined, unreadCount: chat.unread });
+      repo.markRead(id);
+    });
+  }, [act]);
+  return { ...snapshot, act, error, selection, openChat };
 }
 
 const ChatContext = createContext<ReturnType<typeof useMockStore> | null>(null);
