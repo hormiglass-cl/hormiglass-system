@@ -1,11 +1,11 @@
-# WhatsApp inbound receiver — proposed v1 contract
+# WhatsApp inbound receiver — proposed v1 and revision 1.1 contract
 
-**Local implementation, disabled by default; not a live integration.** This is a technical proposal for the bot agent to agree and implement. It accepts four inbound event types atomically. It does **not** establish ClickUp parity or replace the bot's existing workflows.
+**Local implementation, disabled by default; not a live integration.** This is a technical proposal for the bot agent to agree and implement. It accepts the four legacy inbound event types atomically, with a proposed opt-in revision 1.1 for richer handoffs and `ownership.taken`. **Revision 1.1 awaits bot agreement; it is not deployed compatibility.** See [the bot-facing response](whatsapp-events-crm-response.md) for the amendment and remaining blockers. It does **not** establish ClickUp parity or replace the bot's existing workflows.
 
 ## Before connecting the bot
 
 1. Agree this wire contract and share **development** seller UUID mappings with the bot agent (`usuarios.id`, not `auth_id` or ClickUp IDs). The bot owns rotation.
-2. Complete the development schema preflight below; apply the additive migration to that development project only after approval.
+2. Complete the development schema preflight below; apply the original and amendment migrations in order to that development project only after approval.
 3. Provision an independent dev service credential and random shared HMAC secret securely. Neither is currently supplied by this delivery.
 4. Deploy an approved **HTTPS development CRM** endpoint; configure the bot to send to `POST /api/integrations/whatsapp/events`. No endpoint is deployed by this delivery.
 5. Explicitly enable the receiver and test end-to-end in development. Keep existing ClickUp behavior running until broader parity is independently verified.
@@ -25,7 +25,7 @@ No shared Supabase client, cookie authentication or fallback URL/key is used. UR
 
 ## Authentication and retries
 
-Send `Content-Type: application/json`, UTF-8 body, maximum **65,536 raw bytes** (including whitespace). Unknown fields are rejected by the HTTP validator; use a new agreed schema version for extensions.
+Send `Content-Type: application/json`, UTF-8 body, maximum **65,536 raw bytes** (including whitespace). Unknown fields are rejected. Numeric `schema_version: 1` and signature `v1=` remain unchanged. Omit `protocol_revision` for strict legacy v1; explicitly send `protocol_revision: "1.1"` for the amendment below. Unknown/null revisions reject, including on otherwise valid events.
 
 | Header | Format |
 |---|---|
@@ -83,7 +83,7 @@ Corrections use a **new event ID, same lead/conversation/phone and increasing re
 
 Result: `{"event_id":"evt-20261104-001","crm_customer_id":"<uuid>","crm_opportunity_id":"<uuid>"}`.
 
-### `handoff.created`
+### `handoff.created` — legacy v1
 
 Use the same envelope, replacing `type`, `event_id` and `data`:
 
@@ -124,13 +124,94 @@ This is **not a public HTTP endpoint**. A future authenticated human UI/server a
 
 Direction: `inbound` or `outbound` (history projection, **not an outbound send command**). Text: nonblank, up to 16,000 characters. `sent_at`: UTC ISO date-time with seconds, optional 1–3 fractional digits, `Z` suffix. Source message ID is immutable across conversations. A new event ID with the same message returns the same `crm_message_id`; changed content/conversation conflicts. Results: `event_id`, `crm_message_id`. Text messages only in this v1; attachments/read receipts require future contract work. No continuous inbox UI is connected.
 
-### `ownership.released`
+### `ownership.released` — legacy v1
 
 ```json
 {"version": 3}
 ```
 
 A versioned inbound projection that the bot owns the conversation. Only a higher version updates storage; stale events return the latest `ownership_version`. Result: `event_id`, `ownership_version`, `owner=bot`. It is **not** a scheduler, bot command, SLA timer or proof that an external action occurred. The frontend's existing mock timer is untouched.
+
+## Proposed revision 1.1 (explicit opt-in)
+
+Add `"protocol_revision":"1.1"` at the envelope root. Lead/message schemas and results are unchanged. All unknown fields/types reject, and the HMAC still signs the complete unchanged raw bytes. Do not add amendment fields to legacy envelopes.
+
+### Handoff routing and association
+
+All revision 1.1 handoffs require `handoff_id`, `kind`, `description`, **`reason` and `priority`**. Reason is a stable lowercase snake_case identifier, 1–64 ASCII characters, regex `^[a-z][a-z0-9]*(_[a-z0-9]+)*$` (no leading/trailing/double underscore). Priorities: `urgente`, `alta`, `media`, `baja`.
+
+| Kind | Area | Association and recipients |
+|---|---|---|
+| `commercial` | Required: `sales` or `management` | Supplied/linked opportunity; notify its **current active** commercial seller, never the original bot assignment. Management additionally requires explicit mapped recipients. |
+| `operational` | Required: `finance` or `scheduling` | No opportunity field allowed and no implicit sale link; requires explicit mapped active recipients. |
+| `complaint` | Absent implies `claims`; only explicit `claims` allowed | Existing linked/pending Postventa path, including optional supported `postventa_type`. Case creation does not require a recipient mapping and never invents `responsable_id`; claims notifications require explicit active mapped recipients. |
+
+Opportunity UUID remains optional for commercial/complaint only. A supplied UUID conflicting with the conversation link rejects with `identity_conflict`. An unknown UUID/no known sale remains pending; no opportunity is fabricated. Controlled later association cannot replace an already associated sale or conflict with a conversation link. Existing human assignment/stage/financials/notes/case management are untouched.
+
+```json
+{
+  "schema_version": 1,
+  "protocol_revision": "1.1",
+  "event_id": "commercial-001",
+  "conversation_id": "wa-conversation-123",
+  "type": "handoff.created",
+  "data": {
+    "handoff_id": "commercial-handoff-001",
+    "kind": "commercial",
+    "area": "management",
+    "reason": "manager_requested",
+    "priority": "alta",
+    "description": "Customer requests a manager"
+  }
+}
+```
+
+Revision 1.1 handoff results have exactly the five legacy keys plus `routing_status` (`pending_routing` or `routed`). Status is `associated` or `pending_association` for commercial/complaint, `operational` for operational. Commercial `crm_case_id` is always null; associated complaints have actual case/opportunity UUIDs. Pending association implies null case/opportunity and pending routing. Missing/inactive recipients are never acknowledged as routed. Management may notify the current seller while still pending the required management route. Mapping multiple recipients means fan-out to all active configured users; inactive mappings do not count as delivery targets. Sales ignores area mappings and requires the current active `user`/`admin` seller. No roles/calendar flags are used to guess recipients.
+
+```json
+{"event_id":"commercial-001","external_handoff_id":"commercial-handoff-001","crm_case_id":null,"crm_opportunity_id":null,"status":"pending_association","routing_status":"pending_routing"}
+```
+
+### Service-only routing setup and completion
+
+`whatsapp_area_recipients(area, usuario_id)` is an integration-specific directory; **no real identities are seeded**. An authorized service operator must explicitly configure each required area. These illustrative SQL calls are a future approved-dev setup recipe, **not commands executed by this delivery**. Verify the placeholder users exist and are active before substituting approved development IDs:
+
+```sql
+-- Service-controlled only; placeholder UUIDs, not provisioned recipients.
+INSERT INTO public.whatsapp_area_recipients(area, usuario_id)
+VALUES ('management', '10000000-0000-4000-8000-000000000010')
+ON CONFLICT (area, usuario_id) DO NOTHING;
+
+-- Retry routing an already associated/operational handoff after configuration.
+SELECT public.whatsapp_complete_handoff('commercial-handoff-001');
+-- Associate a pending commercial/complaint with a verified existing development sale and route.
+SELECT public.whatsapp_complete_handoff(
+  'commercial-handoff-001', '20000000-0000-4000-8000-000000000010'::uuid
+);
+```
+
+Completion returns the handoff result without `event_id`. It uses the same lock and complaint case-creation function as ingestion. Reassociation conflicts; unknown supplied service opportunity returns `invalid_opportunity`; operational cannot be associated. Repeated delivery/completion never duplicates notifications for the same handoff+recipient, even if that user is both seller and mapped manager. Changed current seller/new explicit recipients can be notified on completion, without reassigning any domain record. It does not retract old notifications or automatically select recipients. No background retry worker or UI is added: a service operator must complete pending work. The original event result remains immutable after completion; a different event ID with identical handoff identity can return the current status.
+
+### Ownership projection: taken and released
+
+```json
+{"version":4,"crm_seller_id":null,"source":"clickup"}
+```
+
+The data above is for `ownership.taken`, revision 1.1 **only**. `crm_seller_id` must be explicitly present: UUID of an active commercial `user`/`admin`, or null (unattributed human, never inferred). Source must be `clickup`. Released retains data `{"version":5}`. Both share one monotonic sequence per conversation:
+
+- Higher version applies the complete requested state. Release clears seller/source to null; take sets human owner.
+- Lower version returns the complete current authoritative state without mutation (a provided requested seller must still be valid).
+- Equal version/identical complete owner+seller+source returns current state. Equal/different state returns `409 ownership_conflict` with no writes.
+- Exact event replay always returns the originally stored acknowledgement, even after later ownership changes or seller deactivation.
+
+Both revision 1.1 ownership event types return exactly `event_id`, `ownership_version`, `owner`, `crm_seller_id`, `source`. Owner can be `bot` (seller/source null) or `human` (nullable seller, source `clickup`), including a stale release whose authoritative state is human:
+
+```json
+{"event_id":"release-stale","ownership_version":4,"owner":"human","crm_seller_id":null,"source":"clickup"}
+```
+
+**Negotiated compatibility change:** legacy releases retain their exact old result when the authoritative state is representable as bot. If an equal/newer human projection prevents that, legacy releases return `409 protocol_revision_required`, not a false bot acknowledgement and not an overwrite. A higher-version legacy release can still restore bot and returns the old three-key shape. Previously stored legacy event replays remain unchanged. This is not ClickUp takeover implementation, an outbound command, or a scheduler.
 
 ## HTTP response semantics
 
@@ -142,7 +223,7 @@ Every response is JSON with `Cache-Control: no-store`. Success is **200 only aft
 | 400 | `{"error":"invalid_event"}`: malformed JSON/UTF-8, unsupported shape/type, invalid fields |
 | 401 | `{"error":"unauthorized"}`: missing/invalid HMAC, changed bytes, stale/future timestamp |
 | 413 | `{"error":"payload_too_large"}`: over 65,536 raw bytes |
-| 409 | `{"error":"event_conflict"}`, `identity_conflict`, or `revision_conflict`; reconcile identity/revision, do not blind retry |
+| 409 | `{"error":"event_conflict"}`, `identity_conflict`, `revision_conflict`, `ownership_conflict`, or `protocol_revision_required`; reconcile identity/revision, do not blind retry |
 | 422 | `{"error":"rut_required"}`, `invalid_seller`, `ambiguous_customer`, or `invalid_opportunity`; fix prerequisites |
 | 503 | `{"error":"receiver_unavailable"}` (configuration) or `persistence_unavailable` (database/network/unexpected error); retry same bytes/ID with fresh signature |
 
@@ -150,7 +231,7 @@ No secrets, headers, raw bodies or database exception details are logged by the 
 
 ## Persistence and deployment preflight
 
-Migration: `supabase/migrations/20261104120000_whatsapp_events_receiver.sql`. Additive integration tables with RLS enabled; PUBLIC/anon/authenticated data access and function execute explicitly revoked. Only `service_role` receives table/RPC grants. Both RPCs are **SECURITY INVOKER**, with fixed search path. The development service role must already have required domain table grants and RLS bypass. No public security-definer write path is introduced.
+Apply in order, only after approval: original `supabase/migrations/20261104120000_whatsapp_events_receiver.sql`, then additive `supabase/migrations/20261104130000_whatsapp_events_v1_1.sql`. The original migration is unchanged. Additive integration tables with RLS enabled; PUBLIC/anon/authenticated data access and function execute explicitly revoked. Only `service_role` receives table/RPC grants. All RPCs, including completion, are **SECURITY INVOKER**, with fixed search path. `whatsapp_receive_event` is the only event-ingress RPC: the amendment replaces its definition in place and preserves the original lead/message/complaint branches behind the canonical validation, transaction lock and replay guards. There is **no** `public.whatsapp_receive_event_v1` compatibility function or replacement alias; direct calls to that absent function fail with PostgreSQL `42883` (`undefined_function`), including for service callers. Revoking a helper while retaining invoker delegation is not used, and no private/exposed-schema configuration change is required. The development service role must already have required domain table grants and RLS bypass. No public security-definer write path is introduced.
 
 All integration deliveries and association calls serialize on one integration-local transaction advisory lock (174931, 1), with an additional normalized phone advisory lock for customer creation. This conservative approach prioritizes correctness at bounded initial traffic; load/queue sizing remains deployment work. It protects concurrent duplicate event IDs and different events for the same lead/handoff. It does not globally serialize unrelated legacy/manual customer creation; do not run another ingester for these same external identities. No trigger or shared folio generator is replaced. Every error rolls back domain writes and inbox insertion together.
 
@@ -160,7 +241,7 @@ All integration deliveries and association calls serialize on one integration-lo
 node --test tests/whatsapp-events*.test.mjs
 ```
 
-The SQL test starts a **brand-new disposable local PostgreSQL** cluster with TCP disabled and a unique short `/tmp/wa-pg-*` Unix socket directory (short path avoids macOS socket length limits). It ignores ambient PG connection variables, bootstraps minimal roles/domain tables, applies the migration, exercises public RPCs and cleans up in `finally`. No existing database is reset. Installed `initdb`, `pg_ctl`, `postgres`, `psql` are prerequisites; no installer runs. SQL assertions live in `supabase/tests/whatsapp_events_receiver.sql`.
+The SQL test starts a **brand-new disposable local PostgreSQL** cluster with TCP disabled and a unique short `/tmp/wa-pg-*` Unix socket directory (short path avoids macOS socket length limits). It ignores ambient PG connection variables, bootstraps minimal roles/domain tables, applies the original then additive migration, exercises public RPCs and cleans up in `finally`. No existing database is reset. Installed `initdb`, `pg_ctl`, `postgres`, `psql` are prerequisites; no installer runs. SQL assertions live in `supabase/tests/whatsapp_events_receiver.sql` and `supabase/tests/whatsapp_events_v1_1.sql`. Tests include actual denied role calls, complete public-domain rollback snapshots, concurrent routing dedup and crossed ownership transitions. `tests/whatsapp-events-v1-1.test.mjs` also exercises signed POSTs backed by real disposable PostgreSQL RPC transport: attempted stale/equal/higher compatibility releases cannot write an acknowledgement or change any affected row, and raw-SHA256 retries cannot replay a false bot acknowledgement. Legitimate higher canonical releases clear human seller/source; legitimate legacy domain paths retain their existing SQL assertions.
 
 **Fixture compatibility is a limitation, not deployed-schema proof.** `tests/fixtures/whatsapp-events-schema.sql` deliberately models representative fields/constraints from:
 
@@ -171,7 +252,7 @@ The SQL test starts a **brand-new disposable local PostgreSQL** cluster with TCP
 
 ### Before any dev migration/enablement
 
-In the **development project's** SQL editor, verify the project identity is exactly `whbqrracrxmeuyerrbdg` before doing anything. This delivery did not query or migrate that database. Do not derive the target from a shared client's fallback.
+In the **development project's** SQL editor, verify the project identity is exactly `whbqrracrxmeuyerrbdg` before doing anything. A prior exact-development read-only metadata request returned **HTTP401**. `clientes.rut` nullability is **UNVERIFIED**, not confirmed NOT NULL. No remote query/retry or migration was performed in this amendment. See the safe metadata-only query in the bot response. Do not derive the target from a shared client's fallback.
 
 - Inspect actual `information_schema.columns`, `pg_constraint`, `pg_policies`, triggers, defaults and grants for `clientes`, `oportunidades`, `usuarios`, `notificaciones`, `postventa_casos`. Migrations plus the stale snapshot do not fully reconstruct deployed schema.
 - Confirm every inserted column/default and check listed above, commercial roles `admin`/`user`, valid seller UUID mappings, opportunity/customer foreign keys and notification type `sistema`.
@@ -179,8 +260,8 @@ In the **development project's** SQL editor, verify the project identity is exac
 - Check phone ambiguity, existing RUT/other unique constraints and custom domain triggers; unexpected incompatibility fails closed as sanitized 503. The fixture does not prove compatibility with these.
 - Confirm Postventa accepts `recibido`, supported type checks, `PV-WA-<uuid>` folios and explicit folios bypass the shared generator; confirm no additional mandatory fields or incompatible trigger assumptions.
 - Confirm service-only function/data access and service-role domain privileges/RLS behavior; run development smoke probes only after explicit approval and with development test records.
-- Apply the single additive migration only through the approved development migration process; keep the receiver disabled until credentials, HTTPS endpoint and bot contract are ready. There are intentionally no production CLI commands here.
+- Apply both migrations in order only through the approved development migration process; keep the receiver disabled until credentials, HTTPS endpoint and bot contract are ready. There are intentionally no production CLI commands here.
 
 ## Remaining scope (S3 is not fulfilled)
 
-Not implemented: bot-facing outbound take/release/close/send/history endpoints; bidirectional request signing; ownership SLA/reconciliation scheduler, quote-follow-up parity and versioned workflow coordination; bot seller provisioning/rotation configuration; continuous production inbox/history UI; complaint-association UI; correction-review UI; attachment contracts; live HTTPS deployment and bot connection. This unit prepares S1/S2/S4–S7 inbound behavior only. Broader ClickUp parity remains the overall target.
+Not implemented: bot-facing outbound take/release/close/send/history endpoints; bidirectional request signing; ownership SLA/reconciliation scheduler, quote-follow-up parity and versioned workflow coordination; bot seller provisioning/rotation configuration; continuous production inbox/history UI; complaint-association UI; correction-review UI; attachment contracts; live HTTPS deployment and bot connection. This unit prepares S1/S2/S4–S7 inbound behavior and the proposed S9–S10 amendment only; S8 RUT verification remains blocked. Broader ClickUp parity remains the overall target.

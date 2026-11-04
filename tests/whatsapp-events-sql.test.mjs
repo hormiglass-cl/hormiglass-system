@@ -16,7 +16,7 @@ test('S4/S5/S6/S7: service RPC transactions, grants, identities and concurrent d
   try {
     execFileSync('initdb', ['-D', data, '-U', 'postgres', '-A', 'trust', '--no-locale'], opts);
     execFileSync('pg_ctl', ['-D', data, '-l', join(scratch, 'postgres.log'), '-o', `-k ${scratch} -p ${port} -c listen_addresses=''`, '-w', 'start'], opts); started = true;
-    for (const path of ['tests/fixtures/whatsapp-events-schema.sql', 'supabase/migrations/20261104120000_whatsapp_events_receiver.sql', 'supabase/tests/whatsapp_events_receiver.sql']) execFileSync('psql', [...args, '-f', resolve(path)], opts);
+    for (const path of ['tests/fixtures/whatsapp-events-schema.sql', 'supabase/migrations/20261104120000_whatsapp_events_receiver.sql', 'supabase/migrations/20261104130000_whatsapp_events_v1_1.sql', 'supabase/tests/whatsapp_events_receiver.sql', 'supabase/tests/whatsapp_events_v1_1.sql']) execFileSync('psql', [...args, '-f', resolve(path)], opts);
     const event = (eid, lid = 'race-lead') => ({ schema_version: 1, event_id: eid, type: 'lead.qualified', conversation_id: 'race-chat', data: { lead_id: lid, revision: 1, phone: '+56988888888', name: 'Race', rut: 'race-rut', crm_seller_id: '10000000-0000-4000-8000-000000000001', title: 'Race', requirement: 'Glass' } });
     const query = e => `SET ROLE service_role; SELECT whatsapp_receive_event('${JSON.stringify(e)}'::jsonb,repeat(md5('${JSON.stringify(e)}'),2));`;
     const outputs = await Promise.all([event('race-1'), event('race-1'), event('race-2'), event('race-3')].map(e => run('psql', [...args, '-At', '-c', query(e)], opts)));
@@ -28,6 +28,26 @@ test('S4/S5/S6/S7: service RPC transactions, grants, identities and concurrent d
     const cases = await Promise.all(['case-1', 'case-1', 'case-2', 'case-3'].map(eid => run('psql', [...args, '-At', '-c', query(handoff(eid))], opts)));
     assert.equal(new Set(cases.map(o => JSON.parse(o.stdout.trim().split('\n').at(-1)).crm_case_id)).size, 1);
     assert.equal(execFileSync('psql', [...args, '-At', '-c', "SELECT count(*) FROM postventa_casos WHERE descripcion='Concurrent complaint'"], opts).trim(), '1');
+    const commercial = eid => ({ schema_version: 1, protocol_revision: '1.1', event_id: eid, type: 'handoff.created', conversation_id: 'race-chat', data: { handoff_id: 'race-commercial', kind: 'commercial', area: 'management', reason: 'race_requested', priority: 'alta', description: 'Concurrent commercial' } });
+    const deliveries = await Promise.all(['commercial-1', 'commercial-1', 'commercial-2', 'commercial-3'].map(eid => run('psql', [...args, '-At', '-c', query(commercial(eid))], opts)));
+    assert.equal(new Set(deliveries.map(o => o.stdout)).size, 3, 'same-event replay has exact original JSON');
+    for (const o of deliveries) assert.equal(JSON.parse(o.stdout.trim().split('\n').at(-1)).routing_status, 'routed');
+    const completion = "SET ROLE service_role; SELECT whatsapp_complete_handoff('race-commercial');";
+    await Promise.all([1, 2, 3].map(() => run('psql', [...args, '-At', '-c', completion], opts)));
+    assert.equal(execFileSync('psql', [...args, '-At', '-c', "SELECT count(*) FROM notificaciones WHERE mensaje='Derivación WhatsApp: race_requested'"], opts).trim(), '1', 'mapped management and current seller overlap is deduplicated');
+    const ownership = (eid, type, version, seller = null) => ({ schema_version: 1, protocol_revision: '1.1', event_id: eid, type, conversation_id: 'race-ownership', data: type === 'ownership.taken' ? { version, crm_seller_id: seller, source: 'clickup' } : { version } });
+    const same = await Promise.allSettled([ownership('take-equal', 'ownership.taken', 20), ownership('release-equal', 'ownership.released', 20)].map(e => run('psql', [...args, '-At', '-c', query(e)], opts)));
+    assert.equal(same.filter(x => x.status === 'fulfilled').length, 1);
+    assert.match(same.find(x => x.status === 'rejected').reason.stderr, /ERROR:  ownership_conflict/);
+    const taken = ownership('take-higher', 'ownership.taken', 22, '10000000-0000-4000-8000-000000000001');
+    const crossed = await Promise.all([taken, ownership('release-lower', 'ownership.released', 21)].map(e => run('psql', [...args, '-At', '-c', query(e)], opts)));
+    const original = JSON.parse(crossed[0].stdout.trim().split('\n').at(-1));
+    assert.deepEqual(original, { event_id: 'take-higher', ownership_version: 22, owner: 'human', crm_seller_id: taken.data.crm_seller_id, source: 'clickup' });
+    const stale = JSON.parse(execFileSync('psql', [...args, '-At', '-c', query(ownership('query-current', 'ownership.released', 1))], opts).trim().split('\n').at(-1));
+    assert.deepEqual({ ...stale, event_id: original.event_id }, original);
+    execFileSync('psql', [...args, '-At', '-c', query(ownership('final-release', 'ownership.released', 23))], opts);
+    const replay = JSON.parse(execFileSync('psql', [...args, '-At', '-c', query(taken)], opts).trim().split('\n').at(-1));
+    assert.deepEqual(replay, original, 'original human result is immutable after later bot release');
   } catch (error) {
     const log = join(scratch, 'postgres.log');
     if (existsSync(log)) console.error(readFileSync(log, 'utf8'));

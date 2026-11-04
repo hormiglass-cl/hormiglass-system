@@ -15,6 +15,7 @@ export class PersistenceError extends Error {
 }
 const knownErrors: Record<string, number> = {
   event_conflict: 409, identity_conflict: 409, revision_conflict: 409,
+  ownership_conflict: 409, protocol_revision_required: 409,
   rut_required: 422, invalid_seller: 422, ambiguous_customer: 422,
   invalid_opportunity: 422, invalid_event: 400,
 };
@@ -51,11 +52,34 @@ export async function persistEvent(config: NonNullable<ReturnType<typeof receive
         valid = uuid(result.crm_customer_id) && uuid(result.crm_opportunity_id); break;
       case 'message.new':
         keys = ['event_id', 'crm_message_id']; valid = uuid(result.crm_message_id); break;
-      case 'ownership.released':
+      case 'ownership.taken':
+      case 'ownership.released': {
         keys = ['event_id', 'ownership_version', 'owner'];
-        valid = result.owner === 'bot' && Number.isInteger(result.ownership_version) && result.ownership_version >= Number(event.data.version); break;
+        valid = Number.isInteger(result.ownership_version) && result.ownership_version >= Number(event.data.version) && result.ownership_version <= 2147483647;
+        if (event.protocol_revision === '1.1') {
+          keys.push('crm_seller_id', 'source');
+          valid = valid && ((result.owner === 'bot' && result.crm_seller_id === null && result.source === null)
+            || (result.owner === 'human' && (result.crm_seller_id === null || uuid(result.crm_seller_id)) && result.source === 'clickup'));
+          if (result.ownership_version === event.data.version) {
+            valid = valid && (event.type === 'ownership.released' ? result.owner === 'bot'
+              : result.owner === 'human' && (result.crm_seller_id === event.data.crm_seller_id
+                || (typeof result.crm_seller_id === 'string' && typeof event.data.crm_seller_id === 'string' && result.crm_seller_id.toLowerCase() === event.data.crm_seller_id.toLowerCase())) && result.source === event.data.source);
+          }
+        } else valid = valid && result.owner === 'bot';
+        break;
+      }
       case 'handoff.created':
         keys = ['event_id', 'external_handoff_id', 'crm_case_id', 'crm_opportunity_id', 'status'];
+        if (event.protocol_revision === '1.1') {
+          keys.push('routing_status');
+          valid = result.external_handoff_id === event.data.handoff_id
+            && ['pending_routing', 'routed'].includes(result.routing_status)
+            && ((event.data.kind === 'operational' && result.status === 'operational' && result.crm_case_id === null && result.crm_opportunity_id === null)
+              || (event.data.kind !== 'operational' && result.status === 'pending_association' && result.crm_case_id === null && result.crm_opportunity_id === null && result.routing_status === 'pending_routing')
+              || (event.data.kind === 'commercial' && result.status === 'associated' && result.crm_case_id === null && uuid(result.crm_opportunity_id))
+              || (event.data.kind === 'complaint' && result.status === 'associated' && uuid(result.crm_case_id) && uuid(result.crm_opportunity_id)));
+          break;
+        }
         valid = result.external_handoff_id === event.data.handoff_id && (
           (result.status === 'associated' && event.data.kind === 'complaint' && uuid(result.crm_case_id) && uuid(result.crm_opportunity_id)) ||
           (result.status === (event.data.kind === 'complaint' ? 'pending_association' : 'operational') && result.crm_case_id === null && result.crm_opportunity_id === null)
