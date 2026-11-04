@@ -35,6 +35,11 @@ function getAuthCookieSignature(request: NextRequest): string {
  * Optimizado con caché en memoria para eliminar latencia en navegación interna.
  */
 export async function proxy(request: NextRequest) {
+  // This exact service endpoint authenticates raw bytes with HMAC, never cookies.
+  // Keep before cookie reads/client creation (the legacy client has a prod fallback).
+  if (request.nextUrl.pathname === '/api/integrations/whatsapp/events') {
+    return NextResponse.next({ request });
+  }
   let supabaseResponse = NextResponse.next({ request });
   const { pathname } = request.nextUrl;
   const publicPath = isPublicPath(pathname);
