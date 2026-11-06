@@ -21,9 +21,9 @@ export function FinancialBalanceCard({
   const percentPendiente = 100 - percentRecaudado;
 
   return (
-    <div className="space-y-5 rounded-panel border border-line bg-surface p-5">
+    <div className="space-y-5 rounded-[20px] border border-line bg-surface p-6">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-line-subtle pb-3">
+      <div className="flex items-center justify-between pb-1">
         <div>
           <div className="flex items-center gap-2">
             <span className="grid h-7 w-7 place-items-center rounded-control bg-success-soft text-success">

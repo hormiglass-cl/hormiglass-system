@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {
   validarRutChileno,
   parseProveedoresCsv,
-  parseProveedoresData,
   parseProveedoresFile,
   generarPlantillaProveedoresCsv,
   generarPlantillaProveedoresXlsx,

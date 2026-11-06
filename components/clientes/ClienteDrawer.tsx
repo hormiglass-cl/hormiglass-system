@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Cliente, OportunidadVenta, Usuario } from '../../lib/types';
 import { SlideOverDrawer } from '../ui/SlideOverDrawer';
 import { AvatarBadge } from '../ui/AvatarBadge';
-import { CodeStamp, StatusBadge } from '../ui/crm';
+import { CodeStamp } from '../ui/crm';
 import { Mail, Phone, MapPin, Building, Briefcase, TrendingUp } from 'lucide-react';
 
 interface ClienteDrawerProps {
@@ -174,7 +174,7 @@ export function ClienteDrawer({
                 return (
                   <Link
                     key={op.id}
-                    href={`/ventas/${op.id}`}
+                    href={`/ventas?oportunidad=${op.id}`}
                     className="flex items-center justify-between p-2.5 rounded-control border border-line bg-surface hover:bg-surface-muted transition group"
                   >
                     <div className="min-w-0 flex-1">

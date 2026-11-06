@@ -2,7 +2,7 @@
 
 import React from 'react';
 import clsx from 'clsx';
-import { TrendingUp, TrendingDown, Minus, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, Info } from 'lucide-react';
 import type { Tone } from './crm';
 
 export interface MetricCardProps {
@@ -38,48 +38,49 @@ export function MetricCard({
 }: MetricCardProps) {
   const isClickable = !!onClick;
 
+  const tint =
+    tone === 'accent' ? 'bg-accent-soft'
+    : tone === 'success' ? 'bg-success-soft'
+    : tone === 'warning' ? 'bg-warning-soft'
+    : tone === 'danger' ? 'bg-danger-soft'
+    : tone === 'info' ? 'bg-info-soft'
+    : 'bg-surface-muted';
+
   return (
     <div
       onClick={onClick}
       role={isClickable ? 'button' : undefined}
       tabIndex={isClickable ? 0 : undefined}
       className={clsx(
-        'rounded-panel border border-line bg-surface p-4 transition shadow-xs',
-        isClickable && 'hover:border-accent hover:shadow-sm cursor-pointer',
+        'rounded-[20px] p-5 transition',
+        tint,
+        isClickable && 'cursor-pointer hover:shadow-sm',
         className
       )}
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className="t-caption text-ink-muted font-medium truncate">{title}</span>
-        {Icon && (
-          <span className={clsx(
-            'grid h-8 w-8 place-items-center rounded-control',
-            tone === 'accent' && 'bg-accent-soft text-accent-ink',
-            tone === 'success' && 'bg-success-soft text-success',
-            tone === 'warning' && 'bg-warning-soft text-warning',
-            tone === 'danger' && 'bg-danger-soft text-danger',
-            tone === 'info' && 'bg-info-soft text-info',
-            (!tone || tone === 'neutral') && 'bg-surface-muted text-ink-muted'
-          )}>
-            <Icon size={16} aria-hidden />
-          </span>
-        )}
-      </div>
+      {Icon && (
+        <span className="grid h-10 w-10 place-items-center rounded-xl bg-ink text-surface">
+          <Icon size={18} aria-hidden />
+        </span>
+      )}
 
-      <div className="mt-2 flex items-baseline justify-between gap-3">
-        <div className="text-2xl font-bold tracking-tight text-ink t-num truncate">
-          {value}
+      <div className="mt-4 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-[28px] font-bold leading-none tracking-tight text-ink t-num">
+            {value}
+          </div>
+          <span className="mt-2 block truncate text-xs font-semibold uppercase tracking-wide text-ink-muted">{title}</span>
         </div>
 
         {change && (
           <span
             className={clsx(
-              'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold shrink-0',
+              'inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold',
               change.trend === 'up'
-                ? 'bg-success-soft text-success border border-success-line'
+                ? 'bg-success text-white'
                 : change.trend === 'down'
-                ? 'bg-danger-soft text-danger border border-danger-line'
-                : 'bg-surface-muted text-ink-muted border border-line'
+                ? 'bg-danger text-white'
+                : 'bg-surface text-ink-muted'
             )}
             title={change.label || undefined}
           >
@@ -87,16 +88,14 @@ export function MetricCard({
               <TrendingUp size={12} aria-hidden />
             ) : change.trend === 'down' ? (
               <TrendingDown size={12} aria-hidden />
-            ) : (
-              <Minus size={12} aria-hidden />
-            )}
+            ) : null}
             <span>{change.value}</span>
           </span>
         )}
       </div>
 
       {subtitle && (
-        <p className="mt-1 text-xs text-ink-muted truncate">{subtitle}</p>
+        <p className="mt-2 truncate text-xs text-ink-muted">{subtitle}</p>
       )}
 
       {progress && (

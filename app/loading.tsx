@@ -1,6 +1,15 @@
+'use client';
+
 import React from 'react';
+import { usePathname } from 'next/navigation';
+import { AuthLoading } from '../components/auth/AuthShell';
 
 export default function Loading() {
+  const pathname = usePathname();
+  // Entre pantallas de acceso se mantiene la escena oscura: el esqueleto claro de la app
+  // provocaba un destello blanco al ir de /login a /auth/recuperar (y de vuelta).
+  if (pathname === '/login' || pathname.startsWith('/auth')) return <AuthLoading />;
+
   return (
     <div className="space-y-6 animate-pulse" aria-busy="true" aria-label="Cargando contenido">
       {/* Skeleton del encabezado */}

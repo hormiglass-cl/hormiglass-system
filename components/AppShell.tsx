@@ -1,22 +1,39 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
+import { CommandPalette } from './CommandPalette';
 import { BreadcrumbProvider } from '../lib/context/BreadcrumbContext';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  // Las pantallas de acceso no usan el marco: así no leen la URL durante el prerender.
+  if (pathname === '/login' || pathname.startsWith('/auth')) return <main>{children}</main>;
+  return <AppFrame pathname={pathname}>{children}</AppFrame>;
+}
+
+function AppFrame({ pathname, children }: { pathname: string; children: React.ReactNode }) {
   const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [isNavigating, setIsNavigating] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
+  // Atajo ⌘K / Ctrl K: abre el buscador desde cualquier pantalla.
   useEffect(() => {
-    setIsNavigating(false);
-  }, [pathname, searchParams]);
-
-  if (pathname === '/login' || pathname.startsWith('/auth')) return <main>{children}</main>;
+    function keydown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setPaletteOpen(true);
+      }
+    }
+    window.addEventListener('keydown', keydown);
+    return () => window.removeEventListener('keydown', keydown);
+  }, []);
+  // La barra de progreso se enciende al pulsar un enlace y se apaga sola cuando cambia la ubicación.
+  const locationKey = `${pathname}?${searchParams.toString()}`;
+  const [navigatingFrom, setNavigatingFrom] = useState<string | null>(null);
+  const isNavigating = navigatingFrom === locationKey;
 
   return (
     <BreadcrumbProvider>
@@ -32,7 +49,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Sidebar
           mobileOpen={mobileOpen}
           onMobileClose={() => setMobileOpen(false)}
-          onNavigate={() => setIsNavigating(true)}
+          onNavigate={() => setNavigatingFrom(locationKey)}
+          onSearch={() => setPaletteOpen(true)}
         />
         <div className="flex min-h-screen min-w-0 flex-1 flex-col">
           <Navbar onMenuClick={() => setMobileOpen(true)} />
@@ -42,6 +60,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </main>
         </div>
+        {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
       </div>
     </BreadcrumbProvider>
   );

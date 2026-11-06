@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '../../../lib/supabase/client';
 import { useAuth } from '../../../lib/context/AuthContext';
+import { useBreadcrumb } from '../../../lib/context/BreadcrumbContext';
 import {
   Cliente,
   NotaActividad,
@@ -45,7 +46,6 @@ import {
   UserCheck,
   Edit,
   Save,
-  CheckCircle,
   Bell,
   PhoneCall,
   Calendar,
@@ -118,12 +118,15 @@ function buildReminderDate(fechaRecordatorio: string, horaRecordatorio?: string 
   return new Date(`${getDateOnly(fechaRecordatorio)}T${normalizeTime(horaRecordatorio)}`);
 }
 
-type ReclamoActividadRow = {
+type OpActividadRow = {
   id: string;
   contenido: string;
   created_at: string;
   usuario_nombre?: string;
+  tipo?: string;
   oportunidad_id: string;
+  fecha_recordatorio?: string | null;
+  hora_recordatorio?: string | null;
 };
 
 const STAGE_CONFIG: Record<string, { label: string; area: string; tone: Tone }> = {
@@ -195,6 +198,11 @@ export default function ClienteDetailPage() {
   const supabase = useMemo(() => createClient(), []);
 
   const [cliente, setCliente] = useState<Cliente | null>(null);
+  const { setCustomTitle: setBreadcrumbTitle } = useBreadcrumb();
+  useEffect(() => {
+    setBreadcrumbTitle(cliente?.nombre ?? null);
+    return () => setBreadcrumbTitle(null);
+  }, [cliente?.nombre, setBreadcrumbTitle]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -258,6 +266,19 @@ export default function ClienteDetailPage() {
   const [deliveryAccreditation, setDeliveryAccreditation] = useState<Record<string, boolean>>({});
   const [usuariosList, setUsuariosList] = useState<Usuario[]>([]);
   const [eventosList, setEventosList] = useState<EventoProduccionLogistica[]>([]);
+  const [actividadesOpList, setActividadesOpList] = useState<
+    {
+      id: string;
+      contenido: string;
+      created_at: string;
+      usuario_nombre?: string;
+      tipo: string;
+      oportunidad_id: string;
+      oportunidad_codigo: string;
+      fecha_recordatorio?: string | null;
+      hora_recordatorio?: string | null;
+    }[]
+  >([]);
   const [reclamosList, setReclamosList] = useState<{ id: string; contenido: string; created_at: string; usuario_nombre?: string; oportunidad_codigo?: string }[]>([]);
 
   // Modales
@@ -287,8 +308,8 @@ export default function ClienteDetailPage() {
         ]);
 
         if (ignore) return;
-        if (usersRes.error) throw usersRes.error;
-        if (nichosRes.error) throw nichosRes.error;
+        if (usersRes.error) console.warn('Ficha cliente: no se cargaron los usuarios:', mensajeError(usersRes.error));
+        if (nichosRes.error) console.warn('Ficha cliente: no se cargaron los nichos:', mensajeError(nichosRes.error));
 
         if (usersRes.data) {
           setUsuariosList(usersRes.data as Usuario[]);
@@ -345,7 +366,7 @@ export default function ClienteDetailPage() {
           .select('*, usuario:usuarios(*)')
           .eq('cliente_id', currentCli.id)
           .order('fecha', { ascending: false });
-        if (notesError) throw notesError;
+        if (notesError) console.warn('Ficha cliente: no se cargaron las notas:', mensajeError(notesError));
 
         if (!ignore) {
           setNotas(notesData ? (notesData as NotaActividad[]) : []);
@@ -357,7 +378,7 @@ export default function ClienteDetailPage() {
           .select('*, items:cotizacion_items(*)')
           .eq('cliente_id', currentCli.id)
           .order('created_at', { ascending: false });
-        if (quotesError) throw quotesError;
+        if (quotesError) console.warn('Ficha cliente: no se cargaron las cotizaciones:', mensajeError(quotesError));
 
         if (!ignore) {
           setCotizaciones(quotesData ? (quotesData as Cotizacion[]) : []);
@@ -367,7 +388,7 @@ export default function ClienteDetailPage() {
         const { data: opData, error: opError } = await supabase
           .from('oportunidades')
           .select('*, cliente:clientes(*), cotizaciones:cotizaciones!cotizaciones_oportunidad_id_fkey(*)');
-        if (opError) throw opError;
+        if (opError) console.warn('Ficha cliente: no se cargaron las oportunidades:', mensajeError(opError));
 
         let matchedOps: OportunidadVenta[] = [];
         if (opData) {
@@ -381,17 +402,17 @@ export default function ClienteDetailPage() {
           const { data: accreditationRows, error: accreditationError } = closedIds.length
             ? await supabase.rpc('estado_entrega_acreditada', { p_ventas: closedIds })
             : { data: [], error: null };
-          if (accreditationError) throw accreditationError;
+          if (accreditationError) console.warn('Ficha cliente: no se cargó la acreditación de entrega:', mensajeError(accreditationError));
           if (!ignore) setDeliveryAccreditation(Object.fromEntries(((accreditationRows || []) as { venta_id: string; acreditada: boolean }[]).map((row) => [row.venta_id, row.acreditada])));
           if (!ignore) setOportunidades(matchedOps);
         } else {
           if (!ignore) { setOportunidades([]); setDeliveryAccreditation({}); }
         }
 
-        // 4. Fetch Events & Reclamos
+        // 4. Fetch Events & Todas las Actividades Operativas / Comerciales de las Oportunidades
         const opIds = matchedOps.map((o) => o.id);
         if (opIds.length > 0) {
-          const [evRes, reclamosRes] = await Promise.all([
+          const [evRes, actOpRes] = await Promise.all([
             supabase
               .from('eventos_produccion_logistica')
               .select('*, responsable:usuarios!responsable_id(*)')
@@ -399,33 +420,38 @@ export default function ClienteDetailPage() {
               .order('fecha_inicio', { ascending: false }),
             supabase
               .from('actividades_op')
-              .select('id, contenido, created_at, usuario_nombre, tipo, oportunidad_id')
+              .select('id, contenido, created_at, usuario_nombre, tipo, oportunidad_id, fecha_recordatorio, hora_recordatorio')
               .in('oportunidad_id', opIds)
-              .eq('tipo', 'reclamo')
               .order('created_at', { ascending: false }),
           ]);
-          if (evRes.error) throw evRes.error;
-          if (reclamosRes.error) throw reclamosRes.error;
+          if (evRes.error) console.warn('Ficha cliente: no se cargaron los eventos:', mensajeError(evRes.error));
+          if (actOpRes.error) console.warn('Ficha cliente: no se cargó la actividad:', mensajeError(actOpRes.error));
 
           if (!ignore) {
             if (evRes.data) setEventosList(evRes.data as EventoProduccionLogistica[]);
-            if (reclamosRes.data) {
-              const mappedReclamos = (reclamosRes.data as ReclamoActividadRow[]).map((r) => {
+            if (actOpRes.data) {
+              const allOpActs = (actOpRes.data as OpActividadRow[]).map((r) => {
                 const parentOp = matchedOps.find((o) => o.id === r.oportunidad_id);
                 return {
                   id: r.id,
                   contenido: r.contenido,
                   created_at: r.created_at,
                   usuario_nombre: r.usuario_nombre,
+                  tipo: r.tipo || 'comentario',
+                  oportunidad_id: r.oportunidad_id,
                   oportunidad_codigo: parentOp?.codigo || 'OP',
+                  fecha_recordatorio: r.fecha_recordatorio,
+                  hora_recordatorio: r.hora_recordatorio,
                 };
               });
-              setReclamosList(mappedReclamos);
+              setActividadesOpList(allOpActs);
+              setReclamosList(allOpActs.filter((r) => r.tipo === 'reclamo'));
             }
           }
         } else {
           if (!ignore) {
             setEventosList([]);
+            setActividadesOpList([]);
             setReclamosList([]);
           }
         }
@@ -435,7 +461,7 @@ export default function ClienteDetailPage() {
           setLoading(false);
         }
       } catch (err) {
-        console.error('Error loading client detail from Supabase:', err);
+        console.error('Error loading client detail from Supabase:', mensajeError(err), err);
         if (!ignore) {
           setLoadError('No se pudo cargar la ficha del cliente. Reintenta más tarde.');
           setLoading(false);
@@ -672,9 +698,37 @@ export default function ClienteDetailPage() {
   candidateActivities.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
   const proximaActividad = candidateActivities[0] || null;
 
-  const filteredNotas = notas.filter((n) => {
+  const unifiedTimeline = [
+    ...notas.map((n) => ({
+      id: `cli-${n.id}`,
+      origen: 'cliente' as const,
+      tipo: n.tipo_actividad || 'nota',
+      contenido: n.contenido,
+      fecha: n.fecha,
+      usuario_nombre: n.usuario?.nombre || 'Usuario CRM',
+      fecha_recordatorio: n.fecha_recordatorio,
+      hora_recordatorio: n.hora_recordatorio,
+      oportunidad_id: undefined as string | undefined,
+      oportunidad_codigo: undefined as string | undefined,
+    })),
+    ...actividadesOpList.map((a) => ({
+      id: `op-${a.id}`,
+      origen: 'oportunidad' as const,
+      tipo: a.tipo || 'comentario',
+      contenido: a.contenido,
+      fecha: a.created_at,
+      usuario_nombre: a.usuario_nombre || 'Sistema',
+      fecha_recordatorio: a.fecha_recordatorio,
+      hora_recordatorio: a.hora_recordatorio,
+      oportunidad_id: a.oportunidad_id,
+      oportunidad_codigo: a.oportunidad_codigo,
+    })),
+  ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+  const filteredTimeline = unifiedTimeline.filter((item) => {
     if (filtroActividadTipo === 'todos') return true;
-    return n.tipo_actividad === filtroActividadTipo;
+    if (filtroActividadTipo === 'oportunidades') return item.origen === 'oportunidad';
+    return item.tipo === filtroActividadTipo;
   });
 
   if (loading) {
@@ -711,7 +765,7 @@ export default function ClienteDetailPage() {
   }
 
   const tabItems = [
-    { id: 'actividad', label: 'Actividad', count: notas.length },
+    { id: 'actividad', label: 'Actividad', count: unifiedTimeline.length },
     { id: 'notas', label: 'Notas & recordatorios' },
     { id: 'reclamos', label: 'Reclamos / postventa', count: reclamosList.length },
     { id: 'metricas', label: 'Resumen & métricas' },
@@ -1109,7 +1163,7 @@ export default function ClienteDetailPage() {
           <Tabs items={tabItems} active={activeTab} onChange={(id) => setActiveTab(id as typeof activeTab)} />
 
           <div className="p-5">
-            {/* PESTAÑA 1: TIMELINE DE ACTIVIDAD */}
+            {/* PESTAÑA 1: TIMELINE DE ACTIVIDAD UNIFICADO (CLIENTE + OPORTUNIDADES) */}
             {activeTab === 'actividad' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between gap-2 border-b border-line-subtle pb-3">
@@ -1122,20 +1176,22 @@ export default function ClienteDetailPage() {
                     onChange={(e) => setFiltroActividadTipo(e.target.value)}
                     className="hg-field min-h-8 py-1 text-xs font-semibold w-auto"
                   >
-                    <option value="todos">Toda la actividad ({notas.length})</option>
+                    <option value="todos">Toda la actividad ({unifiedTimeline.length})</option>
+                    <option value="oportunidades">Bitácora de oportunidades ({actividadesOpList.length})</option>
                     <option value="nota">Notas generales</option>
                     <option value="reunion">Reuniones</option>
                     <option value="llamada">Llamadas telefónicas</option>
                     <option value="recordatorio">Recordatorios</option>
+                    <option value="seguimiento">Seguimientos comerciales</option>
                   </select>
                 </div>
 
                 <div className="space-y-3">
-                  {filteredNotas.length === 0 ? (
+                  {filteredTimeline.length === 0 ? (
                     <EmptyState
                       icon={MessageSquare}
                       title="Sin actividades registradas"
-                      description="No hay notas ni recordatorios que coincidan con el filtro seleccionado."
+                      description="No hay notas ni registros de oportunidades que coincidan con el filtro seleccionado."
                       action={
                         <Button variant="secondary" size="sm" onClick={() => setActiveTab('notas')}>
                           Crear una nota
@@ -1143,8 +1199,8 @@ export default function ClienteDetailPage() {
                       }
                     />
                   ) : (
-                    filteredNotas.map((n) => {
-                      const isReminder = n.tipo_actividad === 'recordatorio';
+                    filteredTimeline.map((n) => {
+                      const isReminder = n.tipo === 'recordatorio' || n.tipo === 'seguimiento';
                       return (
                         <div
                           key={n.id}
@@ -1154,21 +1210,29 @@ export default function ClienteDetailPage() {
                               : 'bg-surface border-line text-ink'
                           }`}
                         >
-                          <div className="flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                            <div className="flex flex-wrap items-center gap-2">
                               {isReminder ? (
                                 <Bell size={15} className="text-warning" aria-hidden />
-                              ) : n.tipo_actividad === 'llamada' ? (
+                              ) : n.tipo === 'llamada' ? (
                                 <PhoneCall size={15} className="text-info" aria-hidden />
-                              ) : n.tipo_actividad === 'reunion' ? (
+                              ) : n.tipo === 'reunion' ? (
                                 <UserCheck size={15} className="text-success" aria-hidden />
                               ) : (
                                 <FileCheck size={15} className="text-accent-ink" aria-hidden />
                               )}
-                              <span className="font-semibold text-ink">{n.usuario?.nombre || 'Usuario CRM'}</span>
+                              <span className="font-semibold text-ink">{n.usuario_nombre}</span>
                               <StatusBadge tone={isReminder ? 'warning' : 'neutral'}>
-                                {n.tipo_actividad || 'nota'}
+                                {n.tipo}
                               </StatusBadge>
+                              {n.oportunidad_id && n.oportunidad_codigo && (
+                                <Link
+                                  href={`/ventas?oportunidad=${n.oportunidad_id}`}
+                                  title="Abrir oportunidad en Ventas"
+                                >
+                                  <CodeStamp>{n.oportunidad_codigo}</CodeStamp>
+                                </Link>
+                              )}
                             </div>
                             <span className="t-caption text-ink-muted t-num">
                               {formatSantiagoDateTime(n.fecha)}

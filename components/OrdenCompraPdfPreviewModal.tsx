@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import { OrdenCompra } from '../lib/types';
 import { CheckCircle, FileText, Printer, X } from 'lucide-react';
@@ -209,7 +210,7 @@ function buildPrintHtml(orden: OrdenCompra) {
 }
 
 export function OrdenCompraPdfPreviewModal({ orden, onClose }: OrdenCompraPdfPreviewModalProps) {
-  if (!orden) return null;
+  if (!orden || typeof document === 'undefined') return null;
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
@@ -221,9 +222,9 @@ export function OrdenCompraPdfPreviewModal({ orden, onClose }: OrdenCompraPdfPre
   const displayItems = orden.items || [];
   const blanks = Array.from({ length: Math.max(0, 8 - displayItems.length) });
 
-  return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
-      <div className="bg-white border border-gray-200 rounded-lg max-w-5xl w-full p-6 space-y-5 shadow-sm text-[#213343] max-h-[92vh] flex flex-col">
+  return createPortal(
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
+      <div className="bg-white border border-gray-200 rounded-lg max-w-5xl w-full p-6 space-y-5 shadow-sm text-[#213343] max-h-[calc(100dvh-2rem)] flex flex-col">
         <div className="flex items-center justify-between border-b border-gray-200 pb-4 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-orange-50 text-[#f97316] rounded-lg flex items-center justify-center border border-orange-200">
@@ -384,6 +385,7 @@ export function OrdenCompraPdfPreviewModal({ orden, onClose }: OrdenCompraPdfPre
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

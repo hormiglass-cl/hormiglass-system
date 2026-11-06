@@ -24,6 +24,14 @@
   --hg-warning: #8a5300;  --hg-warning-soft: #fff4dc;  --hg-warning-border: #f1d79c;
   --hg-danger: #a8261f;   --hg-danger-soft: #fdecea;   --hg-danger-border: #f3c1bc;
   --hg-info: #2c5a94;     --hg-info-soft: #eaf1fa;     --hg-info-border: #bfd3ec;
+  /* Escena nocturna (barra lateral y pantallas de acceso): carbón de marca con acento naranja */
+  --hg-night-top: #2d2b29;
+  --hg-night: #1d1c1b;
+  --hg-night-deep: #141413;
+  --hg-night-ink: #ffffff;
+  --hg-night-muted: #d2cec6;   /* 11:1 sobre --hg-night */
+  --hg-night-soft: #a9a59d;    /* 7:1 sobre --hg-night: placeholders y rótulos */
+  --hg-night-link: #ffb866;
   /* Forma */
   --hg-radius-sm: 6px;
   --hg-radius: 8px;
@@ -64,6 +72,13 @@
   --color-info: var(--hg-info);
   --color-info-soft: var(--hg-info-soft);
   --color-info-line: var(--hg-info-border);
+  --color-night-top: var(--hg-night-top);
+  --color-night: var(--hg-night);
+  --color-night-deep: var(--hg-night-deep);
+  --color-night-ink: var(--hg-night-ink);
+  --color-night-muted: var(--hg-night-muted);
+  --color-night-soft: var(--hg-night-soft);
+  --color-night-link: var(--hg-night-link);
   --radius-control: var(--hg-radius-sm);
   --radius-panel: var(--hg-radius-lg);
 }
@@ -269,4 +284,10 @@ button:active:not(:disabled) {
 @media print {
   .hg-app-sidebar, .hg-app-header { display: none !important; }
   .hg-app-main { padding: 0 !important; }
+}
+
+/* Pantallas de acceso: fondo oscuro, el anillo de foco necesita el naranja claro (≥3:1). */
+.hg-auth :where(button, a, input, select, textarea, [tabindex]):focus-visible,
+.hg-night :where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline-color: var(--hg-accent);
 }

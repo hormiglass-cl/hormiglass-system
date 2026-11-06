@@ -20,24 +20,26 @@ interface DonutChartProps {
   centerLabel?: string;
   centerValue?: string;
   showAmountInLegend?: boolean;
+  /** Versión baja, para apilar con otras tarjetas. */
+  compact?: boolean;
 }
 
 export function DonutChart({
   title,
-  subtitle,
   icon: IconComponent,
   segments,
   centerLabel,
   centerValue,
   showAmountInLegend = true,
+  compact = false,
 }: DonutChartProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   const totalValue = segments.reduce((sum, s) => sum + s.value, 0);
 
   // SVG Geometry for Donut
-  const size = 200;
-  const strokeWidth = 26;
+  const size = compact ? 176 : 200;
+  const strokeWidth = compact ? 22 : 26;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const center = size / 2;
@@ -61,9 +63,9 @@ export function DonutChart({
   }, [segments, totalValue, circumference]);
 
   return (
-    <div className="flex flex-col justify-between rounded-panel border border-line bg-surface p-5">
+    <div className="flex h-full flex-col justify-between rounded-[20px] border border-line bg-surface p-6">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-line-subtle pb-3">
+      <div className="flex items-center justify-between pb-1">
         <div>
           <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
             {IconComponent && (
@@ -73,9 +75,6 @@ export function DonutChart({
             )}
             <span>{title}</span>
           </h3>
-          {subtitle && (
-            <p className="t-caption mt-0.5 text-ink-muted">{subtitle}</p>
-          )}
         </div>
       </div>
 
@@ -84,7 +83,7 @@ export function DonutChart({
           No hay datos registrados en este período.
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-6 py-2 sm:flex-row">
+        <div className={`flex flex-col items-center sm:flex-row ${compact ? 'gap-5 pt-3' : 'gap-6 py-2'}`}>
           {/* Donut SVG con Centro */}
           <div className="relative flex shrink-0 items-center justify-center">
             <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90 transform">
@@ -134,7 +133,7 @@ export function DonutChart({
           </div>
 
           {/* Leyenda y Desglose */}
-          <div className="w-full flex-1 space-y-2 text-xs">
+          <div className={`w-full flex-1 text-xs ${compact ? 'space-y-1' : 'space-y-2'}`}>
             {segments.map((seg) => {
               const pct = totalValue > 0 ? Math.round((seg.value / totalValue) * 100) : 0;
               const isHovered = hoveredId === seg.id;
@@ -161,7 +160,7 @@ export function DonutChart({
 
                   <div className="flex items-center justify-between pt-0.5 text-[11px] text-ink-muted">
                     <span>
-                      {seg.value} {seg.sublabel || 'registros'}
+                      {seg.value}{compact ? '' : ` ${seg.sublabel || 'registros'}`}
                     </span>
                     {showAmountInLegend && seg.monto !== undefined && (
                       <span className="t-num font-semibold text-accent-ink">

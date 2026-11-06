@@ -14,7 +14,6 @@ import { OrdenCompraPdfPreviewModal } from '../../components/OrdenCompraPdfPrevi
 import { Pagination } from '../../components/Pagination';
 import { useAuth } from '../../lib/context/AuthContext';
 import {
-  Building,
   CreditCard,
   Edit3,
   Eye,
@@ -27,7 +26,6 @@ import {
   IconButton,
   PageHeader,
   Panel,
-  FilterBar,
   SearchField,
   StatusBadge,
   CodeStamp,
@@ -36,7 +34,6 @@ import {
 import { useConfirm, useToast } from '../../components/ui/feedback';
 import { AvatarBadge } from '../../components/ui/AvatarBadge';
 import { FilterPills, FilterDefinition } from '../../components/ui/FilterPills';
-import clsx from 'clsx';
 
 import { swrCache } from '../../lib/cache/swr-cache';
 
@@ -52,6 +49,19 @@ export default function OrdenesCompraPage() {
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
   const [previewOrden, setPreviewOrden] = useState<OrdenCompra | null>(null);
   const [editingOrden, setEditingOrden] = useState<OrdenCompra | null>(null);
+  const [modalProveedorIdInicial, setModalProveedorIdInicial] = useState<string | undefined>(() => {
+    if (typeof window === 'undefined') return undefined;
+    return new URLSearchParams(window.location.search).get('proveedor_id') || undefined;
+  });
+  const [modalOportunidadIdInicial, setModalOportunidadIdInicial] = useState<string | undefined>(() => {
+    if (typeof window === 'undefined') return undefined;
+    return new URLSearchParams(window.location.search).get('op_id') || undefined;
+  });
+  const [showOcModal, setShowOcModal] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return Boolean(params.get('nueva') === '1' || params.get('proveedor_id') || params.get('op_id'));
+  });
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -256,11 +266,18 @@ export default function OrdenesCompraPage() {
         title="Órdenes de Compra"
         description="Gestión de abastecimiento, distribución entre ventas y liquidación de pagos en Caja."
         actions={
-          <Link href="/ordenes-compra/nuevo">
-            <Button variant="primary" icon={Plus}>
-              Nueva OC
-            </Button>
-          </Link>
+          <Button
+            variant="primary"
+            icon={Plus}
+            onClick={() => {
+              setEditingOrden(null);
+              setModalProveedorIdInicial(undefined);
+              setModalOportunidadIdInicial(undefined);
+              setShowOcModal(true);
+            }}
+          >
+            Nueva OC
+          </Button>
         }
       />
 
@@ -424,9 +441,16 @@ export default function OrdenesCompraPage() {
 
       <OrdenCompraPdfPreviewModal orden={previewOrden} onClose={() => setPreviewOrden(null)} />
       <OrdenCompraModal
-        isOpen={!!editingOrden}
+        isOpen={showOcModal || !!editingOrden}
         initialOrden={editingOrden}
-        onClose={() => setEditingOrden(null)}
+        proveedorIdInicial={modalProveedorIdInicial}
+        oportunidadIdInicial={modalOportunidadIdInicial}
+        onClose={() => {
+          setShowOcModal(false);
+          setEditingOrden(null);
+          setModalProveedorIdInicial(undefined);
+          setModalOportunidadIdInicial(undefined);
+        }}
         onSuccess={loadOrdenes}
       />
 

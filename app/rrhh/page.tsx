@@ -68,7 +68,7 @@ const USER_ROLE_TONE: Record<UserRole, Tone> = {
 };
 
 export default function RecursosHumanosPage() {
-  const { addUser, currentUser, updateUserRole } = useAuth();
+  const { addUser, currentUser, updateUserRole, refreshUsers } = useAuth();
   const toast = useToast();
   const supabase = useMemo(() => createClient(), []);
   const isAdmin = currentUser?.rol === 'admin';
@@ -89,10 +89,13 @@ export default function RecursosHumanosPage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   // Modo de cuenta de usuario al crear trabajador
-  const [workerAccountMode, setWorkerAccountMode] = useState<'create' | 'link'>('create');
+  const [workerAccountMode, setWorkerAccountMode] = useState<'create' | 'link' | 'none'>('create');
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [newUserRole, setNewUserRole] = useState<UserRole>('mano_obra');
-  const [newUserPassword, setNewUserPassword] = useState<string>('Hormiglass2026!');
+  const [newUserPassword, setNewUserPassword] = useState<string>('');
+  const [newUserCalVisitas, setNewUserCalVisitas] = useState<boolean>(true);
+  const [newUserCalProduccion, setNewUserCalProduccion] = useState<boolean>(true);
+  const [newUserCalReventa, setNewUserCalReventa] = useState<boolean>(true);
 
   const [newWorker, setNewWorker] = useState<{
     nombre: string;
@@ -144,7 +147,7 @@ export default function RecursosHumanosPage() {
           .from('trabajadores')
           .select('*, documentos:trabajador_documentos(*), permisos:trabajador_permisos_ausencias(*), liquidaciones:trabajador_liquidaciones_sueldos(*)')
           .order('nombre', { ascending: true }),
-        supabase.from('usuarios').select('*').eq('activo', true),
+        supabase.from('usuarios').select('*').order('nombre', { ascending: true }),
       ]);
 
       if (trabRes.data) {
@@ -232,7 +235,55 @@ export default function RecursosHumanosPage() {
     }
   };
 
-  // Crear nuevo trabajador vinculado a usuario
+  // Alternar presencia del usuario en los 3 calendarios operativos directamente desde RR.HH.
+  const handleToggleUserCalendar = async (
+    usuario: Usuario,
+    field: 'calendario_visitas' | 'calendario_produccion' | 'calendario_reventa'
+  ) => {
+    if (!isAdmin) return;
+    const newVal = !(usuario[field] ?? true);
+    const previousUsuarios = usuarios;
+    setUsuarios((prev) =>
+      prev.map((u) => (u.id === usuario.id ? { ...u, [field]: newVal } : u))
+    );
+
+    try {
+      const { error } = await supabase
+        .from('usuarios')
+        .update({ [field]: newVal, updated_at: new Date().toISOString() })
+        .eq('id', usuario.id);
+
+      if (error) throw error;
+      await refreshUsers();
+      toast({ message: 'Permiso de calendario actualizado.', tone: 'success' });
+    } catch (err) {
+      setUsuarios(previousUsuarios);
+      toast({ message: mensajeError(err, 'No se pudo actualizar el calendario.'), tone: 'danger' });
+    }
+  };
+
+  // Alternar estado activo/inactivo de la cuenta CRM vinculada
+  const handleToggleUserActivo = async (usuario: Usuario) => {
+    if (!isAdmin) return;
+    const nextActivo = !usuario.activo;
+    const previousUsuarios = usuarios;
+    setUsuarios((prev) =>
+      prev.map((u) => (u.id === usuario.id ? { ...u, activo: nextActivo } : u))
+    );
+
+    try {
+      await updateUserRole(usuario.id, usuario.rol, nextActivo);
+      toast({
+        message: nextActivo ? `Cuenta de ${usuario.nombre} activada` : `Cuenta de ${usuario.nombre} desactivada`,
+        tone: 'success',
+      });
+    } catch (err) {
+      setUsuarios(previousUsuarios);
+      toast({ message: mensajeError(err, 'No se pudo cambiar el estado de la cuenta.'), tone: 'danger' });
+    }
+  };
+
+  // Crear nuevo trabajador vinculado (o no) a cuenta de usuario sin duplicar filas
   const handleCreateWorker = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -242,8 +293,8 @@ export default function RecursosHumanosPage() {
       return;
     }
 
-    if (!newWorker.email.trim()) {
-      setFormError('El correo electrónico es obligatorio para vincular la cuenta de usuario.');
+    if (workerAccountMode === 'create' && !newWorker.email.trim()) {
+      setFormError('El correo electrónico es obligatorio para crear una cuenta de acceso al CRM.');
       return;
     }
 
@@ -258,40 +309,43 @@ export default function RecursosHumanosPage() {
           return;
         }
         finalUserId = selectedUserId;
-      } else {
-        // Modo Crear Nueva Cuenta de Usuario
-        if (!newUserPassword || newUserPassword.length < 6) {
-          setFormError('La contraseña debe tener al menos 6 caracteres.');
+      } else if (workerAccountMode === 'create') {
+        if (newUserPassword.trim().length > 0 && newUserPassword.trim().length < 6) {
+          setFormError('Si especificas una contraseña manual, debe tener al menos 6 caracteres.');
           setSavingNewWorker(false);
           return;
         }
 
-        // Crear usuario en Auth y public.usuarios
+        // Crear usuario en Auth y public.usuarios (dispara handle_sync_usuario_to_trabajador)
         try {
           await addUser({
             nombre: newWorker.nombre.trim(),
             email: newWorker.email.trim(),
-            password: newUserPassword,
+            password: newUserPassword.trim() || undefined,
             rol: newUserRole,
             activo: true,
+            calendario_visitas: newUserCalVisitas,
+            calendario_produccion: newUserCalProduccion,
+            calendario_reventa: newUserCalReventa,
+            rut: newWorker.rut.trim(),
           });
 
           const { data: createdUser } = await supabase
             .from('usuarios')
             .select('id')
-            .eq('email', newWorker.email.trim())
-            .single();
+            .ilike('email', newWorker.email.trim())
+            .maybeSingle();
 
           if (createdUser?.id) {
             finalUserId = createdUser.id;
           }
         } catch (authErr: unknown) {
-          // Si el usuario ya existe, intentamos vincularlo
+          // Si el usuario ya existe en public.usuarios, lo vinculamos limpiamente
           const { data: existingUser } = await supabase
             .from('usuarios')
             .select('id')
-            .eq('email', newWorker.email.trim())
-            .single();
+            .ilike('email', newWorker.email.trim())
+            .maybeSingle();
 
           if (existingUser?.id) {
             finalUserId = existingUser.id;
@@ -301,34 +355,53 @@ export default function RecursosHumanosPage() {
         }
       }
 
-      // Insertar en trabajadores
-      const { error } = await supabase
-        .from('trabajadores')
-        .insert([
-          {
-            nombre: newWorker.nombre.trim(),
-            rut: newWorker.rut.trim(),
-            email: newWorker.email.trim() || null,
-            telefono: newWorker.telefono.trim() || null,
-            direccion: newWorker.direccion.trim() || null,
-            comuna: newWorker.comuna,
-            region: newWorker.region,
-            cargo: newWorker.cargo,
-            area: newWorker.area,
-            tipo_contrato: newWorker.tipo_contrato,
-            fecha_ingreso: newWorker.fecha_ingreso || null,
-            sueldo_base: newWorker.sueldo_base ? Number(newWorker.sueldo_base) : 0,
-            estado_disponibilidad: newWorker.estado_disponibilidad,
-            contacto_emergencia_nombre: newWorker.contacto_emergencia_nombre.trim() || null,
-            contacto_emergencia_telefono: newWorker.contacto_emergencia_telefono.trim() || null,
-            banco: newWorker.banco.trim() || null,
-            tipo_cuenta: newWorker.tipo_cuenta.trim() || null,
-            numero_cuenta: newWorker.numero_cuenta.trim() || null,
-            usuario_id: finalUserId,
-            observaciones: newWorker.observaciones.trim() || null,
-            activo: true,
-          },
-        ]);
+      const workerPayload = {
+        nombre: newWorker.nombre.trim(),
+        rut: newWorker.rut.trim(),
+        email: newWorker.email.trim() || null,
+        telefono: newWorker.telefono.trim() || null,
+        direccion: newWorker.direccion.trim() || null,
+        comuna: newWorker.comuna,
+        region: newWorker.region,
+        cargo: newWorker.cargo,
+        area: newWorker.area,
+        tipo_contrato: newWorker.tipo_contrato,
+        fecha_ingreso: newWorker.fecha_ingreso || null,
+        sueldo_base: newWorker.sueldo_base ? Number(newWorker.sueldo_base) : 0,
+        estado_disponibilidad: newWorker.estado_disponibilidad,
+        contacto_emergencia_nombre: newWorker.contacto_emergencia_nombre.trim() || null,
+        contacto_emergencia_telefono: newWorker.contacto_emergencia_telefono.trim() || null,
+        banco: newWorker.banco.trim() || null,
+        tipo_cuenta: newWorker.tipo_cuenta.trim() || null,
+        numero_cuenta: newWorker.numero_cuenta.trim() || null,
+        usuario_id: finalUserId,
+        observaciones: newWorker.observaciones.trim() || null,
+        activo: true,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Verificar si el trigger de usuario ya creó la fila en public.trabajadores
+      let existingWorkerId: string | null = null;
+      if (finalUserId) {
+        const { data: byUser } = await supabase
+          .from('trabajadores')
+          .select('id')
+          .eq('usuario_id', finalUserId)
+          .maybeSingle();
+        if (byUser?.id) existingWorkerId = byUser.id;
+      }
+      if (!existingWorkerId && newWorker.email.trim()) {
+        const { data: byEmail } = await supabase
+          .from('trabajadores')
+          .select('id')
+          .ilike('email', newWorker.email.trim())
+          .maybeSingle();
+        if (byEmail?.id) existingWorkerId = byEmail.id;
+      }
+
+      const { error } = existingWorkerId
+        ? await supabase.from('trabajadores').update(workerPayload).eq('id', existingWorkerId)
+        : await supabase.from('trabajadores').insert([workerPayload]);
 
       if (error) {
         setFormError(mensajeError(error, 'No se pudo guardar la ficha del colaborador.'));
@@ -338,7 +411,12 @@ export default function RecursosHumanosPage() {
 
       setShowNewWorkerModal(false);
       setSavingNewWorker(false);
-      toast({ message: 'Colaborador creado exitosamente', tone: 'success' });
+      toast({
+        message: existingWorkerId
+          ? 'Colaborador y cuenta CRM sincronizados exitosamente'
+          : 'Colaborador creado exitosamente',
+        tone: 'success',
+      });
       void loadTrabajadores();
     } catch (err: unknown) {
       setFormError(mensajeError(err, 'No se pudo guardar la ficha del colaborador.'));
@@ -522,14 +600,15 @@ export default function RecursosHumanosPage() {
           </p>
         </Panel>
       ) : viewMode === 'table' ? (
-        /* VISTA DE TABLA */
+        /* VISTA DE TABLA UNIFICADA (RR.HH. + ACCESO CRM + CALENDARIOS) */
         <Panel className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="hg-table">
               <thead>
                 <tr>
                   <th>Colaborador</th>
-                  <th>Tipo de usuario</th>
+                  <th>Rol & Acceso CRM</th>
+                  <th>Calendarios operativos</th>
                   <th>Cargo & Área</th>
                   <th>Disponibilidad</th>
                   <th className="text-right">Acción</th>
@@ -558,23 +637,28 @@ export default function RecursosHumanosPage() {
                             <span className="block font-semibold text-ink hover:underline">
                               {t.nombre}
                             </span>
-                            <div className="mt-0.5">
+                            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                               <CodeStamp title={`RUT: ${t.rut}`}>{t.rut || 'Sin RUT'}</CodeStamp>
+                              {t.email && (
+                                <span className="t-micro text-ink-muted truncate max-w-[160px]">
+                                  {t.email}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </Link>
                       </td>
 
-                      {/* 2. Tipo de Usuario */}
+                      {/* 2. Rol & Estado de Cuenta CRM */}
                       <td>
                         {linkedUser && isAdmin ? (
-                          <div className="max-w-[160px]">
+                          <div className="flex items-center gap-1.5 max-w-[230px]">
                             <Select
                               value={linkedUser.rol}
                               onChange={(e) =>
                                 void handleUpdateTipoUsuario(linkedUser, e.target.value as UserRole)
                               }
-                              className="text-xs"
+                              className="text-xs flex-1 min-w-[140px]"
                             >
                               {Object.entries(ROL_NOMBRE).map(([role, label]) => (
                                 <option key={role} value={role}>
@@ -582,23 +666,86 @@ export default function RecursosHumanosPage() {
                                 </option>
                               ))}
                             </Select>
+                            <button
+                              type="button"
+                              onClick={() => void handleToggleUserActivo(linkedUser)}
+                              title={
+                                linkedUser.activo
+                                  ? 'Cuenta activa (clic para suspender acceso)'
+                                  : 'Cuenta suspendida (clic para activar acceso)'
+                              }
+                              className="shrink-0"
+                            >
+                              <StatusBadge tone={linkedUser.activo ? 'success' : 'neutral'}>
+                                {linkedUser.activo ? 'Activo' : 'Inactivo'}
+                              </StatusBadge>
+                            </button>
                           </div>
                         ) : linkedUser ? (
-                          <StatusBadge tone={USER_ROLE_TONE[linkedUser.rol]}>
-                            {ROL_NOMBRE[linkedUser.rol] ?? linkedUser.rol}
-                          </StatusBadge>
+                          <div className="flex items-center gap-1.5">
+                            <StatusBadge tone={USER_ROLE_TONE[linkedUser.rol]}>
+                              {ROL_NOMBRE[linkedUser.rol] ?? linkedUser.rol}
+                            </StatusBadge>
+                            <StatusBadge tone={linkedUser.activo ? 'success' : 'neutral'}>
+                              {linkedUser.activo ? 'Activo' : 'Inactivo'}
+                            </StatusBadge>
+                          </div>
                         ) : (
-                          <span className="t-caption text-ink-muted">Sin cuenta</span>
+                          <Link
+                            href={`/rrhh/${t.id}`}
+                            className="inline-flex items-center gap-1 t-caption text-ink-muted hover:text-accent-ink"
+                          >
+                            <span>Sin cuenta CRM</span>
+                          </Link>
                         )}
                       </td>
 
-                      {/* 3. Cargo & Área */}
+                      {/* 3. Calendarios Operativos */}
+                      <td>
+                        {linkedUser ? (
+                          <div className="flex flex-wrap items-center gap-1">
+                            {(
+                              [
+                                { field: 'calendario_visitas', label: 'Visitas' },
+                                { field: 'calendario_produccion', label: 'Producción' },
+                                { field: 'calendario_reventa', label: 'Reventa' },
+                              ] as const
+                            ).map(({ field, label }) => {
+                              const active = linkedUser[field] ?? true;
+                              return (
+                                <button
+                                  key={field}
+                                  type="button"
+                                  disabled={!isAdmin}
+                                  onClick={() => void handleToggleUserCalendar(linkedUser, field)}
+                                  title={
+                                    isAdmin
+                                      ? `Alternar presencia en Calendario de ${label}`
+                                      : `Calendario de ${label}: ${active ? 'Activo' : 'Oculto'}`
+                                  }
+                                  className={`px-2 py-0.5 rounded-full t-micro font-medium border transition-colors ${
+                                    active
+                                      ? 'bg-success-soft text-success border-success-line'
+                                      : 'bg-surface-muted text-ink-muted border-line opacity-65'
+                                  } ${isAdmin ? 'cursor-pointer hover:opacity-100' : 'cursor-default'}`}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="t-caption text-ink-subtle">—</span>
+                        )}
+                      </td>
+
+                      {/* 4. Cargo & Área */}
                       <td>
                         <span className="block font-semibold text-ink">{t.cargo}</span>
                         <span className="t-caption text-ink-muted">{t.area}</span>
                       </td>
 
-                      {/* 4. Disponibilidad */}
+                      {/* 5. Disponibilidad */}
                       <td>
                         <div className="max-w-[170px]">
                           <Select
@@ -620,7 +767,7 @@ export default function RecursosHumanosPage() {
                         </div>
                       </td>
 
-                      {/* 5. Acción */}
+                      {/* 6. Acción */}
                       <td className="text-right">
                         <Link href={`/rrhh/${t.id}`}>
                           <Button variant="secondary" size="sm" icon={Eye}>
@@ -711,7 +858,7 @@ export default function RecursosHumanosPage() {
       <Dialog
         open={showNewWorkerModal}
         title="Nuevo colaborador"
-        description="Registrar ficha laboral vinculada a una cuenta de usuario."
+        description="Registrar ficha laboral y configurar opcionalmente su cuenta de acceso y calendarios."
         size="lg"
         onClose={() => setShowNewWorkerModal(false)}
         footer={
@@ -745,7 +892,7 @@ export default function RecursosHumanosPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <span className="font-semibold text-ink flex items-center gap-1.5 text-sm">
                 <Lock size={16} className="text-accent-ink" aria-hidden />
-                <span>Cuenta de usuario</span>
+                <span>Acceso al CRM y calendarios</span>
               </span>
 
               <div className="inline-flex rounded-control border border-line bg-surface p-0.5 text-xs font-semibold">
@@ -758,7 +905,7 @@ export default function RecursosHumanosPage() {
                       : 'text-ink-muted hover:text-ink'
                   }`}
                 >
-                  Crear nueva cuenta
+                  Crear cuenta CRM
                 </button>
                 <button
                   type="button"
@@ -770,6 +917,17 @@ export default function RecursosHumanosPage() {
                   }`}
                 >
                   Vincular existente
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWorkerAccountMode('none')}
+                  className={`px-2.5 py-1 rounded-control transition-colors ${
+                    workerAccountMode === 'none'
+                      ? 'bg-accent text-on-accent'
+                      : 'text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  Solo ficha RR.HH.
                 </button>
               </div>
             </div>
@@ -802,36 +960,78 @@ export default function RecursosHumanosPage() {
                   </Select>
                 )}
               </Field>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Rol de acceso en el sistema" required>
-                  {({ id }) => (
-                    <Select
-                      id={id}
-                      value={newUserRole}
-                      onChange={(e) => setNewUserRole(e.target.value as UserRole)}
-                    >
-                      <option value="mano_obra">Mano de Obra</option>
-                      <option value="user">Ejecutivo Comercial</option>
-                      <option value="finanzas">Finanzas y Caja</option>
-                      <option value="admin">Administrador</option>
-                    </Select>
-                  )}
-                </Field>
+            ) : workerAccountMode === 'create' ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Rol de acceso en el sistema" required>
+                    {({ id }) => (
+                      <Select
+                        id={id}
+                        value={newUserRole}
+                        onChange={(e) => setNewUserRole(e.target.value as UserRole)}
+                      >
+                        <option value="mano_obra">Mano de Obra</option>
+                        <option value="user">Ejecutivo Comercial</option>
+                        <option value="finanzas">Finanzas y Caja</option>
+                        <option value="admin">Administrador</option>
+                      </Select>
+                    )}
+                  </Field>
 
-                <Field label="Contraseña inicial" hint="Mínimo 6 caracteres" required>
-                  {({ id }) => (
-                    <TextInput
-                      id={id}
-                      type="password"
-                      required
-                      minLength={6}
-                      value={newUserPassword}
-                      onChange={(e) => setNewUserPassword(e.target.value)}
+                  <Field
+                    label="Contraseña inicial (opcional)"
+                    hint="Si se deja vacío, se envía invitación por correo"
+                  >
+                    {({ id }) => (
+                      <TextInput
+                        id={id}
+                        type="password"
+                        minLength={6}
+                        placeholder="Automática por correo..."
+                        value={newUserPassword}
+                        onChange={(e) => setNewUserPassword(e.target.value)}
+                      />
+                    )}
+                  </Field>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-4 pt-1 text-xs">
+                  <span className="t-micro uppercase font-semibold text-ink-muted">
+                    Asignación en calendarios:
+                  </span>
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-ink font-medium">
+                    <input
+                      type="checkbox"
+                      checked={newUserCalVisitas}
+                      onChange={(e) => setNewUserCalVisitas(e.target.checked)}
+                      className="rounded-control"
                     />
-                  )}
-                </Field>
+                    <span>Visitas a Terreno</span>
+                  </label>
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-ink font-medium">
+                    <input
+                      type="checkbox"
+                      checked={newUserCalProduccion}
+                      onChange={(e) => setNewUserCalProduccion(e.target.checked)}
+                      className="rounded-control"
+                    />
+                    <span>Producción y Obras</span>
+                  </label>
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-ink font-medium">
+                    <input
+                      type="checkbox"
+                      checked={newUserCalReventa}
+                      onChange={(e) => setNewUserCalReventa(e.target.checked)}
+                      className="rounded-control"
+                    />
+                    <span>Reventa y Logística</span>
+                  </label>
+                </div>
               </div>
+            ) : (
+              <p className="t-caption text-ink-muted">
+                Se creará únicamente la carpeta laboral del colaborador en RR.HH. Podrás vincularle o crearle una cuenta CRM más adelante desde su ficha.
+              </p>
             )}
           </div>
 
@@ -868,12 +1068,15 @@ export default function RecursosHumanosPage() {
                 )}
               </Field>
 
-              <Field label="Correo electrónico (Login)" required>
+              <Field
+                label="Correo electrónico (Login)"
+                required={workerAccountMode === 'create'}
+              >
                 {({ id }) => (
                   <TextInput
                     id={id}
                     type="email"
-                    required
+                    required={workerAccountMode === 'create'}
                     placeholder="correo@hormiglass.cl"
                     value={newWorker.email}
                     onChange={(e) => setNewWorker({ ...newWorker, email: e.target.value })}

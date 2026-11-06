@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import { Cotizacion } from '../lib/types';
 import { Printer, X, FileText, CheckCircle } from 'lucide-react';
@@ -73,7 +74,7 @@ function calculateTotals(cotizacion: Cotizacion) {
 }
 
 export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
-  if (!cotizacion) return null;
+  if (!cotizacion || typeof document === 'undefined') return null;
 
   const totals = calculateTotals(cotizacion);
   const items = cotizacion.items || [];
@@ -516,9 +517,9 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
     printWindow.document.close();
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 z-50 ">
-      <div className="bg-white border border-gray-200 rounded-xl max-w-4xl w-full p-4 sm:p-6 space-y-4 shadow-sm text-[#252b2d] max-h-[95vh] flex flex-col">
+  return createPortal(
+    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 z-[100]">
+      <div className="bg-white border border-gray-200 rounded-xl max-w-4xl w-full p-4 sm:p-6 space-y-4 shadow-sm text-[#252b2d] max-h-[calc(100dvh-2rem)] flex flex-col">
         {/* Header Modal Bar */}
         <div className="flex items-center justify-between border-b border-gray-200 pb-3 shrink-0">
           <div className="flex items-center gap-3">
@@ -759,6 +760,7 @@ export function PdfPreviewModal({ cotizacion, onClose }: PdfPreviewModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

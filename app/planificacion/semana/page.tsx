@@ -200,7 +200,7 @@ export default function SemanaProduccionPage() {
                       {dayOrders.map((order) => (
                         <Link
                           key={order.id}
-                          href={`/ventas/${order.oportunidad_id}/operacion`}
+                          href={`/ventas?oportunidad=${order.oportunidad_id}&tab=operacion`}
                           className="block rounded-lg border border-border bg-surface p-2.5 transition-colors hover:border-accent/40 hover:bg-surface-muted group"
                         >
                           <div className="flex items-center justify-between gap-1 mb-1">
@@ -237,7 +237,7 @@ export default function SemanaProduccionPage() {
               {orders.map((order) => (
                 <Link
                   key={order.id}
-                  href={`/ventas/${order.oportunidad_id}/operacion`}
+                  href={`/ventas?oportunidad=${order.oportunidad_id}&tab=operacion`}
                   className="block rounded-lg border border-border bg-surface p-2.5 transition-colors hover:border-border-strong hover:bg-surface-muted"
                 >
                   <div className="flex items-center justify-between gap-1 mb-1">

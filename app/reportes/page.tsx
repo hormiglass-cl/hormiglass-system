@@ -620,7 +620,7 @@ export default function ReportesPage() {
                               <Button
                                 size="sm"
                                 variant="subtle"
-                                onClick={() => router.push(`/ventas/${r.oportunidad_id}/operacion`)}
+                                onClick={() => router.push(`/ventas?oportunidad=${r.oportunidad_id}&tab=operacion`)}
                               >
                                 Operación
                               </Button>
