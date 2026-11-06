@@ -4,12 +4,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Bell, ChevronRight, ContactRound, FileText, FolderKanban, LogOut, Menu, Search, Settings2, ShoppingCart } from 'lucide-react';
+import { ChevronRight, ContactRound, FileText, FolderKanban, LogOut, Menu, Search, Settings2, ShoppingCart } from 'lucide-react';
 import { useAuth } from '../lib/context/AuthContext';
 import { useBreadcrumb } from '../lib/context/BreadcrumbContext';
 import { createClient } from '../lib/supabase/client';
 import { ROL_NOMBRE } from '../lib/types';
 import { findActiveItem, navDestinations } from '../lib/navigation';
+import { NotificationBell } from './whatsapp/AssignmentNotifications';
 
 /** Rutas que no están en la barra lateral. */
 const EXTRA_TITLES: Record<string, string> = {
@@ -121,20 +122,7 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
     </button>
     <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Buscar" className="grid h-9 w-9 place-items-center rounded-control text-ink-muted hover:bg-surface-muted lg:hidden"><Search size={19} aria-hidden /></button>
 
-    <Link
-      href="/notificaciones"
-      prefetch={true}
-      aria-label="Notificaciones"
-      title="Notificaciones"
-      className="relative grid h-9 w-9 place-items-center rounded-control text-ink-muted hover:bg-surface-muted hover:text-ink"
-    >
-      <Bell size={19} aria-hidden />
-      {unreadCount > 0 && (
-        <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 t-micro t-num font-bold text-on-accent">
-          {unreadCount > 99 ? '99+' : unreadCount}
-        </span>
-      )}
-    </Link>
+    <NotificationBell unreadCount={unreadCount} />
     <UserMenu />
 
     {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}

@@ -1,4 +1,5 @@
 import type { ChatMessage, ChatNotice, Conversation, ConversationRepository } from './types.ts';
+import { datasheetMessage, findMockDatasheet } from './mock-documents';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -78,6 +79,17 @@ export function createMockRepository(start = Date.now()): ConversationRepository
       if (chat.state !== 'seller' || (chat.pausedUntil ?? 0) <= now) throw new Error('Toma la conversación para responder al cliente.');
       if (!text.trim()) throw new Error('Escribe un mensaje.');
       chat.messages.push({ ...message('seller', text.trim(), now), delivery: 'sent' });
+    },
+    sendDocument(id, documentId, now) {
+      const chat = requireChat(id);
+      if (chat.state !== 'seller' || (chat.pausedUntil ?? 0) <= now) throw new Error('Toma la conversación para responder al cliente.');
+      const document = findMockDatasheet(documentId);
+      if (!document) throw new Error('Selecciona una ficha técnica de demostración válida.');
+      // Validate everything before allocating IDs or changing the mock thread.
+      chat.messages.push(
+        { ...message('seller', datasheetMessage(document), now), delivery: 'sent' },
+        { ...message('file', `${document.name} · Documento de demostración`, now), delivery: 'sent' },
+      );
     },
     receive(id, text, now) {
       const chat = requireChat(id);

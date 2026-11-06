@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createMockRepository } from '../lib/whatsapp/repository.ts';
+import './helpers/whatsapp-typescript.mjs';
+const { createMockRepository } = await import('../lib/whatsapp/repository.ts');
 
 const now = Date.UTC(2026, 10, 3, 12);
 const setup = () => createMockRepository(now);

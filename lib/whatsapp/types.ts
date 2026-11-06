@@ -34,6 +34,7 @@ export interface ConversationRepository {
   release(id: string, now: number): void;
   close(id: string, now: number): void;
   send(id: string, text: string, now: number): void;
+  sendDocument(id: string, documentId: string, now: number): void;
   receive(id: string, text: string, now: number): void;
   markRead(id: string): void;
   tick(now: number): void;

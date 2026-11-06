@@ -8,6 +8,7 @@ import type { ConversationRepository } from './types';
 function useMockStore() {
   const repository = useRef<ConversationRepository | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [threadRequested, setThreadRequested] = useState(false);
   const [selection, setSelection] = useState<{ id: string; unreadAt?: string; unreadCount: number } | null>(null);
   const [snapshot, setSnapshot] = useState(() => ({ chats: [] as ReturnType<ConversationRepository['list']>, notices: [] as ReturnType<ConversationRepository['notices']>, now: 0 }));
   const refresh = useCallback(() => {
@@ -45,7 +46,15 @@ function useMockStore() {
       repo.markRead(id);
     });
   }, [act]);
-  return { ...snapshot, act, error, selection, openChat };
+  // One in-memory navigation intent, shared across the center and inbox. No URL
+  // effect can reopen the mobile thread after the user returns to the list.
+  const requestThread = (id: string) => {
+    if (!repository.current?.get(id)) return false;
+    openChat(id);
+    setThreadRequested(true);
+    return true;
+  };
+  return { ...snapshot, act, error, selection, openChat, requestThread, threadRequested, setThreadRequested };
 }
 
 const ChatContext = createContext<ReturnType<typeof useMockStore> | null>(null);

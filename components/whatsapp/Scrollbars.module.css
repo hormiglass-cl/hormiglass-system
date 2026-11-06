@@ -1,0 +1,74 @@
+.scope,
+.scope * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hg-text-muted) transparent;
+}
+
+.scope::-webkit-scrollbar,
+.scope *::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.scope::-webkit-scrollbar-track,
+.scope *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scope::-webkit-scrollbar-thumb,
+.scope *::-webkit-scrollbar-thumb {
+  background: var(--hg-text-muted);
+  border-radius: 999px;
+}
+
+.scope::-webkit-scrollbar-thumb:hover,
+.scope *::-webkit-scrollbar-thumb:hover {
+  background: var(--hg-text);
+}
+
+/* Filter tabs keep a thin horizontal rail, never a vertical scrollbar. */
+.scope [data-conversation-filters] [role='tablist'] {
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.scope [data-conversation-filters] [role='tablist']::-webkit-scrollbar {
+  height: 12px;
+  width: 0;
+}
+
+.scope [data-conversation-filters] [role='tablist']::-webkit-scrollbar-thumb {
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Match the filter rail: 2px visible thumb inside a 12px drag target. */
+.scope [data-conversation-list]::-webkit-scrollbar {
+  width: 12px;
+}
+
+.scope [data-conversation-list]::-webkit-scrollbar-thumb {
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  background-clip: padding-box;
+}
+
+@supports selector(::-webkit-scrollbar) {
+  .scope [data-conversation-filters] [role='tablist'],
+  .scope [data-conversation-list] {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+}
+
+@media (forced-colors: active) {
+  .scope,
+  .scope * {
+    scrollbar-color: auto;
+  }
+  .scope::-webkit-scrollbar-thumb,
+  .scope *::-webkit-scrollbar-thumb {
+    background: CanvasText;
+  }
+}

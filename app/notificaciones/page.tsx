@@ -30,6 +30,8 @@ import {
 import { AvatarBadge } from '../../components/ui/AvatarBadge';
 import { useConfirm, useToast } from '../../components/ui/feedback';
 
+import { AssignmentNotifications, useAssignments } from '../../components/whatsapp/AssignmentNotifications';
+
 export type InboxTab = 'principal' | 'otras' | 'mas_tarde' | 'borradas';
 export type FilterCategory = 'todas' | 'no_leidas' | 'menciones' | 'recordatorios' | 'finanzas' | 'despacho';
 
@@ -179,6 +181,9 @@ export default function NotificacionesPage() {
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const assignmentCount = useAssignments().length;
+  const visibleAssignments = useAssignments(activeTab, filterCategory, searchQuery).length;
 
   // Claves de almacenamiento por usuario
   const SNOOZED_KEY = currentUserId ? `hg_notif_snoozed_${currentUserId}` : '';
@@ -596,10 +601,10 @@ export default function NotificacionesPage() {
       title: 'Principal',
       description: 'Menciones (@), tareas y cobros clave',
       icon: Inbox,
-      count: counts.totalPrincipal,
-      unitLabel: counts.totalPrincipal === 1 ? 'aviso activo' : 'avisos activos',
-      badgeText: counts.unreadPrincipal > 0 ? `${counts.unreadPrincipal} sin leer` : 'Al día',
-      badgeTone: counts.unreadPrincipal > 0 ? 'accent' : 'success',
+      count: counts.totalPrincipal + assignmentCount,
+      unitLabel: counts.totalPrincipal + assignmentCount === 1 ? 'aviso activo' : 'avisos activos',
+      badgeText: counts.unreadPrincipal + assignmentCount > 0 ? `${counts.unreadPrincipal + assignmentCount} sin leer` : 'Al día',
+      badgeTone: counts.unreadPrincipal + assignmentCount > 0 ? 'accent' : 'success',
       iconTone: 'accent',
     },
     {
@@ -778,7 +783,7 @@ export default function NotificacionesPage() {
                 {activeTab === 'borradas' && 'Papelera de Borradas'}
               </span>
               <span className="text-xs text-ink-muted t-num">
-                ({currentTabItems.length})
+                ({currentTabItems.length + visibleAssignments})
               </span>
             </div>
 
@@ -907,9 +912,10 @@ export default function NotificacionesPage() {
         {/* ========================================================= */}
         {/* 3. FEED DE NOTIFICACIONES AGRUPADO POR TIEMPO             */}
         {/* ========================================================= */}
+        <AssignmentNotifications tab={activeTab} category={filterCategory} search={searchQuery} navigate={router.push} />
         {loading ? (
           <p className="py-16 text-center text-sm text-ink-muted">Cargando bandeja de entrada…</p>
-        ) : currentTabItems.length === 0 ? (
+        ) : currentTabItems.length === 0 && visibleAssignments === 0 ? (
           <div className="p-12 text-center">
             <EmptyState
               icon={Bell}

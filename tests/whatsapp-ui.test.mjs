@@ -21,6 +21,8 @@ registerHooks({
     return next(specifier, context);
   },
   load(url, context, next) {
+    // SSR tests do not measure styles; the browser harness compiles the real module.
+    if (url.endsWith('.module.css')) return {format:'module', shortCircuit:true, source:'export default {scope:"ssr-scroll-scope"};'};
     if (/\.tsx?$/.test(url) && !url.includes('/node_modules/')) {
       return { format: 'module', shortCircuit: true, source: ts.transpileModule(readFileSync(new URL(url), 'utf8'), { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText };
     }
@@ -50,12 +52,12 @@ test('unread divider remains anchored to captured message after repository markR
   assert.equal(repository.get(chat.id).unread, 0);
 });
 
-test('assistant composer is locked and seller composer keeps quick replies and demo hint', () => {
+test('assistant composer is locked and seller keeps action shortcuts, visit reply and demo hint', () => {
   const locked = render(ChatComposer, { locked: true, onSend: () => true });
   assert.ok(locked.includes('Toma la conversación para responder al cliente.'));
   assert.ok(locked.includes('disabled=""'));
-  const seller = render(ChatComposer, { locked: false, onSend: () => true });
-  for (const text of ['Agendar visita a terreno', 'Enviar ficha técnica', 'Cotización en preparación', 'Se envía por WhatsApp desde el número de Hormiglass', 'no se envían mensajes reales']) assert.ok(seller.includes(text), text);
+  const seller = render(ChatComposer, { locked: false, onSend: () => true, onCreateQuote: () => {}, onSelectDatasheet: () => {} });
+  for (const text of ['Agendar visita a terreno', 'Enviar ficha técnica', 'Crear cotización', 'Se envía por WhatsApp desde el número de Hormiglass', 'no se envían mensajes reales']) assert.ok(seller.includes(text), text);
   assert.ok(!seller.includes('disabled=""'));
 });
 
@@ -67,11 +69,12 @@ test('inbox lists demo conversations, filters and opportunity summary without li
   for (const label of ['Cliente', 'Oportunidad', 'Capturado por el asistente', 'Abrir oportunidad', 'Demo']) assert.ok(details.includes(label), label);
   assert.ok(!details.includes('href='));
   const notices = render(NoticeBanners, { notices: [
-    { id: 'a', conversationId: 'demo-1', text: 'Nuevo cliente asignado a ti' },
+    { id: 'a', kind: 'assigned', conversationId: 'demo-1', text: 'Nuevo cliente asignado a ti' },
     { id: 'b', conversationId: 'demo-3', text: 'Tu plazo vence en 5 min' },
     { id: 'c', conversationId: 'demo-3', text: 'El asistente retomó una conversación' },
   ], onOpen: () => {}, onDismiss: () => {} });
-  for (const label of ['Nuevo cliente asignado a ti', 'Tu plazo vence en 5 min', 'El asistente retomó una conversación', 'Ver chat', 'Más tarde']) assert.ok(notices.includes(label), label);
+  assert.ok(!notices.includes('Nuevo cliente asignado a ti'), 'Assignment belongs in the notification center, not inline');
+  for (const label of ['Tu plazo vence en 5 min', 'El asistente retomó una conversación', 'Ver chat', 'Más tarde']) assert.ok(notices.includes(label), label);
 });
 
 test('opportunity integration preserves Activity by default and never invents captured real data', async () => {
