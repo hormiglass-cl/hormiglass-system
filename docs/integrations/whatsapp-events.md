@@ -1,6 +1,21 @@
 # WhatsApp inbound receiver — proposed v1 and revision 1.1 contract
 
-**Local implementation, disabled by default; not a live integration.** This is a technical proposal for the bot agent to agree and implement. It accepts the four legacy inbound event types atomically, with a proposed opt-in revision 1.1 for richer handoffs and `ownership.taken`. **Revision 1.1 awaits bot agreement; it is not deployed compatibility.** See [the bot-facing response](whatsapp-events-crm-response.md) for the amendment and remaining blockers. It does **not** establish ClickUp parity or replace the bot's existing workflows.
+**Local implementation, disabled by default; not a live integration.** This is a technical proposal for the bot agent to agree and implement. It accepts the four legacy inbound event types atomically, with a proposed opt-in revision 1.1 for richer handoffs and `ownership.taken`. **Revision 1.1 is applied in the development project only (see Development status below); it is not deployed to production.** See [the bot-facing response](whatsapp-events-crm-response.md) for the amendment and remaining blockers. It does **not** establish ClickUp parity or replace the bot's existing workflows.
+
+## Development status (2026-11-06)
+
+- Both migrations are applied to development project `whbqrracrxmeuyerrbdg` only; deployed function bodies match the repository files.
+- Revision 1.1 is live in development: `protocol_revision: "1.1"`, `ownership.taken`, and `handoff.created` with `kind` `commercial` | `operational` | `complaint`, required `reason` and `priority`, and `area` per the routing table below.
+- `clientes.rut` is verified **NOT NULL** in development. A `lead.qualified` for a phone that matches no existing customer must include `rut`; otherwise the receiver returns 422 `{"error":"rut_required"}` and writes nothing. A phone that matches exactly one existing customer reuses that customer, and `rut` may be omitted.
+- Development sellers (`usuarios.id`, all active); any other UUID is rejected with 422 `invalid_seller`:
+  - `7b726374-5516-429d-b993-fe18d7d421d6` — Juan Pablo (`admin`)
+  - `439b17c7-2623-480a-910e-997a64f72727` — PRUEBA Vendedor 1 (`user`)
+  - `bfc11153-a1ed-4c82-9875-38e136944f71` — PRUEBA Vendedor 2 (`user`)
+  - `0831b5db-c97d-47d2-a799-fd2f999f0acc` — PRUEBA Vendedor 3 (`user`)
+
+  The `PRUEBA` sellers are development-only test accounts (`@example.invalid`, no password; they cannot sign in).
+- No area recipients are mapped yet, so `management`, `finance`, `scheduling` and `claims` handoffs return `routing_status: "pending_routing"`.
+- The development endpoint is a temporary tunnel URL shared out of band; it changes whenever the tunnel restarts.
 
 ## Before connecting the bot
 
@@ -252,7 +267,7 @@ The SQL test starts a **brand-new disposable local PostgreSQL** cluster with TCP
 
 ### Before any dev migration/enablement
 
-In the **development project's** SQL editor, verify the project identity is exactly `whbqrracrxmeuyerrbdg` before doing anything. A prior exact-development read-only metadata request returned **HTTP401**. `clientes.rut` nullability is **UNVERIFIED**, not confirmed NOT NULL. No remote query/retry or migration was performed in this amendment. See the safe metadata-only query in the bot response. Do not derive the target from a shared client's fallback.
+In the **development project's** SQL editor, verify the project identity is exactly `whbqrracrxmeuyerrbdg` before doing anything. As of 2026-11-06, `clientes.rut` is verified NOT NULL in development and both migrations are applied there (see Development status). Do not derive the target from a shared client's fallback.
 
 - Inspect actual `information_schema.columns`, `pg_constraint`, `pg_policies`, triggers, defaults and grants for `clientes`, `oportunidades`, `usuarios`, `notificaciones`, `postventa_casos`. Migrations plus the stale snapshot do not fully reconstruct deployed schema.
 - Confirm every inserted column/default and check listed above, commercial roles `admin`/`user`, valid seller UUID mappings, opportunity/customer foreign keys and notification type `sistema`.
