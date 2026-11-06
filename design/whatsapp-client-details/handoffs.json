@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chosen": "01-refined.html",
+  "handoffs": {
+    "01-refined.html": {
+      "status": "implemented",
+      "queued": false,
+      "sentAt": "2026-11-03T17:27:33.222Z",
+      "startedAt": "2026-11-03T17:27:56.770Z",
+      "implementedAt": "2026-11-03T17:28:52.666Z",
+      "note": "Implemented in ConversationDetails with existing CRM tokens. Parent reviewed actual-component 236px screenshot, matched artboard/token source, and observed 15 focused tests, lint/design checks and production build pass. Summary toggle logic unchanged; browser proof covers SSR styling/content at236/320/390, not a new hydrated-click test.",
+      "previewUrl": "http://localhost:3000/conversaciones"
+    }
+  }
+}

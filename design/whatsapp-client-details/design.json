@@ -1,0 +1,13 @@
+{
+  "title": "Ficha del cliente · WhatsApp",
+  "brief": "Refinamiento puntual de la ficha existente: identidad clara, oportunidad naranja suave y datos del asistente en azul informativo; conserva contenido, acción y demo local.",
+  "artboards": [
+    {
+      "file": "01-refined.html",
+      "title": "Ficha refinada",
+      "tradeoff": "Jerarquía compacta con bloques semánticos; los textos largos envuelven y aumentan la altura en vez de truncarse.",
+      "width": 260,
+      "height": 680
+    }
+  ]
+}
