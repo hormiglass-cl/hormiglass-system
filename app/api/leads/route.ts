@@ -86,10 +86,10 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(data);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Exception in /api/leads route handler:', err);
     return NextResponse.json(
-      { error: err?.message || 'Error interno procesando la solicitud de lead.' },
+      { error: (err instanceof Error && err.message) || 'Error interno procesando la solicitud de lead.' },
       { status: 500 }
     );
   }

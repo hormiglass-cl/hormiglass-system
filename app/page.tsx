@@ -17,7 +17,6 @@ import {
 import { completeRecordatorio } from '../lib/recordatorios';
 import { totalAbonado as calcularAbonado, totalComercial } from '../lib/oportunidad-finanzas';
 import {
-  Calendar,
   ChevronRight,
   Factory,
   MapPin,
@@ -25,31 +24,24 @@ import {
   Award,
   Package,
   CreditCard,
-  CheckSquare,
-  Square,
   AlertTriangle,
   ShieldAlert,
   Wallet,
   Clock,
-  RotateCcw,
   TrendingUp,
   FolderKanban,
   Users,
-  Sparkles,
   LayoutDashboard,
   Target,
 } from 'lucide-react';
 import clsx from 'clsx';
-import {
-  PageHeader,
-  StatusBadge,
-} from '../components/ui';
 import { MetricCard } from '../components/ui/MetricCard';
+import { DateRangePicker } from '../components/ui/DateRangePicker';
 
 import { SalesTimelineChart } from '../components/dashboard/SalesTimelineChart';
 import { DonutChart, DonutSegment } from '../components/dashboard/DonutChart';
 import { RankingBarChart, RankingItem } from '../components/dashboard/RankingBarChart';
-import { FinancialBalanceCard } from '../components/dashboard/FinancialBalanceCard';
+import { ColumnChart, TreemapChart, StageStepper, WeekAgenda, StackedBar, RadialGauge, ProgressList, formatShortMoney } from '../components/dashboard/visuals';
 import { PipelineFunnelChart, FunnelStageData } from '../components/dashboard/PipelineFunnelChart';
 import { RecentLeadsCard } from '../components/dashboard/RecentLeadsCard';
 import { TasksActivityCard } from '../components/dashboard/TasksActivityCard';
@@ -85,9 +77,16 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<DashboardTab>('general');
 
   // Filtros de fecha rápidos y personalizados
-  const [quickFilter, setQuickFilter] = useState<QuickFilterPreset | 'custom'>('all');
-  const [fechaDesde, setFechaDesde] = useState<string>('');
-  const [fechaHasta, setFechaHasta] = useState<string>('');
+  // Por defecto: mes en curso, del día 1 hasta hoy.
+  const [, setQuickFilter] = useState<QuickFilterPreset | 'custom'>('month');
+  const [fechaDesde, setFechaDesde] = useState<string>(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [fechaHasta, setFechaHasta] = useState<string>(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+  });
 
   // Carga de datos 100% en vivo desde Supabase
   const loadDashboardData = useCallback(async () => {
@@ -173,6 +172,7 @@ export default function Dashboard() {
   }, [currentUserId, supabase]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial de datos al montar y suscripción Realtime
     void loadDashboardData();
 
     // Supabase Realtime multi-table sync con debounce de 300ms
@@ -208,47 +208,6 @@ export default function Dashboard() {
     return totalComercial(op, op.cotizaciones || []);
   };
 
-  // Manejador de filtros rápidos de tiempo
-  const applyQuickFilter = (type: QuickFilterPreset) => {
-    setQuickFilter(type);
-    const now = new Date();
-
-    if (type === 'all') {
-      setFechaDesde('');
-      setFechaHasta('');
-      return;
-    }
-
-    if (type === 'today') {
-      const todayStr = now.toISOString().split('T')[0];
-      setFechaDesde(todayStr);
-      setFechaHasta(todayStr);
-      return;
-    }
-
-    if (type === 'week') {
-      const startOfWeek = new Date(now);
-      startOfWeek.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1));
-      setFechaDesde(startOfWeek.toISOString().split('T')[0]);
-      setFechaHasta(now.toISOString().split('T')[0]);
-      return;
-    }
-
-    if (type === 'month') {
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      setFechaDesde(startOfMonth.toISOString().split('T')[0]);
-      setFechaHasta(now.toISOString().split('T')[0]);
-      return;
-    }
-
-    if (type === 'year') {
-      const startOfYear = new Date(now.getFullYear(), 0, 1);
-      setFechaDesde(startOfYear.toISOString().split('T')[0]);
-      setFechaHasta(now.toISOString().split('T')[0]);
-      return;
-    }
-  };
-
   // Oportunidades filtradas por rango temporal
   const filteredOportunidades = useMemo(() => {
     return oportunidades.filter((op) => {
@@ -258,12 +217,12 @@ export default function Dashboard() {
 
       const opDate = new Date(opDateStr);
       if (fechaDesde) {
-        const d = new Date(fechaDesde);
+        const d = new Date(`${fechaDesde}T00:00:00`);
         d.setHours(0, 0, 0, 0);
         if (opDate < d) return false;
       }
       if (fechaHasta) {
-        const h = new Date(fechaHasta);
+        const h = new Date(`${fechaHasta}T00:00:00`);
         h.setHours(23, 59, 59, 999);
         if (opDate > h) return false;
       }
@@ -280,12 +239,12 @@ export default function Dashboard() {
 
       const cotDate = new Date(cotDateStr);
       if (fechaDesde) {
-        const d = new Date(fechaDesde);
+        const d = new Date(`${fechaDesde}T00:00:00`);
         d.setHours(0, 0, 0, 0);
         if (cotDate < d) return false;
       }
       if (fechaHasta) {
-        const h = new Date(fechaHasta);
+        const h = new Date(`${fechaHasta}T00:00:00`);
         h.setHours(23, 59, 59, 999);
         if (cotDate > h) return false;
       }
@@ -381,7 +340,7 @@ export default function Dashboard() {
 
     let accumulatedSales = 0;
 
-    filteredOportunidades.forEach((op) => {
+    oportunidades.forEach((op) => {
       const dateStr = op.fecha_inicio || op.created_at;
       if (!dateStr) return;
 
@@ -410,7 +369,7 @@ export default function Dashboard() {
       monthlySeries: Object.entries(monthlyMap).map(([k, v]) => ({ dateKey: k, ...v })),
       totalPeriodTimelineSales: accumulatedSales,
     };
-  }, [filteredOportunidades]);
+  }, [oportunidades]);
 
   // Segmentación de Clientes
   const segmentacionClientes = useMemo((): DonutSegment[] => {
@@ -428,17 +387,17 @@ export default function Dashboard() {
     return [
       {
         id: 'juridica',
-        label: 'Empresas y constructoras',
+        label: 'Empresas',
         value: juridicaCount,
         color: 'var(--hg-accent)',
-        sublabel: 'clientes jurídicos',
+        sublabel: 'jurídicos',
       },
       {
         id: 'natural',
-        label: 'Clientes particulares',
+        label: 'Particulares',
         value: naturalCount,
         color: 'var(--hg-info)',
-        sublabel: 'personas naturales',
+        sublabel: 'personas',
       },
     ];
   }, [clientes]);
@@ -595,7 +554,7 @@ export default function Dashboard() {
   }, [usuarios, filteredOportunidades]);
 
   // Proyecciones de Venta en Pipeline
-  const { funnelStages, totalPipelineNominal, totalPipelineWeighted } = useMemo(() => {
+  const funnel = useMemo(() => {
     const stageDefs: { id: string; label: string; prob: number; color: string; bg: string }[] = [
       { id: 'nueva', label: '1. Nuevas oportunidades', prob: 20, color: 'var(--hg-warning)', bg: 'var(--hg-surface-muted)' },
       { id: 'pagada', label: '2. Pago validado', prob: 70, color: 'var(--hg-info)', bg: 'var(--hg-surface-muted)' },
@@ -607,11 +566,12 @@ export default function Dashboard() {
       { id: 'sin_acreditar', label: 'Entregas históricas sin acreditar', prob: 0, color: 'var(--hg-warning)', bg: 'var(--hg-surface-muted)' },
     ];
 
+    const build = (ops: OportunidadVenta[]) => {
     let totalNominal = 0;
     let totalWeighted = 0;
 
     const stages: FunnelStageData[] = stageDefs.map((def) => {
-      const opsInStage = filteredOportunidades.filter((o) => {
+      const opsInStage = ops.filter((o) => {
         if (def.id === 'entregada') {
           return o.estado_pipeline === 'entregada';
         }
@@ -642,12 +602,12 @@ export default function Dashboard() {
       };
     });
 
-    return {
-      funnelStages: stages,
-      totalPipelineNominal: totalNominal,
-      totalPipelineWeighted: totalWeighted,
+    return { stages, totalNominal, totalWeighted };
     };
+
+    return build(filteredOportunidades);
   }, [filteredOportunidades, deliveryAccreditation]);
+  const totalPipelineNominal = funnel.totalNominal;
 
   const recordatoriosStats = useMemo(() => {
     const completados = recordatorios.filter((item) => item.completado || item.estado === 'completada').length;
@@ -655,13 +615,6 @@ export default function Dashboard() {
     const total = completados + pendientes;
     const cumplimiento = total > 0 ? Math.round((completados / total) * 100) : 100;
     return { completados, pendientes, cumplimiento };
-  }, [recordatorios]);
-
-  const topRecordatoriosPendientes = useMemo(() => {
-    return recordatorios
-      .filter((item) => !item.completado && item.estado !== 'completada')
-      .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento))
-      .slice(0, 5);
   }, [recordatorios]);
 
   const handleCompleteRecordatorio = async (recordatorio: Recordatorio) => {
@@ -726,131 +679,128 @@ export default function Dashboard() {
     );
   }
 
+  const CARD = 'rounded-[20px] border border-line bg-surface p-6';
+  const calendarioPlantaHref = '/calendarios/general?contexto=produccion_logistica';
+  const pctCobrado = Math.round((totalAbonado / Math.max(1, totalFacturado)) * 100);
+  const eventosActivos = eventos.filter((e) => ['por_hacer', 'en_curso', 'reprogramado'].includes(e.estado));
+
+  const atencion = [
+    { href: calendarioPlantaHref, icon: AlertTriangle, tone: 'bg-warning-soft text-warning', label: 'Despachos en riesgo', count: despachosEnRiesgo.length },
+    { href: '/caja', icon: Wallet, tone: 'bg-success-soft text-success', label: 'Abonos por validar', count: abonosPendientes.length },
+    { href: '/postventa', icon: ShieldAlert, tone: 'bg-accent-soft text-accent-ink', label: 'Garantías y reclamos', count: casosPostventa.length },
+    { href: '/administracion?empresa=inmobiliaria&seccion=pendientes_generales', icon: Clock, tone: 'bg-info-soft text-info', label: 'Compromisos pendientes', count: recordatoriosStats.pendientes },
+  ];
+
+  // Series de 6 meses para los gráficos de columnas (independientes del filtro de fechas)
+  const MESES_CORTO = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  const serie6Meses = (() => {
+    const ahora = new Date();
+    const meses = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(ahora.getFullYear(), ahora.getMonth() - (5 - i), 1);
+      return { key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: MESES_CORTO[d.getMonth()], nuevas: 0, cerradas: 0, facturado: 0, cobrado: 0 };
+    });
+    oportunidades.forEach((op) => {
+      const raw = op.fecha_inicio || op.created_at;
+      const d = raw ? new Date(raw) : null;
+      if (!d || isNaN(d.getTime())) return;
+      const mes = meses.find((m) => m.key === `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      if (!mes) return;
+      mes.nuevas += 1;
+      if (['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline)) mes.cerradas += 1;
+      mes.facturado += getOportunidadTrueValue(op);
+      mes.cobrado += calcularAbonado(op);
+    });
+    return meses;
+  })();
+
+  const saldosPorCobrar = filteredOportunidades
+    .map((op) => ({ op, total: getOportunidadTrueValue(op), done: calcularAbonado(op) }))
+    .filter((r) => r.total - r.done > 0)
+    .sort((a, b) => (b.total - b.done) - (a.total - a.done))
+    .slice(0, 5)
+    .map((r) => ({
+      id: r.op.id,
+      title: r.op.cliente?.nombre || r.op.codigo || 'Oportunidad',
+      sub: r.op.codigo || undefined,
+      total: r.total,
+      done: r.done,
+      href: `/ventas?oportunidad=${r.op.id}`,
+    }));
+
+  const agendaEventos = eventosActivos.map((ev) => ({
+    id: ev.id,
+    titulo: ev.titulo,
+    fecha: ev.fecha_inicio?.split('T')[0] || ev.fecha_evento || '',
+    hora: ev.hora_evento,
+    alerta: ev.estado === 'reprogramado',
+  }));
+
+  const postventaSegmentos = [
+    { id: 'abierto', label: 'Abiertos', value: casosPostventa.filter((c) => c.estado === 'abierto').length, color: 'bg-danger' },
+    { id: 'programado', label: 'Programados', value: casosPostventa.filter((c) => c.estado === 'programado').length, color: 'bg-warning' },
+    { id: 'en_curso', label: 'En curso', value: casosPostventa.filter((c) => c.estado === 'en_curso').length, color: 'bg-info' },
+  ];
+
   return (
     <div className="space-y-6 pb-8">
-      {/* ========================================================= */}
-      {/* 1. CABECERA CON PESTAÑAS TIPO PÍLDORA (Ref: Cabina 1/2)   */}
-      {/* ========================================================= */}
-      <PageHeader
-        title="Panel operativo"
-        description={`Centro de control analítico y operativo de Hormiglass para ${currentUser?.nombre?.split(' ')[0] || 'el equipo'}.`}
-        actions={
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Píldoras de Navegación Analítica */}
-            <div className="inline-flex h-11 items-center gap-1 rounded-full border border-line bg-surface-muted p-1 shadow-xs">
-              {dashboardTabs.map((tab) => {
-                const isActive = activeTab === tab.id;
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setActiveTab(tab.id)}
-                    className={clsx(
-                      'h-full cursor-pointer rounded-full px-4 sm:px-5 text-xs sm:text-sm font-semibold transition-all duration-200 flex items-center gap-2 select-none',
-                      isActive
-                        ? 'bg-accent text-on-accent shadow-xs'
-                        : 'text-ink-muted hover:text-ink hover:bg-surface/60'
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+      {/* Barra superior: pestañas y rango de fechas (sin título: la ruta ya lo indica) */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex h-11 items-center gap-1 rounded-full border border-line bg-surface-muted p-1">
+          {dashboardTabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={clsx(
+                  'flex h-full cursor-pointer select-none items-center gap-2 rounded-full px-4 text-xs font-semibold transition-all duration-200 sm:px-5 sm:text-sm',
+                  isActive ? 'bg-accent text-on-accent shadow-xs' : 'text-ink-muted hover:bg-surface/60 hover:text-ink'
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
 
-            {/* Selector de Rango de Fechas (Mismo tamaño, altura y letra que las pestañas) */}
-            <div className="inline-flex h-11 items-center gap-2.5 rounded-full border border-line bg-surface px-4 sm:px-5 shadow-xs">
-              <Calendar className="h-4 w-4 text-accent-ink shrink-0" aria-hidden />
-              <input
-                type="date"
-                value={fechaDesde}
-                onChange={(e) => {
-                  setQuickFilter('custom');
-                  setFechaDesde(e.target.value);
-                }}
-                className="bg-transparent text-xs sm:text-sm font-semibold text-ink focus:outline-none cursor-pointer"
-                title="Fecha inicial"
-              />
-              <span className="text-ink-muted text-xs sm:text-sm font-semibold select-none">→</span>
-              <input
-                type="date"
-                value={fechaHasta}
-                onChange={(e) => {
-                  setQuickFilter('custom');
-                  setFechaHasta(e.target.value);
-                }}
-                className="bg-transparent text-xs sm:text-sm font-semibold text-ink focus:outline-none cursor-pointer"
-                title="Fecha final"
-              />
-              {(fechaDesde || fechaHasta) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFechaDesde('');
-                    setFechaHasta('');
-                    setQuickFilter('all');
-                  }}
-                  className="ml-1 cursor-pointer p-1 rounded-full text-ink-muted transition hover:text-danger hover:bg-surface-muted"
-                  title="Restablecer fechas"
-                >
-                  <RotateCcw className="h-4 w-4" aria-hidden />
-                </button>
-              )}
-            </div>
-          </div>
-        }
-      />
+        <DateRangePicker
+          from={fechaDesde}
+          to={fechaHasta}
+          onChange={(desde, hasta) => {
+            setQuickFilter(desde || hasta ? 'custom' : 'all');
+            setFechaDesde(desde);
+            setFechaHasta(hasta);
+          }}
+        />
+      </div>
 
-      {/* ========================================================= */}
-      {/* 2. VISTA 1: GENERAL (Visión 360 y Alertas Prioritarias)    */}
-      {/* ========================================================= */}
+      {/* ===== GENERAL ===== */}
       {activeTab === 'general' && (
         <div className="space-y-6">
-          {/* 4 KPIs de Visión General */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard
-              title="Facturación del Período"
+              title="Facturado en el período"
               value={`$${totalFacturado.toLocaleString('es-CL')}`}
               icon={TrendingUp}
               tone="warning"
-              change={{ value: '+20.4%', trend: 'up', label: 'vs anterior' }}
-              subtitle={`$${totalAbonado.toLocaleString('es-CL')} recaudados`}
+              change={{ value: `${pctCobrado}% cobrado`, trend: 'neutral', label: `$${totalAbonado.toLocaleString('es-CL')} recaudados` }}
             />
+            <MetricCard title="Clientes" value={clientes.length} icon={Building2} tone="success" />
+            <MetricCard title="Obras en ejecución" value={obrasEnRielCount} icon={Factory} tone="info" />
             <MetricCard
-              title="Total Contactos"
-              value={clientes.length}
-              icon={Building2}
-              tone="success"
-              change={{ value: '+8.1%', trend: 'up', label: 'este mes' }}
-              subtitle="Cuentas activas en CRM"
-            />
-            <MetricCard
-              title="Obras en Ejecución"
-              value={obrasEnRielCount}
-              icon={Factory}
-              tone="info"
-              change={{ value: '+14.2%', trend: 'up', label: 'activas' }}
-              subtitle="Contratos en riel operativo"
-            />
-            <MetricCard
-              title="Atención Requerida"
+              title="Requieren atención"
               value={totalAlertasCount}
               icon={AlertTriangle}
-              tone="accent"
-              change={{
-                value: `${despachosEnRiesgo.length} despachos`,
-                trend: despachosEnRiesgo.length > 0 ? 'down' : 'neutral',
-                label: 'en riesgo',
-              }}
-              subtitle="Alertas operativas pendientes"
+              tone="danger"
+              change={despachosEnRiesgo.length > 0 ? { value: `${despachosEnRiesgo.length} despachos`, trend: 'down', label: 'en riesgo' } : undefined}
             />
           </div>
 
-          {/* Fila Principal 50/50: Evolución de Ventas vs Alertas de Atención */}
-          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
-            <div className="h-full">
+          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
+            <div className="lg:col-span-2">
               <SalesTimelineChart
                 dailyData={dailySeries}
                 monthlyData={monthlySeries}
@@ -860,531 +810,215 @@ export default function Dashboard() {
               />
             </div>
 
-            <div className="h-full flex flex-col justify-between rounded-panel border border-line bg-surface p-5 shadow-xs">
-              <div>
-                <div className="flex items-center justify-between border-b border-line pb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="grid h-7 w-7 place-items-center rounded-control bg-warning-soft text-warning">
-                      <AlertTriangle className="h-4 w-4" aria-hidden />
-                    </span>
-                    <div>
-                      <h3 className="text-base font-semibold text-ink">
-                        Qué necesita atención hoy
-                      </h3>
-                      <p className="t-caption text-ink-muted">
-                        Alertas operativas y financieras prioritarias
-                      </p>
-                    </div>
-                  </div>
-                  <span className="t-micro rounded-full bg-surface-muted border border-line px-2.5 py-0.5 font-bold text-ink">
-                    {totalAlertasCount} activas
-                  </span>
-                </div>
-
-                <div className="mt-3 divide-y divide-line-subtle">
-                  {/* Alerta 1: Despachos */}
-                  <Link
-                    href="/planificacion/calendario"
-                    className="flex items-center justify-between py-3 px-2 rounded-control transition hover:bg-surface-muted group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="grid h-8 w-8 place-items-center rounded-control bg-warning-soft text-warning shrink-0">
-                        <AlertTriangle className="h-4 w-4" />
+            <section className={CARD}>
+              <h3 className="text-base font-semibold text-ink">Atención hoy</h3>
+              <ul className="mt-4 divide-y divide-line-subtle">
+                {atencion.map((row) => (
+                  <li key={row.label}>
+                    <Link href={row.href} className="group flex items-center gap-3 py-3.5">
+                      <span className={clsx('grid h-10 w-10 shrink-0 place-items-center rounded-xl', row.tone)}>
+                        <row.icon className="h-[18px] w-[18px]" aria-hidden />
                       </span>
-                      <div>
-                        <p className="text-xs font-semibold text-ink group-hover:text-accent-ink transition">
-                          Despachos en riesgo o activos
-                        </p>
-                        <p className="t-micro text-ink-muted">
-                          {despachosEnRiesgo.length === 0
-                            ? 'Sin entregas atrasadas ni reprogramadas'
-                            : `${despachosEnRiesgo.length} evento(s) requieren supervisión`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="t-num font-bold text-ink text-sm">{despachosEnRiesgo.length}</span>
-                      <ChevronRight className="h-3.5 w-3.5 text-ink-muted group-hover:text-accent-ink" />
-                    </div>
-                  </Link>
-
-                  {/* Alerta 2: Abonos */}
-                  <Link
-                    href="/caja"
-                    className="flex items-center justify-between py-3 px-2 rounded-control transition hover:bg-surface-muted group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="grid h-8 w-8 place-items-center rounded-control bg-success-soft text-success shrink-0">
-                        <Wallet className="h-4 w-4" />
-                      </span>
-                      <div>
-                        <p className="text-xs font-semibold text-ink group-hover:text-accent-ink transition">
-                          Abonos por validar en Caja
-                        </p>
-                        <p className="t-micro text-ink-muted">
-                          {abonosPendientes.length === 0
-                            ? 'Todos los comprobantes conciliados'
-                            : `$${totalMontoAbonosPorValidar.toLocaleString('es-CL')} pendientes en cuenta oficial`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="t-num font-bold text-ink text-sm">{abonosPendientes.length}</span>
-                      <ChevronRight className="h-3.5 w-3.5 text-ink-muted group-hover:text-accent-ink" />
-                    </div>
-                  </Link>
-
-                  {/* Alerta 3: Postventa */}
-                  <Link
-                    href="/postventa"
-                    className="flex items-center justify-between py-3 px-2 rounded-control transition hover:bg-surface-muted group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="grid h-8 w-8 place-items-center rounded-control bg-accent-soft text-accent-ink shrink-0">
-                        <ShieldAlert className="h-4 w-4" />
-                      </span>
-                      <div>
-                        <p className="text-xs font-semibold text-ink group-hover:text-accent-ink transition">
-                          Garantías y reclamos abiertos
-                        </p>
-                        <p className="t-micro text-ink-muted">
-                          {casosPostventa.length === 0
-                            ? 'Sin incidencias técnicas pendientes'
-                            : `${casosPostventa.length} caso(s) en seguimiento técnico`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="t-num font-bold text-ink text-sm">{casosPostventa.length}</span>
-                      <ChevronRight className="h-3.5 w-3.5 text-ink-muted group-hover:text-accent-ink" />
-                    </div>
-                  </Link>
-
-                  {/* Alerta 4: Compromisos */}
-                  <Link
-                    href="/administracion?empresa=inmobiliaria&seccion=pendientes_generales"
-                    className="flex items-center justify-between py-3 px-2 rounded-control transition hover:bg-surface-muted group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="grid h-8 w-8 place-items-center rounded-control bg-info-soft text-info shrink-0">
-                        <Clock className="h-4 w-4" />
-                      </span>
-                      <div>
-                        <p className="text-xs font-semibold text-ink group-hover:text-accent-ink transition">
-                          Compromisos del día
-                        </p>
-                        <p className="t-micro text-ink-muted">
-                          {recordatoriosStats.pendientes === 0
-                            ? 'Compromisos al día (100%)'
-                            : `${recordatoriosStats.pendientes} pendientes · ${recordatoriosStats.cumplimiento}% cumplimiento`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="t-num font-bold text-ink text-sm">{recordatoriosStats.pendientes}</span>
-                      <ChevronRight className="h-3.5 w-3.5 text-ink-muted group-hover:text-accent-ink" />
-                    </div>
-                  </Link>
-                </div>
-              </div>
-
-              <div className="mt-4 border-t border-line pt-3 flex items-center justify-between text-xs">
-                <span className="text-ink-muted">Resumen del estado operacional</span>
-                <span className="font-semibold text-accent-ink">Plataforma Hormiglass</span>
-              </div>
-            </div>
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink group-hover:text-accent-ink">{row.label}</span>
+                      <span className="t-num text-xl font-bold text-ink">{row.count}</span>
+                      <ChevronRight className="h-4 w-4 text-ink-muted group-hover:text-accent-ink" aria-hidden />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
           </div>
 
-          {/* Fila Secundaria 50/50: Leads Recientes y Tareas */}
           <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
             <RecentLeadsCard oportunidades={filteredOportunidades} />
-            <TasksActivityCard
-              recordatorios={recordatorios}
-              eventos={eventos}
-              onToggleComplete={handleCompleteRecordatorio}
-            />
+            <TasksActivityCard recordatorios={recordatorios} eventos={eventos} onToggleComplete={handleCompleteRecordatorio} />
           </div>
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* 3. VISTA 2: VENTAS & PIPELINE                             */}
-      {/* ========================================================= */}
+      {/* ===== VENTAS: embudo, evolución mensual, geografía, clientes, vendedores ===== */}
       {activeTab === 'ventas' && (
         <div className="space-y-6">
-          {/* 4 KPIs de Ventas */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard title="Prospectos" value={oportunidades.length} icon={Users} tone="info" subtitle={`${filteredOportunidades.length} en el período`} />
             <MetricCard
-              title="Total Prospectos"
-              value={oportunidades.length}
-              icon={Users}
-              tone="info"
-              change={{ value: '+12.5%', trend: 'up', label: 'este mes' }}
-              subtitle={`${filteredOportunidades.length} en período seleccionado`}
-            />
-            <MetricCard
-              title="Negocios en Pipeline"
+              title="En pipeline"
               value={filteredOportunidades.filter((op) => !['prod_finalizado', 'rev_entregado', 'perdida'].includes(op.estado_pipeline)).length}
               icon={FolderKanban}
               tone="accent"
-              change={{ value: '+15.3%', trend: 'up', label: 'este mes' }}
               subtitle={`$${Math.round(totalPipelineNominal / 1000).toLocaleString('es-CL')}k en negociación`}
             />
             <MetricCard
-              title="Tasa de Conversión"
+              title="Conversión"
               value={`${totalDealsClosed > 0 ? Math.round((totalDealsClosed / Math.max(1, filteredOportunidades.length)) * 100) : 0}%`}
               icon={Target}
               tone="success"
-              change={{ value: `${totalDealsClosed} cerradas`, trend: 'up', label: 'éxito' }}
-              subtitle="Oportunidades concretadas"
+              change={totalDealsClosed > 0 ? { value: `${totalDealsClosed} cerradas`, trend: 'up' } : undefined}
             />
-            <MetricCard
-              title="Ticket Promedio"
-              value={`$${averageDealSize.toLocaleString('es-CL')}`}
-              icon={TrendingUp}
-              tone="warning"
-              change={{ value: '+10.3%', trend: 'up', label: 'vs mes anterior' }}
-              subtitle="Monto medio por contrato"
-            />
+            <MetricCard title="Ticket promedio" value={`$${averageDealSize.toLocaleString('es-CL')}`} icon={TrendingUp} tone="warning" />
           </div>
 
-          {/* Fila Principal 50/50: Evolución de Ventas & Embudo de Ventas (SIN ESPACIOS EN BLANCO) */}
           <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
-            <div className="h-full">
-              <SalesTimelineChart
-                dailyData={dailySeries}
-                monthlyData={monthlySeries}
-                totalPeriodSales={totalPeriodTimelineSales}
-                totalDealsClosed={totalDealsClosed}
-                averageDealSize={averageDealSize}
-              />
-            </div>
-            <div className="h-full">
-              <PipelineFunnelChart
-                stages={funnelStages}
-                totalPipelineNominal={totalPipelineNominal}
-                totalPipelineWeighted={totalPipelineWeighted}
-              />
+            <PipelineFunnelChart stages={funnel.stages} totalNominal={funnel.totalNominal} />
+            <div className="flex flex-col gap-5">
+              <div className="flex-1">
+                <ColumnChart
+                  compact
+                  title="Oportunidades por mes"
+                  hint="Nuevas frente a cerradas, últimos 6 meses"
+                  data={serie6Meses.map((m) => ({ label: m.label, a: m.nuevas, b: m.cerradas }))}
+                  aLabel="Nuevas"
+                  bLabel="Cerradas"
+                  format={(n) => String(n)}
+                />
+              </div>
+              <div className="flex-1">
+                <DonutChart
+                  compact
+                  title="Tipo de cliente"
+                  icon={Building2}
+                  segments={segmentacionClientes}
+                  centerLabel="Clientes"
+                  centerValue={clientes.length.toString()}
+                />
+              </div>
             </div>
           </div>
 
-          {/* Fila Secundaria 50/50: Leads Recientes & Rankings de Vendedores y Segmentación */}
-          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
-            <RecentLeadsCard oportunidades={filteredOportunidades} />
-            <div className="space-y-5">
-              <RankingBarChart
-                title="Ventas por vendedor"
-                subtitle="Rendimiento y volumen comercial por ejecutivo"
-                icon={Award}
-                items={rankingVendedores}
-                emptyMessage="No hay ventas asignadas a vendedores en el período."
-                maxItems={4}
-              />
-              <DonutChart
-                title="Segmentación de clientes"
-                subtitle="Distribución entre empresas corporativas y particulares"
-                icon={Building2}
-                segments={segmentacionClientes}
-                centerLabel="Clientes"
-                centerValue={clientes.length.toString()}
-              />
-            </div>
-          </div>
+          <TreemapChart
+            title="Dónde vendemos"
+            hint="Monto por comuna: más grande, más ventas"
+            items={rankingComunas.map((c) => ({ id: c.id, label: c.title, value: c.monto, sub: `${c.count} ${c.countLabel ?? 'proyectos'}` }))}
+            empty="No hay comunas registradas en el período."
+          />
+
+          <RankingBarChart
+            title="Ventas por vendedor"
+            icon={Award}
+            items={rankingVendedores}
+            emptyMessage="No hay ventas asignadas a vendedores en el período."
+            maxItems={5}
+          />
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* 4. VISTA 3: OPERACIONES & PLANTA                          */}
-      {/* ========================================================= */}
+      {/* ===== OPERACIONES: etapas de obra, agenda, postventa, productos ===== */}
       {activeTab === 'operaciones' && (
         <div className="space-y-6">
-          {/* 4 KPIs Operativos */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard title="Obras en riel" value={obrasEnRielCount} icon={Factory} tone="info" />
             <MetricCard
-              title="Obras en Riel"
-              value={obrasEnRielCount}
-              icon={Factory}
-              tone="info"
-              change={{ value: '100%', trend: 'neutral', label: 'trazabilidad' }}
-              subtitle="Contratos activos en seguimiento"
-            />
-            <MetricCard
-              title="En Fabricación Planta"
+              title="En fabricación"
               value={filteredOportunidades.filter((o) => o.estado_pipeline === 'prod_fabricacion').length}
               icon={Package}
               tone="warning"
-              change={{ value: '+4', trend: 'up', label: 'esta semana' }}
-              subtitle="Lotes en moldes y fraguado"
             />
-            <MetricCard
-              title="Despachos Programados"
-              value={despachosEnRiesgo.length}
-              icon={MapPin}
-              tone="accent"
-              change={{ value: `${despachosEnRiesgo.length} activos`, trend: 'neutral', label: 'fletes' }}
-              subtitle="Guías y rutas de despacho"
-            />
-            <MetricCard
-              title="Casos Postventa"
-              value={casosPostventa.length}
-              icon={ShieldAlert}
-              tone="success"
-              change={{ value: 'Calidad', trend: 'neutral', label: 'técnica' }}
-              subtitle="Garantías y rectificaciones"
-            />
+            <MetricCard title="Despachos activos" value={despachosEnRiesgo.length} icon={MapPin} tone="accent" />
+            <MetricCard title="Casos postventa" value={casosPostventa.length} icon={ShieldAlert} tone="success" />
           </div>
 
-          {/* Riel de Obra Agregado (Pallet Hormiglass) */}
-          <div className="rounded-panel border border-line bg-surface p-5 space-y-4 shadow-xs">
-            <div className="flex flex-col justify-between gap-1 sm:flex-row sm:items-center border-b border-line pb-3">
-              <div>
-                <h3 className="text-base font-semibold text-ink">
-                  Riel de obra agregado
-                </h3>
-                <p className="t-caption text-ink-muted">
-                  Recorrido de contratos activos por etapa del flujo comercial y logístico
-                </p>
-              </div>
-              <Link
-                href="/ventas"
-                className="t-micro flex items-center gap-1 font-semibold text-accent-ink hover:underline"
-              >
-                Ver pipeline completo <ChevronRight className="h-3.5 w-3.5" />
-              </Link>
+          <StageStepper
+            title="Obras por etapa"
+            hint="Dónde está cada obra hoy"
+            stages={rielObrasSemana}
+            href="/ventas"
+            hrefLabel="Ver pipeline"
+          />
+
+          <WeekAgenda
+            title="Próximos 7 días en planta"
+            hint="Fabricación, despachos e instalaciones"
+            events={agendaEventos}
+            href={calendarioPlantaHref}
+            hrefLabel="Calendario"
+          />
+
+          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
+            <StackedBar title="Postventa abierta" hint="Casos por estado" segments={postventaSegmentos} href="/postventa" hrefLabel="Ver casos" />
+            <div className="lg:col-span-2">
+              <RankingBarChart
+                title="Productos más cotizados"
+                icon={Package}
+                items={rankingProductos}
+                emptyMessage="No hay productos cotizados en el período seleccionado."
+                maxItems={5}
+              />
             </div>
-
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-              {rielObrasSemana.map((etapa, idx) => (
-                <div
-                  key={etapa.id}
-                  className="relative flex flex-col justify-between rounded-control border border-line bg-surface-muted/60 p-3.5"
-                >
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <span className="t-micro font-mono text-ink-muted">0{idx + 1}</span>
-                      <span className="t-micro rounded-full border border-line bg-surface px-2 py-0.5 font-medium text-ink">
-                        {etapa.count} {etapa.count === 1 ? 'obra' : 'obras'}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm font-semibold text-ink">
-                      {etapa.label}
-                    </p>
-                  </div>
-                  <div className="mt-3 border-t border-line-subtle pt-2">
-                    <span className="t-caption t-num block font-medium text-ink-muted">
-                      ${etapa.monto.toLocaleString('es-CL')}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Fila 50/50: Programación en Planta vs Productos Más Fabricados */}
-          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
-            <div className="h-full flex flex-col justify-between rounded-panel border border-line bg-surface p-5 shadow-xs">
-              <div>
-                <div className="flex items-center justify-between border-b border-line pb-3">
-                  <div>
-                    <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
-                      <span className="grid h-7 w-7 place-items-center rounded-control bg-accent-soft text-accent-ink">
-                        <Factory className="h-4 w-4" aria-hidden />
-                      </span>
-                      <span>Obras y programación en planta</span>
-                    </h3>
-                    <p className="t-caption mt-0.5 text-ink-muted">
-                      Eventos activos de fabricación, instalación y despacho
-                    </p>
-                  </div>
-                  <Link
-                    href="/planificacion/calendario"
-                    className="t-micro flex items-center gap-0.5 font-semibold text-accent-ink hover:underline"
-                  >
-                    <span>Calendario</span>
-                    <ChevronRight className="h-3 w-3" />
-                  </Link>
-                </div>
-
-                {eventos.filter((e) => ['por_hacer', 'en_curso', 'reprogramado'].includes(e.estado)).length === 0 ? (
-                  <div className="p-8 text-center text-xs italic text-ink-muted">
-                    Sin eventos ni obras pendientes para este período.
-                  </div>
-                ) : (
-                  <div className="mt-3 space-y-2 text-xs">
-                    {eventos
-                      .filter((e) => ['por_hacer', 'en_curso', 'reprogramado'].includes(e.estado))
-                      .slice(0, 5)
-                      .map((ev) => (
-                        <div
-                          key={ev.id}
-                          className="space-y-1 rounded-control border border-line bg-surface-muted/60 p-3 transition hover:bg-surface-muted"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="truncate font-semibold text-ink max-w-[220px]">
-                              {ev.titulo}
-                            </span>
-                            <StatusBadge tone={ev.estado === 'reprogramado' ? 'warning' : 'info'}>
-                              {ev.tipo_evento}
-                            </StatusBadge>
-                          </div>
-                          <div className="flex items-center justify-between text-ink-muted text-[11px]">
-                            <span className="font-mono">{ev.fecha_inicio?.split('T')[0] || ev.fecha_evento}</span>
-                            <span>{ev.responsable?.nombre || 'Sin responsable'}</span>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
-              <div className="mt-4 border-t border-line pt-3 flex items-center justify-between text-xs">
-                <span className="text-ink-muted">Turnos de planta activos</span>
-                <span className="font-semibold text-accent-ink">Líneas de moldeo y vibrado</span>
-              </div>
-            </div>
-
-            <RankingBarChart
-              title="Productos más vendidos y demandados"
-              subtitle="Líneas de producto con mayor salida de fábrica"
-              icon={Package}
-              items={rankingProductos}
-              emptyMessage="No hay productos cotizados en el período seleccionado."
-              maxItems={5}
-            />
           </div>
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* 5. VISTA 4: FINANZAS & CAJA                               */}
-      {/* ========================================================= */}
+      {/* ===== FINANZAS: facturación mensual, cobranza, saldos, abonos, medios de pago ===== */}
       {activeTab === 'finanzas' && (
         <div className="space-y-6">
-          {/* 4 KPIs Financieros */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard title="Facturado" value={`$${totalFacturado.toLocaleString('es-CL')}`} icon={TrendingUp} tone="warning" />
+            <MetricCard title="Recaudado" value={`$${totalAbonado.toLocaleString('es-CL')}`} icon={Wallet} tone="success" />
+            <MetricCard title="Por cobrar" value={`$${totalPendientePorPagar.toLocaleString('es-CL')}`} icon={CreditCard} tone="danger" subtitle={`${filteredOportunidades.length} contratos`} />
             <MetricCard
-              title="Total Facturado"
-              value={`$${totalFacturado.toLocaleString('es-CL')}`}
-              icon={TrendingUp}
-              tone="warning"
-              change={{ value: '+20.4%', trend: 'up', label: 'este mes' }}
-              subtitle="Monto total convenido"
-            />
-            <MetricCard
-              title="Recaudado en Caja"
-              value={`$${totalAbonado.toLocaleString('es-CL')}`}
-              icon={Wallet}
-              tone="success"
-              change={{ value: `${Math.round((totalAbonado / Math.max(1, totalFacturado)) * 100)}%`, trend: 'up', label: 'cobrado' }}
-              subtitle="Abonos bancarios conciliados"
-            />
-            <MetricCard
-              title="Saldo por Cobrar"
-              value={`$${totalPendientePorPagar.toLocaleString('es-CL')}`}
-              icon={CreditCard}
-              tone="accent"
-              change={{ value: `${filteredOportunidades.length} contratos`, trend: 'neutral', label: 'por liquidar' }}
-              subtitle="Cuentas pendientes clientes"
-            />
-            <MetricCard
-              title="Abonos por Conciliar"
+              title="Por conciliar"
               value={`$${totalMontoAbonosPorValidar.toLocaleString('es-CL')}`}
               icon={AlertTriangle}
               tone="info"
-              change={{ value: `${abonosPendientes.length} pendientes`, trend: 'neutral', label: 'en caja' }}
-              subtitle="Comprobantes para validar"
+              change={abonosPendientes.length > 0 ? { value: `${abonosPendientes.length} abonos`, trend: 'neutral' } : undefined}
             />
           </div>
 
-          {/* Fila Principal 50/50: Balance Financiero Bancario vs Abonos Pendientes */}
-          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
-            <FinancialBalanceCard
-              totalVendido={totalFacturado}
-              totalAbonado={totalAbonado}
-              totalPendiente={totalPendientePorPagar}
-              totalOps={filteredOportunidades.length}
-            />
-
-            <div className="h-full flex flex-col justify-between rounded-panel border border-line bg-surface p-5 shadow-xs">
-              <div>
-                <div className="flex items-center justify-between border-b border-line pb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="grid h-7 w-7 place-items-center rounded-control bg-success-soft text-success">
-                      <Wallet className="h-4 w-4" aria-hidden />
-                    </span>
-                    <div>
-                      <h3 className="text-base font-semibold text-ink">
-                        Abonos pendientes de conciliación
-                      </h3>
-                      <p className="t-caption text-ink-muted">
-                        Comprobantes subidos que requieren validación en cuenta oficial
-                      </p>
-                    </div>
-                  </div>
-                  <Link
-                    href="/caja"
-                    className="t-micro flex items-center gap-0.5 font-semibold text-accent-ink hover:underline"
-                  >
-                    <span>Ir a Caja</span>
-                    <ChevronRight className="h-3 w-3" />
-                  </Link>
-                </div>
-
-                {abonosPendientes.length === 0 ? (
-                  <div className="py-12 text-center text-xs text-ink-muted">
-                    No hay comprobantes pendientes de conciliación en Caja.
-                  </div>
-                ) : (
-                  <div className="mt-3 divide-y divide-line-subtle">
-                    {abonosPendientes.slice(0, 5).map((abono) => (
-                      <div key={abono.id} className="flex items-center justify-between py-2.5">
-                        <div>
-                          <p className="text-xs font-semibold text-ink">
-                            {abono.cuenta_bancaria?.banco || abono.cuenta_bancaria?.alias || 'Comprobante de Abono'}
-                          </p>
-                          <p className="t-micro text-ink-muted">
-                            Op: {abono.oportunidad?.codigo || abono.oportunidad_id?.slice(0, 8)} · {abono.fecha?.split('T')[0] || 'Pendiente'}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <span className="t-num block text-xs font-bold text-success">
-                            +${(abono.monto || 0).toLocaleString('es-CL')}
-                          </span>
-                          <span className="t-micro text-ink-muted">
-                            {abono.nota ? abono.nota.slice(0, 20) : 'Transferencia'}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-4 border-t border-line pt-3 flex items-center justify-between text-xs">
-                <span className="text-ink-muted">Total pendiente por conciliar:</span>
-                <span className="font-bold text-ink t-num">
-                  ${totalMontoAbonosPorValidar.toLocaleString('es-CL')}
-                </span>
-              </div>
+          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <ColumnChart
+                title="Facturado y cobrado por mes"
+                hint="Lo vendido cada mes y cuánto se ha cobrado de ello"
+                data={serie6Meses.map((m) => ({ label: m.label, a: m.facturado, b: m.cobrado }))}
+                aLabel="Facturado"
+                bLabel="Cobrado"
+              />
             </div>
+            <RadialGauge
+              title="Cobranza del período"
+              percent={pctCobrado}
+              centerLabel="cobrado"
+              rows={[
+                { label: 'Facturado', value: formatShortMoney(totalFacturado), dot: 'bg-accent' },
+                { label: 'Recaudado', value: formatShortMoney(totalAbonado), dot: 'bg-success' },
+                { label: 'Por cobrar', value: formatShortMoney(totalPendientePorPagar), dot: 'bg-danger' },
+              ]}
+            />
           </div>
 
-          {/* Fila Secundaria 50/50: Métodos de Pago & Comunas */}
-          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
+          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
+            <ProgressList title="Mayores saldos por cobrar" hint="Cuánto falta y cuánto se ha cobrado" rows={saldosPorCobrar} />
+
+            <section className={CARD}>
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-base font-semibold text-ink">Abonos por conciliar</h3>
+                <Link href="/caja" className="flex items-center gap-1 text-xs font-semibold text-accent-ink hover:underline">
+                  Ir a Caja <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                </Link>
+              </div>
+              {abonosPendientes.length === 0 ? (
+                <p className="py-10 text-center text-sm text-ink-muted">No hay comprobantes pendientes en Caja.</p>
+              ) : (
+                <ul className="mt-4 divide-y divide-line-subtle">
+                  {abonosPendientes.slice(0, 5).map((abono) => (
+                    <li key={abono.id} className="flex items-center justify-between gap-3 py-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-ink">{abono.cuenta_bancaria?.banco || abono.cuenta_bancaria?.alias || 'Comprobante de abono'}</p>
+                        <p className="mt-0.5 truncate text-xs text-ink-muted">{abono.oportunidad?.codigo || abono.oportunidad_id?.slice(0, 8)} · {abono.fecha?.split('T')[0] || 'Pendiente'}</p>
+                      </div>
+                      <span className="t-num shrink-0 text-sm font-bold text-success">+${(abono.monto || 0).toLocaleString('es-CL')}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
             <DonutChart
-              title="Métodos de pago utilizados"
-              subtitle="Preferencia y recaudación según medio de pago"
+              title="Medios de pago"
               icon={CreditCard}
               segments={metodosPagoSegmentos}
               centerLabel="Operaciones"
               centerValue={filteredOportunidades.length.toString()}
-            />
-            <RankingBarChart
-              title="Comunas más vendidas"
-              subtitle="Ubicación geográfica con mayor volumen de venta"
-              icon={MapPin}
-              items={rankingComunas}
-              emptyMessage="No hay registros de comunas en el período seleccionado."
-              maxItems={5}
             />
           </div>
         </div>

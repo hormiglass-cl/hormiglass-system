@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { LucideIcon } from 'lucide-react';
+import { LucideIcon, UserRound } from 'lucide-react';
 
 export interface RankingItem {
   id: string;
@@ -25,7 +25,6 @@ interface RankingBarChartProps {
 
 export function RankingBarChart({
   title,
-  subtitle,
   icon: IconComponent,
   items,
   emptyMessage = 'No hay datos en el período seleccionado.',
@@ -35,9 +34,9 @@ export function RankingBarChart({
   const maxMonto = Math.max(...displayItems.map((i) => i.monto), 1);
 
   return (
-    <div className="flex flex-col justify-between space-y-4 rounded-panel border border-line bg-surface p-5">
+    <div className="flex flex-col justify-between space-y-4 rounded-[20px] border border-line bg-surface p-6">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-line-subtle pb-3">
+      <div className="flex items-center justify-between pb-1">
         <div>
           <h3 className="flex items-center gap-2 text-base font-semibold text-ink">
             {IconComponent && (
@@ -47,9 +46,6 @@ export function RankingBarChart({
             )}
             <span>{title}</span>
           </h3>
-          {subtitle && (
-            <p className="t-caption mt-0.5 text-ink-muted">{subtitle}</p>
-          )}
         </div>
       </div>
 
@@ -78,8 +74,8 @@ export function RankingBarChart({
                     </span>
 
                     {item.avatarText && (
-                      <span className="t-micro flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-soft font-semibold text-accent-ink ring-1 ring-accent-line">
-                        {item.avatarText}
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-ink ring-1 ring-accent-line">
+                        <UserRound size={14} aria-hidden />
                       </span>
                     )}
 

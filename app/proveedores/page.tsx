@@ -1,9 +1,11 @@
 'use client';
 
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { createClient } from '../../lib/supabase/client';
-import { Proveedor, PedidoProveedor } from '../../lib/types';
+import { Proveedor, OrdenCompra } from '../../lib/types';
+import { OrdenCompraModal } from '../../components/OrdenCompraModal';
 import {
   Plus,
   Building,
@@ -36,12 +38,13 @@ export default function ProveedoresPage() {
   const toast = useToast();
 
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
-  const [pedidos, setPedidos] = useState<PedidoProveedor[]>([]);
+  const [ordenes, setOrdenes] = useState<OrdenCompra[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Form states
   const [showProvModal, setShowProvModal] = useState(false);
-  const [showPedidoModal, setShowPedidoModal] = useState(false);
+  const [showOcModal, setShowOcModal] = useState(false);
+  const [ocProveedorIdInicial, setOcProveedorIdInicial] = useState<string | undefined>(undefined);
   const [showImportModal, setShowImportModal] = useState(false);
 
   // Search filter
@@ -61,11 +64,6 @@ export default function ProveedoresPage() {
   const [comunaProv, setComunaProv] = useState('');
   const [rubroProv, setRubroProv] = useState('');
 
-  // Fast PO form
-  const [proveedorId, setProveedorId] = useState('');
-  const [descripcionPedido, setDescripcionPedido] = useState('');
-  const [montoPedido, setMontoPedido] = useState(150000);
-
   // Bulk import states
   const [preview, setPreview] = useState<ProveedorImportado[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
@@ -80,19 +78,16 @@ export default function ProveedoresPage() {
         .select('*')
         .order('nombre');
 
-      const { data: pedsData } = await supabase
-        .from('pedidos_proveedor')
+      const { data: ocData } = await supabase
+        .from('ordenes_compra')
         .select('*, proveedor:proveedores(*)')
         .order('created_at', { ascending: false });
 
       const loadedProvs = provsData ? (provsData as Proveedor[]) : [];
-      const loadedPeds = pedsData ? (pedsData as PedidoProveedor[]) : [];
+      const loadedOrdenes = ocData ? (ocData as OrdenCompra[]) : [];
 
       setProveedores(loadedProvs);
-      setPedidos(loadedPeds);
-      if (loadedProvs.length > 0) {
-        setProveedorId((current) => current || loadedProvs[0].id);
-      }
+      setOrdenes(loadedOrdenes);
       setLoading(false);
     } catch (err) {
       console.error('Error loading proveedores from Supabase:', err);
@@ -109,7 +104,7 @@ export default function ProveedoresPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'proveedores' }, () => {
         if (!ignore) void loadData();
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos_proveedor' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes_compra' }, () => {
         if (!ignore) void loadData();
       })
       .subscribe();
@@ -158,7 +153,6 @@ export default function ProveedoresPage() {
 
       if (data) {
         setProveedores((prev) => [...prev, data as Proveedor]);
-        if (!proveedorId) setProveedorId((data as Proveedor).id);
         toast({ message: `Proveedor ${nombreProv} registrado exitosamente.`, tone: 'success' });
       }
     } catch (err) {
@@ -175,49 +169,6 @@ export default function ProveedoresPage() {
     setDireccionProv('');
     setComunaProv('');
     setRubroProv('');
-  };
-
-  const handleAddPedido = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!descripcionPedido || !proveedorId) return;
-
-    const selectedProv = proveedores.find((p) => p.id === proveedorId);
-
-    const newPedPayload = {
-      proveedor_id: proveedorId,
-      descripcion: descripcionPedido,
-      monto: Number(montoPedido) || 0,
-      estado: 'solicitado' as const,
-      fecha: new Date().toISOString().split('T')[0],
-    };
-
-    try {
-      const { data, error } = await supabase
-        .from('pedidos_proveedor')
-        .insert([newPedPayload])
-        .select('*, proveedor:proveedores(*)')
-        .single();
-
-      if (error) throw error;
-
-      if (data) {
-        setPedidos([data as PedidoProveedor, ...pedidos]);
-      } else {
-        const fallbackPed: PedidoProveedor = {
-          id: `ped-${Date.now()}`,
-          ...newPedPayload,
-          proveedor: selectedProv,
-        };
-        setPedidos([fallbackPed, ...pedidos]);
-      }
-      toast({ message: 'Orden de compra rápida generada.', tone: 'success' });
-    } catch (err) {
-      console.error('Error creating purchase order in Supabase:', err);
-      toast({ message: 'No se pudo generar la orden de compra.', tone: 'danger' });
-    }
-
-    setShowPedidoModal(false);
-    setDescripcionPedido('');
   };
 
   // Bulk import handling
@@ -338,9 +289,9 @@ export default function ProveedoresPage() {
     );
   }, [proveedores, searchQuery]);
 
-  // Pagination for pedidos
-  const totalItems = pedidos.length;
-  const paginatedPedidos = pedidos.slice(
+  // Pagination for ordenes
+  const totalItems = ordenes.length;
+  const paginatedOrdenes = ordenes.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
@@ -379,16 +330,15 @@ export default function ProveedoresPage() {
               Nuevo Proveedor
             </Button>
             <Button
-              variant="secondary"
-              onClick={() => setShowPedidoModal(true)}
+              variant="primary"
+              icon={FileText}
+              onClick={() => {
+                setOcProveedorIdInicial(undefined);
+                setShowOcModal(true);
+              }}
             >
-              Generar OC Rápida
+              OC Oficial
             </Button>
-            <Link href="/ordenes-compra/nuevo">
-              <Button variant="primary" icon={FileText}>
-                OC Oficial
-              </Button>
-            </Link>
           </div>
         }
       />
@@ -448,11 +398,16 @@ export default function ProveedoresPage() {
                   </div>
                   <div className="flex flex-col items-end gap-2 shrink-0">
                     <StatusBadge tone="success">Oficial</StatusBadge>
-                    <Link href={`/ordenes-compra/nuevo?proveedor_id=${prov.id}`}>
-                      <Button variant="secondary" size="sm">
-                        Crear OC
-                      </Button>
-                    </Link>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setOcProveedorIdInicial(prov.id);
+                        setShowOcModal(true);
+                      }}
+                    >
+                      Crear OC
+                    </Button>
                   </div>
                 </div>
               ))
@@ -461,54 +416,65 @@ export default function ProveedoresPage() {
         </div>
       </Panel>
 
-      {/* Historial de Órdenes de Compra */}
+      {/* Historial de Órdenes de Compra Oficiales */}
       <Panel
         title={
           <span className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-accent-ink" />
-            <span>Órdenes de Compra Registradas ({pedidos.length})</span>
+            <span>Órdenes de Compra Oficiales ({ordenes.length})</span>
           </span>
+        }
+        actions={
+          <Link href="/ordenes-compra">
+            <Button variant="secondary" size="sm">
+              Ver Módulo OC
+            </Button>
+          </Link>
         }
       >
         <div className="overflow-x-auto">
           <table className="hg-table w-full min-w-[700px] text-left text-xs">
             <thead>
               <tr>
+                <th className="py-3 px-4">OC #</th>
                 <th className="py-3 px-4">Fecha</th>
                 <th className="py-3 px-4">Proveedor</th>
-                <th className="py-3 px-4">Descripción del Pedido</th>
                 <th className="py-3 px-4">Estado OC</th>
-                <th className="py-3 px-4 text-right">Monto ($)</th>
+                <th className="py-3 px-4 text-right">Monto Total ($)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line-subtle">
-              {paginatedPedidos.length === 0 ? (
+              {paginatedOrdenes.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-8 text-center text-ink-muted font-medium">
-                    No se han registrado órdenes de compra rápidas.
+                    No se han registrado órdenes de compra oficiales.
                   </td>
                 </tr>
               ) : (
-                paginatedPedidos.map((ped) => (
-                  <tr key={ped.id} className="hover:bg-surface-muted transition">
-                    <td className="py-3 px-4 text-ink-muted font-mono">{ped.fecha}</td>
-                    <td className="py-3 px-4 font-semibold text-ink">{ped.proveedor?.nombre || 'Proveedor'}</td>
-                    <td className="py-3 px-4 text-ink-muted">{ped.descripcion}</td>
+                paginatedOrdenes.map((oc) => (
+                  <tr key={oc.id} className="hover:bg-surface-muted transition">
+                    <td className="py-3 px-4 font-semibold text-ink">
+                      <CodeStamp>{oc.numero_oc}</CodeStamp>
+                    </td>
+                    <td className="py-3 px-4 text-ink-muted font-mono">{oc.fecha_emision}</td>
+                    <td className="py-3 px-4 font-semibold text-ink">{oc.proveedor?.nombre || 'Proveedor'}</td>
                     <td className="py-3 px-4">
                       <StatusBadge
                         tone={
-                          ped.estado === 'recibido'
+                          oc.estado === 'pagada' || oc.estado === 'recibida' || oc.estado === 'aprobada'
                             ? 'success'
-                            : ped.estado === 'solicitado'
+                            : oc.estado === 'emitida'
                             ? 'info'
+                            : oc.estado === 'cancelada'
+                            ? 'danger'
                             : 'neutral'
                         }
                       >
-                        {ped.estado}
+                        {oc.estado}
                       </StatusBadge>
                     </td>
                     <td className="py-3 px-4 text-right font-semibold text-ink t-num">
-                      ${ped.monto.toLocaleString('es-CL')}
+                      ${Number(oc.monto_total || 0).toLocaleString('es-CL')}
                     </td>
                   </tr>
                 ))
@@ -777,62 +743,16 @@ export default function ProveedoresPage() {
         </div>
       </Dialog>
 
-      {/* Modal Nueva Orden de Compra Rápida */}
-      <Dialog
-        open={showPedidoModal}
-        onClose={() => setShowPedidoModal(false)}
-        title="Generar Orden de Compra Rápida"
-        description="Registra un pedido directo a un proveedor existente."
-        size="md"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setShowPedidoModal(false)}>
-              Cancelar
-            </Button>
-            <Button variant="primary" type="submit" form="form-pedido">
-              Generar OC
-            </Button>
-          </>
-        }
-      >
-        <form id="form-pedido" onSubmit={handleAddPedido} className="space-y-3 text-xs">
-          <div>
-            <label className="block text-ink font-semibold mb-1">Proveedor *</label>
-            <select
-              value={proveedorId}
-              onChange={(e) => setProveedorId(e.target.value)}
-              className="hg-field"
-            >
-              {proveedores.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nombre} ({p.rut})
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-ink font-semibold mb-1">Descripción del Pedido *</label>
-            <textarea
-              rows={2}
-              required
-              placeholder="Ej. Cemento Portland 50 sacos 25kg"
-              value={descripcionPedido}
-              onChange={(e) => setDescripcionPedido(e.target.value)}
-              className="hg-field"
-            />
-          </div>
-          <div>
-            <label className="block text-ink font-semibold mb-1">Monto Total OC ($) *</label>
-            <input
-              type="number"
-              required
-              value={montoPedido}
-              onChange={(e) => setMontoPedido(Number(e.target.value))}
-              className="hg-field t-num"
-            />
-          </div>
-        </form>
-      </Dialog>
+      {/* Modal Unificado de Orden de Compra Oficial */}
+      <OrdenCompraModal
+        isOpen={showOcModal}
+        proveedorIdInicial={ocProveedorIdInicial}
+        onClose={() => {
+          setShowOcModal(false);
+          setOcProveedorIdInicial(undefined);
+        }}
+        onSuccess={loadData}
+      />
     </div>
   );
 }

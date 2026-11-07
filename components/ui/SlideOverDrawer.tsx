@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import clsx from 'clsx';
 import { X, ExternalLink } from 'lucide-react';
 import { IconButton } from './crm';
+import { useMounted } from './useMounted';
 
 export interface SlideOverDrawerProps {
   open: boolean;
@@ -30,13 +31,9 @@ export function SlideOverDrawer({
   footer,
   width = 'lg',
 }: SlideOverDrawerProps) {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Keyboard navigation & body scroll lock
   useEffect(() => {

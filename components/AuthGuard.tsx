@@ -26,16 +26,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         const manoObraAllowed = [
           '/rrhh',
           '/administracion',
-          '/visitas',
-          '/planificacion/calendario',
           '/planificacion/semana',
           '/calendarios/general',
-          '/reventa/calendario',
           '/notificaciones',
           '/recordatorios',
         ];
         const isAllowed = manoObraAllowed.some((route) => pathname.startsWith(route)) ||
-          /^\/ventas\/[^/]+\/operacion(?:\/|$)/.test(pathname) || pathname.startsWith('/auth');
+          /^\/ventas\/[^/]+(?:\/operacion(?:\/|$)|$)/.test(pathname) || pathname.startsWith('/auth');
         if (!isAllowed) {
           router.replace('/rrhh');
         }
@@ -43,7 +40,10 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   }, [currentUser, loading, pathname, router]);
 
-  if (loading) {
+  // Las pantallas de acceso no esperan a la sesión: evita el destello claro del spinner.
+  const isAccessRoute = pathname === '/login' || pathname.startsWith('/auth');
+
+  if (loading && !isAccessRoute) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-app text-ink hg-page-transition">
         <div className="flex flex-col items-center gap-3">

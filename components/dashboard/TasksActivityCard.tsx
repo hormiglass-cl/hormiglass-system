@@ -69,10 +69,10 @@ export function TasksActivityCard({
   const allItems = [...pendingTasks, ...operationalEvents].slice(0, 6);
 
   return (
-    <div className="flex flex-col justify-between rounded-panel border border-line bg-surface p-5 shadow-xs">
+    <div className="flex flex-col justify-between rounded-[20px] border border-line bg-surface p-6">
       <div>
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-line pb-3">
+        <div className="flex items-center justify-between pb-1">
           <div className="flex items-center gap-2">
             <span className="grid h-7 w-7 place-items-center rounded-control bg-accent-soft text-accent-ink">
               <Clock size={15} aria-hidden />
@@ -171,7 +171,7 @@ export function TasksActivityCard({
       <div className="border-t border-line-subtle pt-3 mt-3 flex items-center justify-between text-xs text-ink-muted">
         <span>{recordatorios.filter((r) => !r.completado).length} recordatorios pendientes</span>
         <Link
-          href="/planificacion/calendario"
+          href="/calendarios/general?contexto=produccion_logistica"
           className="font-medium hover:text-ink transition"
         >
           Ver calendario semanal →

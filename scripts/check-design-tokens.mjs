@@ -23,6 +23,8 @@ const MIGRATED = [
   'components/AppShell.tsx',
   'components/Sidebar.tsx',
   'components/Navbar.tsx',
+  'components/CommandPalette.tsx',
+  'components/dashboard/visuals.tsx',
   // Fase 2
   'app/page.tsx',
   'app/notificaciones/page.tsx',
@@ -35,8 +37,6 @@ const MIGRATED = [
   'components/dashboard/TasksActivityCard.tsx',
   // Fase 3
   'app/ventas/page.tsx',
-  'app/ventas/[id]/page.tsx',
-  'app/ventas/[id]/operacion/page.tsx',
   // Fase 4
   'app/clientes/page.tsx',
   'app/clientes/[id]/page.tsx',
@@ -79,7 +79,6 @@ const MIGRATED = [
 const EXCLUDED = [
   'components/PdfPreviewModal.tsx',
   'components/OrdenCompraPdfPreviewModal.tsx',
-  'app/ventas/[id]/operacion/guias/',
 ];
 
 const PALETTE = 'gray|slate|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose';

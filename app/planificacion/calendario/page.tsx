@@ -1,31 +1,23 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import React, { Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { CalendarioEventos } from '../../../components/CalendarioEventos';
-
-function CalendarioPlanificacionContent() {
-  const searchParams = useSearchParams();
-  const highlightedOpId = searchParams.get('opId');
-
-  return (
-    <div className="hg-page">
-      <CalendarioEventos
-        contexto="produccion_logistica"
-        titulo="Calendario de Producción & Logística"
-        subtitulo="Planificación integral de obras en terreno, fabricación en planta y despachos logísticos."
-        tiposPermitidos={['obra', 'produccion', 'logistica', 'despacho_cliente', 'instalacion', 'postventa', 'logistica_interna']}
-        filtroPersonalField="calendario_produccion_logistica"
-        highlightedOpId={highlightedOpId}
-      />
-    </div>
-  );
+interface CalendarioProduccionLegacyRedirectProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export default function CalendarioPlanificacionPage() {
-  return (
-    <Suspense fallback={<div className="p-8 text-center text-xs text-ink-muted font-medium">Cargando Calendario de Producción...</div>}>
-      <CalendarioPlanificacionContent />
-    </Suspense>
-  );
+export default async function CalendarioProduccionLegacyRedirectPage({
+  searchParams,
+}: CalendarioProduccionLegacyRedirectProps) {
+  const resolved = await searchParams;
+  const params = new URLSearchParams();
+  params.set('contexto', 'produccion_logistica');
+
+  for (const [key, value] of Object.entries(resolved)) {
+    if (typeof value === 'string' && value) {
+      params.set(key, value);
+    } else if (Array.isArray(value) && value[0]) {
+      params.set(key, value[0]);
+    }
+  }
+
+  redirect(`/calendarios/general?${params.toString()}`);
 }

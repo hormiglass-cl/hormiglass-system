@@ -11,7 +11,6 @@ import { CotizacionModal } from '../../components/CotizacionModal';
 import {
   Plus,
   Search,
-  Building,
   Download,
   Eye,
   CheckSquare,
@@ -40,9 +39,30 @@ export default function CotizacionesPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [previewCotizacion, setPreviewCotizacion] = useState<Cotizacion | null>(null);
 
-  // Unified CotizacionModal Edit State
+  // Unified CotizacionModal Create/Edit State
   const [editingCotizacion, setEditingCotizacion] = useState<Cotizacion | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
+  const [modalClienteIdInicial, setModalClienteIdInicial] = useState<string | undefined>(() => {
+    if (typeof window === 'undefined') return undefined;
+    return new URLSearchParams(window.location.search).get('cliente_id') || undefined;
+  });
+  const [modalOportunidadIdInicial, setModalOportunidadIdInicial] = useState<string | undefined>(() => {
+    if (typeof window === 'undefined') return undefined;
+    return new URLSearchParams(window.location.search).get('op_id') || undefined;
+  });
+  const [modalEditCotIdInicial, setModalEditCotIdInicial] = useState<string | undefined>(() => {
+    if (typeof window === 'undefined') return undefined;
+    return new URLSearchParams(window.location.search).get('edit_cot_id') || undefined;
+  });
+  const [showEditModal, setShowEditModal] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return Boolean(
+      params.get('nueva') === '1' ||
+      params.get('cliente_id') ||
+      params.get('op_id') ||
+      params.get('edit_cot_id')
+    );
+  });
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -280,12 +300,19 @@ export default function CotizacionesPage() {
                 <span>Ver PDF Selección ({selectedIds.length})</span>
               </Button>
             )}
-            <Link href="/cotizaciones/nuevo">
-              <Button variant="primary">
-                <Plus className="w-4 h-4" />
-                <span>Crear Nueva Cotización</span>
-              </Button>
-            </Link>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setEditingCotizacion(null);
+                setModalClienteIdInicial(undefined);
+                setModalOportunidadIdInicial(undefined);
+                setModalEditCotIdInicial(undefined);
+                setShowEditModal(true);
+              }}
+            >
+              <Plus className="w-4 h-4" />
+              <span>Crear Nueva Cotización</span>
+            </Button>
           </div>
         }
       />
@@ -489,7 +516,7 @@ export default function CotizacionesPage() {
                       <td className="py-2 px-3 max-w-[240px]">
                         {linkedOp ? (
                           <Link
-                            href={`/ventas/${linkedOp.id}`}
+                            href={`/ventas?oportunidad=${linkedOp.id}`}
                             className="flex items-center gap-1.5 text-xs text-ink hover:text-accent transition font-medium group truncate"
                           >
                             <TrendingUp className="w-3.5 h-3.5 text-accent-ink shrink-0" />
@@ -610,8 +637,14 @@ export default function CotizacionesPage() {
         onClose={() => {
           setShowEditModal(false);
           setEditingCotizacion(null);
+          setModalClienteIdInicial(undefined);
+          setModalOportunidadIdInicial(undefined);
+          setModalEditCotIdInicial(undefined);
         }}
         initialCotizacion={editingCotizacion}
+        clienteIdInicial={modalClienteIdInicial}
+        oportunidadIdInicial={modalOportunidadIdInicial}
+        editCotizacionIdInicial={modalEditCotIdInicial}
         onSuccess={async () => {
           const { data, error } = await supabase
             .from('cotizaciones')

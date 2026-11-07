@@ -153,6 +153,7 @@ export default function CajaPage() {
   }, [supabase, toast]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial de datos al montar y suscripción Realtime
     void loadData();
 
     // Suscripción Realtime para abonos y movimientos con debounce
@@ -178,6 +179,7 @@ export default function CajaPage() {
 
   useEffect(() => {
     if (tabParam === 'movimientos' || tabParam === 'validacion') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza la pestaña y la búsqueda con la URL
       setActiveTab(tabParam);
     }
     if (abonoParam) {

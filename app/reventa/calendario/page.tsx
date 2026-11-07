@@ -1,31 +1,23 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import React, { Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { CalendarioEventos } from '../../../components/CalendarioEventos';
-
-function CalendarioReventaContent() {
-  const searchParams = useSearchParams();
-  const highlightedOpId = searchParams.get('opId');
-
-  return (
-    <div className="hg-page">
-      <CalendarioEventos
-        contexto="reventa_logistica"
-        titulo="Calendario de Reventa & Logística"
-        subtitulo="Coordinación de entregas con proveedores externos, retiro de materiales y despachos a clientes."
-        tiposPermitidos={['reventa', 'logistica', 'retiro_proveedor', 'despacho_cliente', 'postventa', 'logistica_interna']}
-        filtroPersonalField="calendario_reventa_logistica"
-        highlightedOpId={highlightedOpId}
-      />
-    </div>
-  );
+interface CalendarioReventaLegacyRedirectProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export default function CalendarioReventaPage() {
-  return (
-    <Suspense fallback={<div className="p-8 text-center text-xs text-ink-muted font-medium">Cargando Calendario de Reventa...</div>}>
-      <CalendarioReventaContent />
-    </Suspense>
-  );
+export default async function CalendarioReventaLegacyRedirectPage({
+  searchParams,
+}: CalendarioReventaLegacyRedirectProps) {
+  const resolved = await searchParams;
+  const params = new URLSearchParams();
+  params.set('contexto', 'reventa_logistica');
+
+  for (const [key, value] of Object.entries(resolved)) {
+    if (typeof value === 'string' && value) {
+      params.set(key, value);
+    } else if (Array.isArray(value) && value[0]) {
+      params.set(key, value[0]);
+    }
+  }
+
+  redirect(`/calendarios/general?${params.toString()}`);
 }

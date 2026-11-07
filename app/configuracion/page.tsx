@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useAuth } from '../../lib/context/AuthContext';
 import { Usuario, UserRole } from '../../lib/types';
 import { createClient } from '../../lib/supabase/client';
@@ -21,13 +22,14 @@ import {
   MoreVertical,
   UserCheck,
   UserX,
+  ExternalLink,
 } from 'lucide-react';
 import { mensajeError } from '../../lib/errores';
+import { recoveryRedirectUrl } from '../../lib/site-url';
 import {
   PageHeader,
   Panel,
   Button,
-  IconButton,
   StatusBadge,
   Dialog,
   Field,
@@ -66,6 +68,38 @@ export default function ConfiguracionPage() {
   const [userCurrentPage, setUserCurrentPage] = useState(1);
   const [userItemsPerPage, setUserItemsPerPage] = useState(10);
 
+  // Directorio RR.HH. vinculado para enlace directo a fichas laborales
+  const [trabajadoresMap, setTrabajadoresMap] = useState<
+    Record<string, { id: string; rut: string; cargo: string }>
+  >({});
+
+  const loadTrabajadoresLinks = useCallback(async () => {
+    const { data } = await supabase
+      .from('trabajadores')
+      .select('id, usuario_id, email, rut, cargo');
+    if (!data) return;
+    const map: Record<string, { id: string; rut: string; cargo: string }> = {};
+    for (const row of data as Array<{
+      id: string;
+      usuario_id: string | null;
+      email: string | null;
+      rut: string | null;
+      cargo: string | null;
+    }>) {
+      const info = { id: row.id, rut: row.rut || '', cargo: row.cargo || '' };
+      if (row.usuario_id) map[row.usuario_id] = info;
+      if (row.email) map[row.email.toLowerCase()] = info;
+    }
+    setTrabajadoresMap(map);
+  }, [supabase]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void loadTrabajadoresLinks();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [loadTrabajadoresLinks, usersList.length]);
+
   // Toggle Calendario directo en la tabla de usuarios
   const handleToggleUserCalendar = async (
     userId: string,
@@ -90,13 +124,13 @@ export default function ConfiguracionPage() {
   // Reenviar correo de invitación / acceso
   const handleResendInvite = async (usr: Usuario) => {
     try {
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      // El correo trae un código de un solo uso; el usuario lo ingresa en "Recuperar contraseña".
       const { error } = await supabase.auth.resetPasswordForEmail(usr.email, {
-        redirectTo: `${origin}/auth/callback?next=/auth/actualizar-password`,
+        redirectTo: recoveryRedirectUrl(),
       });
       if (error) throw error;
       toast({
-        message: `Correo de invitación / acceso enviado exitosamente a ${usr.email}.`,
+        message: `Código de acceso enviado a ${usr.email}. Debe ingresarlo en «Recuperar contraseña» → «Ya tengo un código».`,
         tone: 'success',
       });
     } catch (err: unknown) {
@@ -233,15 +267,22 @@ export default function ConfiguracionPage() {
       {/* Cabecera Principal */}
       <PageHeader
         title="Configuración de usuarios y accesos"
-        description="Gestión centralizada de colaboradores, roles de acceso, credenciales y vinculación a calendarios operativos."
+        description="Gestión centralizada de cuentas CRM, roles de acceso, credenciales y vinculación con Recursos Humanos y calendarios operativos."
         actions={
-          <Button
-            variant="primary"
-            icon={UserPlus}
-            onClick={() => setShowUserModal(true)}
-          >
-            Registrar usuario
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/rrhh">
+              <Button variant="secondary" icon={ExternalLink}>
+                Directorio RR.HH. y Fichas Laborales
+              </Button>
+            </Link>
+            <Button
+              variant="primary"
+              icon={UserPlus}
+              onClick={() => setShowUserModal(true)}
+            >
+              Registrar usuario
+            </Button>
+          </div>
         }
       />
 
@@ -305,7 +346,7 @@ export default function ConfiguracionPage() {
             <table className="hg-table w-full text-left text-xs min-w-[950px]">
               <thead>
                 <tr>
-                  <th className="p-3">Usuario / Nombre</th>
+                  <th className="p-3">Usuario / Ficha RR.HH.</th>
                   <th className="p-3">Correo electrónico</th>
                   <th className="p-3">Rol de acceso</th>
                   <th className="p-3 text-center">Cal. Visitas</th>
@@ -316,11 +357,32 @@ export default function ConfiguracionPage() {
                 </tr>
               </thead>
               <tbody>
-                {paginatedUsers.map((usr) => (
+                {paginatedUsers.map((usr) => {
+                  const linkedWorker =
+                    trabajadoresMap[usr.id] ||
+                    (usr.email ? trabajadoresMap[usr.email.toLowerCase()] : undefined);
+
+                  return (
                   <tr key={usr.id}>
-                    {/* Usuario / Nombre */}
-                    <td className="p-3 font-semibold text-ink">
-                      {usr.nombre}
+                    {/* Usuario / Nombre + Enlace a Ficha RR.HH. */}
+                    <td className="p-3">
+                      <div className="font-semibold text-ink">{usr.nombre}</div>
+                      {linkedWorker ? (
+                        <Link
+                          href={`/rrhh/${linkedWorker.id}`}
+                          className="inline-flex items-center gap-1 t-micro text-accent-ink hover:underline mt-0.5"
+                        >
+                          <span>Ficha RR.HH. ({linkedWorker.rut || 'Ver carpeta'})</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </Link>
+                      ) : (
+                        <Link
+                          href="/rrhh"
+                          className="inline-flex items-center gap-1 t-micro text-ink-muted hover:text-accent-ink mt-0.5"
+                        >
+                          <span>Vincular en RR.HH.</span>
+                        </Link>
+                      )}
                     </td>
 
                     {/* Correo Electrónico */}
@@ -453,7 +515,8 @@ export default function ConfiguracionPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
