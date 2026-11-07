@@ -5,8 +5,9 @@ export function seguimientosParaUsuario(
   oportunidades: Pick<OportunidadVenta, 'id' | 'titulo' | 'asignado_a' | 'seguimiento_responsable_id' | 'proxima_accion' | 'proxima_accion_fecha' | 'estado_pipeline'>[],
   userId: string,
   now = new Date(),
+  anticipacionHoras = 24,
 ) {
-  const horizon = now.getTime() + 24 * 60 * 60 * 1000;
+  const horizon = now.getTime() + anticipacionHoras * 60 * 60 * 1000;
   return oportunidades.filter((op) => {
     const due = op.proxima_accion_fecha ? new Date(op.proxima_accion_fecha).getTime() : NaN;
     return (op.seguimiento_responsable_id || op.asignado_a) === userId &&
@@ -25,6 +26,11 @@ export async function syncSeguimientoNotificaciones(
   if (syncingUsers.has(userId)) return;
   syncingUsers.add(userId);
   try {
+    const { data: ajustes } = await supabase.from('ajustes_sistema').select('clave, valor').in('clave', ['avisos', 'recordatorios']);
+    const cfg = (clave: string) => (ajustes?.find((a: { clave: string }) => a.clave === clave)?.valor ?? {}) as Record<string, unknown>;
+    const seguimientoActivo = cfg('avisos').seguimiento_activo !== false;
+    const horas = Number(cfg('recordatorios').anticipacion_horas);
+    const anticipacion = Number.isFinite(horas) && horas >= 0 ? horas : 24;
     const [opsResult, noticesResult] = await Promise.all([
       supabase.from('oportunidades')
         .select('id, titulo, estado_pipeline, asignado_a, seguimiento_responsable_id, proxima_accion, proxima_accion_fecha')
@@ -37,7 +43,9 @@ export async function syncSeguimientoNotificaciones(
     if (opsResult.error || noticesResult.error) return;
 
   const notices = noticesResult.data || [];
-  const candidates = seguimientosParaUsuario((opsResult.data || []) as OportunidadVenta[], userId);
+  const candidates = seguimientoActivo
+    ? seguimientosParaUsuario((opsResult.data || []) as OportunidadVenta[], userId, new Date(), anticipacion)
+    : [];
 
   for (const previous of notices) {
     if (!candidates.some((op) => op.id === previous.entidad_relacionada)) {
@@ -63,6 +71,8 @@ export async function syncSeguimientoNotificaciones(
       });
     }
   }
+  } catch {
+    // Sin conexión o Supabase inalcanzable: se reintenta en la próxima carga.
   } finally {
     syncingUsers.delete(userId);
   }
