@@ -1,30 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import {
-  AlertCircle,
   AlertTriangle,
   Camera,
   CheckCircle2,
   ChevronRight,
-  Clock,
-  DollarSign,
   FileCheck,
-  FileText,
-  Filter,
   HardHat,
-  Kanban,
   Plus,
   Printer,
   RefreshCw,
   Search,
   Shield,
   ShieldAlert,
-  Table as TableIcon,
   Trash2,
   Wrench,
-  X,
   XCircle,
 } from 'lucide-react';
 import { createClient } from '../../lib/supabase/client';
@@ -49,7 +40,6 @@ import {
   Button,
   CodeStamp,
   Dialog,
-  EmptyState,
   FilterBar,
   PageHeader,
   Panel,
@@ -198,7 +188,7 @@ export default function PostventaPage() {
 
     if (opsData) setOportunidades(opsData as OportunidadVenta[]);
     if (clientesData) setClientes(clientesData as Cliente[]);
-    if (trabajadores) setTrabajadores(trabData as Trabajador[]);
+    if (trabData) setTrabajadores(trabData as Trabajador[]);
     if (usrsData) setUsuarios(usrsData as Usuario[]);
     if (prodsData) setProductos(prodsData as ProductoCatalogo[]);
 
@@ -206,6 +196,7 @@ export default function PostventaPage() {
   }, [supabase, toast]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial de datos al montar
     void loadData();
   }, [loadData]);
 

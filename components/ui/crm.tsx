@@ -4,9 +4,19 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import {
-  AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Info,
-  MoreHorizontal, MoreVertical, Search, X, XCircle,
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  MoreHorizontal,
+  Search,
+  X,
+  XCircle,
 } from 'lucide-react';
+import { useMounted } from './useMounted';
 
 /* Componentes base del CRM sobre los tokens de app/globals.css (plans/plan-rediseno-hig.md).
    Reglas: sin hex sueltos, sin paleta Tailwind cruda, texto ≥ 11 px, pesos 400–700. */
@@ -107,7 +117,7 @@ export function PageHeader({
     <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div className="min-w-0">
         <h1 className="t-page truncate">{title}</h1>
-        {description && <p className="t-caption mt-1 max-w-2xl">{description}</p>}
+        {description && <div className="t-caption mt-1 max-w-2xl">{description}</div>}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
     </header>
@@ -481,11 +491,7 @@ export function Dialog({ open, title, description, children, footer, onClose, si
   const ref = useRef<HTMLElement>(null);
   const titleId = useId();
   const descriptionId = useId();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useMounted();
 
   useDialogBehavior(open, onClose, ref);
   if (!open || !mounted) return null;
@@ -535,11 +541,7 @@ export function Sheet({ open, title, children, footer, onClose, width = 'md' }: 
 }) {
   const ref = useRef<HTMLElement>(null);
   const titleId = useId();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useMounted();
 
   useDialogBehavior(open, onClose, ref);
   if (!open || !mounted) return null;

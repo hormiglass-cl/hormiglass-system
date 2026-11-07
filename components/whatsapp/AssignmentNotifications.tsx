@@ -1,7 +1,5 @@
 'use client';
 
-import Link from 'next/link';
-import { Bell } from 'lucide-react';
 import { useConversations } from '../../lib/whatsapp/store';
 import { assignmentItems } from '../../lib/whatsapp/notifications';
 import { Button } from '../ui/crm';
@@ -9,15 +7,6 @@ import { Button } from '../ui/crm';
 export function useAssignments(tab = 'principal', category = 'todas', search = '') {
   const { notices, chats } = useConversations();
   return assignmentItems(notices, chats, tab, category, search);
-}
-
-/** The real bell destination and unread subscription remain owned by Navbar. */
-export function NotificationBell({ unreadCount }: { unreadCount: number }) {
-  const count = unreadCount + useAssignments().length;
-  return <Link href="/notificaciones" prefetch={true} aria-label="Notificaciones" title="Notificaciones" className="relative grid h-9 w-9 place-items-center rounded-control text-ink-muted hover:bg-surface-muted hover:text-ink">
-    <Bell size={19} aria-hidden />
-    {count > 0 && <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 t-micro t-num font-bold text-on-accent">{count > 99 ? '99+' : count}</span>}
-  </Link>;
 }
 
 export function AssignmentNotifications({ tab, category, search, navigate }: { tab: string; category: string; search: string; navigate: (href: string) => void }) {

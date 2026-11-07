@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import type { OrigenProducto, ProductoCatalogo } from './types';
+import type { OrigenProducto } from './types';
 
 export type ProductoImportado = {
   codigo: string;

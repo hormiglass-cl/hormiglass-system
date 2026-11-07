@@ -17,13 +17,11 @@ interface CacheEntry<T> {
 const memoryStore = new Map<string, CacheEntry<unknown>>();
 
 // TTL por defecto: 60 segundos antes de considerar los datos totalmente expirados
-const DEFAULT_TTL_MS = 60_000;
 
 export const swrCache = {
-  get<T>(key: string, maxAgeMs: number = DEFAULT_TTL_MS): T | null {
+  get<T>(key: string): T | null {
     const entry = memoryStore.get(key) as CacheEntry<T> | undefined;
     if (!entry) return null;
-    const isExpired = Date.now() - entry.timestamp > maxAgeMs;
     // En SWR devolvemos los datos para render inmediato incluso si están desactualizados
     return entry.data;
   },

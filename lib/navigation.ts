@@ -1,7 +1,7 @@
 import {
-  Bell, Briefcase, Building2, CalendarDays, CalendarRange, ChartNoAxesCombined, Container,
-  ContactRound, Factory, FileText, FolderKanban, Handshake, Landmark, LayoutDashboard, MapPin,
-  MessageSquare, Package, Settings2, ShieldAlert, ShoppingCart, Truck, Users, Wallet,
+  Bell, Briefcase, Building2, CalendarDays, CalendarRange, ChartNoAxesCombined,
+  ContactRound, FileText, FolderKanban, Handshake, Landmark, LayoutDashboard,
+  Boxes, MessageSquare, Package, Settings2, ShieldAlert, ShoppingCart, TrendingUp, Truck, Users, Wallet,
 } from 'lucide-react';
 import type { UserRole } from './types';
 
@@ -19,6 +19,8 @@ export type NavItem = {
 export type NavGroup = {
   id: string;
   label: string;
+  /** Ícono de la carpeta (se muestra con la barra contraída). */
+  icon: typeof LayoutDashboard;
   items: NavItem[];
   /** Grupo plegable en la barra lateral (sidebars.md › disclosure controls). */
   collapsible?: boolean;
@@ -28,40 +30,37 @@ const ADMIN_FINANZAS: UserRole[] = ['admin', 'finanzas'];
 const TODOS_MENOS_CAMPO: UserRole[] = ['admin', 'user', 'finanzas'];
 
 export const NAV_GROUPS: NavGroup[] = [
-  { id: 'inicio', label: 'Inicio', collapsible: true, items: [
+  { id: 'inicio', label: 'Inicio', icon: LayoutDashboard, collapsible: false, items: [
     { label: 'Panel operativo', href: '/', icon: LayoutDashboard, roles: TODOS_MENOS_CAMPO },
-    { label: 'Pipeline de ventas', href: '/ventas', icon: FolderKanban, match: '/ventas', roles: TODOS_MENOS_CAMPO },
   ] },
-  { id: 'comercial', label: 'Comercial', collapsible: true, items: [
+  { id: 'comercial', label: 'Comercial', icon: TrendingUp, collapsible: true, items: [
     { label: 'Conversaciones', href: '/conversaciones', icon: MessageSquare, roles: TODOS_MENOS_CAMPO },
+    { label: 'Pipeline de ventas', href: '/ventas', icon: FolderKanban, match: '/ventas', roles: TODOS_MENOS_CAMPO },
     { label: 'Clientes', href: '/clientes', icon: ContactRound, roles: TODOS_MENOS_CAMPO },
     { label: 'Cotizaciones', href: '/cotizaciones', icon: FileText, roles: TODOS_MENOS_CAMPO },
     { label: 'Postventa y garantías', href: '/postventa', icon: ShieldAlert, roles: TODOS_MENOS_CAMPO },
   ] },
-  { id: 'compras', label: 'Compras y catálogo', collapsible: true, items: [
+  { id: 'compras', label: 'Compras y catálogo', icon: Boxes, collapsible: true, items: [
     { label: 'Órdenes de compra', href: '/ordenes-compra', icon: ShoppingCart, roles: TODOS_MENOS_CAMPO },
     { label: 'Proveedores', href: '/proveedores', icon: Handshake, roles: TODOS_MENOS_CAMPO },
     { label: 'Productos e insumos', href: '/productos', icon: Package, roles: TODOS_MENOS_CAMPO },
   ] },
-  { id: 'calendarios', label: 'Calendarios', collapsible: true, items: [
-    { label: 'Vista general', href: '/calendarios/general', icon: CalendarDays },
-    { label: 'Visitas a terreno', href: '/visitas', icon: MapPin },
-    { label: 'Producción y logística', href: '/planificacion/calendario', icon: Factory },
+  { id: 'calendarios', label: 'Calendarios', icon: CalendarDays, collapsible: true, items: [
+    { label: 'Calendario operativo', href: '/calendarios/general', icon: CalendarDays, match: '/calendarios' },
     { label: 'Programa semanal', href: '/planificacion/semana', icon: CalendarRange },
-    { label: 'Reventa y logística', href: '/reventa/calendario', icon: Container },
   ] },
-  { id: 'finanzas', label: 'Finanzas', collapsible: true, items: [
+  { id: 'finanzas', label: 'Finanzas', icon: Wallet, collapsible: true, items: [
     { label: 'Caja', href: '/caja', icon: Wallet, roles: TODOS_MENOS_CAMPO },
     { label: 'Bancos y empresas', href: '/caja/configuracion', icon: Landmark, roles: ADMIN_FINANZAS },
     { label: 'Reportes', href: '/reportes', icon: ChartNoAxesCombined, roles: TODOS_MENOS_CAMPO },
   ] },
-  { id: 'administracion', label: 'Administración', collapsible: true, items: [
+  { id: 'administracion', label: 'Administración', icon: Building2, collapsible: true, items: [
     { label: 'Sociedad Comercial', href: '/administracion?empresa=comercial&seccion=cuentas_por_cobrar', icon: Briefcase, roles: TODOS_MENOS_CAMPO },
     { label: 'Sociedad Transportes', href: '/administracion?empresa=transportes&seccion=cuentas_por_cobrar', icon: Truck, roles: TODOS_MENOS_CAMPO },
     { label: 'Sociedad Inmobiliaria', href: '/administracion?empresa=inmobiliaria&seccion=cuentas_por_cobrar', icon: Building2, roles: TODOS_MENOS_CAMPO },
     { label: 'Recursos humanos', href: '/rrhh', icon: Users },
   ] },
-  { id: 'sistema', label: 'Sistema', collapsible: true, items: [
+  { id: 'sistema', label: 'Sistema', icon: Settings2, collapsible: true, items: [
     { label: 'Notificaciones', href: '/notificaciones', icon: Bell },
     { label: 'Configuración', href: '/configuracion', icon: Settings2, roles: TODOS_MENOS_CAMPO },
   ] },

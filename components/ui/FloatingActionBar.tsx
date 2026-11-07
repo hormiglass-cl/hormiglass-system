@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { X } from 'lucide-react';
+import { useMounted } from './useMounted';
 
 export interface FloatingActionBarProps {
   selectedCount: number;
@@ -20,11 +21,7 @@ export function FloatingActionBar({
   itemLabel = 'elementos',
   className,
 }: FloatingActionBarProps) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useMounted();
 
   if (!mounted || selectedCount <= 0) return null;
 

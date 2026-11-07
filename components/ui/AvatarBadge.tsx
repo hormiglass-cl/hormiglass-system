@@ -2,6 +2,7 @@
 
 import React from 'react';
 import clsx from 'clsx';
+import { UserRound } from 'lucide-react';
 
 const AVATAR_TONES = [
   { bg: 'bg-accent-soft', text: 'text-accent-ink', border: 'border-accent-line' },
@@ -19,13 +20,6 @@ function getToneForString(str?: string) {
   }
   const index = Math.abs(hash) % AVATAR_TONES.length;
   return AVATAR_TONES[index];
-}
-
-function getInitials(name?: string) {
-  if (!name) return '?';
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 export interface AvatarBadgeProps {
@@ -46,14 +40,14 @@ export function AvatarBadge({
   className,
 }: AvatarBadgeProps) {
   const tone = getToneForString(name);
-  const initials = getInitials(name);
 
   const sizeClasses = {
-    xs: 'h-5 w-5 text-[11px]',
-    sm: 'h-6 w-6 text-xs',
-    md: 'h-8 w-8 text-sm',
-    lg: 'h-10 w-10 text-base',
+    xs: 'h-5 w-5',
+    sm: 'h-6 w-6',
+    md: 'h-8 w-8',
+    lg: 'h-10 w-10',
   }[size];
+  const iconSize = { xs: 12, sm: 14, md: 18, lg: 22 }[size];
 
   const avatar = (
     <span
@@ -72,7 +66,7 @@ export function AvatarBadge({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={imageUrl} alt={name} className="h-full w-full rounded-full object-cover" />
       ) : (
-        initials
+        <UserRound size={iconSize} aria-hidden />
       )}
     </span>
   );

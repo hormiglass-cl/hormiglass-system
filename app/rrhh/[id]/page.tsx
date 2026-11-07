@@ -1857,7 +1857,7 @@ export default function TrabajadorDetailPage() {
                           <tr key={op.id} className="hover:bg-surface-muted transition-colors">
                             <td className="py-2.5 px-3">
                               <Link
-                                href={`/ventas/${op.id}`}
+                                href={`/ventas?oportunidad=${op.id}`}
                                 className="font-semibold text-accent hover:underline inline-flex items-center gap-1.5"
                               >
                                 <span>{op.titulo || op.codigo || op.id.slice(0, 8)}</span>

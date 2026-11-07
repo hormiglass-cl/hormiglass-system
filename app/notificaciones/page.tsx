@@ -20,6 +20,8 @@ import {
   Circle,
   Bell,
   ChevronRight,
+  Wallet,
+  Truck,
 } from 'lucide-react';
 import clsx from 'clsx';
 import {
@@ -194,6 +196,7 @@ export default function NotificacionesPage() {
     if (!currentUserId) return;
     try {
       const s = localStorage.getItem(`hg_notif_snoozed_${currentUserId}`);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- lee localStorage del usuario actual
       if (s) setSnoozedIds(JSON.parse(s));
       const c = localStorage.getItem(`hg_notif_cleared_${currentUserId}`);
       if (c) setClearedIds(JSON.parse(c));
@@ -532,17 +535,6 @@ export default function NotificacionesPage() {
     }
   };
 
-  // Selección múltiple
-  const toggleSelectAll = () => {
-    const allFilteredIds = currentTabItems.map((n) => n.id);
-    const isAllSelected = allFilteredIds.length > 0 && allFilteredIds.every((id) => selectedIds.includes(id));
-    if (isAllSelected) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(allFilteredIds);
-    }
-  };
-
   const toggleSelectOne = (id: string) => {
     if (selectedIds.includes(id)) {
       setSelectedIds(selectedIds.filter((item) => item !== id));
@@ -574,7 +566,6 @@ export default function NotificacionesPage() {
     setSelectedIds([]);
   };
 
-  const allSelected = currentTabItems.length > 0 && currentTabItems.every((n) => selectedIds.includes(n.id));
 
   const filterOptions: { id: FilterCategory; label: string }[] = [
     { id: 'todas', label: 'Todos los avisos' },
@@ -1014,7 +1005,13 @@ export default function NotificacionesPage() {
                           </span>
 
                           {/* Avatar con Iniciales del Autor / Entidad */}
-                          <AvatarBadge name={parsed.initials} size="xs" className="shrink-0" />
+                          {parsed.category === 'cobro' || parsed.category === 'despacho' || parsed.category === 'sistema' ? (
+                            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line bg-surface-muted text-ink-muted" aria-hidden>
+                              {parsed.category === 'cobro' ? <Wallet size={12} /> : parsed.category === 'despacho' ? <Truck size={12} /> : <Bell size={12} />}
+                            </span>
+                          ) : (
+                            <AvatarBadge name={parsed.title} size="xs" className="shrink-0" />
+                          )}
 
                           {/* Texto del Mensaje / Preview */}
                           <span className="truncate text-xs text-ink-muted min-w-0 flex-1 hidden md:inline">

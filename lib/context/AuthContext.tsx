@@ -5,6 +5,7 @@ import type { Session } from '@supabase/supabase-js';
 import { Usuario, UserRole } from '../types';
 import { createClient } from '../supabase/client';
 import { mensajeError } from '../errores';
+import { recoveryRedirectUrl } from '../site-url';
 
 export interface AddUserInput {
   nombre: string;
@@ -160,13 +161,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Si la contraseña no fue ingresada manualmente, enviar correo para que el usuario defina su contraseña
     if (!userData.password && typeof window !== 'undefined') {
       try {
-        const origin = window.location.origin;
-        const { error: inviteError } = await supabase.auth.resetPasswordForEmail(
-          userData.email.trim(),
-          {
-            redirectTo: `${origin}/auth/callback?next=/auth/actualizar-password`,
-          }
-        );
+        // El correo trae un código de un solo uso; el usuario lo ingresa en "Recuperar contraseña".
+        const { error: inviteError } = await supabase.auth.resetPasswordForEmail(userData.email.trim(), {
+          redirectTo: recoveryRedirectUrl(),
+        });
         if (inviteError) {
           console.warn('Aviso: No se pudo enviar el correo de invitación automático:', inviteError.message);
         }

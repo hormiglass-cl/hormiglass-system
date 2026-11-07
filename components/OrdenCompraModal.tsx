@@ -2,6 +2,7 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { createClient } from '../lib/supabase/client';
 import { useAuth } from '../lib/context/AuthContext';
 import { EstadoOrdenCompra, OrdenCompra, OrdenCompraItem, Proveedor, OportunidadVenta, ProductoCatalogo } from '../lib/types';
@@ -162,7 +163,7 @@ export function OrdenCompraModal({
   const montoIva = Math.round(subtotal * 0.19);
   const montoTotal = subtotal + montoIva + Number(costoEnvio || 0) + Number(otrosCargos || 0);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
   const handleItemChange = (index: number, field: keyof OrdenCompraItem, value: string | number) => {
     const updated = [...items];
@@ -445,25 +446,29 @@ export function OrdenCompraModal({
     await saveOrdenToBackend(false);
   };
 
-  return (
-    <div className="fixed inset-0 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-      <div className="bg-surface border border-line rounded-panel max-w-4xl w-full p-6 space-y-5 shadow-[var(--hg-shadow-popover)] text-ink max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center justify-between border-b border-line pb-3">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] bg-ink/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="bg-surface border border-line rounded-panel max-w-4xl w-full shadow-[var(--hg-shadow-popover)] text-ink max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
+        <header className="shrink-0 flex items-center justify-between border-b border-line-subtle px-5 py-4 bg-surface">
           <h3 className="t-section flex items-center gap-2">
-            <FileText className="w-5 h-5 text-accent-ink" />
+            <FileText className="w-5 h-5 text-accent-ink shrink-0" />
             <span>{initialOrden ? `Editar OC ${initialOrden.numero_oc}` : 'Emitir Nueva Orden de Compra'}</span>
           </h3>
           <IconButton icon={X} label="Cerrar" onClick={onClose} />
-        </div>
+        </header>
 
-        {errorMsg && (
-          <div className="bg-danger-soft border border-danger-line text-danger p-3.5 rounded-lg text-xs font-semibold flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-danger shrink-0" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+        <form id="form-oc-modal" onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4 text-xs">
+          {errorMsg && (
+            <div className="bg-danger-soft border border-danger-line text-danger p-3.5 rounded-lg text-xs font-semibold flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-danger shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 bg-surface-muted p-4 rounded-lg border border-line">
             <div className="lg:col-span-2 relative">
               <label className="block font-semibold text-ink mb-1">Proveedor *</label>
@@ -590,7 +595,7 @@ export function OrdenCompraModal({
               </Button>
             </div>
 
-            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            <div className="space-y-2.5">
               <div className="hidden sm:grid grid-cols-12 gap-2 px-2 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
                 <span className="col-span-2">Código</span>
                 <span className="col-span-4">Descripción</span>
@@ -600,12 +605,12 @@ export function OrdenCompraModal({
                 <span className="col-span-1 text-center">Quitar</span>
               </div>
               {items.map((item, index) => (
-                <div key={index} className="grid grid-cols-12 gap-2 items-center bg-surface-muted p-2.5 rounded-md border border-line">
+                <div key={index} className="grid grid-cols-12 gap-2 items-center bg-surface-muted p-3 rounded-lg border border-line">
                   <select
                     aria-label={`Producto de compra ${index + 1}`}
                     value={item.producto_catalogo_id || ''}
                     onChange={(e) => selectCatalogItem(index, e.target.value)}
-                    className="col-span-12 bg-surface border border-line rounded-md px-2 py-1.5 text-ink font-medium focus:outline-none focus:border-accent"
+                    className="col-span-12 bg-surface border border-line rounded-md px-2.5 py-1.5 text-ink font-medium focus:outline-none focus:border-accent"
                   >
                     <option value="">Partida libre / seleccionar catálogo</option>
                     {catalogo.map((product) => (
@@ -625,14 +630,14 @@ export function OrdenCompraModal({
                     onChange={(e) => handleItemChange(index, 'articulo_codigo', e.target.value)}
                     placeholder="Código"
                     aria-label="Código artículo"
-                    className="col-span-12 sm:col-span-2 bg-surface border border-line rounded-md px-2 py-1.5 text-ink font-mono focus:outline-none focus:border-accent"
+                    className="col-span-12 sm:col-span-2 bg-surface border border-line rounded-md px-2.5 py-1.5 text-ink font-mono focus:outline-none focus:border-accent"
                   />
                   <input
                     value={item.descripcion}
                     onChange={(e) => handleItemChange(index, 'descripcion', e.target.value)}
                     placeholder="Descripción"
                     aria-label="Descripción artículo"
-                    className="col-span-12 sm:col-span-4 bg-surface border border-line rounded-md px-2 py-1.5 font-semibold text-ink focus:outline-none focus:border-accent"
+                    className="col-span-12 sm:col-span-4 bg-surface border border-line rounded-md px-2.5 py-1.5 font-semibold text-ink focus:outline-none focus:border-accent"
                   />
                   <input
                     type="number"
@@ -641,7 +646,7 @@ export function OrdenCompraModal({
                     value={item.cantidad}
                     onChange={(e) => handleItemChange(index, 'cantidad', e.target.value)}
                     aria-label="Cantidad"
-                    className="col-span-6 sm:col-span-2 bg-surface border border-line rounded-md px-2 py-1.5 text-right font-semibold text-ink t-num focus:outline-none focus:border-accent"
+                    className="col-span-6 sm:col-span-2 bg-surface border border-line rounded-md px-2.5 py-1.5 text-right font-semibold text-ink t-num focus:outline-none focus:border-accent"
                   />
                   <div className="col-span-6 sm:col-span-2 relative">
                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-ink-muted">CLP</span>
@@ -652,7 +657,7 @@ export function OrdenCompraModal({
                       value={item.precio_unitario}
                       onChange={(e) => handleItemChange(index, 'precio_unitario', e.target.value)}
                       aria-label="Precio unitario en pesos chilenos"
-                      className="w-full bg-surface border border-line rounded-md pl-9 pr-2 py-1.5 text-right font-semibold text-ink t-num focus:outline-none focus:border-accent"
+                      className="w-full bg-surface border border-line rounded-md pl-9 pr-2.5 py-1.5 text-right font-semibold text-ink t-num focus:outline-none focus:border-accent"
                     />
                   </div>
                   <div className="col-span-10 sm:col-span-1 font-bold text-right text-ink t-num">
@@ -662,9 +667,9 @@ export function OrdenCompraModal({
                     type="button"
                     onClick={() => handleRemoveItem(index)}
                     aria-label="Quitar ítem"
-                    className="col-span-1 text-ink-muted hover:text-danger flex justify-center transition cursor-pointer"
+                    className="col-span-2 sm:col-span-1 text-ink-muted hover:text-danger flex justify-center transition cursor-pointer"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               ))}
@@ -717,19 +722,19 @@ export function OrdenCompraModal({
               </div>
             </div>
           </div>
-
-          <div className="pt-3 flex items-center justify-end gap-3 border-t border-line">
-            <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-            <Button variant="primary" type="submit" disabled={loading}>
-              <Save className="w-4 h-4" />
-              <span>{loading ? 'Guardando...' : 'Guardar OC'}</span>
-            </Button>
-          </div>
         </form>
+
+        <footer className="shrink-0 flex items-center justify-end gap-2 border-t border-line-subtle bg-app px-5 py-3.5">
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button variant="primary" type="submit" form="form-oc-modal" disabled={loading}>
+            <Save className="w-4 h-4" />
+            <span>{loading ? 'Guardando...' : 'Guardar OC'}</span>
+          </Button>
+        </footer>
       </div>
 
       {showVersionConfirmModal && initialOrden && (
-        <div className="fixed inset-0 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4 z-[60]">
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4 z-[110]">
           <div className="bg-surface border border-line rounded-panel max-w-md w-full p-6 space-y-4 shadow-[var(--hg-shadow-popover)] text-ink">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="text-base font-bold text-ink flex items-center gap-2">
@@ -771,6 +776,7 @@ export function OrdenCompraModal({
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }

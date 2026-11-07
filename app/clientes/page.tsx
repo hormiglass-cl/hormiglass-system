@@ -21,7 +21,7 @@ import { Pagination } from '../../components/Pagination';
 import { SearchableSelect } from '../../components/SearchableSelect';
 import { REGIONES_CHILE, TODAS_COMUNAS_CHILE } from '../../lib/chile-data';
 import { mensajeError } from '../../lib/errores';
-import { Button, CodeStamp, PageHeader, Panel, StatusBadge } from '../../components/ui/crm';
+import { Button, CodeStamp, PageHeader, Panel } from '../../components/ui/crm';
 import { useConfirm, useToast } from '../../components/ui/feedback';
 import { AvatarBadge } from '../../components/ui/AvatarBadge';
 import { FloatingActionBar } from '../../components/ui/FloatingActionBar';
@@ -290,33 +290,6 @@ export default function ClientesPage() {
   };
 
   const isAllSelected = filteredClientes.length > 0 && selectedClientIds.length === filteredClientes.length;
-
-  const handleDeleteClient = async (cli: Cliente) => {
-    const ok = await confirmDialog({
-      title: 'Eliminar Cliente',
-      message: `¿Estás seguro de que deseas eliminar a "${cli.nombre}" (${formatRutClean(cli.rut)})? Esta acción no se puede deshacer.`,
-      confirmLabel: 'Eliminar Cliente',
-      destructive: true,
-    });
-    if (!ok) return;
-
-    try {
-      const { error } = await supabase.from('clientes').delete().eq('id', cli.id);
-      if (error) throw error;
-      setClientes((prev) => prev.filter((c) => c.id !== cli.id));
-      setSelectedClientIds((prev) => prev.filter((id) => id !== cli.id));
-      toast({
-        message: `Cliente ${cli.nombre} eliminado.`,
-        tone: 'success',
-      });
-    } catch (err) {
-      console.error('Error deleting client:', err);
-      toast({
-        message: 'No se pudo eliminar el cliente.',
-        tone: 'danger',
-      });
-    }
-  };
 
   const handleDeleteSelected = async () => {
     if (selectedClientIds.length === 0) return;

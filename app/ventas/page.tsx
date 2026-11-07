@@ -10,7 +10,6 @@ import {
   EstadoCotizacion,
   EstadoPipeline,
   OportunidadVenta,
-  PRODUCTOS_HORMIGLASS,
   Usuario,
   ChatMensaje,
   VisitaTerreno,
@@ -35,106 +34,52 @@ import { logSistema } from '../../lib/logger';
 import { playNotificationSound } from '../../lib/audio';
 import { cotizacionVigente, totalAbonado, totalComercial } from '../../lib/oportunidad-finanzas';
 import {
-  ArrowLeft,
-  TrendingUp,
-  GripVertical,
   Calendar,
-  Clock,
   FileText,
   Plus,
-  Sparkles,
-  Building,
   Eye,
   FilePlus,
   User,
   Check,
   Edit,
-  Phone,
-  Mail,
   Paperclip,
   Send,
   MessageSquare,
   DollarSign,
-  Package,
   Layers,
   List,
   Kanban,
   AtSign,
-  FileCheck,
   Search,
   Trash2,
-  CheckCircle2,
-  XCircle,
   AlertTriangle,
   X,
-  Bell,
-  ThumbsUp,
   Reply,
-  Mic,
   MoreHorizontal,
-  ListFilter,
-  SlidersHorizontal,
-  ChevronRight,
+  Link2,
+  PanelLeftClose,
+  PanelLeftOpen,
+  LayoutList,
   ChevronDown,
-  ChevronUp,
-  Circle,
   Factory,
-  Truck,
-  CheckCircle,
   Download,
-  HardHat,
   ShoppingCart,
-  ShieldAlert,
   Flag,
   Tag,
   Compass,
   Disc,
   AlarmClock,
-  ClipboardCheck,
-  ExternalLink,
 } from 'lucide-react';
 
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { CotizacionModal } from '../../components/CotizacionModal';
 import { mensajeError } from '../../lib/errores';
-import { CodeStamp, StageRail, StatusBadge, FilterPills, type FilterDefinition, FloatingActionBar, AvatarBadge } from '../../components/ui/crm';
+import { CodeStamp, StatusBadge, Button, Dialog, Field, TextInput, Select } from '../../components/ui/crm';
 import { KanbanCard } from '../../components/ventas/KanbanCard';
 import { CapturedDataPending, OpportunityActivity } from '../../components/whatsapp/OpportunityActivity';
 import { useConfirm, useToast } from '../../components/ui/feedback';
 import { useBreadcrumb } from '../../lib/context/BreadcrumbContext';
 import { swrCache } from '../../lib/cache/swr-cache';
-
-function AreaCardHeader({
-  icon: Icon,
-  title,
-  open,
-  onToggle,
-  aside,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  open: boolean;
-  onToggle: () => void;
-  aside?: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={open}
-      className="w-full p-3 bg-surface hover:bg-surface-muted text-ink font-semibold text-sm flex items-center justify-between gap-3 transition cursor-pointer text-left"
-    >
-      <span className="flex items-center gap-2.5 min-w-0">
-        <Icon className="w-4 h-4 text-accent-ink shrink-0" />
-        <span className="truncate">{title}</span>
-      </span>
-      <span className="flex items-center gap-2 shrink-0">
-        {aside}
-        {open ? <ChevronUp className="w-4 h-4 text-ink-muted" /> : <ChevronDown className="w-4 h-4 text-ink-muted" />}
-      </span>
-    </button>
-  );
-}
 
 // Convierte el texto de un recordatorio en pares [etiqueta, valor].
 // Soporta el formato actual (una línea por campo) y el anterior ("⏰ ... · fecha · Resp: ...").
@@ -158,31 +103,33 @@ function isUUID(id?: string | null): boolean {
 }
 
 
-const PIPELINE_STAGES = [
-  { id: 'nueva', label: 'Nueva' },
-  { id: 'cotizacion', label: 'Cotización' },
-  { id: 'pagada', label: 'Abono / Pago' },
-  { id: 'aprobada', label: 'Venta Aprobada' },
-  { id: 'operacion', label: 'Abastecimiento' },
-  { id: 'entregada', label: 'Cierre / Entrega' },
-] as const;
+/* Valores impuros usados solo dentro de manejadores de eventos (nunca durante el render). */
+const nowMs = () => Date.now();
+const randomSuffix = () => Math.random().toString(36).slice(2, 6);
 
-function getStageIndex(estado: EstadoPipeline): number {
-  if (estado === 'nueva') return 0;
-  if (estado === 'pagada') return 2;
-  if (estado === 'entregada') return 3;
-  if (estado.startsWith('prod_') || estado.startsWith('rev_') || estado === 'programada') {
-    if (estado === 'prod_finalizado' || estado === 'rev_entregado') return 5;
-    return 4;
-  }
-  return 1;
-}
+/** Cambio recibido por Supabase Realtime (solo los campos que usa esta pantalla). */
+type RealtimeChange<T> = { eventType: string; new: T; old: Partial<T> };
+type ActividadRow = {
+  id: string; oportunidad_id: string; usuario_id: string | null; usuario_nombre: string | null;
+  contenido: string; created_at: string; tipo: string | null;
+};
+type AntecedenteRow = {
+  id: string; oportunidad_id: string; nombre: string; tipo: string | null; public_url: string | null;
+  bucket_id: string | null; storage_path: string; mime_type: string | null; size_bytes: number | null;
+  created_at: string; updated_at: string; subido_por_nombre: string | null; subido_por_id: string | null;
+  eliminado: boolean | null; eliminado_en: string | null; eliminado_por: string | null;
+};
 
 export default function PipelineVentasPage() {
   const { currentUser, usersList } = useAuth();
   const searchParams = useSearchParams();
+  const closingOpRef = useRef(false);
+  const router = useRouter();
   const confirmDialog = useConfirm();
   const toast = useToast();
+  const supabase = useMemo(() => createClient(), []);
+  const [opEventosProdLog, setOpEventosProdLog] = useState<EventoProduccionLogistica[]>([]);
+  const [opVisitasList, setOpVisitasList] = useState<VisitaTerreno[]>([]);
   const { setCustomTitle, setOnBack } = useBreadcrumb();
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>(() => swrCache.get('ventas:oportunidades') || []);
   const [deliveryAccreditation, setDeliveryAccreditation] = useState<Record<string, boolean>>(() => swrCache.get('ventas:accreditation') || {});
@@ -205,57 +152,26 @@ export default function PipelineVentasPage() {
   const [usuariosApp, setUsuariosApp] = useState<Usuario[]>([]);
   const [personalTerrenoList, setPersonalTerrenoList] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState<boolean>(() => !swrCache.has('ventas:oportunidades'));
-  const [activeTab, setActiveTab] = useState<'lista' | 'tablero'>('lista');
 
   // Advanced Filters for List & Board View
+  const [viewType, setViewType] = useState<'lista' | 'tablero'>('tablero');
   const [filterSearch, setFilterSearch] = useState('');
-  const [filterEstado, setFilterEstado] = useState<string>('todos');
-  const [filterTipoVenta, setFilterTipoVenta] = useState<string>('todos');
-  const [filterPrioridad, setFilterPrioridad] = useState<string>('todos');
-  const [filterAsignado, setFilterAsignado] = useState<string>('todos');
-  const [collapsedParentSections, setCollapsedParentSections] = useState<Record<string, boolean>>({});
+  const [filterEstado] = useState<string>('todos');
+  const [filterRama] = useState<string>(() => searchParams.get('rama') || 'todos');
+  const [filterTipoVenta] = useState<string>('todos');
+  const [filterPrioridad] = useState<string>('todos');
+  const [filterAsignado] = useState<string>('todos');
 
   // List View Section Collapsing State
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [stageMenuPos, setStageMenuPos] = useState<{ opId: string; top: number; left: number } | null>(null);
   const [statusSearchQuery, setStatusSearchQuery] = useState('');
 
-  // Bifurcation Modal State (Sección 1 -> Sección 2 vs 3)
-  const [ramaChoiceModal, setRamaChoiceModal] = useState<{
-    op: OportunidadVenta;
-    targetState: EstadoPipeline;
-  } | null>(null);
-
   // Deletion Modal State for Oportunidad
   const [opToDelete, setOpToDelete] = useState<OportunidadVenta | null>(null);
+  const [opMenuOpen, setOpMenuOpen] = useState(false);
   const [deleteOpError, setDeleteOpError] = useState('');
   const [deletingOp, setDeletingOp] = useState(false);
   const [cotToDeleteInModal, setCotToDeleteInModal] = useState<Cotizacion | null>(null);
-
-  // Accordion Sections State in Modal (Todas cerradas por defecto)
-  const [openSections, setOpenSections] = useState<{
-    contacto: boolean;
-    productos: boolean;
-    finanzas: boolean;
-    antecedentes: boolean;
-    visita: boolean;
-    produccionEventos: boolean;
-    produccionBitacora: boolean;
-    produccionOc: boolean;
-    reventaEventos: boolean;
-    reventaOc: boolean;
-  }>({
-    contacto: true,
-    productos: false,
-    finanzas: false,
-    antecedentes: false,
-    visita: false,
-    produccionEventos: false,
-    produccionBitacora: false,
-    produccionOc: false,
-    reventaEventos: false,
-    reventaOc: false,
-  });
 
   // Antecedentes Documentación State
   const [nuevoAntecedenteFile, setNuevoAntecedenteFile] = useState<File | null>(null);
@@ -273,14 +189,6 @@ export default function PipelineVentasPage() {
   const [seguimientoDraft, setSeguimientoDraft] = useState({ resultado: '', accion: '', fecha: '', responsable: '' });
   const [seguimientoSaving, setSeguimientoSaving] = useState(false);
 
-  // Area Sections Collapsible State (Secciones 1, 2 y 3) (Todas contraídas por defecto al entrar)
-  const [areaExpanded, setAreaExpanded] = useState<{ comercial: boolean; produccion: boolean; reventa: boolean; cierre: boolean }>({
-    comercial: false,
-    produccion: false,
-    reventa: false,
-    cierre: false,
-  });
-
   // Órdenes de Compra vinculadas a la Oportunidad
   const [opOrdenesCompra, setOpOrdenesCompra] = useState<OrdenCompra[]>([]);
   const [loadingOpOrdenes, setLoadingOpOrdenes] = useState(false);
@@ -289,13 +197,26 @@ export default function PipelineVentasPage() {
 
   // Matriz de Costos y Margen por NV (Fase 3)
   const [margenOp, setMargenOp] = useState<MargenPorNV | null>(null);
-  const [loadingMargenOp, setLoadingMargenOp] = useState(false);
+  const [, setLoadingMargenOp] = useState(false);
 
   // Bitácora de Producción Diaria y Stock de la Oportunidad
   const [opProduccionDiaria, setOpProduccionDiaria] = useState<ProduccionDiaria[]>([]);
   const [loadingProduccionDiaria, setLoadingProduccionDiaria] = useState(false);
   const [cotizacionItemsOp, setCotizacionItemsOp] = useState<CotizacionItem[]>([]);
-  const [newProdProducto, setNewProdProducto] = useState('');
+  const [showProdModal, setShowProdModal] = useState(false);
+  const [newProdItemId, setNewProdItemId] = useState('');
+  const [prodSaving, setProdSaving] = useState(false);
+  const [stockCatalogo, setStockCatalogo] = useState<Record<string, number>>({});
+  const [showAbonoModal, setShowAbonoModal] = useState(false);
+  const [showAntecedenteModal, setShowAntecedenteModal] = useState(false);
+  const [railCollapsed, setRailCollapsed] = useState<boolean>(() => {
+    try { return typeof window !== 'undefined' && window.localStorage.getItem('hg-op-rail-collapsed') === '1'; } catch { return false; }
+  });
+  const toggleRail = () => setRailCollapsed((v) => {
+    const next = !v;
+    try { window.localStorage.setItem('hg-op-rail-collapsed', next ? '1' : '0'); } catch { /* sin almacenamiento */ }
+    return next;
+  });
   const [newProdCantidad, setNewProdCantidad] = useState<number>(0);
   const [newProdFecha, setNewProdFecha] = useState(() => new Date().toISOString().split('T')[0]);
   const [newProdResponsableId, setNewProdResponsableId] = useState('');
@@ -321,6 +242,7 @@ export default function PipelineVentasPage() {
 
   // Modal Detalle de Oportunidad
   const [selectedOp, setSelectedOp] = useState<OportunidadVenta | null>(null);
+  const [opDetailTab, setOpDetailTab] = useState<'resumen' | 'cotizaciones' | 'abastecimiento' | 'operacion'>('resumen');
   const [showNewOpModal, setShowNewOpModal] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState('');
@@ -334,7 +256,6 @@ export default function PipelineVentasPage() {
   const mentionRef = React.useRef<HTMLDivElement | null>(null);
 
   // Product Category Search & Dropdown State
-  const [productSearchInput, setProductSearchInput] = useState('');
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const productRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -371,9 +292,7 @@ export default function PipelineVentasPage() {
 
   // Activity Search & Filter State
   const [activitySearchQuery, setActivitySearchQuery] = useState('');
-  const [activityFilter, setActivityFilter] = useState<'all' | 'comentarios' | 'sistema' | 'reclamos' | 'seguimiento'>('all');
-  const [showActivitySearch, setShowActivitySearch] = useState(false);
-  const [likedMessages, setLikedMessages] = useState<Record<string, boolean>>({});
+  const [showActivitySearch] = useState(false);
 
   // Helper to deduplicate chat & activity messages across all sources and real-time updates
   const mergeAndDeduplicateMessages = (messages: ChatMensaje[]): ChatMensaje[] => {
@@ -490,7 +409,7 @@ export default function PipelineVentasPage() {
         ? opDataRes.data.chat_interno
         : [];
 
-      const tableChat: ChatMensaje[] = (actRes.data || []).map((a: any) => ({
+      const tableChat: ChatMensaje[] = (actRes.data as ActividadRow[] | null || []).map((a) => ({
         id: a.id || `db-${a.created_at}`,
         usuario_id: a.usuario_id || 'sistema',
         usuario_nombre: a.usuario_nombre || 'Sistema',
@@ -527,24 +446,6 @@ export default function PipelineVentasPage() {
         .order('fecha_visita_terreno', { ascending: true });
 
       const list = (data || []) as VisitaTerreno[];
-
-      // Include legacy visit from opportunity fields if not present in visitas_terreno
-      if (
-        op.fecha_visita_terreno &&
-        !list.some((v) => v.fecha_visita_terreno === op.fecha_visita_terreno)
-      ) {
-        list.unshift({
-          id: `legacy-${op.id}`,
-          oportunidad_id: op.id,
-          tecnico_visita: op.tecnico_visita || 'Responsable',
-          tecnico_id: op.tecnico_id || null,
-          fecha_visita_terreno: op.fecha_visita_terreno,
-          hora_visita_terreno: op.hora_visita_terreno || '09:00',
-          estado_visita: op.estado_visita || 'programada',
-          observaciones_visita: op.observaciones_visita || '',
-        });
-      }
-
       visitasCacheRef.current[op.id] = list;
       setOpVisitasList(list);
     } catch (err) {
@@ -652,11 +553,11 @@ export default function PipelineVentasPage() {
     }
   };
 
-  const mapAntecedenteRecord = (record: any): AntecedenteDocumento => ({
+  const mapAntecedenteRecord = (record: AntecedenteRow): AntecedenteDocumento => ({
     id: record.id,
     oportunidad_id: record.oportunidad_id,
     nombre: record.nombre,
-    tipo: record.tipo || 'otro',
+    tipo: (record.tipo || 'otro') as TipoAntecedenteDocumento,
     url: record.public_url || '#',
     bucket_id: record.bucket_id || 'documentos',
     storage_path: record.storage_path,
@@ -676,61 +577,14 @@ export default function PipelineVentasPage() {
     if (!isUUID(op.id)) {
       const legacyDocs = Array.isArray(op.antecedentes) ? op.antecedentes : [];
       setOpAntecedentesList(legacyDocs);
-      return;
-    }
-
-    const cached = antecedentesCacheRef.current[op.id];
-    if (cached) {
-      setOpAntecedentesList(cached);
-      setSelectedOp((prev) => (prev && prev.id === op.id ? { ...prev, antecedentes: cached } : prev));
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('oportunidad_antecedentes')
-        .select('*')
-        .eq('oportunidad_id', op.id)
-        .eq('eliminado', false)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const docs = (data || []).map(mapAntecedenteRecord);
-      antecedentesCacheRef.current[op.id] = docs;
-      setOpAntecedentesList(docs);
-      setSelectedOp((prev) => (prev && prev.id === op.id ? { ...prev, antecedentes: docs } : prev));
-      setOportunidades((prevOps) =>
-        prevOps.map((o) => (o.id === op.id ? { ...o, antecedentes: docs } : o))
-      );
-    } catch (err) {
-      console.error('Error loading antecedentes from Supabase:', err);
-      const legacyDocs = Array.isArray(op.antecedentes) ? op.antecedentes : [];
-      setOpAntecedentesList(legacyDocs);
     }
   };
 
   // Helper to open opportunity and update URL
-  const handleOpenOportunidad = (op: OportunidadVenta) => {
-    setOpenSections({
-      contacto: false,
-      productos: false,
-      finanzas: false,
-      antecedentes: false,
-      visita: false,
-      produccionEventos: false,
-      produccionBitacora: false,
-      produccionOc: false,
-      reventaEventos: false,
-      reventaOc: false,
-    });
-    setAreaExpanded({
-      comercial: false,
-      produccion: false,
-      reventa: false,
-      cierre: false,
-    });
+  const handleOpenOportunidad = (op: OportunidadVenta, initialTab: 'resumen' | 'cotizaciones' | 'abastecimiento' | 'operacion' = 'resumen') => {
     setIsSeguimientoMode(false);
+    closingOpRef.current = false;
+    setOpDetailTab(initialTab);
     setSelectedOp(op);
     setEditTitleValue(op.titulo);
     loadLatestActivities(op.id);
@@ -746,16 +600,53 @@ export default function PipelineVentasPage() {
     }
   };
 
+  const handleGuardarVisita = async () => {
+    if (!selectedOp || !newVisitaFecha || !newVisitaTecnico) return;
+    const responsableNombre = getPersonalTerreno(newVisitaTecnico)?.nombre || '';
+    const payload = {
+      oportunidad_id: selectedOp.id,
+      tecnico_visita: responsableNombre,
+      tecnico_id: newVisitaTecnico,
+      fecha_visita_terreno: newVisitaFecha,
+      hora_visita_terreno: newVisitaHora,
+      estado_visita: 'programada',
+      observaciones_visita: newVisitaNotas,
+    };
+    try {
+      const { data, error } = await supabase
+        .from('visitas_terreno')
+        .insert([payload])
+        .select('*, tecnico:usuarios!tecnico_id(*)')
+        .single();
+      if (error || !data) throw error || new Error('Sin datos');
+      const nueva = data as VisitaTerreno;
+      visitasCacheRef.current[selectedOp.id] = [...(visitasCacheRef.current[selectedOp.id] || opVisitasList), nueva];
+      setOpVisitasList((prev) => [...prev, nueva]);
+      updateOportunidadField(selectedOp.id, 'requiere_visita_terreno', true);
+      setShowAddVisitaForm(false);
+      setNewVisitaNotas('');
+      setNewVisitaFecha('');
+      await addOportunidadActividad(selectedOp.id, `Visita a terreno programada para ${newVisitaFecha} a las ${newVisitaHora} hrs con ${responsableNombre}.`);
+      toast({ message: 'Visita a terreno agendada', tone: 'success' });
+    } catch (err) {
+      console.error('Error inserting visita:', err);
+      toast({ message: 'No se pudo agendar la visita', tone: 'danger' });
+    }
+  };
+
   // Helper to close opportunity and clear URL parameter
   const handleCloseOportunidad = () => {
+    closingOpRef.current = true;
     setSelectedOp(null);
+    setOpDetailTab('resumen');
     setMargenOp(null);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       url.searchParams.delete('oportunidad');
       url.searchParams.delete('opId');
       const newSearch = url.searchParams.toString();
-      window.history.pushState(null, '', url.pathname + (newSearch ? '?' + newSearch : ''));
+      // router.replace actualiza useSearchParams; con pushState quedaba el valor viejo y la oportunidad se reabría sola.
+      router.replace(url.pathname + (newSearch ? '?' + newSearch : ''), { scroll: false });
     }
   };
 
@@ -768,18 +659,27 @@ export default function PipelineVentasPage() {
           handleOpenOportunidad(found);
         }
       } else {
+        closingOpRef.current = false;
         setSelectedOp(null);
+        setOpDetailTab('resumen');
         setMargenOp(null);
       }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- el handler se recrea en cada render; solo reaccionan los datos indicados
   }, [oportunidades]);
 
   useEffect(() => {
     if (selectedOp) {
       setCustomTitle(selectedOp.titulo || selectedOp.codigo || 'Oportunidad');
-      setOnBack(() => handleCloseOportunidad);
+      setOnBack(() => () => {
+        if (opDetailTab !== 'resumen') {
+          setOpDetailTab('resumen');
+        } else {
+          handleCloseOportunidad();
+        }
+      });
     } else {
       setCustomTitle(null);
       setOnBack(null);
@@ -788,15 +688,29 @@ export default function PipelineVentasPage() {
       setCustomTitle(null);
       setOnBack(null);
     };
-  }, [selectedOp, setCustomTitle, setOnBack]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- el handler se recrea en cada render; solo reaccionan los datos indicados
+  }, [selectedOp, opDetailTab, setCustomTitle, setOnBack]);
 
   useEffect(() => {
     const targetOpId = searchParams.get('oportunidad');
+    if (!targetOpId) closingOpRef.current = false;
+    if (closingOpRef.current) return;
     if (!targetOpId && selectedOp) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza la oportunidad abierta con ?oportunidad= de la URL
       setSelectedOp(null);
+      setOpDetailTab('resumen');
       setMargenOp(null);
+    } else if (targetOpId && (!selectedOp || selectedOp.id !== targetOpId) && oportunidades.length > 0) {
+      const found = oportunidades.find((o) => o.id === targetOpId);
+      if (found) {
+        const tabParam = searchParams.get('tab');
+        const validTabs = ['resumen', 'cotizaciones', 'abastecimiento', 'operacion'] as const;
+        const initialTab = validTabs.find((t) => t === tabParam) ?? 'resumen';
+        handleOpenOportunidad(found, initialTab);
+      }
     }
-  }, [searchParams, selectedOp]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- sincroniza con la URL solo cuando cambian los parámetros
+  }, [searchParams, selectedOp, oportunidades]);
 
   // Cotización seleccionada para previsualización modal
   const [previewCotizacion, setPreviewCotizacion] = useState<Cotizacion | null>(null);
@@ -809,27 +723,17 @@ export default function PipelineVentasPage() {
   const [nuevoTipoVenta, setNuevoTipoVenta] = useState('Instalación');
   const [nuevoOrigen, setNuevoOrigen] = useState('');
   const [nuevaModalidadRequerimiento, setNuevaModalidadRequerimiento] = useState<'solo_material' | 'instalacion'>('instalacion');
-  const [isActividadesExpanded, setIsActividadesExpanded] = useState(false);
 
   // Visitas a Terreno Múltiples State
-  const [opVisitasList, setOpVisitasList] = useState<VisitaTerreno[]>([]);
   const [showAddVisitaForm, setShowAddVisitaForm] = useState(false);
   const [newVisitaTecnico, setNewVisitaTecnico] = useState<string>('');
   const [newVisitaFecha, setNewVisitaFecha] = useState<string>('');
   const [newVisitaHora, setNewVisitaHora] = useState<string>('09:00');
-  const [newVisitaEstado, setNewVisitaEstado] = useState<string>('programada');
   const [newVisitaNotas, setNewVisitaNotas] = useState<string>('');
 
   // Editing Visita State
-  const [editingVisitaId, setEditingVisitaId] = useState<string | null>(null);
-  const [editVisitaTecnico, setEditVisitaTecnico] = useState<string>('');
-  const [editVisitaFecha, setEditVisitaFecha] = useState<string>('');
-  const [editVisitaHora, setEditVisitaHora] = useState<string>('09:00');
-  const [editVisitaEstado, setEditVisitaEstado] = useState<string>('programada');
-  const [editVisitaNotas, setEditVisitaNotas] = useState<string>('');
 
   // Eventos múltiples para calendario Producción y Logística
-  const [opEventosProdLog, setOpEventosProdLog] = useState<EventoProduccionLogistica[]>([]);
   const [showAddProdLogEventForm, setShowAddProdLogEventForm] = useState(false);
   const [newProdLogTipo, setNewProdLogTipo] = useState<TipoEventoProduccionLogistica>('produccion');
   const [newProdLogTitulo, setNewProdLogTitulo] = useState('');
@@ -838,10 +742,8 @@ export default function PipelineVentasPage() {
   const [newProdLogResponsableId, setNewProdLogResponsableId] = useState('');
   const [newProdLogEstado, setNewProdLogEstado] = useState<EstadoEventoProduccionLogistica>('por_hacer');
   const [newProdLogNotas, setNewProdLogNotas] = useState('');
-  const [newProdLogContexto, setNewProdLogContexto] = useState<ContextoEventoProduccionLogistica>('produccion_logistica');
+  const [, setNewProdLogContexto] = useState<ContextoEventoProduccionLogistica>('produccion_logistica');
   const [editingProdLogEventId, setEditingProdLogEventId] = useState<string | null>(null);
-  const [produccionEventosEnabled, setProduccionEventosEnabled] = useState(true);
-  const [reventaEventosEnabled, setReventaEventosEnabled] = useState(true);
 
   // Ref y Estado para el feed de actividad con scroll
   const activityScrollRef = useRef<HTMLDivElement>(null);
@@ -874,9 +776,8 @@ export default function PipelineVentasPage() {
       }, 150);
       return () => clearTimeout(timer);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- sincroniza con la URL solo cuando cambian los parámetros
   }, [selectedOp?.id, selectedOp?.chat_interno?.length]);
-
-  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     let ignore = false;
@@ -908,20 +809,20 @@ export default function PipelineVentasPage() {
           if (opRes.data) {
             const rawOps = opRes.data as OportunidadVenta[];
             const closedIds = rawOps.filter((op) => ['prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline)).map((op) => op.id);
-            const { data: accreditationRows, error: accreditationError } = closedIds.length
+            const { data: accreditationRows } = closedIds.length
               ? await supabase.rpc('estado_entrega_acreditada', { p_ventas: closedIds })
-              : { data: [], error: null };
+              : { data: [] };
             const accreditationMap = Object.fromEntries(((accreditationRows || []) as { venta_id: string; acreditada: boolean }[]).map((row) => [row.venta_id, row.acreditada]));
             setDeliveryAccreditation(accreditationMap);
             swrCache.set('ventas:accreditation', accreditationMap);
             const allQuotes = (cotRes.data || []) as Cotizacion[];
-            const allDbAct = actRes.data || [];
+            const allDbAct = (actRes.data || []) as ActividadRow[];
 
             mergedOps = rawOps.map((op) => {
               const jsonChat: ChatMensaje[] = Array.isArray(op.chat_interno) ? op.chat_interno : [];
               const tableChat = allDbAct
-                .filter((a: any) => a.oportunidad_id === op.id)
-                .map((a: any) => ({
+                .filter((a) => a.oportunidad_id === op.id)
+                .map((a) => ({
                   id: a.id || `db-${a.created_at}`,
                   usuario_id: a.usuario_id || 'sistema',
                   usuario_nombre: a.usuario_nombre || 'Sistema',
@@ -960,24 +861,6 @@ export default function PipelineVentasPage() {
           if (targetOpId && opRes.data) {
             const found = mergedOps.find((o) => o.id === targetOpId);
             if (found) {
-              setOpenSections({
-                contacto: false,
-                productos: false,
-                finanzas: false,
-                antecedentes: false,
-                visita: false,
-                produccionEventos: false,
-                produccionBitacora: false,
-                produccionOc: false,
-                reventaEventos: false,
-                reventaOc: false,
-              });
-              setAreaExpanded({
-                comercial: false,
-                produccion: false,
-                reventa: false,
-                cierre: false,
-              });
               setSelectedOp(found);
               setEditTitleValue(found.titulo);
               loadLatestActivities(found.id);
@@ -1016,7 +899,7 @@ export default function PipelineVentasPage() {
           schema: 'public',
           table: 'actividades_op',
         },
-        (payload: any) => {
+        (payload: RealtimeChange<ActividadRow>) => {
           const newAct = payload.new;
           if (!newAct) return;
 
@@ -1051,7 +934,7 @@ export default function PipelineVentasPage() {
           schema: 'public',
           table: 'oportunidades',
         },
-        (payload: any) => {
+        (payload: RealtimeChange<Partial<OportunidadVenta> & { id: string }>) => {
           if (payload.eventType === 'UPDATE' && payload.new) {
             const updatedOp = payload.new;
             setOportunidades((prevOps) =>
@@ -1095,7 +978,7 @@ export default function PipelineVentasPage() {
           schema: 'public',
           table: 'oportunidad_antecedentes',
         },
-        (payload: any) => {
+        (payload: RealtimeChange<{ oportunidad_id: string }>) => {
           const opId = payload.new?.oportunidad_id || payload.old?.oportunidad_id;
           if (opId) delete antecedentesCacheRef.current[opId];
           setSelectedOp((prev) => {
@@ -1111,7 +994,7 @@ export default function PipelineVentasPage() {
           schema: 'public',
           table: 'clientes',
         },
-        (payload: any) => {
+        (payload: RealtimeChange<Cliente>) => {
           if (payload.new) {
             const updatedClient = payload.new as Cliente;
             setClientes((prev) => {
@@ -1133,7 +1016,7 @@ export default function PipelineVentasPage() {
           schema: 'public',
           table: 'notificaciones',
         },
-        (payload: any) => {
+        (payload: RealtimeChange<{ usuario_id: string; mensaje: string }>) => {
           const newNotif = payload.new;
           if (!newNotif) return;
 
@@ -1160,6 +1043,7 @@ export default function PipelineVentasPage() {
       ignore = true;
       supabase.removeChannel(realtimeChannel);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- carga de datos al abrir otra oportunidad; los loaders se recrean en cada render
   }, [usersList, searchParams]);
 
   // Synchronize file attachments and chats when selecting an opportunity
@@ -1178,7 +1062,7 @@ export default function PipelineVentasPage() {
             .select('*, responsable:usuarios!responsable_id(*)')
             .eq('oportunidad_id', selectedOp.id)
             .order('fecha_produccion', { ascending: false })
-            .then(({ data }: any) => {
+            .then(({ data }: { data: ProduccionDiaria[] | null }) => {
               if (!ignore && data) {
                 const list = data as ProduccionDiaria[];
                 produccionDiariaCacheRef.current[selectedOp.id] = list;
@@ -1198,7 +1082,7 @@ export default function PipelineVentasPage() {
               .from('cotizacion_items')
               .select('*')
               .eq('cotizacion_id', latestQ.id)
-              .then(({ data }: any) => {
+              .then(({ data }: { data: CotizacionItem[] | null }) => {
                 if (!ignore && data) {
                   const items = data as CotizacionItem[];
                   cotizacionItemsCacheRef.current[latestQ.id] = items;
@@ -1218,7 +1102,8 @@ export default function PipelineVentasPage() {
     return () => {
       ignore = true;
     };
-  }, [selectedOp?.id]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- recarga solo al cambiar la oportunidad seleccionada
+  }, [selectedOp?.id, selectedOp?.cotizacion_actual_id, allCotizaciones.length]);
 
   const SECCIONES_PIPELINE = [
     {
@@ -1292,13 +1177,6 @@ export default function PipelineVentasPage() {
     if (estado === 'reprogramado') return 'bg-surface-muted text-ink border-line';
     if (estado === 'en_curso') return 'bg-warning-soft text-warning-ink border-warning/30';
     return 'bg-info-soft text-info border-info/30';
-  };
-
-  const getProdLogTipoClasses = (tipo?: string | null) => {
-    if (tipo === 'produccion') return 'bg-surface-muted text-ink border-line';
-    if (tipo === 'obra') return 'bg-accent-soft text-accent-ink border-accent/30';
-    if (tipo === 'reventa') return 'bg-surface-muted text-ink border-line';
-    return 'bg-surface-muted text-ink border-line';
   };
 
   const responsablesVisitas = personalTerrenoList.filter(
@@ -1429,7 +1307,7 @@ export default function PipelineVentasPage() {
     } catch (err) {
       console.error('Error saving production/logistics event:', err);
       setToastAlert({
-        id: Date.now().toString(),
+        id: nowMs().toString(),
         message: 'No se pudo guardar el evento. Revisa los datos e intenta nuevamente.',
         user: 'Sistema CRM',
       });
@@ -1463,7 +1341,7 @@ export default function PipelineVentasPage() {
     } catch (err) {
       console.error('Error deleting production/logistics event:', err);
       setToastAlert({
-        id: Date.now().toString(),
+        id: nowMs().toString(),
         message: 'No se pudo eliminar el evento. Intenta nuevamente.',
         user: 'Sistema CRM',
       });
@@ -1581,15 +1459,6 @@ export default function PipelineVentasPage() {
     porcentajeActual?: number;
   } | null>(null);
 
-  // Helper para obtener el color del círculo de estado según la etapa del pipeline
-  const getStageDotColor = (stage: EstadoPipeline) => {
-    if (stage === 'nueva') return 'bg-warning-soft border-warning/30 text-warning-ink';
-    if (stage === 'pagada') return 'bg-info-soft border-info/30 text-info';
-    if (stage === 'entregada') return 'bg-success-soft border-success/30 text-success';
-    if (stage.startsWith('prod_')) return 'bg-surface-muted border-line text-ink';
-    return 'bg-surface-muted border-line text-ink';
-  };
-
 
   const [cotizacionErrorMsg, setCotizacionErrorMsg] = useState('');
   const guardarCambioCotizacion = async (
@@ -1610,7 +1479,10 @@ export default function PipelineVentasPage() {
   };
 
   // Candidate quote dropdown selection state
-  const [selectedCandidateCotId, setSelectedCandidateCotId] = useState<string>('');
+  const [selectedCandidateCotIds, setSelectedCandidateCotIds] = useState<string[]>([]);
+  const [showVincularCotModal, setShowVincularCotModal] = useState(false);
+  const [vincularCotBusqueda, setVincularCotBusqueda] = useState('');
+  const [vinculandoCot, setVinculandoCot] = useState(false);
 
   // Abonos state
   const [nuevoAbonoMonto, setNuevoAbonoMonto] = useState<string>('');
@@ -1659,9 +1531,6 @@ export default function PipelineVentasPage() {
   };
 
   // Editing abono state
-  const [editingAbonoId, setEditingAbonoId] = useState<string | null>(null);
-  const [editAbonoMonto, setEditAbonoMonto] = useState<string>('');
-  const [editAbonoNota, setEditAbonoNota] = useState<string>('');
 
   // Helper para agregar actividades al historial de la oportunidad y persistir en actividades_op
   const addOportunidadActividad = async (
@@ -1676,7 +1545,7 @@ export default function PipelineVentasPage() {
     const userId = (currentUser?.id && isUUID(currentUser.id)) ? currentUser.id : null;
 
     const newMsg: ChatMensaje = {
-      id: `act-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      id: `act-${nowMs()}-${randomSuffix()}`,
       usuario_id: userId || 'sistema',
       usuario_nombre: userName,
       contenido,
@@ -1751,12 +1620,6 @@ export default function PipelineVentasPage() {
     }
 
     const stateLabel = pipelineStates.find((s) => s.id === targetState)?.label || targetState;
-    setToastAlert({
-      id: Date.now().toString(),
-      message: `Oportunidad ${targetOp.codigo} movida a ${stateLabel} (${rama === 'produccion' ? 'Producción y Logística' : 'Reventa y Logística'})`,
-      user: 'Sistema CRM',
-    });
-    setTimeout(() => setToastAlert(null), 4000);
 
     if (isUUID(opId)) {
       try {
@@ -1775,7 +1638,7 @@ export default function PipelineVentasPage() {
         setOportunidades(previousOportunidades);
         setSelectedOp(previousSelectedOp);
         setToastAlert({
-          id: Date.now().toString(),
+          id: nowMs().toString(),
           message: 'No se pudo cambiar la rama. La oportunidad quedó sin cambios.',
           user: 'Sistema CRM',
         });
@@ -1829,12 +1692,10 @@ export default function PipelineVentasPage() {
 
     // Si se mueve a Venta Aprobada (entregada) y no tiene rama_destino aún, abrir modal de elección
     if (targetState === 'entregada' && !targetOp.rama_destino) {
-      setRamaChoiceModal({ op: targetOp, targetState });
       return;
     }
 
     // Si ya tiene rama o se mueve dentro de comercial
-    const rama = targetOp.rama_destino || (targetOp.tipo_venta === 'Suministro' || targetOp.tipo_venta === 'Reventa de Material' ? 'reventa' : 'produccion');
 
     // Actualización optimista local
     setOportunidades((prev) =>
@@ -1846,12 +1707,6 @@ export default function PipelineVentasPage() {
     }
 
     const stateLabel = pipelineStates.find((s) => s.id === targetState)?.label || targetState;
-    setToastAlert({
-      id: Date.now().toString(),
-      message: `Oportunidad ${targetOp.codigo} movida a ${stateLabel}`,
-      user: 'Sistema CRM',
-    });
-    setTimeout(() => setToastAlert(null), 4000);
 
     if (isUUID(opId)) {
       try {
@@ -1879,30 +1734,123 @@ export default function PipelineVentasPage() {
     });
   };
 
-  // Registrar tanda de Producción Diaria
-  const handleRegisterProduccionDiaria = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedOp || !newProdProducto.trim() || newProdCantidad <= 0) return;
+  // Stock actual de los productos del catálogo que aparecen en la cotización vigente
+  const cargarStockCatalogo = async (items: CotizacionItem[]) => {
+    const ids = Array.from(new Set(items.map((i) => i.producto_catalogo_id).filter((v): v is string => !!v)));
+    if (ids.length === 0) return;
+    const { data, error } = await supabase.from('catalogo_productos').select('id, stock_actual').in('id', ids);
+    if (error || !data) return; // columna aún no migrada: se omite el stock
+    const next: Record<string, number> = {};
+    for (const row of data as { id: string; stock_actual: number | null }[]) next[row.id] = Number(row.stock_actual || 0);
+    setStockCatalogo((prev) => ({ ...prev, ...next }));
+  };
 
+  const abrirModalProduccion = async () => {
+    if (!selectedOp) return;
+    let items = cotizacionItemsOp;
+    if (items.length === 0) {
+      // Las partidas pueden no haberse cargado aún: se piden bajo demanda a la cotización vigente.
+      const latestQ = getActiveQuote(selectedOp);
+      if (latestQ && isUUID(latestQ.id)) {
+        const { data } = await supabase.from('cotizacion_items').select('*').eq('cotizacion_id', latestQ.id);
+        if (data) {
+          items = data as CotizacionItem[];
+          cotizacionItemsCacheRef.current[latestQ.id] = items;
+          setCotizacionItemsOp(items);
+        }
+      }
+    }
+    if (!items.some((i) => i.id)) {
+      toast({ message: 'Vincula una cotización con partidas a esta oportunidad para registrar producción.', tone: 'warning' });
+      return;
+    }
+    setNewProdItemId(items.find((i) => i.id)?.id || '');
+    setNewProdCantidad(0);
+    setNewProdObservaciones('');
+    setNewProdFecha(new Date().toISOString().split('T')[0]);
+    setShowProdModal(true);
+    void cargarStockCatalogo(items);
+  };
+
+  // Registrar tanda de Producción Diaria (suma al stock del producto del catálogo vía trigger en la base de datos)
+  const handleRegisterProduccionDiaria = async () => {
+    const item = cotizacionItemsOp.find((i) => i.id === newProdItemId);
+    if (!selectedOp || !item?.id || newProdCantidad <= 0) return;
+    setProdSaving(true);
     try {
       const latestQ = getActiveQuote(selectedOp);
-      const payload: any = {
+
+      // La base exige que cada tanda cuelgue de una orden de producción y de una partida de la cotización.
+      const { data: existentes, error: ordenErr } = await supabase
+        .from('ordenes_produccion')
+        .select('id, items:orden_produccion_items(cotizacion_item_id)')
+        .eq('oportunidad_id', selectedOp.id)
+        .neq('estado', 'cancelada')
+        .order('created_at', { ascending: true })
+        .limit(1);
+      if (ordenErr) throw ordenErr;
+
+      let ordenId: string | undefined = existentes?.[0]?.id;
+      if (!ordenId) {
+        const { data: nueva, error: nuevaErr } = await supabase
+          .from('ordenes_produccion')
+          .insert({
+            oportunidad_id: selectedOp.id,
+            fecha_inicio: newProdFecha || new Date().toISOString().split('T')[0],
+            responsable_id: newProdResponsableId || null,
+          })
+          .select('id')
+          .single();
+        if (nuevaErr || !nueva) throw nuevaErr || new Error('No se pudo crear la orden de producción.');
+        ordenId = nueva.id as string;
+        const { error: itemsErr } = await supabase.from('orden_produccion_items').insert(
+          cotizacionItemsOp
+            .filter((i) => i.id && Number(i.cantidad) > 0)
+            .map((i) => ({
+              orden_produccion_id: ordenId,
+              cotizacion_item_id: i.id,
+              producto: i.producto,
+              cantidad_objetivo: i.cantidad,
+            }))
+        );
+        if (itemsErr) {
+          await supabase.from('ordenes_produccion').delete().eq('id', ordenId);
+          throw itemsErr;
+        }
+      } else {
+        const yaTiene = (existentes?.[0]?.items as { cotizacion_item_id: string | null }[] | undefined)?.some(
+          (r) => r.cotizacion_item_id === item.id
+        );
+        if (!yaTiene) {
+          const { error: itemErr } = await supabase.from('orden_produccion_items').insert({
+            orden_produccion_id: ordenId,
+            cotizacion_item_id: item.id,
+            producto: item.producto,
+            cantidad_objetivo: item.cantidad,
+          });
+          if (itemErr) throw itemErr;
+        }
+      }
+
+      const payload: Record<string, unknown> = {
         oportunidad_id: selectedOp.id,
+        orden_produccion_id: ordenId,
         cotizacion_id: latestQ?.id || null,
-        producto: newProdProducto.trim(),
+        cotizacion_item_id: item.id,
+        producto: item.producto,
         cantidad_producida: newProdCantidad,
         fecha_produccion: newProdFecha || new Date().toISOString().split('T')[0],
         responsable_id: newProdResponsableId || null,
         observaciones: newProdObservaciones.trim() || null,
         registrado_por: currentUser?.id || null,
       };
+      if (item.producto_catalogo_id) payload.producto_catalogo_id = item.producto_catalogo_id;
 
       const { data, error } = await supabase
         .from('produccion_diaria')
         .insert([payload])
         .select('*, responsable:usuarios!responsable_id(*)')
         .single();
-
       if (error) throw error;
 
       if (data) {
@@ -1916,21 +1864,51 @@ export default function PipelineVentasPage() {
 
       await addOportunidadActividad(
         selectedOp.id,
-        `Fabricación registrada: ${newProdCantidad} un. de "${newProdProducto.trim()}" el ${payload.fecha_produccion}`
+        `Fabricación registrada: ${newProdCantidad} un. de "${item.producto}" el ${payload.fecha_produccion}`
       );
 
-      setNewProdCantidad(0);
-      setNewProdObservaciones('');
+      if (item.producto_catalogo_id) {
+        await cargarStockCatalogo([item]);
+        toast({ message: `Producción registrada: +${newProdCantidad} un. al stock de ${item.producto}`, tone: 'success' });
+      } else {
+        toast({ message: 'Producción registrada (el producto no está en el catálogo, no suma stock)', tone: 'warning' });
+      }
+      setShowProdModal(false);
     } catch (err) {
       console.error('Error registrando produccion diaria:', err);
+      toast({ message: mensajeError(err, 'No se pudo registrar la producción.'), tone: 'danger' });
+    } finally {
+      setProdSaving(false);
     }
   };
 
   // Guardar campo individual en Supabase
+  // Vincula a la oportunidad una cotización existente del mismo cliente.
+  const vincularCotizacionesSeleccionadas = async (op: OportunidadVenta) => {
+    const targets = allCotizaciones.filter((c) => selectedCandidateCotIds.includes(c.id));
+    if (targets.length === 0) return;
+    setVinculandoCot(true);
+    setCotizacionErrorMsg('');
+    try {
+      for (const target of targets) {
+        await guardarCambioCotizacion(target, { oportunidad_id: op.id });
+        await addOportunidadActividad(op.id, `Cotización ${target.numero_cotizacion} vinculada a la oportunidad.`);
+      }
+      setSelectedCandidateCotIds([]);
+      setVincularCotBusqueda('');
+      setShowVincularCotModal(false);
+      toast({ message: targets.length === 1 ? 'Cotización vinculada' : `${targets.length} cotizaciones vinculadas`, tone: 'success' });
+    } catch (err) {
+      setCotizacionErrorMsg(mensajeError(err));
+    } finally {
+      setVinculandoCot(false);
+    }
+  };
+
   const updateOportunidadField = async (
     opId: string,
     field: keyof OportunidadVenta,
-    value: any
+    value: OportunidadVenta[keyof OportunidadVenta]
   ) => {
     setOportunidades((prev) =>
       prev.map((o) => (o.id === opId ? { ...o, [field]: value } : o))
@@ -2002,17 +1980,6 @@ export default function PipelineVentasPage() {
     setIsSeguimientoMode(false);
   };
 
-  // Toggle producto en oportunidad
-  const toggleProductoSeleccionado = (prod: string) => {
-    if (!selectedOp) return;
-    const currentProds = selectedOp.productos || [];
-    const updated = currentProds.includes(prod)
-      ? currentProds.filter((p) => p !== prod)
-      : [...currentProds, prod];
-
-    updateOportunidadField(selectedOp.id, 'productos', updated);
-  };
-
   // Handle Drag Handlers
   const handleDragStart = (e: React.DragEvent, opId: string) => {
     e.dataTransfer.setData('text/plain', opId);
@@ -2055,7 +2022,7 @@ export default function PipelineVentasPage() {
       for (const file of stagedChatFiles) {
         try {
           const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-          const storagePath = `antecedentes/${selectedOp.id}/${Date.now()}_${cleanFileName}`;
+          const storagePath = `antecedentes/${selectedOp.id}/${nowMs()}_${cleanFileName}`;
           const { data: uploadData, error: uploadError } = await supabase.storage
             .from('documentos')
             .upload(storagePath, file, {
@@ -2209,7 +2176,7 @@ export default function PipelineVentasPage() {
       }
 
       const cleanFileName = nuevoAntecedenteFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const storagePath = `antecedentes/${selectedOp.id}/${Date.now()}_${cleanFileName}`;
+      const storagePath = `antecedentes/${selectedOp.id}/${nowMs()}_${cleanFileName}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('documentos')
         .upload(storagePath, nuevoAntecedenteFile, {
@@ -2263,7 +2230,8 @@ export default function PipelineVentasPage() {
       setNuevoAntecedenteFile(null);
       setNuevoAntecedenteNombre('');
       setNuevoAntecedenteTipo('contrato');
-    } catch (err: any) {
+      setShowAntecedenteModal(false);
+    } catch (err) {
       console.error('Error uploading antecedente:', err);
       setAntecedenteErrorMsg(`Error al subir archivo: ${mensajeError(err, 'Error al subir.')}`);
     } finally {
@@ -2352,7 +2320,7 @@ export default function PipelineVentasPage() {
         console.error('Error creating oportunidad in Supabase:', error?.message || error);
         toast({ message: 'No se pudo crear la oportunidad. Revisa los datos e intenta nuevamente.', tone: 'danger' });
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error creating oportunidad:', err);
       toast({ message: 'No se pudo conectar con la base de datos. Intenta nuevamente.', tone: 'danger' });
     }
@@ -2385,6 +2353,16 @@ export default function PipelineVentasPage() {
       return false;
     }
 
+    // 2.5 Rama Operativa (Producción vs Reventa)
+    if (filterRama !== 'todos') {
+      if (filterRama === 'produccion' && op.rama_destino !== 'produccion' && !op.estado_pipeline.startsWith('prod_')) {
+        return false;
+      }
+      if (filterRama === 'reventa' && op.rama_destino !== 'reventa' && !op.estado_pipeline.startsWith('rev_')) {
+        return false;
+      }
+    }
+
     // 3. Tipo de Venta
     if (filterTipoVenta !== 'todos' && op.tipo_venta !== filterTipoVenta) {
       return false;
@@ -2407,53 +2385,6 @@ export default function PipelineVentasPage() {
     return true;
   });
 
-  const produccionEventos = opEventosProdLog.filter(
-    (event) => (event.contexto || 'produccion_logistica') === 'produccion_logistica'
-  );
-  const reventaEventos = opEventosProdLog.filter(
-    (event) => event.contexto === 'reventa_logistica'
-  );
-
-  const ventasFilterDefs: FilterDefinition[] = useMemo(() => [
-    {
-      id: 'estado',
-      label: 'Estado',
-      options: pipelineStates.map((st) => ({
-        value: st.id,
-        label: st.label,
-        count: oportunidades.filter((o) => o.estado_pipeline === st.id).length,
-      })),
-    },
-    {
-      id: 'tipo_venta',
-      label: 'Tipo de venta',
-      options: [
-        { value: 'Instalación', label: 'Instalación' },
-        { value: 'Suministro', label: 'Suministro' },
-        { value: 'Reventa de Material', label: 'Reventa de Material' },
-      ],
-    },
-    {
-      id: 'prioridad',
-      label: 'Prioridad',
-      options: [
-        { value: 'Normal / Baja', label: 'Normal / Baja' },
-        { value: 'Alta', label: 'Alta' },
-        { value: 'Urgente', label: 'Urgente' },
-      ],
-    },
-    {
-      id: 'asignado',
-      label: 'Asignado a',
-      options: [
-        ...(currentUser ? [{ value: 'me', label: '👤 Asignadas a mí' }] : []),
-        ...usuariosApp.map((u) => ({
-          value: u.id,
-          label: u.nombre || u.email,
-        })),
-      ],
-    },
-  ], [pipelineStates, oportunidades, currentUser, usuariosApp]);
 
   return (
     <div className="space-y-6 text-ink relative">
@@ -2474,2870 +2405,958 @@ export default function PipelineVentasPage() {
       )}
 
       {!selectedOp ? (
-        <>
-          {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-line pb-5">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink flex items-center gap-2">
-            <TrendingUp className="w-6 h-6 text-accent-ink" />
-            <span>Pipeline de Oportunidades de Venta</span>
-          </h1>
-          <p className="text-xs text-ink-muted mt-1">
-            Gestiona todas las oportunidades desde la captación hasta la entrega y postventa.
-          </p>
+      <>
+      <div className="flex items-center justify-between gap-3">
+        <div className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-muted p-1">
+          <button
+            type="button"
+            onClick={() => setViewType('lista')}
+            aria-pressed={viewType === 'lista'}
+            className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+              viewType === 'lista' ? 'bg-accent text-on-accent shadow-xs' : 'text-ink-muted hover:text-ink'
+            }`}
+          >
+            <List className="h-3.5 w-3.5" />
+            <span>Lista</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewType('tablero')}
+            aria-pressed={viewType === 'tablero'}
+            className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+              viewType === 'tablero' ? 'bg-accent text-on-accent shadow-xs' : 'text-ink-muted hover:text-ink'
+            }`}
+          >
+            <Kanban className="h-3.5 w-3.5" />
+            <span>Tablero</span>
+          </button>
         </div>
 
-        <div className="flex items-center gap-3 self-start md:self-auto">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="relative w-full min-w-[200px] max-w-sm">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" aria-hidden />
+            <input
+              type="search"
+              aria-label="Buscar oportunidad o cliente"
+              placeholder="Buscar cliente, código, RUT..."
+              value={filterSearch}
+              onChange={(e) => setFilterSearch(e.target.value)}
+              className="w-full rounded-control border border-line bg-surface py-2 pl-9 pr-3 text-xs text-ink placeholder:text-ink-muted focus:border-accent focus:outline-none"
+            />
+          </div>
           <button
             onClick={() => setShowNewOpModal(true)}
-            className="bg-accent hover:bg-accent-hover text-on-accent font-semibold text-xs px-4 py-2.5 rounded-md shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+            className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-accent px-4 py-2 text-xs font-semibold text-on-accent shadow-sm transition hover:bg-accent-hover"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="h-4 w-4" />
             <span>Nueva Oportunidad</span>
           </button>
-
-          <div className="flex items-center gap-1 bg-surface-muted p-1 rounded-md border border-line">
-            <button
-              onClick={() => setActiveTab('lista')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'lista' ? 'bg-accent text-on-accent shadow-xs' : 'text-ink-muted hover:text-ink'
-              }`}
-            >
-              <List className="w-3.5 h-3.5" />
-              <span>Lista</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('tablero')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'tablero' ? 'bg-accent text-on-accent shadow-xs' : 'text-ink-muted hover:text-ink'
-              }`}
-            >
-              <Kanban className="w-3.5 h-3.5" />
-              <span>Tablero</span>
-            </button>
-          </div>
         </div>
-      </div>
-
-      {/* Barra de Filtros Next-Gen (Attio & Twenty Style) */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-surface p-3 rounded-panel border border-line shadow-xs">
-        <div className="relative flex-1 min-w-[220px] max-w-md">
-          <Search className="w-4 h-4 text-ink-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden />
-          <input
-            type="search"
-            placeholder="Buscar por código, cliente, título, RUT..."
-            value={filterSearch}
-            onChange={(e) => setFilterSearch(e.target.value)}
-            className="w-full pl-9 pr-8 py-1.5 text-xs bg-app border border-line rounded-control text-ink placeholder:text-ink-muted focus:outline-none focus:border-accent"
-          />
-          {filterSearch && (
-            <button
-              onClick={() => setFilterSearch('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-
-        <FilterPills
-          filters={ventasFilterDefs}
-          activeFilters={{
-            estado: filterEstado,
-            tipo_venta: filterTipoVenta,
-            prioridad: filterPrioridad,
-            asignado: filterAsignado,
-          }}
-          onFilterChange={(id, value) => {
-            if (id === 'estado') setFilterEstado(value);
-            if (id === 'tipo_venta') setFilterTipoVenta(value);
-            if (id === 'prioridad') setFilterPrioridad(value);
-            if (id === 'asignado') setFilterAsignado(value);
-          }}
-          onClearAll={() => {
-            setFilterSearch('');
-            setFilterEstado('todos');
-            setFilterTipoVenta('todos');
-            setFilterPrioridad('todos');
-            setFilterAsignado('todos');
-          }}
-          totalResults={oportunidades.length}
-          filteredResults={filteredOportunidades.length}
-        />
       </div>
 
       {loading ? (
         <div className="py-12 text-center text-ink-muted font-medium text-xs">
           Cargando oportunidades de venta...
         </div>
-      ) : activeTab === 'tablero' ? (
-        <div className="space-y-4 ">
-          {SECCIONES_PIPELINE.map((activeSection) => (
-              <div key={activeSection.id} className="p-4 rounded-xl border border-line bg-surface space-y-4 min-h-[560px]">
-                <div className="flex items-center justify-between border-b border-line pb-3">
-                  <h3 className="text-base font-semibold text-[var(--color-ink)]">{activeSection.nombre}</h3>
-                  <span className="text-xs font-mono font-bold text-ink-muted">
-                    {activeSection.etapas.length} etapas
-                  </span>
-                </div>
-
-                <div
-                  className="grid gap-4 overflow-x-auto pb-2"
-                  style={{ gridTemplateColumns: `repeat(${activeSection.etapas.length}, minmax(260px, 1fr))` }}
-                >
-                  {activeSection.etapas.map((stage) => {
-                    const colOps = filteredOportunidades.filter((o) => o.estado_pipeline === stage.id);
-                    const isTargetColumn = dragOverColumn === stage.id;
-                    const totalColMonto = colOps.reduce((acc, curr) => acc + getOportunidadTotalValue(curr), 0);
-
-                    return (
-                      <div
-                        key={stage.id}
-                        onDragOver={(e) => handleDragOver(e, stage.id)}
-                        onDrop={(e) => handleDrop(e, stage.id)}
-                        className={clsx(
-                          'rounded-panel border p-3 min-h-[500px] transition flex flex-col',
-                          isTargetColumn
-                            ? 'bg-accent-soft border-accent ring-2 ring-accent/20'
-                            : 'bg-surface-muted/30 border-line'
-                        )}
-                      >
-                        {/* Cabecera de Etapa (Folk & Attio Style) */}
-                        <div className="flex items-center justify-between border-b border-line pb-2.5 mb-3 shrink-0">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className={clsx('w-2 h-2 rounded-full shrink-0', stage.color)} />
-                            <h4 className="text-xs font-bold text-ink truncate">{stage.label}</h4>
-                            <span className="text-[11px] font-semibold text-ink-muted bg-surface px-1.5 py-0.2 rounded-full border border-line shrink-0">
-                              {colOps.length}
-                            </span>
-                          </div>
-                          {totalColMonto > 0 && (
-                            <span className="t-num text-[11px] font-semibold text-ink-muted shrink-0" title={`Total acumulado: $${totalColMonto.toLocaleString('es-CL')}`}>
-                              ${Math.round(totalColMonto / 1000).toLocaleString('es-CL')}k
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Listado de Tarjetas Modulares Compactas */}
-                        <div className="space-y-2.5 flex-1 overflow-y-auto">
-                          {colOps.map((op) => {
-                            const latestQuote = getActiveQuote(op);
-                            const montoTotal = getOportunidadTotalValue(op);
-                            const montoAbonado = getOportunidadAbonadoValue(op);
-                            const saldoPendiente = Math.max(0, montoTotal - montoAbonado);
-                            const isBeingDragged = draggedOpId === op.id;
-
-                            return (
-                              <KanbanCard
-                                key={op.id}
-                                oportunidad={op}
-                                assignedUser={usuariosApp.find((u) => u.id === op.asignado_a)}
-                                montoTotal={montoTotal}
-                                montoAbonado={montoAbonado}
-                                saldoPendiente={saldoPendiente}
-                                latestQuoteVersion={latestQuote?.version}
-                                isUnaccredited={isUnaccreditedClose(op)}
-                                isBeingDragged={isBeingDragged}
-                                onDragStart={(e) => handleDragStart(e, op.id)}
-                                onDragEnd={handleDragEnd}
-                                onClick={() => handleOpenOportunidad(op)}
-                                onDelete={() => {
-                                  setDeleteOpError('');
-                                  setOpToDelete(op);
-                                }}
-                              />
-                            );
-                          })}
-
-                          {colOps.length === 0 && (
-                            <div className="min-h-24 border border-dashed border-line rounded-control flex items-center justify-center text-xs text-ink-muted font-medium bg-surface/50">
-                              Sin oportunidades
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-          ))}
+      ) : viewType === 'lista' ? (
+        <div className="space-y-4">
+          {pipelineStates.map((stage) => {
+            const rows = sortOpportunities(filteredOportunidades.filter((o) => o.estado_pipeline === stage.id));
+            const total = rows.reduce((acc, curr) => acc + getOportunidadTotalValue(curr), 0);
+            const isTargetColumn = dragOverColumn === stage.id;
+            return (
+              <section
+                key={stage.id}
+                onDragOver={(e) => handleDragOver(e, stage.id)}
+                onDrop={(e) => handleDrop(e, stage.id)}
+                className={clsx('overflow-hidden rounded-panel border bg-surface transition', isTargetColumn ? 'border-accent ring-2 ring-accent/20' : 'border-line')}
+              >
+                <header className="flex items-center justify-between gap-3 border-b border-line bg-surface-muted/40 px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className={clsx('h-2.5 w-2.5 shrink-0 rounded-full border', stage.color, stage.bg)} />
+                    <h3 className="truncate text-sm font-semibold text-ink">{stage.label}</h3>
+                    <span className="rounded-full border border-line bg-surface px-2 text-[11px] font-semibold text-ink-muted">{rows.length}</span>
+                  </div>
+                  {total > 0 && <span className="t-num text-xs font-semibold text-ink-muted">${total.toLocaleString('es-CL')}</span>}
+                </header>
+                {rows.length === 0 ? (
+                  <p className="px-4 py-4 text-xs font-medium text-ink-muted">No hay oportunidades en esta etapa.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[720px] text-left text-xs">
+                      <thead className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                        <tr>
+                          <th className="px-4 py-2">Código</th>
+                          <th className="px-4 py-2">Cliente</th>
+                          <th className="px-4 py-2">Oportunidad</th>
+                          <th className="px-4 py-2 text-right">Monto</th>
+                          <th className="px-4 py-2 text-right">Abonado</th>
+                          <th className="px-4 py-2">Responsable</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-line-subtle">
+                        {rows.map((op) => (
+                          <tr
+                            key={op.id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, op.id)}
+                            onDragEnd={handleDragEnd}
+                            onClick={() => handleOpenOportunidad(op)}
+                            className="cursor-pointer transition hover:bg-surface-muted"
+                          >
+                            <td className="t-num px-4 py-2.5 font-semibold text-ink">{op.codigo}</td>
+                            <td className="px-4 py-2.5 text-ink">{op.cliente?.nombre || '—'}</td>
+                            <td className="max-w-[260px] truncate px-4 py-2.5 text-ink-muted">{op.titulo}</td>
+                            <td className="t-num px-4 py-2.5 text-right text-ink">${getOportunidadTotalValue(op).toLocaleString('es-CL')}</td>
+                            <td className="t-num px-4 py-2.5 text-right text-ink-muted">${getOportunidadAbonadoValue(op).toLocaleString('es-CL')}</td>
+                            <td className="px-4 py-2.5 text-ink-muted">{usuariosApp.find((u) => u.id === op.asignado_a)?.nombre || 'Sin asignar'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            );
+          })}
         </div>
       ) : (
-        /* Vista Lista Agrupada por Secciones del Pipeline */
-        <div className="space-y-5">
-          {SECCIONES_PIPELINE.map((sec) => {
-            const isSecCollapsed = !!collapsedParentSections[sec.id];
-            const secOps = filteredOportunidades.filter((o) =>
-              sec.etapas.some((e) => e.id === o.estado_pipeline)
-            );
+        <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-3">
+          {pipelineStates.map((stage) => {
+            const colOps = sortOpportunities(filteredOportunidades.filter((o) => o.estado_pipeline === stage.id));
+            const isTargetColumn = dragOverColumn === stage.id;
+            const totalColMonto = colOps.reduce((acc, curr) => acc + getOportunidadTotalValue(curr), 0);
 
             return (
-              <div key={sec.id} className="hg-list-group">
-                {/* Header de Sección Colapsable */}
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCollapsedParentSections((prev) => ({
-                      ...prev,
-                      [sec.id]: !prev[sec.id],
-                    }))
-                  }
-                  aria-expanded={!isSecCollapsed}
-                  className="hg-list-group-heading w-full cursor-pointer select-none text-left hover:bg-[var(--color-surface-muted)]"
-                >
-                    {isSecCollapsed ? <ChevronRight className="w-5 h-5 text-[var(--color-ink-muted)]" /> : <ChevronDown className="w-5 h-5 text-[var(--color-ink-muted)]" />}
-                    <span className="text-sm font-semibold text-[var(--color-ink)]">{sec.nombre}</span>
-                    <span className="hg-list-count">{secOps.length}</span>
-                </button>
+              <div
+                key={stage.id}
+                onDragOver={(e) => handleDragOver(e, stage.id)}
+                onDrop={(e) => handleDrop(e, stage.id)}
+                className={clsx(
+                  'flex h-[calc(100vh-230px)] min-h-[460px] w-[290px] shrink-0 snap-start flex-col rounded-panel border p-3 transition',
+                  isTargetColumn ? 'border-accent bg-accent-soft ring-2 ring-accent/20' : 'border-line bg-surface-muted/30'
+                )}
+              >
+                <div className="mb-3 flex shrink-0 items-center justify-between border-b border-line pb-2.5">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className={clsx('h-2.5 w-2.5 shrink-0 rounded-full border', stage.color, stage.bg)} />
+                    <h4 className="truncate text-xs font-bold text-ink">{stage.label}</h4>
+                    <span className="shrink-0 rounded-full border border-line bg-surface px-1.5 text-[11px] font-semibold text-ink-muted">{colOps.length}</span>
+                  </div>
+                  {totalColMonto > 0 && (
+                    <span className="t-num shrink-0 text-[11px] font-semibold text-ink-muted" title={`Total acumulado: $${totalColMonto.toLocaleString('es-CL')}`}>
+                      ${Math.round(totalColMonto / 1000).toLocaleString('es-CL')}k
+                    </span>
+                  )}
+                </div>
 
-                {/* Tablas por etapa dentro de esta sección */}
-                {!isSecCollapsed && (
-                  <div className="divide-y divide-[var(--color-line-subtle)]">
-                    {sec.etapas.map((col) => {
-                      const isCollapsed = !!collapsedSections[col.id];
-                      const rawOps = filteredOportunidades.filter((o) => o.estado_pipeline === col.id);
-                      const colOps = sortOpportunities(rawOps);
-                      const isTargetColumn = dragOverColumn === col.id;
-
-                      return (
-                        <div
-                          key={col.id}
-                          onDragOver={(e) => handleDragOver(e, col.id)}
-                          onDrop={(e) => handleDrop(e, col.id)}
-                          className={`transition-all duration-200 ${
-                            isTargetColumn
-                              ? 'bg-accent-soft ring-2 ring-inset ring-[var(--color-accent)]'
-                              : 'bg-surface'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between px-4 py-3 transition group hover:bg-[var(--color-surface-muted)]">
-                            <button
-                              type="button"
-                              onClick={() => setCollapsedSections((prev) => ({ ...prev, [col.id]: !prev[col.id] }))}
-                              aria-expanded={!isCollapsed}
-                              className="flex min-w-0 items-center gap-2.5 text-left"
-                            >
-                              <span className="text-ink-subtle group-hover:text-ink transition">
-                                {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                              </span>
-
-                              <span className="flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
-                                <span className={`h-2.5 w-2.5 rounded-full border ${col.color} ${col.bg}`} />
-                                <span>{col.label}</span>
-                              </span>
-
-                              <span className="hg-list-count">
-                                {col.id === 'prod_finalizado' || col.id === 'rev_entregado'
-                                  ? `${rawOps.filter((op) => !isUnaccreditedClose(op)).length} acreditadas · ${rawOps.length} registros`
-                                  : rawOps.length}
-                              </span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => setShowNewOpModal(true)}
-                              className="text-xs font-bold text-ink-muted hover:text-accent-ink transition flex items-center gap-1 cursor-pointer"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>Agregar Oportunidad</span>
-                            </button>
-                          </div>
-
-                          {!isCollapsed && (
-                            <div className="border-t border-[var(--color-line-subtle)]">
-                              {colOps.length > 0 && <div>
-                                {colOps.map((op) => {
-                                  const responsable = usuariosApp.find((user) => user.id === op.asignado_a)?.nombre || 'Sin asignar';
-                                  const monto = getOportunidadTotalValue(op);
-                                  return (
-                                    <div key={op.id} className="hg-list-row">
-                                      <button
-                                        type="button"
-                                        onClick={(event) => {
-                                          const rect = event.currentTarget.getBoundingClientRect();
-                                          setStageMenuPos({ opId: op.id, top: rect.bottom + 4, left: rect.left });
-                                        }}
-                                        className={`h-3.5 w-3.5 shrink-0 rounded-full border ${getStageDotColor(op.estado_pipeline)}`}
-                                        aria-label={`Cambiar etapa de ${op.codigo}`}
-                                      />
-                                      <CodeStamp>{op.codigo}</CodeStamp>
-                                      <button type="button" onClick={() => handleOpenOportunidad(op)} className="min-w-0 flex-1 text-left">
-                                        <span className="block truncate text-sm font-semibold text-[var(--color-ink)] hover:text-[var(--color-accent-ink)]">{op.titulo}</span>
-                                        <span className="block truncate text-xs text-[var(--color-ink-muted)]">{op.cliente?.nombre || 'Cliente sin nombre'}</span>
-                                        {isUnaccreditedClose(op) && <span className="block text-xs font-semibold text-warning-ink">Entrega sin acreditar</span>}
-                                      </button>
-                                      <div className="hidden items-center gap-2 lg:flex">
-                                        <span className="hg-list-meta" title={`Responsable: ${responsable}`}>{responsable}</span>
-                                        {op.fecha_limite && <span className="hg-list-meta">Límite {op.fecha_limite}</span>}
-                                        <span className="hg-list-meta t-num font-semibold text-[var(--color-ink)]">${monto.toLocaleString('es-CL')}</span>
-                                      </div>
-                                      <Link
-                                        href={`/ventas/${op.id}`}
-                                        className="p-1 text-ink-subtle hover:text-accent-ink rounded transition"
-                                        title="Abrir ficha completa"
-                                      >
-                                        <ExternalLink className="w-3.5 h-3.5" />
-                                      </Link>
-                                    </div>
-                                  );
-                                })}
-                              </div>}
-                              {colOps.length === 0 && (
-                                <div className="px-5 py-4 text-xs text-[var(--color-ink-muted)]">
-                                  No hay oportunidades en esta etapa.
-                                </div>
-                              )}
-                        </div>
-                      )}
+                <div className="flex-1 space-y-2.5 overflow-y-auto">
+                  {colOps.map((op) => {
+                    const latestQuote = getActiveQuote(op);
+                    const montoTotal = getOportunidadTotalValue(op);
+                    const montoAbonado = getOportunidadAbonadoValue(op);
+                    return (
+                      <KanbanCard
+                        key={op.id}
+                        oportunidad={op}
+                        assignedUser={usuariosApp.find((u) => u.id === op.asignado_a)}
+                        montoTotal={montoTotal}
+                        montoAbonado={montoAbonado}
+                        saldoPendiente={Math.max(0, montoTotal - montoAbonado)}
+                        latestQuoteVersion={latestQuote?.version}
+                        isUnaccredited={isUnaccreditedClose(op)}
+                        isBeingDragged={draggedOpId === op.id}
+                        onDragStart={(e) => handleDragStart(e, op.id)}
+                        onDragEnd={handleDragEnd}
+                        onClick={() => handleOpenOportunidad(op)}
+                        onDelete={() => {
+                          setDeleteOpError('');
+                          setOpToDelete(op);
+                        }}
+                      />
+                    );
+                  })}
+                  {colOps.length === 0 && (
+                    <div className="flex min-h-24 items-center justify-center rounded-control border border-dashed border-line bg-surface/50 text-xs font-medium text-ink-muted">
+                      Sin oportunidades
                     </div>
-                  );
-                })}
-	              </div>
-	            )}
-	            </div>
-	          );
-	        })}
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
       </>
       ) : (
-        /* Vista Nativa de Oportunidad de Venta (Directa en página, sin modal flotante) */
-        <div
-          ref={modalContainerRef}
-          className="bg-surface text-ink border border-line rounded-xl w-full p-4 sm:p-6 shadow-xs flex flex-col lg:flex-row gap-0 relative min-h-[calc(100vh-10rem)]"
-        >
-          {/* Columna Izquierda: Breadcrumb + Título + Accordions (Ancho Resizable) */}
-          <div
-            style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${modalLeftColRatio}%` : '100%' }}
-            className="flex flex-col min-h-0 lg:h-full overflow-hidden pr-0 lg:pr-3 shrink-0"
-          >
-            {/* Header Superior con Flecha Atrás, Breadcrumb y Botones de Acción */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3 text-sm shrink-0">
-              <div className="flex items-center gap-2.5 text-ink-muted font-medium">
-                <button
-                  type="button"
-                  onClick={handleCloseOportunidad}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-control border border-line bg-surface hover:bg-surface-muted text-ink font-semibold text-xs transition shadow-xs cursor-pointer mr-1"
-                  title="Volver al panel de ventas"
-                >
-                  <ArrowLeft className="w-4 h-4 text-ink-muted" />
-                  <span>Volver al panel</span>
-                </button>
-
-                <Building className="w-4 h-4 text-accent-ink" />
-                <Link href={`/clientes/${selectedOp.cliente_id}`} className="hover:text-accent-ink text-ink transition underline font-bold text-sm">
-                  {selectedOp.cliente?.nombre || 'Cliente'}
-                </Link>
-                <span className="text-ink-subtle">/</span>
-                <span className="text-ink-muted font-bold font-mono text-sm">{selectedOp.codigo}</span>
-                <button
-                  type="button"
-                  onClick={() => setOpenSections((prev) => ({ ...prev, antecedentes: true }))}
-                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-surface-muted hover:bg-accent-soft text-ink hover:text-accent-ink border border-line hover:border-accent/30 font-mono transition"
-                  title={`${opAntecedentesList.length} archivo(s) adjunto(s) - Clic para ver`}
-                >
-                  <Paperclip className="w-3 h-3 text-accent-ink" />
-                  <span>{opAntecedentesList.length}</span>
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2 sm:gap-3">
-                <Link href={`/ventas/${selectedOp.id}/operacion`} className="px-3 py-1.5 bg-accent-soft hover:bg-accent-soft text-accent-ink rounded-md border border-accent/30 font-bold text-xs">
-                  Producción y entregas
-                </Link>
-                <button
-                  onClick={() => { setDeleteOpError(''); setOpToDelete(selectedOp); }}
-                  className="px-3 py-1.5 bg-danger-soft hover:bg-danger-soft text-danger rounded-md transition border border-danger/30 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
-                  title="Eliminar oportunidad"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>Eliminar</span>
-                </button>
-              </div>
-            </div>
-
-              {/* Título Principal Editable Inline */}
-              <div className="py-3 border-b border-line flex items-center justify-between shrink-0 mb-4">
-                {isEditingTitle ? (
-                  <div className="flex items-center gap-2.5 w-full">
-                    <input
-                      type="text"
-                      value={editTitleValue}
-                      onChange={(e) => setEditTitleValue(e.target.value)}
-                      className="bg-surface text-2xl font-bold text-ink border border-accent rounded-md px-3.5 py-1.5 w-full focus:outline-none"
-                      autoFocus
-                    />
+        <div className="bg-surface text-ink border border-line rounded-lg w-full h-[88vh] flex flex-col relative overflow-hidden">
+          {/* Barra superior: menú de acciones y cierre */}
+          <div className="flex shrink-0 items-center justify-end gap-1 border-b border-line px-4 py-2">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setOpMenuOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={opMenuOpen}
+                aria-label="Más acciones"
+                className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-ink-muted transition hover:bg-surface-muted hover:text-ink"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+              {opMenuOpen && (
+                <>
+                  <button type="button" aria-label="Cerrar menú" tabIndex={-1} onClick={() => setOpMenuOpen(false)} className="fixed inset-0 z-40 cursor-default" />
+                  <div role="menu" className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-line bg-surface p-1 shadow-[var(--hg-shadow-popover)]">
                     <button
-                      onClick={handleSaveTitleEdit}
-                      className="bg-accent hover:bg-accent-hover text-on-accent p-2.5 rounded-md transition font-bold"
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setOpMenuOpen(false); setDeleteOpError(''); setOpToDelete(selectedOp); }}
+                      className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-danger transition hover:bg-danger-soft"
                     >
-                      <Check className="w-5 h-5" />
+                      <Trash2 className="h-4 w-4" />
+                      <span>Eliminar oportunidad</span>
                     </button>
                   </div>
-                ) : (
-                  <div
-                    onClick={() => {
-                      setIsEditingTitle(true);
-                      setEditTitleValue(selectedOp.titulo);
-                    }}
-                    className="flex items-center gap-3 cursor-pointer group"
+                </>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleCloseOportunidad}
+              className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-ink-muted transition hover:bg-surface-muted hover:text-ink"
+              title="Cerrar y volver al pipeline de ventas"
+              aria-label="Cerrar oportunidad"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+        <div ref={modalContainerRef} className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+          {/* Columna Izquierda: Pestañas en sitio de la Oportunidad */}
+          <div
+            style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${modalLeftColRatio}%` : '100%' }}
+            className="flex min-h-0 flex-col overflow-hidden shrink-0 md:flex-row lg:h-full"
+          >
+            {/* Navegación lateral vertical + contenido */}
+              <nav aria-label="Secciones de la oportunidad" className={clsx('flex shrink-0 gap-1 overflow-x-auto border-b border-line p-3 transition-[width] duration-150 md:flex-col md:overflow-y-auto md:border-b-0 md:border-r', railCollapsed ? 'md:w-16' : 'md:w-64')}>
+                <button
+                  type="button"
+                  onClick={toggleRail}
+                  aria-expanded={!railCollapsed}
+                  aria-label={railCollapsed ? 'Expandir barra lateral' : 'Contraer barra lateral'}
+                  title={railCollapsed ? 'Expandir barra lateral' : 'Contraer barra lateral'}
+                  className={clsx('hidden shrink-0 cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-ink-subtle transition hover:bg-surface-muted hover:text-ink md:flex', railCollapsed && 'justify-center')}
+                >
+                  {railCollapsed ? <PanelLeftOpen className="h-4 w-4" aria-hidden /> : <><PanelLeftClose className="h-4 w-4" aria-hidden /><span>Contraer</span></>}
+                </button>
+                {([
+                  { id: 'resumen' as const, label: 'Resumen', icon: LayoutList, count: null as number | null },
+                  { id: 'cotizaciones' as const, label: 'Cotizaciones y pagos', icon: FileText, count: allCotizaciones.filter((c) => c.oportunidad_id === selectedOp.id).length },
+                  { id: 'abastecimiento' as const, label: 'Abastecimiento y OC', icon: ShoppingCart, count: opOrdenesCompra.length },
+                  { id: 'operacion' as const, label: 'Producción y logística', icon: Factory, count: null as number | null },
+                ]).map((t) => {
+                  const active = opDetailTab === t.id;
+                  const Icon = t.icon;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setOpDetailTab(t.id)}
+                      aria-current={active ? 'page' : undefined}
+                      title={railCollapsed ? t.label : undefined}
+                      aria-label={t.label}
+                      className={clsx(
+                        'flex shrink-0 cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition',
+                        railCollapsed && 'md:justify-center',
+                        active ? 'bg-accent-soft text-ink' : 'text-ink-muted hover:bg-surface-muted hover:text-ink'
+                      )}
+                    >
+                      <Icon className={clsx('h-3.5 w-3.5 shrink-0', active ? 'text-accent-ink' : 'text-ink-subtle')} aria-hidden />
+                      <span className={clsx('min-w-0 flex-1', railCollapsed && 'md:hidden')}>{t.label}</span>
+                      {t.count !== null && t.count > 0 && !railCollapsed && (
+                        <span className="t-num rounded-full bg-surface px-1.5 text-[11px] font-semibold text-ink-muted ring-1 ring-line">{t.count}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </nav>
+
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col px-6 pt-5">
+            {/* Título Principal Editable Inline (Tipografía estandarizada t-page) */}
+            <div className="flex shrink-0 items-center justify-between pb-1">
+              {isEditingTitle ? (
+                <div className="flex items-center gap-2 w-full">
+                  <input
+                    type="text"
+                    value={editTitleValue}
+                    onChange={(e) => setEditTitleValue(e.target.value)}
+                    className="bg-surface t-page text-ink border border-accent rounded-md px-3 py-1 w-full focus:outline-none"
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleSaveTitleEdit}
+                    className="bg-accent hover:bg-accent-hover text-on-accent p-2 rounded-md transition font-semibold"
                   >
-                    <h2 className="text-2xl sm:text-3xl font-bold text-ink leading-tight group-hover:text-accent-ink transition">
-                      {selectedOp.titulo}
-                    </h2>
-                    <Edit className="w-5 h-5 text-ink-subtle group-hover:text-accent-ink transition opacity-0 group-hover:opacity-100" />
-                  </div>
-                )}
-              </div>
-
-              <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-2 text-sm">
-              {isUnaccreditedClose(selectedOp) && <p role="alert" className="rounded-md border border-warning/30 bg-warning-soft p-3 text-sm font-semibold text-warning-ink">Esta venta figura cerrada en el historial, pero su entrega no tiene respaldo acreditado. La cobranza automática permanece suspendida.</p>}
-              {/* Resumen visible: campos de decisión y seguimiento rápido */}
-              {selectedOp.origen?.trim().toLowerCase() === 'whatsapp' && <CapturedDataPending />}
-              <section aria-label="Resumen de la oportunidad" className="rounded-xl border border-line bg-[var(--color-surface-muted)] p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-ink-muted">Resumen de la oportunidad</h3>
-                  <span className="text-[11px] text-ink-subtle">Datos principales</span>
+                    <Check className="w-4 h-4" />
+                  </button>
                 </div>
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-5 gap-y-2 text-xs">
-                  <div className="min-w-0">
-                    {/* 1. Status */}
-                    <div className="flex min-w-0 items-center gap-3 min-h-[40px]">
-                      <div className="w-24 sm:w-28 flex items-center gap-2 text-ink-muted font-medium shrink-0">
-                        <Disc className="w-4 h-4 text-ink-subtle shrink-0" />
-                        <span>Estado</span>
-                      </div>
-                      <div className="relative min-w-0 flex-1 h-8">
-                        <select
-                          value={selectedOp.estado_pipeline}
-                          onChange={async (e) => {
-                            const newStage = e.target.value as EstadoPipeline;
-                            await moveOportunidadToState(selectedOp.id, newStage);
-                          }}
-                          className="w-full h-full appearance-none bg-surface-muted hover:bg-surface-muted text-ink font-bold text-xs pl-3 pr-8 rounded-md border border-line cursor-pointer focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] transition shadow-xs"
-                        >
-                          {pipelineStates.map((etapa) => (
-                            <option key={etapa.id} value={etapa.id}>{etapa.label}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="min-w-0">
-                    {/* 1. Vendedor (anteriormente Assignees) */}
-                    <div className="flex min-w-0 items-center gap-3 min-h-[40px]">
-                      <div className="w-24 sm:w-28 flex items-center gap-2 text-ink-muted font-medium shrink-0">
-                        <User className="w-4 h-4 text-ink-subtle shrink-0" />
-                        <span>Vendedor</span>
-                      </div>
-                      <div className="relative min-w-0 flex-1 h-8">
-                        <select
-                          value={selectedOp.asignado_a || ''}
-                          onChange={async (e) => {
-                            const newUserId = e.target.value || null;
-                            updateOportunidadField(selectedOp.id, 'asignado_a', newUserId);
-                            const userObj = usuariosApp.find((u) => u.id === newUserId);
-                            await addOportunidadActividad(selectedOp.id, `Vendedor asignado actualizado a "${userObj?.nombre || 'Sin asignar'}".`);
-                          }}
-                          className={`w-full h-full appearance-none bg-surface hover:bg-surface-muted border border-line hover:border-line rounded-md pl-3 pr-8 text-xs font-bold truncate focus:outline-none focus:border-accent transition shadow-xs cursor-pointer ${
-                            selectedOp.asignado_a ? 'text-ink' : 'text-ink-subtle font-normal'
-                          }`}
-                        >
-                          <option value="">Sin asignar</option>
-                          {usuariosApp.map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.nombre}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="min-w-0">
-                    {/* Fechas */}
-                    <div className="flex min-w-0 flex-wrap items-center gap-2 sm:flex-nowrap sm:gap-3 min-h-[40px]">
-                      <div className="w-full sm:w-28 flex items-center gap-2 text-ink-muted font-medium shrink-0">
-                        <Calendar className="w-4 h-4 text-ink-subtle shrink-0" />
-                        <span>Fechas</span>
-                      </div>
-                      <div className="w-full sm:w-auto min-w-0 flex-1 h-8 bg-surface border border-line hover:border-line rounded-md px-2.5 flex items-center justify-between text-xs text-ink shadow-xs">
-                        <input
-                          type="date"
-                          value={selectedOp.fecha_inicio || ''}
-                          onChange={async (e) => {
-                            const newDate = e.target.value;
-                            updateOportunidadField(selectedOp.id, 'fecha_inicio', newDate);
-                            await addOportunidadActividad(selectedOp.id, `Fecha de inicio actualizada a ${newDate} desde el detalle.`);
-                          }}
-                          className="bg-transparent text-ink font-mono text-xs w-[95px] min-w-0 focus:outline-none cursor-pointer [color-scheme:light]"
-                          title="Fecha de inicio"
-                        />
-                        <span className="text-ink-subtle font-bold">→</span>
-                        <input
-                          type="date"
-                          value={selectedOp.fecha_limite || ''}
-                          onChange={async (e) => {
-                            const newDate = e.target.value;
-                            updateOportunidadField(selectedOp.id, 'fecha_limite', newDate);
-                            await addOportunidadActividad(selectedOp.id, `Fecha límite actualizada a ${newDate} desde el detalle.`);
-                          }}
-                          className="bg-transparent text-warning-ink font-mono text-xs w-[95px] min-w-0 focus:outline-none cursor-pointer [color-scheme:light]"
-                          title="Fecha límite"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="min-w-0">
-                    {/* 2. Priority */}
-                    <div className="flex min-w-0 items-center gap-3 min-h-[40px]">
-                      <div className="w-24 sm:w-28 flex items-center gap-2 text-ink-muted font-medium shrink-0">
-                        <Flag className="w-4 h-4 text-ink-subtle shrink-0" />
-                        <span>Prioridad</span>
-                      </div>
-                      <div className="relative min-w-0 flex-1 h-8">
-                        <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center">
-                          <Flag className={`w-3.5 h-3.5 ${
-                            selectedOp.prioridad === 'urgente' ? 'text-danger' : selectedOp.prioridad === 'alta' ? 'text-warning-ink' : selectedOp.prioridad === 'normal' ? 'text-info' : 'text-ink-subtle'
-                          }`} />
+              ) : (
+                <div
+                  onClick={() => {
+                    setIsEditingTitle(true);
+                    setEditTitleValue(selectedOp.titulo);
+                  }}
+                  className="flex items-center gap-2.5 cursor-pointer group min-w-0"
+                >
+                  <h2 className="truncate text-[28px] font-bold leading-tight tracking-tight text-ink transition group-hover:text-accent-ink">
+                    {selectedOp.titulo}
+                  </h2>
+                  <Edit className="w-4 h-4 text-ink-subtle group-hover:text-accent-ink transition opacity-0 group-hover:opacity-100 shrink-0" />
+                </div>
+              )}
+            </div>
+
+            <div className="shrink-0 space-y-0.5 pb-5 text-xs text-ink-muted">
+              <p>
+                ID: <span className="t-num font-semibold text-ink">{selectedOp.codigo}</span>
+              </p>
+              <p>
+                Cliente:{' '}
+                <Link
+                  href={`/clientes/${selectedOp.cliente_id}?desde=${encodeURIComponent(selectedOp.id)}&desdeTitulo=${encodeURIComponent(selectedOp.titulo || selectedOp.codigo || 'Oportunidad')}`}
+                  className="font-semibold text-ink underline-offset-2 transition hover:text-accent-ink hover:underline"
+                >
+                  {selectedOp.cliente?.nombre || 'Ver cliente'}
+                </Link>
+              </p>
+            </div>
+
+            {/* Contenido de la Pestaña Activa */}
+            <div className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto pr-2 text-xs">
+              {isUnaccreditedClose(selectedOp) && (
+                <p role="alert" className="rounded-md border border-warning/30 bg-warning-soft p-3 text-xs font-semibold text-warning-ink">
+                  Esta venta figura cerrada en el historial, pero su entrega no tiene respaldo acreditado. La cobranza automática permanece suspendida.
+                </p>
+              )}
+
+              {/* =========================================================
+                  PESTAÑA 1: RESUMEN Y VISITA (Vista Principal de Oportunidad)
+                 ========================================================= */}
+              {opDetailTab === 'resumen' && (
+                <>
+                  {/* Resumen visible: campos de decisión y seguimiento rápido */}
+                  {selectedOp.origen?.trim().toLowerCase() === 'whatsapp' && <CapturedDataPending />}
+                  <section aria-label="Propiedades de la oportunidad" className="space-y-1 pb-2">
+                    <div className="grid grid-cols-1 gap-y-0.5 pt-2 text-xs">
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-3 min-h-[36px]">
+                          <div className="w-36 flex items-center gap-2.5 t-caption shrink-0">
+                            <Disc className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
+                            <span>Estado</span>
+                          </div>
+                          <div className="relative min-w-0 flex-1 h-8">
+                            <select
+                              value={selectedOp.estado_pipeline}
+                              onChange={async (e) => {
+                                const newStage = e.target.value as EstadoPipeline;
+                                await moveOportunidadToState(selectedOp.id, newStage);
+                              }}
+                              className="w-full h-full appearance-none bg-transparent hover:bg-surface-muted text-ink font-semibold text-xs pl-3 pr-8 rounded-md border border-transparent hover:border-line cursor-pointer focus:outline-none focus:border-accent transition"
+                            >
+                              {pipelineStates.map((etapa) => (
+                                <option key={etapa.id} value={etapa.id}>{etapa.label}</option>
+                              ))}
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
                         </div>
-                        <select
-                          value={selectedOp.prioridad || ''}
-                          onChange={async (e) => {
-                            const newPrio = e.target.value as 'normal' | 'alta' | 'urgente';
-                            updateOportunidadField(selectedOp.id, 'prioridad', newPrio || null);
-                            await addOportunidadActividad(selectedOp.id, `Prioridad cambiada a "${newPrio || 'normal'}" desde el detalle.`);
-                          }}
-                          className={`w-full h-full appearance-none bg-surface hover:bg-surface-muted border border-line hover:border-line rounded-md pl-8 pr-8 text-xs font-bold focus:outline-none focus:border-accent transition shadow-xs cursor-pointer ${
-                            selectedOp.prioridad ? 'text-ink' : 'text-ink-subtle font-normal'
-                          }`}
-                        >
-                          <option value="">Sin prioridad</option>
-                          <option value="normal">Normal</option>
-                          <option value="alta">Alta</option>
-                          <option value="urgente">Urgente</option>
-                        </select>
-                        <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-3 min-h-[36px]">
+                          <div className="w-36 flex items-center gap-2.5 t-caption shrink-0">
+                            <User className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
+                            <span>Vendedor</span>
+                          </div>
+                          <div className="relative min-w-0 flex-1 h-8">
+                            <select
+                              value={selectedOp.asignado_a || ''}
+                              onChange={async (e) => {
+                                const newUserId = e.target.value || null;
+                                updateOportunidadField(selectedOp.id, 'asignado_a', newUserId);
+                                const userObj = usuariosApp.find((u) => u.id === newUserId);
+                                await addOportunidadActividad(selectedOp.id, `Vendedor asignado actualizado a "${userObj?.nombre || 'Sin asignar'}".`);
+                              }}
+                              className={`w-full h-full appearance-none bg-transparent hover:bg-surface-muted border border-transparent hover:border-line rounded-md pl-3 pr-8 text-xs font-semibold truncate focus:outline-none focus:border-accent transition cursor-pointer ${
+                                selectedOp.asignado_a ? 'text-ink' : 'text-ink-subtle font-normal'
+                              }`}
+                            >
+                              <option value="">Sin asignar</option>
+                              {usuariosApp.map((u) => (
+                                <option key={u.id} value={u.id}>
+                                  {u.nombre}
+                                </option>
+                              ))}
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:flex-nowrap sm:gap-3 min-h-[36px]">
+                          <div className="w-36 flex items-center gap-2.5 t-caption shrink-0">
+                            <Calendar className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
+                            <span>Fechas</span>
+                          </div>
+                          <div className="w-full sm:w-auto min-w-0 flex-1 h-8 bg-surface border border-transparent hover:border-line rounded-md px-2.5 flex items-center justify-between text-xs text-ink">
+                            <input
+                              type="date"
+                              value={selectedOp.fecha_inicio || ''}
+                              onChange={async (e) => {
+                                const newDate = e.target.value;
+                                updateOportunidadField(selectedOp.id, 'fecha_inicio', newDate);
+                                await addOportunidadActividad(selectedOp.id, `Fecha de inicio actualizada a ${newDate} desde el detalle.`);
+                              }}
+                              className="bg-transparent text-ink t-num font-medium text-xs w-[95px] min-w-0 focus:outline-none cursor-pointer [color-scheme:light]"
+                              title="Fecha de inicio"
+                            />
+                            <span className="text-ink-subtle font-semibold">→</span>
+                            <input
+                              type="date"
+                              value={selectedOp.fecha_limite || ''}
+                              onChange={async (e) => {
+                                const newDate = e.target.value;
+                                updateOportunidadField(selectedOp.id, 'fecha_limite', newDate);
+                                await addOportunidadActividad(selectedOp.id, `Fecha límite actualizada a ${newDate} desde el detalle.`);
+                              }}
+                              className="bg-transparent text-warning-ink t-num font-semibold text-xs w-[95px] min-w-0 focus:outline-none cursor-pointer [color-scheme:light]"
+                              title="Fecha límite"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-3 min-h-[36px]">
+                          <div className="w-36 flex items-center gap-2.5 t-caption shrink-0">
+                            <Flag className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
+                            <span>Prioridad</span>
+                          </div>
+                          <div className="relative min-w-0 flex-1 h-8">
+                            <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center">
+                              <Flag className={`w-3.5 h-3.5 ${
+                                selectedOp.prioridad === 'urgente' ? 'text-danger' : selectedOp.prioridad === 'alta' ? 'text-warning-ink' : selectedOp.prioridad === 'normal' ? 'text-info' : 'text-ink-subtle'
+                              }`} />
+                            </div>
+                            <select
+                              value={selectedOp.prioridad || ''}
+                              onChange={async (e) => {
+                                const newPrio = e.target.value as 'normal' | 'alta' | 'urgente';
+                                updateOportunidadField(selectedOp.id, 'prioridad', newPrio || null);
+                                await addOportunidadActividad(selectedOp.id, `Prioridad cambiada a "${newPrio || 'normal'}" desde el detalle.`);
+                              }}
+                              className={`w-full h-full appearance-none bg-transparent hover:bg-surface-muted border border-transparent hover:border-line rounded-md pl-8 pr-8 text-xs font-semibold focus:outline-none focus:border-accent transition cursor-pointer ${
+                                selectedOp.prioridad ? 'text-ink' : 'text-ink-subtle font-normal'
+                              }`}
+                            >
+                              <option value="">Sin prioridad</option>
+                              <option value="normal">Normal</option>
+                              <option value="alta">Alta</option>
+                              <option value="urgente">Urgente</option>
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-3 min-h-[36px]">
+                          <div className="w-36 flex items-center gap-2.5 t-caption shrink-0">
+                            <Compass className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
+                            <span>Origen</span>
+                          </div>
+                          <div className="relative min-w-0 flex-1 h-8">
+                            <select
+                              value={selectedOp.origen || ''}
+                              onChange={async (e) => {
+                                const origen = e.target.value;
+                                updateOportunidadField(selectedOp.id, 'origen', origen || null);
+                                await addOportunidadActividad(
+                                  selectedOp.id,
+                                  origen ? `Origen actualizado a "${origen}".` : 'Origen de la oportunidad eliminado.'
+                                );
+                              }}
+                              className={`w-full h-full appearance-none bg-transparent hover:bg-surface-muted border border-transparent hover:border-line rounded-md pl-3 pr-8 text-xs font-semibold focus:outline-none focus:border-accent transition cursor-pointer ${
+                                selectedOp.origen ? 'text-ink' : 'text-ink-subtle font-normal'
+                              }`}
+                            >
+                              <option value="">Sin origen</option>
+                              <option value="WhatsApp">WhatsApp</option>
+                              <option value="Webmail">Webmail</option>
+                              <option value="Llamado">Llamado</option>
+                              <option value="Visita presencial">Visita presencial</option>
+                              <option value="Referido">Referido</option>
+                              <option value="Cliente recurrente">Cliente recurrente</option>
+                              <option value="Manual">Manual</option>
+                              {selectedOp.origen && !['WhatsApp', 'Webmail', 'Llamado', 'Visita presencial', 'Referido', 'Cliente recurrente', 'Manual'].includes(selectedOp.origen) && (
+                                <option value={selectedOp.origen}>{selectedOp.origen}</option>
+                              )}
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-3 min-h-[36px]">
+                          <div className="w-36 flex items-center gap-2.5 t-caption shrink-0">
+                            <Tag className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
+                            <span>Tipo de venta</span>
+                          </div>
+                          <div className="relative min-w-0 flex-1 h-8">
+                            <select
+                              value={selectedOp.tipo_venta || 'Instalación'}
+                              onChange={async (e) => {
+                                const newTipo = e.target.value;
+                                updateOportunidadField(selectedOp.id, 'tipo_venta', newTipo);
+                                await addOportunidadActividad(selectedOp.id, `Tipo de venta cambiado a "${newTipo}" desde el detalle.`);
+                              }}
+                              className="w-full h-full appearance-none bg-transparent hover:bg-surface-muted border border-transparent hover:border-line rounded-md pl-3 pr-8 text-xs font-semibold text-ink focus:outline-none focus:border-accent transition cursor-pointer"
+                            >
+                              <option value="Instalación">Instalación</option>
+                              <option value="Suministro">Suministro</option>
+                              <option value="Reventa de Material">Reventa de Material</option>
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-3 min-h-[36px]">
+                          <div className="w-36 flex items-center gap-2.5 t-caption shrink-0">
+                            <Layers className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
+                            <span>Requerimiento</span>
+                          </div>
+                          <div className="relative min-w-0 flex-1 h-8">
+                            <select
+                              value={selectedOp.modalidad_requerimiento || 'instalacion'}
+                              onChange={async (e) => {
+                                const value = e.target.value as 'solo_material' | 'instalacion';
+                                updateOportunidadField(selectedOp.id, 'modalidad_requerimiento', value);
+                                await addOportunidadActividad(
+                                  selectedOp.id,
+                                  `Requerimiento actualizado a "${value === 'solo_material' ? 'Sólo material' : 'Instalación'}".`
+                                );
+                              }}
+                              className="w-full h-full appearance-none bg-transparent hover:bg-surface-muted border border-transparent hover:border-line rounded-md pl-3 pr-8 text-xs font-semibold text-ink focus:outline-none focus:border-accent transition cursor-pointer"
+                            >
+                              <option value="instalacion">Instalación</option>
+                              <option value="solo_material">Sólo material</option>
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="min-w-0">
-                    {/* 3. Origen */}
-                    <div className="flex min-w-0 items-center gap-3 min-h-[40px]">
-                      <div className="w-24 sm:w-28 flex items-center gap-2 text-ink-muted font-medium shrink-0">
-                        <Compass className="w-4 h-4 text-ink-subtle shrink-0" />
-                        <span>Origen</span>
-                      </div>
-                      <div className="relative min-w-0 flex-1 h-8">
-                        <select
-                          value={selectedOp.origen || ''}
-                          onChange={async (e) => {
-                            const origen = e.target.value;
-                            updateOportunidadField(selectedOp.id, 'origen', origen || null);
-                            await addOportunidadActividad(
-                              selectedOp.id,
-                              origen ? `Origen actualizado a "${origen}".` : 'Origen de la oportunidad eliminado.'
-                            );
-                          }}
-                          className={`w-full h-full appearance-none bg-surface hover:bg-surface-muted border border-line hover:border-line rounded-md pl-3 pr-8 text-xs font-bold focus:outline-none focus:border-accent transition shadow-xs cursor-pointer ${
-                            selectedOp.origen ? 'text-ink' : 'text-ink-subtle font-normal'
-                          }`}
-                        >
-                          <option value="">Sin origen</option>
-                          <option value="WhatsApp">WhatsApp</option>
-                          <option value="Webmail">Webmail</option>
-                          <option value="Llamado">Llamado</option>
-                          <option value="Visita presencial">Visita presencial</option>
-                          <option value="Referido">Referido</option>
-                          <option value="Cliente recurrente">Cliente recurrente</option>
-                          <option value="Manual">Manual</option>
-                          {selectedOp.origen && !['WhatsApp', 'Webmail', 'Llamado', 'Visita presencial', 'Referido', 'Cliente recurrente', 'Manual'].includes(selectedOp.origen) && (
-                            <option value={selectedOp.origen}>{selectedOp.origen}</option>
-                          )}
-                        </select>
-                        <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="min-w-0">
-                    {/* 4. Tipo de Venta / Tags */}
-                    <div className="flex min-w-0 items-center gap-3 min-h-[40px]">
-                      <div className="w-24 sm:w-28 flex items-center gap-2 text-ink-muted font-medium shrink-0">
-                        <Tag className="w-4 h-4 text-ink-subtle shrink-0" />
-                        <span>Tipo de venta</span>
-                      </div>
-                      <div className="relative min-w-0 flex-1 h-8">
-                        <select
-                          value={selectedOp.tipo_venta || 'Instalación'}
-                          onChange={async (e) => {
-                            const newTipo = e.target.value;
-                            updateOportunidadField(selectedOp.id, 'tipo_venta', newTipo);
-                            await addOportunidadActividad(selectedOp.id, `Tipo de venta cambiado a "${newTipo}" desde el detalle.`);
-                          }}
-                          className="w-full h-full appearance-none bg-surface hover:bg-surface-muted border border-line hover:border-line rounded-md pl-3 pr-8 text-xs font-bold text-ink focus:outline-none focus:border-accent transition shadow-xs cursor-pointer"
-                        >
-                          <option value="Instalación">Instalación</option>
-                          <option value="Suministro">Suministro</option>
-                          <option value="Reventa de Material">Reventa de Material</option>
-                        </select>
-                        <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="min-w-0">
-                    {/* 5. Requerimiento (debajo de Tipo de venta) */}
-                    <div className="flex min-w-0 items-center gap-3 min-h-[40px]">
-                      <div className="w-24 sm:w-28 flex items-center gap-2 text-ink-muted font-medium shrink-0">
-                        <Layers className="w-4 h-4 text-ink-subtle shrink-0" />
-                        <span>Requerimiento</span>
-                      </div>
-                      <div className="relative min-w-0 flex-1 h-8">
-                        <select
-                          value={selectedOp.modalidad_requerimiento || 'instalacion'}
-                          onChange={async (e) => {
-                            const value = e.target.value as 'solo_material' | 'instalacion';
-                            updateOportunidadField(selectedOp.id, 'modalidad_requerimiento', value);
-                            await addOportunidadActividad(
-                              selectedOp.id,
-                              `Requerimiento actualizado a "${value === 'solo_material' ? 'Sólo material' : 'Instalación'}".`
-                            );
-                          }}
-                          className="w-full h-full appearance-none bg-surface hover:bg-surface-muted border border-line hover:border-line rounded-md pl-3 pr-8 text-xs font-bold text-ink focus:outline-none focus:border-accent transition shadow-xs cursor-pointer"
-                        >
-                          <option value="instalacion">Instalación</option>
-                          <option value="solo_material">Sólo material</option>
-                        </select>
-                        <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </section>
+                  </section>
 
-              {(() => {
-                const activeClient = clientes.find((c) => c.id === selectedOp.cliente_id) || selectedOp.cliente;
-                const ejecutivoCliente = usuariosApp.find((u) => u.id === (activeClient?.usuario_id || selectedOp.asignado_a));
-
-                return (
-                  <div className="mb-4 bg-surface rounded-lg border border-line overflow-hidden shadow-xs">
-                    <div className="w-full p-3 bg-surface hover:bg-surface-muted text-ink font-semibold text-sm flex flex-wrap items-center justify-between gap-3 border-b border-line transition">
+                  {/* Visitas a terreno */}
+                  <section aria-label="Visitas a terreno" className="border-t border-line pt-5 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="t-section text-ink flex items-center gap-1.5">
+                        <Calendar className="w-4 h-4 text-accent-ink" />
+                        <span>Visitas a terreno</span>
+                        <span className="t-num rounded-full bg-surface-muted px-2 text-[11px] font-semibold text-ink-muted">{opVisitasList.length}</span>
+                      </h3>
                       <button
                         type="button"
-                        onClick={() => setOpenSections((prev) => ({ ...prev, contacto: !prev.contacto }))}
-                        className="flex items-center gap-2.5 hover:text-[var(--color-accent-hover)] transition cursor-pointer text-left font-semibold text-sm text-ink"
+                        onClick={() => setShowAddVisitaForm(true)}
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-on-accent transition hover:bg-accent-hover"
                       >
-                        <User className="w-4 h-4 text-accent-ink" />
-                        <span>Información del cliente</span>
-                        {openSections.contacto ? (
-                          <ChevronUp className="w-4 h-4 text-ink-muted" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4 text-ink-muted" />
-                        )}
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Agendar visita a terreno</span>
                       </button>
-                      {selectedOp.cliente_id && (
-                        <Link
-                          href={`/clientes/${selectedOp.cliente_id}`}
-                          className="text-xs font-semibold bg-accent-soft hover:bg-accent text-accent-ink hover:text-white border border-accent/30 px-3 py-1.5 rounded-md transition flex items-center gap-1.5"
-                        >
-                          Editar ficha del cliente
-                        </Link>
-                      )}
                     </div>
 
-                    {openSections.contacto && (
-                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3.5 text-ink text-xs">
-                      <div>
-                        <span className="text-ink-muted font-medium text-xs block mb-0.5">Razón social / Nombre</span>
-                        <strong className="text-ink text-xs font-bold block">{activeClient?.nombre || 'Hormiglass Cliente'}</strong>
+                    <Dialog
+                      open={showAddVisitaForm}
+                      onClose={() => setShowAddVisitaForm(false)}
+                      title="Agendar visita a terreno"
+                      footer={
+                        <>
+                          <Button onClick={() => setShowAddVisitaForm(false)}>Cancelar</Button>
+                          <Button variant="primary" disabled={!newVisitaFecha || !newVisitaTecnico} onClick={handleGuardarVisita}>Guardar visita</Button>
+                        </>
+                      }
+                    >
+                      <div className="space-y-4">
+                        <Field label="Responsable" required>
+                          {(f) => (
+                            <Select {...f} value={newVisitaTecnico} onChange={(e) => setNewVisitaTecnico(e.target.value)}>
+                              <option value="">Selecciona responsable</option>
+                              {responsablesVisitas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                            </Select>
+                          )}
+                        </Field>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <Field label="Fecha" required>
+                            {(f) => <TextInput {...f} type="date" className="t-num" value={newVisitaFecha} onChange={(e) => setNewVisitaFecha(e.target.value)} />}
+                          </Field>
+                          <Field label="Hora">
+                            {(f) => <TextInput {...f} type="time" className="t-num" value={newVisitaHora} onChange={(e) => setNewVisitaHora(e.target.value)} />}
+                          </Field>
+                        </div>
+                        <Field label="Notas para el técnico">
+                          {(f) => <TextInput {...f} value={newVisitaNotas} onChange={(e) => setNewVisitaNotas(e.target.value)} placeholder="Ej: medir acceso y tomar plantilla" />}
+                        </Field>
                       </div>
-                      <div>
-                        <span className="text-ink-muted font-medium text-xs block mb-0.5">Encargado del cliente</span>
-                        <span className="text-ink text-xs font-bold block">{ejecutivoCliente?.nombre || 'Sin encargado asignado'}</span>
+                    </Dialog>
+
+                    {opVisitasList.length === 0 ? null : (
+                      <ul className="divide-y divide-line-subtle rounded-lg border border-line">
+                        {opVisitasList.map((vis) => (
+                          <li key={vis.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                            <div className="min-w-0">
+                              <span className="t-num block font-semibold text-ink">
+                                {vis.fecha_visita_terreno}{vis.hora_visita_terreno ? ` · ${vis.hora_visita_terreno}` : ''}
+                              </span>
+                              <span className="t-caption block truncate">
+                                {getResponsableVisitaNombre(vis)}{vis.observaciones_visita ? ` — ${vis.observaciones_visita}` : ''}
+                              </span>
+                            </div>
+                            <StatusBadge tone={vis.estado_visita === 'realizada' ? 'success' : vis.estado_visita === 'cancelada' ? 'danger' : 'accent'}>
+                              {vis.estado_visita || 'programada'}
+                            </StatusBadge>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+
+                  {/* Documentos y antecedentes */}
+                  <section aria-label="Documentos y antecedentes" className="border-t border-line pt-5 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="t-section text-ink flex items-center gap-1.5">
+                      <Paperclip className="w-4 h-4 text-accent-ink" />
+                      <span>Documentos y antecedentes</span>
+                      <span className="t-num rounded-full bg-surface-muted px-2 text-[11px] font-semibold text-ink-muted">{opAntecedentesList.length}</span>
+                    </h3>
+                      <button
+                        type="button"
+                        onClick={() => { setAntecedenteErrorMsg(''); setShowAntecedenteModal(true); }}
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-on-accent transition hover:bg-accent-hover"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Subir documento</span>
+                      </button>
                       </div>
-                      <div>
-                        <span className="text-ink-muted font-medium text-xs block mb-0.5">RUT registrado</span>
-                        <span className="font-mono text-warning-ink font-bold text-xs block">{activeClient?.rut || 'Sin RUT'}</span>
-                      </div>
-                      <div>
-                        <span className="text-ink-muted font-medium text-xs block mb-0.5">Teléfono</span>
-                        <span className="flex items-center gap-1.5 font-bold text-ink text-xs">
-                          <Phone className="w-3.5 h-3.5 text-accent-ink" />
-                          {activeClient?.telefono || 'No indicado'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-ink-muted font-medium text-xs block mb-0.5">Dirección de despacho / Obra</span>
-                        <span className="text-ink text-xs font-bold block" title={activeClient?.direccion || selectedOp.direccion || 'Sin dirección'}>
-                          {activeClient?.direccion || selectedOp.direccion || 'Sin dirección'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-ink-muted font-medium text-xs block mb-0.5">Comuna / Región</span>
-                        <span className="text-ink text-xs font-bold block">
-                          {[activeClient?.comuna || selectedOp.comuna, activeClient?.region || selectedOp.region || 'Región Metropolitana'].filter(Boolean).join(', ')}
-                        </span>
-                      </div>
-                      <div className="md:col-span-2">
-                        <span className="text-ink-muted font-medium text-xs block mb-1">Correos electrónicos</span>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="bg-surface-muted px-2.5 py-1 rounded-md border border-line text-ink font-mono text-xs flex items-center gap-1.5 font-semibold">
-                            <Mail className="w-3.5 h-3.5 text-accent-ink" />
-                            {activeClient?.correo || 'Sin correo principal'}
-                          </span>
-                          {activeClient?.correos_secundarios?.map((sec, idx) => (
-                            <span key={idx} className="bg-surface-muted px-2.5 py-1 rounded-md border border-line text-ink-muted font-mono text-xs flex items-center gap-1.5">
-                              <Mail className="w-3.5 h-3.5 text-ink-subtle" />
-                              {sec}
-                            </span>
+
+                    <Dialog
+                      open={showAntecedenteModal}
+                      onClose={() => setShowAntecedenteModal(false)}
+                      title="Subir contrato o documento"
+                      footer={
+                        <>
+                          <Button onClick={() => setShowAntecedenteModal(false)}>Cancelar</Button>
+                          <Button variant="primary" disabled={!nuevoAntecedenteFile || antecedenteUploading} onClick={handleUploadAntecedente}>
+                            {antecedenteUploading ? 'Subiendo...' : 'Subir documento'}
+                          </Button>
+                        </>
+                      }
+                    >
+                      <div className="space-y-4">
+                      <div className="space-y-2">
+                        <p className="t-caption font-semibold text-ink">1. Tipo de documento</p>
+                        <div className="flex flex-wrap gap-2">
+                          {([
+                            ['contrato', 'Contrato'],
+                            ['anexo', 'Anexo'],
+                            ['documento_empresa', 'Doc. empresa'],
+                            ['otro', 'Otro'],
+                          ] as [TipoAntecedenteDocumento, string][]).map(([value, label]) => (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => setNuevoAntecedenteTipo(value)}
+                              aria-pressed={nuevoAntecedenteTipo === value}
+                              className={clsx(
+                                'cursor-pointer rounded-full border px-3 py-1.5 text-xs font-semibold transition',
+                                nuevoAntecedenteTipo === value ? 'border-accent bg-accent-soft text-ink' : 'border-line bg-surface text-ink-muted hover:text-ink'
+                              )}
+                            >
+                              {label}
+                            </button>
                           ))}
                         </div>
                       </div>
-                    </div>
+
+                      <div className="space-y-2">
+                        <p className="t-caption font-semibold text-ink">2. Archivo</p>
+                        <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-line bg-surface px-4 py-3 transition hover:border-accent">
+                          <Paperclip className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden />
+                          <span className={clsx('min-w-0 flex-1 truncate text-xs', nuevoAntecedenteFile ? 'font-semibold text-ink' : 'text-ink-muted')}>
+                            {nuevoAntecedenteFile ? nuevoAntecedenteFile.name : 'Haz clic para elegir un archivo'}
+                          </span>
+                          <input
+                            type="file"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0] || null;
+                              setNuevoAntecedenteFile(f);
+                              if (f && !nuevoAntecedenteNombre) setNuevoAntecedenteNombre(f.name);
+                            }}
+                          />
+                        </label>
+                      </div>
+
+                        {antecedenteErrorMsg && <p className="text-xs font-medium text-danger">{antecedenteErrorMsg}</p>}
+                      </div>
+                    </Dialog>
+                    {antecedenteErrorMsg && <p className="text-xs font-medium text-danger">{antecedenteErrorMsg}</p>}
+
+                    {opAntecedentesList.length === 0 ? null : (
+                      <ul className="divide-y divide-line-subtle rounded-lg border border-line">
+                        {opAntecedentesList.map((doc) => (
+                          <li key={doc.id} className="flex items-center gap-3 px-4 py-3">
+                            <FileText className="h-4 w-4 shrink-0 text-ink-subtle" aria-hidden />
+                            <div className="min-w-0 flex-1">
+                              <a href={doc.url} target="_blank" rel="noopener noreferrer" className="block truncate font-semibold text-ink hover:text-accent-ink hover:underline">
+                                {doc.nombre}
+                              </a>
+                              <span className="t-caption block truncate">{doc.tipo} · {doc.subido_por}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteAntecedente(doc.id)}
+                              className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-md text-ink-subtle transition hover:bg-danger-soft hover:text-danger"
+                              title="Eliminar documento"
+                              aria-label="Eliminar documento"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
                     )}
-                  </div>
+                  </section>
+                </>
+              )}
+
+              {/* =========================================================
+                  PESTAÑA 2: COTIZACIONES Y PAGOS (En Sitio)
+                 ========================================================= */}
+              {opDetailTab === 'cotizaciones' && (() => {
+                const opQuotes = allCotizaciones.filter((c) => c.oportunidad_id === selectedOp.id);
+                const activeQuote = getActiveQuote(selectedOp);
+                const candidateQuotes = allCotizaciones.filter(
+                  (c) => c.cliente_id === selectedOp.cliente_id && c.oportunidad_id !== selectedOp.id
                 );
-              })()}
+                const totalCot = getOportunidadTotalValue(selectedOp);
+                const abonado = getOportunidadAbonadoValue(selectedOp);
+                const saldo = Math.max(0, totalCot - abonado);
+                const pagosList = Array.isArray(selectedOp.comprobantes_pago)
+                  ? selectedOp.comprobantes_pago.filter((p) => typeof p === 'object' && p !== null && 'monto' in p)
+                  : [];
 
-              {/* Listas Desplegables (Accordions) */}
-                {/* Área Comercial & Ventas */}
-                <div className="bg-surface rounded-lg border border-line overflow-hidden shadow-xs">
-                <AreaCardHeader
-                  icon={TrendingUp}
-                  title="Área Comercial & Ventas"
-                  open={areaExpanded.comercial}
-                  onToggle={() => setAreaExpanded((prev) => ({ ...prev, comercial: !prev.comercial }))}
-                />
+                const enviarAbono = async () => {
+                              const montoNum = Number(nuevoAbonoMonto);
+                              if (!montoNum || montoNum <= 0 || !nuevoAbonoFile) return;
+                              setAbonoSaving(true);
+                              setAbonoErrorMsg('');
+                              try {
+                                const cleanName = nuevoAbonoFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                                const storagePath = `comprobantes/${selectedOp.id}/${Date.now()}_${cleanName}`;
+                                const { error: upErr } = await supabase.storage
+                                  .from('documentos')
+                                  .upload(storagePath, nuevoAbonoFile, { upsert: false });
+                                if (upErr) throw upErr;
+                                await guardarAbono('crear', {
+                                  id: `pago-${Date.now()}`,
+                                  monto: montoNum,
+                                  fecha: new Date().toLocaleDateString('es-CL'),
+                                  fecha_iso: new Date().toISOString(),
+                                  comprobante_url: storagePath,
+                                  comprobante_nombre: nuevoAbonoFileName || nuevoAbonoFile.name,
+                                  nota: nuevoAbonoNota.trim() || 'Abono registrado',
+                                  creado_por: currentUser?.nombre || 'Comercial',
+                                  estado: 'pendiente',
+                                });
+                                // eslint-disable-next-line react-hooks/refs -- falso positivo: el ref solo se lee al ejecutar el manejador, no al renderizar
+                                await addOportunidadActividad(
+                                  selectedOp.id,
+                                  `Abono registrado por $${montoNum.toLocaleString('es-CL')} (pendiente de validación en Caja).`,
+                                  'abono'
+                                );
+                                setNuevoAbonoMonto('');
+                                setNuevoAbonoNota('');
+                                setNuevoAbonoFile(null);
+                                setNuevoAbonoFileName('');
+                                setShowAbonoModal(false);
+                              } catch (err) {
+                                setAbonoErrorMsg(mensajeError(err, 'No se pudo registrar el abono.'));
+                              } finally {
+                                setAbonoSaving(false);
+                              }
+                };
 
-                {areaExpanded.comercial && (
-                  <div className="border-t border-line p-3 sm:p-4 space-y-3.5">
-
-                {/* Accordion 1: Cotizaciones de la Oportunidad */}
-                <div className="bg-surface rounded-lg border border-line overflow-hidden shadow-xs">
-                  <button
-                    onClick={() => setOpenSections({ ...openSections, productos: !openSections.productos })}
-                    className="w-full p-3 bg-surface-muted hover:bg-surface-muted/80 text-ink font-semibold text-xs flex items-center justify-between border-b border-line transition"
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <FileText className="w-4 h-4 text-accent-ink" />
-                      <span>Cotizaciones de la Oportunidad</span>
-                    </span>
-                    {openSections.productos ? <ChevronUp className="w-4 h-4 text-ink-muted" /> : <ChevronDown className="w-4 h-4 text-ink-muted" />}
-                  </button>
-
-                  {openSections.productos && (
-                    <div className="p-5 space-y-4 bg-surface text-ink">
-                      {cotizacionErrorMsg && <p role="alert" className="rounded-md border border-danger/30 bg-danger-soft p-3 text-xs font-semibold text-danger">{cotizacionErrorMsg}</p>}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-line pb-3">
-                        <div>
-                          <h4 className="text-ink font-semibold text-sm flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-accent-ink" />
-                            <span>Cotizaciones del Cliente:</span>
-                          </h4>
-                          <p className="text-xs text-ink-muted mt-1">
-                            Vincula las cotizaciones a esta oportunidad. Solo la última versión <strong>Enviada</strong> o <strong>Aprobada</strong> determina el valor total.
-                          </p>
-                        </div>
-
+                return (
+                  <div className="space-y-6">
+                    {/* Tarjeta de Resumen Financiero y Matriz de Costos */}
+                    <section className="border-t border-line pt-5 space-y-3 first:border-t-0 first:pt-0">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="t-section text-ink flex items-center gap-1.5">
+                          <DollarSign className="w-4 h-4 text-accent-ink" />
+                          <span>Resumen Financiero y Matriz de Costos</span>
+                        </h3>
                         <button
                           type="button"
                           onClick={() => setShowUnifiedCotModal(true)}
-                          className="bg-accent hover:bg-accent-hover text-on-accent text-xs font-semibold px-3.5 py-2 rounded-md transition flex items-center gap-1.5 self-start sm:self-auto shrink-0 shadow-xs"
+                          className="px-3 py-1.5 rounded-md bg-accent hover:bg-accent-hover text-on-accent font-semibold text-xs inline-flex items-center gap-1.5 transition shadow-xs cursor-pointer"
                         >
-                          <FilePlus className="w-4 h-4" />
-                          <span>Crear Nueva Cotización</span>
+                          <FilePlus className="w-3.5 h-3.5" />
+                          <span>Crear nueva cotización</span>
                         </button>
                       </div>
 
-                      {(() => {
-                        const candidateQuotes = allCotizaciones.filter(
-                          (c) => c.cliente_id === selectedOp.cliente_id
-                        );
-                        const unassignedQuotes = candidateQuotes.filter(
-                          (c) => !c.oportunidad_id || c.oportunidad_id !== selectedOp.id
-                        );
-                        const linkedQuotes = candidateQuotes.filter(
-                          (c) => c.oportunidad_id === selectedOp.id
-                        );
-                        const totalValorOportunidad = getOportunidadTotalValue(selectedOp);
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        <div className="rounded-lg border border-line bg-surface-muted/50 p-2.5">
+                          <span className="t-caption block">Total comercial</span>
+                          <strong className="text-sm font-semibold text-ink t-num block mt-0.5">${totalCot.toLocaleString('es-CL')}</strong>
+                        </div>
+                        <div className="rounded-lg border border-line bg-surface-muted/50 p-2.5">
+                          <span className="t-caption block">Validado en Caja</span>
+                          <strong className="text-sm font-semibold text-success t-num block mt-0.5">${abonado.toLocaleString('es-CL')}</strong>
+                        </div>
+                        <div className="rounded-lg border border-line bg-surface-muted/50 p-2.5">
+                          <span className="t-caption block">Saldo pendiente</span>
+                          <strong className="text-sm font-semibold text-warning-ink t-num block mt-0.5">${saldo.toLocaleString('es-CL')}</strong>
+                        </div>
+                        <div className="rounded-lg border border-line bg-surface-muted/50 p-2.5">
+                          <span className="t-caption block">Costo OC / Directo</span>
+                          <strong className="text-sm font-semibold text-ink t-num block mt-0.5">
+                            ${Number(margenOp?.costo_compras_asignadas ?? margenOp?.costo_directo_total ?? 0).toLocaleString('es-CL')}
+                          </strong>
+                        </div>
+                      </div>
+                    </section>
 
-                        return (
-                          <div className="space-y-4">
-                            {/* Desplegable de Selección y Previsualización de Cotizaciones Disponibles */}
-                            {unassignedQuotes.length > 0 && (
-                              <div className="bg-surface-muted p-4 rounded-lg border border-line space-y-3">
-                                <label className="text-ink font-semibold text-xs flex items-center gap-2 uppercase tracking-normal">
-                                  <FileText className="w-4 h-4 text-accent-ink" />
-                                  <span>Seleccionar Cotización Disponible para Agregar:</span>
-                                </label>
+                    {/* Listado de Cotizaciones de la Oportunidad */}
+                    <section className="border-t border-line pt-5 space-y-3 first:border-t-0 first:pt-0">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="t-section text-ink">Cotizaciones vinculadas ({opQuotes.length})</h3>
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedCandidateCotIds([]); setVincularCotBusqueda(''); setShowVincularCotModal(true); }}
+                          className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-on-accent transition hover:bg-accent-hover"
+                        >
+                          <Link2 className="w-3.5 h-3.5" />
+                          <span>Vincular cotización</span>
+                        </button>
+                      </div>
 
-                                <div className="flex flex-col sm:flex-row items-center gap-2.5">
-                                  <select
-                                    value={selectedCandidateCotId}
-                                    onChange={(e) => setSelectedCandidateCotId(e.target.value)}
-                                    className="w-full bg-surface text-ink border border-line rounded-md px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-accent"
-                                  >
-                                    <option value="">-- Escoger Cotización Disponible ({unassignedQuotes.length}) --</option>
-                                    {unassignedQuotes.map((cot) => (
-                                      <option key={cot.id} value={cot.id}>
-                                        {cot.numero_cotizacion} (v{cot.version || 1}) — ${(cot.monto_total || 0).toLocaleString('es-CL')} CLP [{cot.estado}]
-                                      </option>
-                                    ))}
-                                  </select>
-
-                                  {selectedCandidateCotId && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const found = unassignedQuotes.find((c) => c.id === selectedCandidateCotId);
-                                        if (found) setPreviewCotizacion(found);
-                                      }}
-                                      className="w-full sm:w-auto bg-surface hover:bg-surface-muted text-ink text-xs font-semibold px-3.5 py-2.5 rounded-md transition flex items-center justify-center gap-1.5 shrink-0 border border-line shadow-xs"
-                                      title="Previsualizar PDF antes de vincular"
-                                    >
-                                      <Eye className="w-4 h-4 text-accent-ink" />
-                                      <span>Previsualizar</span>
-                                    </button>
-                                  )}
-
-                                  <button
-                                    type="button"
-                                    disabled={!selectedCandidateCotId}
-                                    onClick={async () => {
-                                      if (!selectedCandidateCotId) return;
-                                      const targetCot = unassignedQuotes.find((c) => c.id === selectedCandidateCotId);
-                                      if (!targetCot) return;
-
-                                      try {
-                                        await guardarCambioCotizacion(targetCot, { oportunidad_id: selectedOp.id });
-                                        setSelectedCandidateCotId('');
-                                      } catch (err: any) {
-                                        setCotizacionErrorMsg(mensajeError(err, 'No se pudo vincular la cotización.'));
-                                        return;
-                                      }
-                                      await addOportunidadActividad(
-                                        selectedOp.id,
-                                        `Cotización ${targetCot.numero_cotizacion} agregada y vinculada a la oportunidad.`
-                                      );
-                                    }}
-                                    className="w-full sm:w-auto bg-accent hover:bg-accent-hover disabled:opacity-50 text-on-accent text-xs font-semibold px-4 py-2.5 rounded-md transition flex items-center justify-center gap-1.5 shrink-0 shadow-xs"
-                                  >
-                                    <Plus className="w-4 h-4" />
-                                    <span>Agregar</span>
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Lista de Cotizaciones Agregadas a la Oportunidad */}
-                            {linkedQuotes.length === 0 ? (
-                              <div className="p-5 bg-surface-muted rounded-lg border border-dashed border-line text-ink-muted text-center text-xs">
-                                No hay cotizaciones agregadas a esta oportunidad. {unassignedQuotes.length > 0 ? 'Selecciona una del desplegable de arriba o haz' : 'Haz'} clic en &quot;Crear Nueva Cotización&quot;.
-                              </div>
-                            ) : (
-                              <div className="space-y-3">
-                                {linkedQuotes.map((cot) => {
-                                  const isLinked = true;
-                                  const isSummed = cot.id === getActiveQuote(selectedOp)?.id &&
-                                    (cot.estado === 'aprobada' || cot.estado === 'enviada');
-
+                      <Dialog
+                        open={showVincularCotModal}
+                        onClose={() => setShowVincularCotModal(false)}
+                        title="Vincular cotizaciones"
+                        footer={
+                          <>
+                            <Button onClick={() => setShowVincularCotModal(false)}>Cancelar</Button>
+                            <Button
+                              variant="primary"
+                              disabled={vinculandoCot || selectedCandidateCotIds.length === 0}
+                              // eslint-disable-next-line react-hooks/refs -- el compilador marca el ref de cierre que usan los handlers de oportunidad; aquí solo se invoca en un click
+                              onClick={() => void vincularCotizacionesSeleccionadas(selectedOp)}
+                            >
+                              {vinculandoCot ? 'Vinculando...' : selectedCandidateCotIds.length > 1 ? `Vincular ${selectedCandidateCotIds.length} cotizaciones` : 'Vincular cotización'}
+                            </Button>
+                          </>
+                        }
+                      >
+                        {(() => {
+                          const q = vincularCotBusqueda.trim().toLowerCase();
+                          const filtradas = candidateQuotes.filter((cq) =>
+                            !q || `${cq.numero_cotizacion} ${cq.monto_total ?? ''} ${cq.estado ?? ''}`.toLowerCase().includes(q)
+                          );
+                          return (
+                            <div className="space-y-3">
+                              <TextInput
+                                type="search"
+                                aria-label="Buscar cotización"
+                                placeholder="Buscar por número o monto..."
+                                value={vincularCotBusqueda}
+                                onChange={(e) => setVincularCotBusqueda(e.target.value)}
+                                autoFocus
+                              />
+                              <ul className="max-h-72 divide-y divide-line-subtle overflow-y-auto rounded-control border border-line" role="listbox" aria-multiselectable="true" aria-label="Cotizaciones del cliente">
+                                {filtradas.map((cq) => {
+                                  const checked = selectedCandidateCotIds.includes(cq.id);
                                   return (
-                                    <div
-                                      key={cot.id}
-                                      className={`p-4 rounded-lg border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                                        isLinked
-                                          ? 'bg-surface border-accent/30 shadow-xs'
-                                          : 'bg-surface border-line opacity-80 hover:opacity-100'
-                                      }`}
-                                    >
-                                      <div className="flex items-center gap-3.5">
+                                    <li key={cq.id}>
+                                      <label className={clsx('flex cursor-pointer items-center gap-3 px-3 py-2.5 text-sm transition hover:bg-surface-muted', checked && 'bg-accent-soft')}>
                                         <input
                                           type="checkbox"
-                                          checked={isLinked}
-                                          onChange={async (e) => {
-                                            const checked = e.target.checked;
-                                            const newOpId = checked ? selectedOp.id : undefined;
-
-                                            try {
-                                              await guardarCambioCotizacion(cot, { oportunidad_id: newOpId || null });
-                                            } catch (err: any) {
-                                              setCotizacionErrorMsg(mensajeError(err, 'No se pudo cambiar el vínculo.'));
-                                              return;
-                                            }
-
-                                            await addOportunidadActividad(
-                                              selectedOp.id,
-                                              `Cotización ${cot.numero_cotizacion} ${checked ? 'vinculada a' : 'desvinculada de'} la oportunidad.`
-                                            );
-                                          }}
-                                          className="w-4 h-4 rounded text-accent-ink focus:ring-[var(--color-accent)] accent-[var(--color-accent)] cursor-pointer shrink-0"
+                                          checked={checked}
+                                          onChange={() => setSelectedCandidateCotIds((prev) => checked ? prev.filter((id) => id !== cq.id) : [...prev, cq.id])}
+                                          className="h-4 w-4 accent-[var(--hg-accent)]"
                                         />
-
-                                        <div className="space-y-1">
-                                          <div className="flex flex-wrap items-center gap-2">
-                                            <span className="font-mono font-bold text-ink text-sm">
-                                              {cot.numero_cotizacion}
-                                            </span>
-                                            <span className="text-xs font-semibold uppercase bg-info-soft text-info px-2 py-0.5 rounded-full border border-info/30">
-                                              v{cot.version || 1}
-                                            </span>
-                                            {isSummed ? (
-                                              <span className="t-micro font-bold uppercase bg-success-soft text-success px-2.5 py-0.5 rounded-full border border-success/30">
-                                                Cotización vigente
-                                              </span>
-                                            ) : isLinked ? (
-                                              <span className="t-micro font-bold uppercase bg-warning-soft text-warning-ink px-2.5 py-0.5 rounded-full border border-warning/30">
-                                                Agregada ({cot.estado})
-                                              </span>
-                                            ) : (
-                                              <span className="t-micro font-bold text-ink-subtle">
-                                                Sin asignar
-                                              </span>
-                                            )}
-                                          </div>
-                                          <span className="font-bold text-accent-ink text-sm block">
-                                            ${(cot.monto_total || 0).toLocaleString('es-CL')} CLP
-                                          </span>
-                                        </div>
-                                      </div>
-
-                                      <div className="flex items-center gap-2.5 self-end sm:self-auto">
-                                        <select
-                                          value={cot.estado}
-                                          onChange={async (e) => {
-                                            const newStatus = e.target.value as EstadoCotizacion;
-
-                                            try {
-                                              await guardarCambioCotizacion(cot, { estado: newStatus });
-                                            } catch (err: any) {
-                                              setCotizacionErrorMsg(mensajeError(err, 'No se pudo cambiar el estado.'));
-                                              return;
-                                            }
-
-                                            await addOportunidadActividad(
-                                              selectedOp.id,
-                                              `Estado de cotización ${cot.numero_cotizacion} cambiado a "${newStatus.toUpperCase()}"`
-                                            );
-                                          }}
-                                          className={`text-xs font-semibold uppercase px-3 py-1.5 rounded-md border cursor-pointer focus:outline-none ${
-                                            cot.estado === 'aprobada'
-                                              ? 'bg-success-soft text-success border-success/30'
-                                              : cot.estado === 'enviada'
-                                              ? 'bg-info-soft text-info border-info/30'
-                                              : cot.estado === 'declinada' || cot.estado === 'rechazada'
-                                              ? 'bg-danger-soft text-danger border-danger/30'
-                                              : 'bg-warning-soft text-warning-ink border-warning/30'
-                                          }`}
-                                        >
-                                          <option value="borrador">Borrador</option>
-                                          <option value="enviada">Enviada</option>
-                                          <option value="aprobada">Aprobada</option>
-                                          <option value="rechazada">Rechazada</option>
-                                        </select>
-
-                                        <button
-                                          type="button"
-                                          onClick={() => setPreviewCotizacion(cot)}
-                                          className="p-2 bg-surface hover:bg-accent-soft text-ink hover:text-accent-ink rounded-md font-bold transition text-xs flex items-center gap-1.5 border border-line"
-                                          title="Previsualizar PDF"
-                                        >
-                                          <Eye className="w-4 h-4" />
-                                          <span className="hidden sm:inline">PDF</span>
-                                        </button>
-
-                                        <button
-                                          type="button"
-                                          onClick={async () => {
-                                            try {
-                                              await guardarCambioCotizacion(cot, { oportunidad_id: null });
-                                            } catch (err: any) {
-                                              setCotizacionErrorMsg(mensajeError(err, 'No se pudo desvincular la cotización.'));
-                                              return;
-                                            }
-
-                                            await addOportunidadActividad(
-                                              selectedOp.id,
-                                              `Cotización ${cot.numero_cotizacion} desvinculada de esta oportunidad.`
-                                            );
-                                          }}
-                                          className="p-2 bg-surface hover:bg-danger-soft text-ink-subtle hover:text-danger rounded-md transition border border-line"
-                                          title="Desvincular cotización de la oportunidad"
-                                        >
-                                          <Trash2 className="w-4 h-4" />
-                                        </button>
-                                      </div>
-                                    </div>
+                                        <span className="min-w-0 flex-1 truncate font-semibold text-ink">{cq.numero_cotizacion}</span>
+                                        <span className="t-num shrink-0 text-ink-muted">${(cq.monto_total || 0).toLocaleString('es-CL')}</span>
+                                      </label>
+                                    </li>
                                   );
                                 })}
-                              </div>
-                            )}
-
-                            {/* Resumen Total Sumado de Oportunidad */}
-                            <div className="p-4 bg-surface-muted border border-line rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
-                              <div>
-                                <span className="text-ink font-semibold text-sm block">Valor Total de la Oportunidad:</span>
-                                <span className="text-xs text-ink-muted">
-                                  Solo la última versión vinculada en estado <strong>Enviada</strong> o <strong>Aprobada</strong>.
-                                </span>
-                              </div>
-
-                              <div className="text-right">
-                                <span className="text-2xl font-bold text-accent-ink block">
-                                  ${totalValorOportunidad.toLocaleString('es-CL')} CLP
-                                </span>
-                              </div>
+                              </ul>
+                              {cotizacionErrorMsg && <p className="text-xs font-medium text-danger">{cotizacionErrorMsg}</p>}
                             </div>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
-                </div>
+                          );
+                        })()}
+                      </Dialog>
 
-                {/* Accordion 3: Finanzas & Documentos Adjuntos (Comprobantes de Pago) */}
-                <div className="bg-surface rounded-lg border border-line overflow-hidden shadow-xs">
-                  <button
-                    onClick={() => setOpenSections({ ...openSections, finanzas: !openSections.finanzas })}
-                    className="w-full p-3 bg-surface-muted hover:bg-surface-muted/80 text-ink font-semibold text-xs flex items-center justify-between border-b border-line transition"
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <DollarSign className="w-4 h-4 text-accent-ink" />
-                      <span>Finanzas & Comprobantes de Pago</span>
-                    </span>
-                    {openSections.finanzas ? <ChevronUp className="w-4 h-4 text-ink-muted" /> : <ChevronDown className="w-4 h-4 text-ink-muted" />}
-                  </button>
+                      {cotizacionErrorMsg && !showVincularCotModal && <p className="text-xs text-danger font-medium">{cotizacionErrorMsg}</p>}
 
-                  {openSections.finanzas && (
-                    <div className="p-5 space-y-5 bg-surface text-ink">
-                      {/* Resumen de Saldo */}
-                      {(() => {
-                        const totalCot = getOportunidadTotalValue(selectedOp);
-                        const abonado = getOportunidadAbonadoValue(selectedOp);
-                        const abonosPendientes = (selectedOp.comprobantes_pago || [])
-                          .filter((item: any) => typeof item === 'object' && item !== null && item.estado === 'pendiente')
-                          .reduce((sum: number, p: any) => sum + (Number(p.monto) || 0), 0);
-                        const saldo = Math.max(0, totalCot - abonado);
-
-                        return (
-                          <div className="space-y-4">
-                            {/* Resumen Financiero Calculado */}
-                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-surface-muted p-4 rounded-lg border border-line text-center">
-                              <div>
-                                <span className="text-ink-muted block text-xs font-semibold mb-1">Valor Total Cotizado:</span>
-                                <strong className="text-ink text-lg font-bold">${totalCot.toLocaleString('es-CL')}</strong>
-                              </div>
-                              <div>
-                                <span className="text-ink-muted block text-xs font-semibold mb-1">Total Validado en Caja:</span>
-                                <strong className="text-success text-lg font-bold">${abonado.toLocaleString('es-CL')}</strong>
-                              </div>
-                              <div>
-                                <span className="text-ink-muted block text-xs font-semibold mb-1">Pendiente de Validación:</span>
-                                <strong className={`text-lg font-bold ${abonosPendientes > 0 ? 'text-warning-ink' : 'text-ink-subtle'}`}>
-                                  ${abonosPendientes.toLocaleString('es-CL')}
-                                </strong>
-                              </div>
-                              <div>
-                                <span className="text-ink-muted block text-xs font-semibold mb-1">Saldo por Cobrar:</span>
-                                <strong className="text-warning-ink text-lg font-bold">${saldo.toLocaleString('es-CL')}</strong>
-                              </div>
-                            </div>
-                            {abonosPendientes > 0 && (
-                              <div className="p-2.5 bg-warning-soft/70 border border-warning/30 rounded-md text-warning-ink text-xs flex items-center gap-2">
-                                <Clock className="w-4 h-4 text-warning-ink shrink-0" />
-                                <span>Hay <strong>${abonosPendientes.toLocaleString('es-CL')}</strong> en comprobantes pendientes de validación por finanzas en Caja.</span>
-                              </div>
-                            )}
-
-                            {/* Matriz Operacional de Costos y Margen por NV (Fase 3) */}
-                            <div className="bg-gradient-to-br bg-surface-dark bg-surface-dark text-white p-4 rounded-lg border border-line space-y-3 shadow-xs">
-                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/80 pb-2.5">
-                                <div className="flex items-center gap-2">
-                                  <TrendingUp className="w-4 h-4 text-accent-ink" />
-                                  <span className="text-xs font-bold uppercase tracking-wider text-white">
-                                    Matriz de Costos y Margen Operacional de la NV
-                                  </span>
-                                </div>
-                                {margenOp && (
+                      {opQuotes.length === 0 ? null : (
+                        <div className="divide-y divide-line-subtle">
+                          {opQuotes.map((cot) => {
+                            const isVigente = activeQuote?.id === cot.id;
+                            return (
+                              <div key={cot.id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
+                                <div className="space-y-0.5">
                                   <div className="flex items-center gap-2">
-                                    <span
-                                      className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
-                                        (margenOp.porcentaje_margen_proyectado ?? 0) >= 35
-                                          ? 'bg-success-soft/20 text-success border-success/30/40'
-                                          : (margenOp.porcentaje_margen_proyectado ?? 0) >= 20
-                                          ? 'bg-warning-soft/20 text-warning-ink border-warning/30/40'
-                                          : 'bg-surface-muted/20 text-ink border-line/40'
-                                      }`}
-                                    >
-                                      Margen Proyectado: {(margenOp.porcentaje_margen_proyectado ?? 0).toFixed(1)}%
-                                    </span>
+                                    <CodeStamp>{cot.numero_cotizacion}</CodeStamp>
+                                    {cot.version && <span className="t-caption">v{cot.version}</span>}
+                                    {isVigente && <StatusBadge tone="success">Vigente</StatusBadge>}
                                   </div>
-                                )}
-                              </div>
-
-                              {loadingMargenOp ? (
-                                <div className="py-3 text-center text-xs text-ink-subtle animate-pulse">
-                                  Calculando costos directos y rentabilidad en tiempo real...
-                                </div>
-                              ) : margenOp ? (
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                                  {/* Compras OC */}
-                                  <div className="bg-surface-muted/90 border border-line/70 p-2.5 rounded-md">
-                                    <span className="t-micro text-ink-subtle uppercase font-bold flex items-center gap-1">
-                                      <ShoppingCart className="w-3 h-3 text-ink" />
-                                      <span>Compras OC Asignadas</span>
-                                    </span>
-                                    <strong className="text-white text-sm font-bold block mt-0.5">
-                                      ${(margenOp.costo_compras_asignadas ?? 0).toLocaleString('es-CL')}
-                                    </strong>
-                                  </div>
-
-                                  {/* Fletes & Guías */}
-                                  <div className="bg-surface-muted/90 border border-line/70 p-2.5 rounded-md">
-                                    <span className="t-micro text-ink-subtle uppercase font-bold flex items-center gap-1">
-                                      <Truck className="w-3 h-3 text-ink" />
-                                      <span>Fletes Despacho</span>
-                                    </span>
-                                    <strong className="text-white text-sm font-bold block mt-0.5">
-                                      ${(margenOp.costo_fletes_despacho ?? 0).toLocaleString('es-CL')}
-                                    </strong>
-                                  </div>
-
-                                  {/* Costo Directo Total */}
-                                  <div className="bg-surface-muted/90 border border-line/70 p-2.5 rounded-md">
-                                    <span className="t-micro text-ink-subtle uppercase font-bold block">
-                                      Costo Directo Total
-                                    </span>
-                                    <strong className="text-ink text-sm font-bold block mt-0.5">
-                                      ${(margenOp.costo_directo_total ?? 0).toLocaleString('es-CL')}
-                                    </strong>
-                                    {margenOp.costo_caja_directo > 0 && (
-                                      <span className="t-micro text-ink-subtle block">
-                                        +${(margenOp.costo_caja_directo).toLocaleString('es-CL')} caja
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  {/* Margen Bruto Real / Proyectado */}
-                                  <div className="bg-surface-muted/90 border border-line/70 p-2.5 rounded-md">
-                                    <span className="t-micro text-ink-subtle uppercase font-bold block">
-                                      Margen Bruto Real (Cobrado)
-                                    </span>
-                                    <strong
-                                      className={`text-sm font-bold block mt-0.5 ${
-                                        (margenOp.margen_bruto_real ?? 0) >= 0 ? 'text-success' : 'text-ink'
-                                      }`}
-                                    >
-                                      ${(margenOp.margen_bruto_real ?? 0).toLocaleString('es-CL')}
-                                    </strong>
-                                    <span className="t-micro text-ink-subtle block truncate">
-                                      Real: {(margenOp.porcentaje_margen_real ?? 0).toFixed(1)}% | Proy: ${(margenOp.margen_bruto_proyectado ?? 0).toLocaleString('es-CL')}
-                                    </span>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="py-2 text-center text-xs text-ink-subtle">
-                                  Sin costos directos registrados para esta nota de venta.
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Registro de Abonos e Historial Acumulativo */}
-                            <div className="bg-surface-muted p-4 rounded-lg border border-line space-y-4">
-                              <h4 className="text-ink font-semibold text-sm flex items-center gap-2">
-                                <DollarSign className="w-4 h-4 text-accent-ink" />
-                                <span>Ingresar Nuevo Abono o Pago (Comprobante Obligatorio)</span>
-                              </h4>
-
-                              {abonoErrorMsg && (
-                                <div className="p-3 bg-danger-soft border border-danger/30 text-danger rounded-md text-xs font-bold">
-                                  {abonoErrorMsg}
-                                </div>
-                              )}
-
-                              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                                <div>
-                                  <label className="text-xs text-ink-muted font-bold block mb-1">Monto Abono ($ CLP) *</label>
-                                  <div className="relative">
-                                    <span className="absolute left-3 top-2.5 text-ink-subtle font-bold text-xs">$</span>
-                                    <input
-                                      type="text"
-                                      placeholder="500.000"
-                                      value={nuevoAbonoMonto ? Number(nuevoAbonoMonto).toLocaleString('es-CL') : ''}
-                                      onChange={(e) => {
-                                        const digits = e.target.value.replace(/\D/g, '');
-                                        setNuevoAbonoMonto(digits);
-                                        setAbonoErrorMsg('');
-                                      }}
-                                      className="w-full bg-surface text-ink border border-line rounded-md pl-7 pr-3 py-2 text-xs font-bold focus:outline-none focus:border-accent"
-                                    />
+                                  <div className="t-caption t-num">
+                                    Fecha: {cot.created_at ? new Date(cot.created_at).toLocaleDateString('es-CL') : '—'} · Total: <strong className="text-ink">${Number(cot.monto_total || 0).toLocaleString('es-CL')}</strong>
                                   </div>
                                 </div>
 
-                                <div>
-                                  <label className="text-xs text-ink-muted font-bold block mb-1">Comprobante de Pago *</label>
-                                  <label className="w-full bg-surface hover:bg-surface-muted text-ink border border-line rounded-md px-3 py-2 text-xs font-bold cursor-pointer flex items-center justify-between transition truncate">
-                                    <span className="truncate">{nuevoAbonoFileName || 'Subir Comprobante'}</span>
-                                    <Paperclip className="w-4 h-4 text-accent-ink shrink-0 ml-1" />
-                                    <input
-                                      type="file"
-                                      required
-                                      className="hidden"
-                                      onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                          if (file.size > 10 * 1024 * 1024) {
-                                            setAbonoErrorMsg('El comprobante excede el tamaño máximo de 10 MB.');
-                                            return;
-                                          }
-                                          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-                                          setNuevoAbonoFile(file);
-                                          setNuevoAbonoFileName(safeName);
-                                          setAbonoErrorMsg('');
-                                        }
-                                      }}
-                                    />
-                                  </label>
-                                </div>
-
-                                <div>
-                                  <label className="text-xs text-ink-muted font-bold block mb-1">Nota / Referencia</label>
-                                  <input
-                                    type="text"
-                                    placeholder="Ej. Transferencia #9842"
-                                    value={nuevoAbonoNota}
-                                    onChange={(e) => setNuevoAbonoNota(e.target.value)}
-                                    className="w-full bg-surface text-ink border border-line rounded-md px-3 py-2 text-xs focus:outline-none focus:border-accent"
-                                  />
-                                </div>
-
-                                <div className="flex items-end">
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      const rawVal = Number(nuevoAbonoMonto);
-                                      if (!rawVal || rawVal <= 0) {
-                                        setAbonoErrorMsg('Ingresa un monto de abono válido.');
-                                        return;
-                                      }
-                                      if (!nuevoAbonoFile) {
-                                        setAbonoErrorMsg('El comprobante de pago es obligatorio.');
-                                        return;
-                                      }
-
-                                      setAbonoSaving(true);
-                                      let fileName = '';
-                                      const pagoId = crypto.randomUUID();
+                                <div className="flex items-center gap-2">
+                                  <select
+                                    value={cot.estado}
+                                    onChange={async (e) => {
                                       try {
-                                        const cleanFileName = nuevoAbonoFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-                                        fileName = `abonos/${selectedOp.id}/${crypto.randomUUID()}_${cleanFileName}`;
-                                        const { data: upload, error: uploadError } = await supabase.storage.from('documentos').upload(fileName, nuevoAbonoFile, {
-                                          contentType: nuevoAbonoFile.type || undefined,
-                                          upsert: false,
-                                        });
-                                        if (uploadError || !upload) throw new Error(mensajeError(uploadError, 'No se pudo subir el archivo.'));
-                                        await guardarAbono('crear', {
-                                          id: pagoId,
-                                          monto: rawVal,
-                                          fecha: new Date().toLocaleString('es-CL'),
-                                          fecha_iso: new Date().toISOString(),
-                                          nota: nuevoAbonoNota || 'Abono registrado',
-                                          comprobante_nombre: nuevoAbonoFile.name,
-                                          comprobante_url: fileName,
-                                        });
-                                        setNuevoAbonoMonto('');
-                                        setNuevoAbonoNota('');
-                                        setNuevoAbonoFile(null);
-                                        setNuevoAbonoFileName('');
-                                      } catch (err: any) {
-                                        if (fileName) {
-                                          // Si se perdió la respuesta tras el commit, conservar el respaldo ya vinculado.
-                                          const { data: persisted } = await supabase.from('oportunidades')
-                                            .select('comprobantes_pago, monto_abonado').eq('id', selectedOp.id).single();
-                                          if (!persisted) {
-                                            setAbonoErrorMsg('No se pudo confirmar el registro. Recarga la oportunidad antes de intentar de nuevo.');
-                                            return;
-                                          }
-                                          const registered = (persisted?.comprobantes_pago || []).some(
-                                            (pago: { id?: string }) => pago.id === pagoId,
-                                          );
-                                          if (registered) {
-                                            setSelectedOp((prev) => prev ? { ...prev, ...persisted } : null);
-                                            setOportunidades((prev) => prev.map((op) => op.id === selectedOp.id ? { ...op, ...persisted } : op));
-                                            setNuevoAbonoMonto('');
-                                            setNuevoAbonoNota('');
-                                            setNuevoAbonoFile(null);
-                                            setNuevoAbonoFileName('');
-                                            setAbonoErrorMsg('');
-                                            return;
-                                          }
-                                          const { error: cleanupError } = await supabase.storage.from('documentos').remove([fileName]);
-                                          if (cleanupError) console.error('No se pudo limpiar el comprobante tras el error:', cleanupError);
-                                        }
-                                        setAbonoErrorMsg(mensajeError(err, 'No se pudo registrar el abono.'));
-                                      } finally {
-                                        setAbonoSaving(false);
+                                        await guardarCambioCotizacion(cot, { estado: e.target.value as EstadoCotizacion });
+                                      } catch (err) {
+                                        setCotizacionErrorMsg(mensajeError(err));
                                       }
                                     }}
-                                    disabled={abonoSaving}
-                                    className="w-full bg-accent hover:bg-accent-hover disabled:opacity-50 text-on-accent text-xs font-semibold px-3.5 py-2 rounded-md transition flex items-center justify-center gap-1.5 shadow-xs"
+                                    className="h-7 rounded-md border border-line bg-surface px-2 text-xs font-semibold text-ink"
                                   >
-                                    <Plus className="w-4 h-4" />
-                                    <span>{abonoSaving ? 'Guardando...' : 'Agregar Abono'}</span>
-                                  </button>
-                                </div>
-                              </div>
-
-                              {/* Historial de Abonos Registrados */}
-                              <div className="pt-4 border-t border-line space-y-3">
-                                <span className="text-ink text-xs font-semibold uppercase tracking-normal block">Historial de Abonos Registrados:</span>
-                                {(() => {
-                                  const abonosList = (selectedOp.comprobantes_pago || []).filter(
-                                    (item: any) => typeof item === 'object' && item !== null && 'monto' in item
-                                  );
-
-                                  if (abonosList.length === 0) {
-                                    return (
-                                      <p className="text-ink-muted italic text-xs">No hay abonos registrados en el historial.</p>
-                                    );
-                                  }
-
-                                  return (
-                                    <div className="space-y-2.5">
-                                      {abonosList.map((ab: any, idx: number) => {
-                                        const isEditingThis = editingAbonoId === ab.id;
-
-                                        if (isEditingThis) {
-                                          return (
-                                            <div key={ab.id || idx} className="bg-surface p-3.5 rounded-md border border-accent space-y-2 text-xs">
-                                              <span className="font-bold text-accent-ink text-xs">Editar Abono:</span>
-                                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                                <input
-                                                  type="text"
-                                                  value={editAbonoMonto ? Number(editAbonoMonto).toLocaleString('es-CL') : ''}
-                                                  onChange={(e) => setEditAbonoMonto(e.target.value.replace(/\D/g, ''))}
-                                                  className="bg-surface text-ink border border-line rounded-lg px-2.5 py-1.5 text-xs font-bold"
-                                                />
-                                                <input
-                                                  type="text"
-                                                  value={editAbonoNota}
-                                                  onChange={(e) => setEditAbonoNota(e.target.value)}
-                                                  className="bg-surface text-ink border border-line rounded-lg px-2.5 py-1.5 text-xs"
-                                                />
-                                                <div className="flex items-center gap-1.5">
-                                                  <button
-                                                    type="button"
-                                                    onClick={async () => {
-                                                      const rawNum = Number(editAbonoMonto);
-                                                      if (!rawNum || rawNum <= 0) return;
-
-                                                      setAbonoSaving(true);
-                                                      try {
-                                                        await guardarAbono('editar', { id: ab.id, monto: rawNum, nota: editAbonoNota });
-                                                        setEditingAbonoId(null);
-                                                      } catch (err: any) {
-                                                        setAbonoErrorMsg(mensajeError(err, 'No se pudo editar el abono.'));
-                                                      } finally {
-                                                        setAbonoSaving(false);
-                                                      }
-                                                    }}
-                                                    className="bg-success-soft hover:bg-success-soft text-white font-bold text-xs px-3 py-1.5 rounded-lg"
-                                                  >
-                                                    Guardar
-                                                  </button>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => setEditingAbonoId(null)}
-                                                    className="bg-surface-muted hover:bg-surface-muted text-ink font-bold text-xs px-3 py-1.5 rounded-lg"
-                                                  >
-                                                    Cancelar
-                                                  </button>
-                                                </div>
-                                              </div>
-                                            </div>
-                                          );
-                                        }
-
-                                        return (
-                                          <div key={ab.id || idx} className="bg-surface p-3 rounded-md border border-line flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs shadow-xs">
-                                            <div className="space-y-1.5">
-                                              <div className="flex flex-wrap items-center gap-2">
-                                                <span className="font-bold text-success text-sm">
-                                                  ${Number(ab.monto || 0).toLocaleString('es-CL')} CLP
-                                                </span>
-                                                <span className="text-ink text-xs font-semibold">
-                                                  — {ab.nota || 'Abono'}
-                                                </span>
-
-                                                {/* Estado del Abono */}
-                                                {(!ab.estado || ab.estado === 'validado') && (
-                                                  <span className="t-micro font-bold px-2 py-0.5 rounded-full bg-success-soft text-success border border-success/30 inline-flex items-center gap-1">
-                                                    <CheckCircle2 className="w-3 h-3 text-success" />
-                                                    <span>Validado en Caja {ab.banco_alias ? `(${ab.banco_alias})` : ''}</span>
-                                                  </span>
-                                                )}
-                                                {ab.estado === 'pendiente' && (
-                                                  <span className="t-micro font-bold px-2 py-0.5 rounded-full bg-warning-soft text-warning-ink border border-warning/30 inline-flex items-center gap-1">
-                                                    <Clock className="w-3 h-3 text-warning-ink" />
-                                                    <span>Pendiente de validación en Caja</span>
-                                                  </span>
-                                                )}
-                                                {ab.estado === 'rechazado' && (
-                                                  <span className="t-micro font-bold px-2 py-0.5 rounded-full bg-danger-soft text-danger border border-danger/30 inline-flex items-center gap-1" title={ab.motivo_rechazo}>
-                                                    <XCircle className="w-3 h-3 text-danger" />
-                                                    <span>Rechazado: {ab.motivo_rechazo || 'Comprobante no válido'}</span>
-                                                  </span>
-                                                )}
-                                              </div>
-
-                                              {ab.comprobante_url && (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => void abrirComprobante(ab.comprobante_url)}
-                                                  className="text-accent-ink hover:underline text-xs font-mono flex items-center gap-1.5 mt-0.5"
-                                                >
-                                                  <FileCheck className="w-3.5 h-3.5 text-accent-ink" />
-                                                  <span>Comprobante: {ab.comprobante_nombre || 'Ver archivo'}</span>
-                                                </button>
-                                              )}
-                                            </div>
-
-                                            <div className="flex items-center gap-2 self-end sm:self-auto">
-                                              <div className="text-right text-xs text-ink-muted mr-2">
-                                                <span>{ab.fecha}</span>
-                                                {ab.creado_por && <span className="block text-ink-subtle font-semibold">{ab.creado_por}</span>}
-                                              </div>
-
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setEditingAbonoId(ab.id);
-                                                  setEditAbonoMonto(String(ab.monto || ''));
-                                                  setEditAbonoNota(ab.nota || '');
-                                                }}
-                                                className="p-1.5 bg-surface hover:bg-info-soft text-info rounded-lg transition border border-line"
-                                                title="Editar Abono"
-                                              >
-                                                <Edit className="w-4 h-4" />
-                                              </button>
-
-                                              <button
-                                                type="button"
-                                                onClick={async () => {
-                                                  setAbonoSaving(true);
-                                                  try {
-                                                    await guardarAbono('eliminar', { id: ab.id });
-                                                  } catch (err: any) {
-                                                    setAbonoErrorMsg(mensajeError(err, 'No se pudo eliminar el abono.'));
-                                                  } finally {
-                                                    setAbonoSaving(false);
-                                                  }
-                                                }}
-                                                className="p-1.5 bg-surface hover:bg-danger-soft text-danger rounded-lg transition border border-line"
-                                                title="Eliminar Abono"
-                                              >
-                                                <Trash2 className="w-4 h-4" />
-                                              </button>
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  );
-                                })()}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
-                </div>
-
-
-
-                {/* Accordion 4: Visita a Terreno */}
-                <div className="bg-surface rounded-lg border border-line overflow-hidden shadow-xs">
-                  <div className="w-full p-3 bg-surface-muted text-ink font-semibold text-xs flex flex-wrap items-center justify-between gap-3 border-b border-line">
-                    <button
-                      type="button"
-                      onClick={() => setOpenSections({ ...openSections, visita: !openSections.visita })}
-                      className="flex items-center gap-2.5 hover:text-accent-ink transition cursor-pointer text-left font-semibold text-xs text-ink"
-                    >
-                      <Calendar className="w-4 h-4 text-accent-ink" />
-                      <span>Visita a Terreno</span>
-                      {opVisitasList.length > 0 && (
-                        <span className="text-xs bg-accent text-on-accent font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
-                          {opVisitasList.length}
-                        </span>
-                      )}
-                      {openSections.visita ? <ChevronUp className="w-4 h-4 text-ink-muted" /> : <ChevronDown className="w-4 h-4 text-ink-muted" />}
-                    </button>
-
-                    <div className="flex items-center gap-3">
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedOp.requiere_visita_terreno ?? false}
-                          onChange={async (e) => {
-                            const checked = e.target.checked;
-                            updateOportunidadField(selectedOp.id, 'requiere_visita_terreno', checked);
-                            if (checked) {
-                              setOpenSections((prev) => ({ ...prev, visita: true }));
-                            }
-                            await addOportunidadActividad(
-                              selectedOp.id,
-                              checked
-                                ? 'Se habilitó la sección de Visita a Terreno.'
-                                : 'Se deshabilitó la sección de Visita a Terreno.'
-                            );
-                          }}
-                          className="sr-only peer"
-                        />
-                        <div className="w-9 h-5 bg-surface-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface after:border-line after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent"></div>
-                        <span className="ml-2 text-xs font-bold text-ink capitalize tracking-normal">
-                          {selectedOp.requiere_visita_terreno ? 'Habilitado' : 'No Requiere'}
-                        </span>
-                      </label>
-                      {selectedOp.requiere_visita_terreno && (
-                        <Link
-                          href={`/visitas?opId=${selectedOp.id}`}
-                          className="text-[11px] bg-accent hover:bg-accent-hover text-on-accent px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition lowercase tracking-normal"
-                        >
-                          <span>Ver en Calendario</span>
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-
-                  {openSections.visita && selectedOp.requiere_visita_terreno && (
-                    <div className="p-4 space-y-4 text-xs text-ink bg-surface">
-                      {/* Botón para agregar una nueva visita */}
-                      <div className="flex items-center justify-between border-b border-line pb-3">
-                        <span className="font-bold text-ink text-xs">Visitas Programadas para este Proyecto:</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowAddVisitaForm(!showAddVisitaForm);
-                            if (!newVisitaFecha) {
-                              setNewVisitaFecha(new Date().toISOString().split('T')[0]);
-                            }
-                          }}
-                          className="bg-accent hover:bg-accent-hover text-on-accent font-semibold text-xs px-3 py-1.5 rounded-md transition flex items-center gap-1.5 shadow-xs"
-                        >
-                          <Plus className="w-4 h-4" />
-                          <span>Agregar Visita a Terreno</span>
-                        </button>
-                      </div>
-
-                      {/* Formulario Inline para Registrar Nueva Visita */}
-                      {showAddVisitaForm && (
-                        <div className="bg-surface-muted p-4 rounded-lg border border-accent/30 space-y-3">
-                          <h4 className="font-semibold text-accent-ink text-xs uppercase flex items-center gap-1.5">
-                            <Plus className="w-4 h-4" />
-                            <span>Registrar Nueva Visita</span>
-                          </h4>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div>
-                              <label className="block font-bold text-ink-muted mb-1">Responsable *</label>
-                              <select
-                                value={newVisitaTecnico}
-                                onChange={(e) => setNewVisitaTecnico(e.target.value)}
-                                className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-accent"
-                              >
-                                <option value="">Selecciona responsable</option>
-                                {responsablesVisitas.map((p) => (
-                                  <option key={p.id} value={p.id}>
-                                    {p.nombre}{p.rut ? ` - ${p.rut}` : ''}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            <div>
-                              <label className="block font-bold text-ink-muted mb-1">Fecha de Visita *</label>
-                              <input
-                                type="date"
-                                required
-                                value={newVisitaFecha}
-                                onChange={(e) => setNewVisitaFecha(e.target.value)}
-                                className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-accent"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block font-bold text-ink-muted mb-1">Hora de Visita</label>
-                              <input
-                                type="time"
-                                value={newVisitaHora}
-                                onChange={(e) => setNewVisitaHora(e.target.value)}
-                                className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-accent"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
-                              <label className="block font-bold text-ink-muted mb-1">Estado Inicial</label>
-                              <select
-                                value={newVisitaEstado}
-                                onChange={(e) => setNewVisitaEstado(e.target.value)}
-                                className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-semibold uppercase focus:outline-none focus:border-accent"
-                              >
-                                <option value="programada">Programada</option>
-                                <option value="realizada">Realizada</option>
-                                <option value="cancelada">Cancelada</option>
-                              </select>
-                            </div>
-
-                            <div>
-                              <label className="block font-bold text-ink-muted mb-1">Notas / Instrucciones</label>
-                              <input
-                                type="text"
-                                placeholder="Ej: Medir acceso y toma de plantilla..."
-                                value={newVisitaNotas}
-                                onChange={(e) => setNewVisitaNotas(e.target.value)}
-                                className="w-full bg-surface text-ink border border-line rounded-md px-3 py-1.5 focus:outline-none focus:border-accent"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
-                            <button
-                              type="button"
-                              onClick={() => setShowAddVisitaForm(false)}
-                              className="px-3 py-1.5 bg-surface-muted hover:bg-surface-muted text-ink rounded-md font-bold transition"
-                            >
-                              Cancelar
-                            </button>
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                if (!selectedOp || !newVisitaFecha || !newVisitaTecnico) return;
-                                const responsable = getPersonalTerreno(newVisitaTecnico);
-                                const responsableNombre = responsable?.nombre || '';
-                                const payload = {
-                                  oportunidad_id: selectedOp.id,
-                                  tecnico_visita: responsableNombre,
-                                  tecnico_id: newVisitaTecnico,
-                                  fecha_visita_terreno: newVisitaFecha,
-                                  hora_visita_terreno: newVisitaHora,
-                                  estado_visita: newVisitaEstado,
-                                  observaciones_visita: newVisitaNotas,
-                                };
-
-                                try {
-                                  const { data, error } = await supabase
-                                    .from('visitas_terreno')
-                                    .insert([payload])
-                                    .select('*, tecnico:usuarios!tecnico_id(*)')
-                                    .single();
-
-                                  if (!error && data) {
-                                    setOpVisitasList((prev) => [...prev, data as VisitaTerreno]);
-                                    updateOportunidadField(selectedOp.id, 'requiere_visita_terreno', true);
-                                    updateOportunidadField(selectedOp.id, 'tecnico_visita', responsableNombre);
-                                    updateOportunidadField(selectedOp.id, 'tecnico_id', newVisitaTecnico);
-                                    updateOportunidadField(selectedOp.id, 'fecha_visita_terreno', newVisitaFecha);
-                                    updateOportunidadField(selectedOp.id, 'hora_visita_terreno', newVisitaHora);
-                                    updateOportunidadField(selectedOp.id, 'estado_visita', newVisitaEstado);
-                                    updateOportunidadField(selectedOp.id, 'observaciones_visita', newVisitaNotas);
-
-                                    await supabase
-                                      .from('oportunidades')
-                                      .update({
-                                        requiere_visita_terreno: true,
-                                        tecnico_visita: responsableNombre,
-                                        tecnico_id: newVisitaTecnico,
-                                        fecha_visita_terreno: newVisitaFecha,
-                                        hora_visita_terreno: newVisitaHora,
-                                        estado_visita: newVisitaEstado,
-                                        observaciones_visita: newVisitaNotas,
-                                      })
-                                      .eq('id', selectedOp.id);
-
-                                    setShowAddVisitaForm(false);
-                                    setNewVisitaNotas('');
-                                    await addOportunidadActividad(
-                                      selectedOp.id,
-                                      `Nueva Visita a Terreno programada para ${newVisitaFecha} a las ${newVisitaHora} hrs con ${responsableNombre}.`
-                                    );
-                                  }
-                                } catch (err) {
-                                  console.error('Error inserting visita:', err);
-                                }
-                              }}
-                              className="px-4 py-1.5 bg-accent hover:bg-accent-hover text-on-accent rounded-md font-semibold transition shadow-xs"
-                            >
-                              Guardar Visita
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Lista de Visitas Registradas */}
-                      {opVisitasList.length === 0 ? (
-                        <div className="py-4 text-center text-ink-muted italic text-xs bg-surface-muted rounded-lg border border-dashed border-line">
-                          No hay visitas a terreno registradas en este momento. Haz clic en <strong>&quot;+ Agregar Visita a Terreno&quot;</strong> para programar una.
-                        </div>
-                      ) : (
-                        <div className="space-y-2.5">
-                          {opVisitasList.map((vis, vIdx) => {
-                            const isEditingThis = editingVisitaId === vis.id;
-                            const responsableNombre = getResponsableVisitaNombre(vis);
-
-                            if (isEditingThis) {
-                              return (
-                                <div
-                                  key={vis.id || vIdx}
-                                  className="bg-surface p-4 rounded-lg border border-accent space-y-3 shadow-xs"
-                                >
-                                  <h4 className="font-semibold text-accent-ink text-xs uppercase flex items-center gap-1.5">
-                                    <Edit className="w-4 h-4" />
-                                    <span>Editar Visita a Terreno</span>
-                                  </h4>
-
-                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                    <div>
-                                      <label className="block font-bold text-ink-muted mb-1">Responsable</label>
-                                      <select
-                                        value={editVisitaTecnico}
-                                        onChange={(e) => setEditVisitaTecnico(e.target.value)}
-                                        className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-accent"
-                                      >
-                                        <option value="">Selecciona responsable</option>
-                                        {responsablesVisitas.map((p) => (
-                                          <option key={p.id} value={p.id}>
-                                            {p.nombre}{p.rut ? ` - ${p.rut}` : ''}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </div>
-
-                                    <div>
-                                      <label className="block font-bold text-ink-muted mb-1">Fecha</label>
-                                      <input
-                                        type="date"
-                                        value={editVisitaFecha}
-                                        onChange={(e) => setEditVisitaFecha(e.target.value)}
-                                        className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-accent"
-                                      />
-                                    </div>
-
-                                    <div>
-                                      <label className="block font-bold text-ink-muted mb-1">Hora</label>
-                                      <input
-                                        type="time"
-                                        value={editVisitaHora}
-                                        onChange={(e) => setEditVisitaHora(e.target.value)}
-                                        className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-accent"
-                                      />
-                                    </div>
-                                  </div>
-
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <div>
-                                      <label className="block font-bold text-ink-muted mb-1">Estado</label>
-                                      <select
-                                        value={editVisitaEstado}
-                                        onChange={(e) => setEditVisitaEstado(e.target.value)}
-                                        className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-semibold uppercase focus:outline-none focus:border-accent"
-                                      >
-                                        <option value="programada">Programada</option>
-                                        <option value="realizada">Realizada</option>
-                                        <option value="cancelada">Cancelada</option>
-                                      </select>
-                                    </div>
-
-                                    <div>
-                                      <label className="block font-bold text-ink-muted mb-1">Notas / Observaciones</label>
-                                      <input
-                                        type="text"
-                                        value={editVisitaNotas}
-                                        onChange={(e) => setEditVisitaNotas(e.target.value)}
-                                        className="w-full bg-surface text-ink border border-line rounded-md px-3 py-1.5 focus:outline-none focus:border-accent"
-                                      />
-                                    </div>
-                                  </div>
-
-                                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditingVisitaId(null)}
-                                      className="px-3 py-1.5 bg-surface-muted hover:bg-surface-muted text-ink rounded-md font-bold transition text-xs"
-                                    >
-                                      Cancelar
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={async () => {
-                                        const responsable = getPersonalTerreno(editVisitaTecnico);
-                                        const editResponsableNombre = responsable?.nombre || vis.tecnico_visita || '';
-                                        const updatedVis = {
-                                          ...vis,
-                                          tecnico_visita: editResponsableNombre,
-                                          tecnico_id: editVisitaTecnico || null,
-                                          tecnico: responsable,
-                                          fecha_visita_terreno: editVisitaFecha,
-                                          hora_visita_terreno: editVisitaHora,
-                                          estado_visita: editVisitaEstado,
-                                          observaciones_visita: editVisitaNotas,
-                                        };
-
-                                        setOpVisitasList((prev) =>
-                                          prev.map((v) => (v.id === vis.id ? updatedVis : v))
-                                        );
-                                        setEditingVisitaId(null);
-
-                                        try {
-                                          if (!vis.id.startsWith('legacy-')) {
-                                            await supabase
-                                              .from('visitas_terreno')
-                                              .update({
-                                                tecnico_visita: editResponsableNombre,
-                                                tecnico_id: editVisitaTecnico || null,
-                                                fecha_visita_terreno: editVisitaFecha,
-                                                hora_visita_terreno: editVisitaHora,
-                                                estado_visita: editVisitaEstado,
-                                                observaciones_visita: editVisitaNotas,
-                                              })
-                                              .eq('id', vis.id);
-                                          } else {
-                                            await supabase
-                                              .from('oportunidades')
-                                              .update({
-                                                tecnico_visita: editResponsableNombre,
-                                                tecnico_id: editVisitaTecnico || null,
-                                                fecha_visita_terreno: editVisitaFecha,
-                                                hora_visita_terreno: editVisitaHora,
-                                                estado_visita: editVisitaEstado,
-                                                observaciones_visita: editVisitaNotas,
-                                              })
-                                              .eq('id', selectedOp.id);
-                                          }
-
-                                          await addOportunidadActividad(
-                                            selectedOp.id,
-                                            `Visita a terreno actualizada: ${editVisitaFecha} (${editResponsableNombre}).`
-                                          );
-                                        } catch (err) {
-                                          console.error('Error updating visita:', err);
-                                        }
-                                      }}
-                                      className="px-4 py-1.5 bg-accent hover:bg-accent-hover text-on-accent rounded-md font-semibold transition shadow-xs text-xs"
-                                    >
-                                      Guardar Cambios
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            }
-
-                            return (
-                              <div
-                                key={vis.id || vIdx}
-                                className="bg-surface p-3.5 rounded-lg border border-line flex flex-col gap-3 hover:border-line transition shadow-xs"
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className="text-[11px] font-bold uppercase tracking-normal px-2 py-1 rounded-md bg-accent-soft text-accent-ink border border-accent/30">
-                                      {responsableNombre}
-                                    </span>
-
-                                    <span className="text-[11px] font-bold px-2 py-1 rounded-md border bg-surface-muted text-ink border-line">
-                                      Visitas a terreno
-                                    </span>
-
-                                    <span
-                                      className={`text-[11px] font-semibold px-2 py-1 rounded-md border ${
-                                        vis.estado_visita === 'realizada'
-                                          ? 'bg-success-soft text-success border-success/30'
-                                          : vis.estado_visita === 'cancelada'
-                                          ? 'bg-danger-soft text-danger border-danger/30'
-                                          : 'bg-warning-soft text-warning-ink border-warning/30'
-                                      }`}
-                                    >
-                                      {vis.estado_visita || 'programada'}
-                                    </span>
-                                  </div>
-
-                                  <div className="flex items-center gap-1.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setEditingVisitaId(vis.id);
-                                        setEditVisitaTecnico(
-                                          vis.tecnico_id ||
-                                          responsablesVisitas.find((p) => p.nombre === vis.tecnico_visita)?.id ||
-                                          ''
-                                        );
-                                        setEditVisitaFecha(vis.fecha_visita_terreno || '');
-                                        setEditVisitaHora(vis.hora_visita_terreno || '09:00');
-                                        setEditVisitaEstado(vis.estado_visita || 'programada');
-                                        setEditVisitaNotas(vis.observaciones_visita || '');
-                                      }}
-                                      className="p-1.5 bg-surface hover:bg-info-soft text-info rounded-lg transition border border-line"
-                                      title="Editar Visita"
-                                    >
-                                      <Edit className="w-4 h-4" />
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      onClick={async () => {
-                                        try {
-                                          const isLegacy = vis.id.startsWith('legacy-');
-                                          if (isUUID(vis.id) && !isLegacy) {
-                                            await supabase.from('visitas_terreno').delete().eq('id', vis.id);
-                                          }
-
-                                          const updatedList = opVisitasList.filter((v) => v.id !== vis.id);
-                                          setOpVisitasList(updatedList);
-
-                                          if (updatedList.length === 0 || isLegacy) {
-                                            if (isUUID(selectedOp.id)) {
-                                              await supabase.from('oportunidades').update({
-                                                fecha_visita_terreno: null,
-                                                hora_visita_terreno: null,
-                                                tecnico_visita: null,
-                                                tecnico_id: null,
-                                                estado_visita: null,
-                                                observaciones_visita: null,
-                                                requiere_visita_terreno: false,
-                                              }).eq('id', selectedOp.id);
-                                            }
-
-                                            setSelectedOp((prev) =>
-                                              prev ? { ...prev, requiere_visita_terreno: false, fecha_visita_terreno: undefined } : null
-                                            );
-                                            setOportunidades((prevOps) =>
-                                              prevOps.map((o) =>
-                                                o.id === selectedOp.id ? { ...o, requiere_visita_terreno: false, fecha_visita_terreno: undefined } : o
-                                              )
-                                            );
-                                          }
-
-                                          await addOportunidadActividad(selectedOp.id, 'Una Visita a Terreno fue eliminada del sistema.');
-                                        } catch (err) {
-                                          console.error('Error deleting visita:', err);
-                                        }
-                                      }}
-                                      className="p-1.5 bg-surface hover:bg-danger-soft text-danger rounded-lg transition border border-line"
-                                      title="Eliminar Visita"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                </div>
-
-                                <div className="space-y-1">
-                                  <strong className="text-ink text-sm block">Visita a terreno</strong>
-                                  <div className="flex flex-wrap items-center gap-3 text-xs text-ink-muted font-bold">
-                                    <span className="font-mono flex items-center gap-1 text-ink">
-                                      <Calendar className="w-3.5 h-3.5 text-accent-ink" />
-                                      {vis.fecha_visita_terreno}
-                                    </span>
-
-                                    <span className="font-mono flex items-center gap-1 text-ink-muted">
-                                      <Clock className="w-3.5 h-3.5 text-ink-subtle" />
-                                      {vis.hora_visita_terreno || '09:00'} hrs
-                                    </span>
-                                  </div>
-                                  <div className="text-xs text-ink-muted font-semibold">
-                                    {[selectedOp.codigo, selectedOp.cliente?.nombre].filter(Boolean).join(' · ')}
-                                  </div>
-
-                                  {vis.observaciones_visita && (
-                                    <p className="text-ink-muted text-xs pt-1">
-                                      {vis.observaciones_visita}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-            </div>
-
-            {/* Producción y Logística */}
-            <div className="bg-surface rounded-lg border border-line overflow-hidden shadow-xs">
-              <AreaCardHeader
-                icon={Factory}
-                title="Producción y Logística"
-                open={areaExpanded.produccion}
-                onToggle={() => setAreaExpanded((prev) => ({ ...prev, produccion: !prev.produccion }))}
-              />
-
-              {areaExpanded.produccion && (
-                <div className="border-t border-line p-3 sm:p-4 space-y-3.5">
-                  <div className="bg-surface rounded-lg border border-line overflow-hidden shadow-xs">
-                    <div className="w-full p-3 bg-surface-muted text-ink font-semibold text-xs flex flex-wrap items-center justify-between gap-3 border-b border-line">
-                      <button
-                        type="button"
-                        onClick={() => setOpenSections({ ...openSections, produccionEventos: !openSections.produccionEventos })}
-                        className="flex items-center gap-2.5 hover:text-[var(--color-accent-hover)] transition cursor-pointer text-left font-semibold text-xs text-ink"
-                      >
-                        <Calendar className="w-4 h-4 text-accent-ink" />
-                        <span>Eventos de Producción y Logística</span>
-                        {produccionEventos.length > 0 && (
-                          <span className="text-xs bg-accent text-on-accent font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
-                            {produccionEventos.length}
-                          </span>
-                        )}
-                        {openSections.produccionEventos ? <ChevronUp className="w-4 h-4 text-ink-muted" /> : <ChevronDown className="w-4 h-4 text-ink-muted" />}
-                      </button>
-
-                      <div className="flex items-center gap-3">
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={produccionEventosEnabled}
-                            onChange={(e) => setProduccionEventosEnabled(e.target.checked)}
-                            className="sr-only peer"
-                          />
-                          <div className="w-9 h-5 bg-surface-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface after:border-line after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent"></div>
-                          <span className="ml-2 text-xs font-bold text-ink capitalize tracking-normal">
-                            {produccionEventosEnabled ? 'Habilitado' : 'No Requiere'}
-                          </span>
-                        </label>
-                        {produccionEventosEnabled && (
-                          <Link
-                            href={`/planificacion/calendario?opId=${selectedOp.id}`}
-                            className="text-[11px] bg-accent hover:bg-accent-hover text-on-accent px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition lowercase tracking-normal"
-                          >
-                            <span>Ver Calendario</span>
-                          </Link>
-                        )}
-                      </div>
-
-                    </div>
-
-                    {openSections.produccionEventos && produccionEventosEnabled && (
-                    <div className="p-4 space-y-4 text-xs text-ink bg-surface">
-                      <div className="flex items-center justify-between border-b border-line pb-3">
-                        <span className="font-bold text-ink text-xs">Eventos registrados para esta oportunidad:</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            resetProdLogForm('produccion_logistica', 'produccion');
-                            setShowAddProdLogEventForm(!showAddProdLogEventForm || newProdLogContexto !== 'produccion_logistica');
-                          }}
-                          className="bg-accent hover:bg-accent-hover text-on-accent font-semibold text-xs px-3 py-1.5 rounded-md transition flex items-center gap-1.5 shadow-xs"
-                        >
-                          <Plus className="w-4 h-4" />
-                          <span>Agregar Evento</span>
-                        </button>
-                      </div>
-
-                      {showAddProdLogEventForm && newProdLogContexto === 'produccion_logistica' && (
-                        <div className="bg-surface-muted p-4 rounded-lg border border-accent/30 space-y-3">
-                          <h4 className="font-semibold text-[var(--color-accent-hover)] text-xs uppercase flex items-center gap-1.5">
-                            <Plus className="w-4 h-4" />
-                            <span>Registrar Evento</span>
-                          </h4>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div>
-                              <label className="block font-bold text-ink-muted mb-1">Tipo de evento *</label>
-                              <select
-                                value={newProdLogTipo}
-                                onChange={(e) => {
-                                  const nextTipo = e.target.value as TipoEventoProduccionLogistica;
-                                  setNewProdLogTipo(nextTipo);
-                                }}
-                                className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-accent"
-                              >
-                                <option value="obra">Obra</option>
-                                <option value="logistica">Logística</option>
-                                <option value="produccion">Producción</option>
-                              </select>
-                            </div>
-
-                            <div>
-                              <label className="block font-bold text-ink-muted mb-1">Fecha *</label>
-                              <input
-                                type="date"
-                                required
-                                value={newProdLogFecha}
-                                onChange={(e) => setNewProdLogFecha(e.target.value)}
-                                className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-accent"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block font-bold text-ink-muted mb-1">Hora</label>
-                              <input
-                                type="time"
-                                value={newProdLogHora}
-                                onChange={(e) => setNewProdLogHora(e.target.value)}
-                                className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-accent"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div>
-                              <label className="block font-bold text-ink-muted mb-1">Título *</label>
-                              <input
-                                type="text"
-                                value={newProdLogTitulo}
-                                onChange={(e) => setNewProdLogTitulo(e.target.value)}
-                                className="w-full bg-surface text-ink border border-line rounded-md px-3 py-1.5 font-bold focus:outline-none focus:border-accent"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block font-bold text-ink-muted mb-1">Responsable</label>
-                              <select
-                                value={newProdLogResponsableId}
-                                onChange={(e) => setNewProdLogResponsableId(e.target.value)}
-                                className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-accent"
-                              >
-                                <option value="">-- Sin asignar --</option>
-                                {responsablesProduccionLogistica.map((p) => (
-                                  <option key={p.id} value={p.id}>
-                                    {p.nombre}{p.rut ? ` - ${p.rut}` : ''}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            <div>
-                              <label className="block font-bold text-ink-muted mb-1">Estado Inicial</label>
-                              <select
-                                value={newProdLogEstado}
-                                onChange={(e) => setNewProdLogEstado(e.target.value as EstadoEventoProduccionLogistica)}
-                                className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-semibold uppercase focus:outline-none focus:border-accent"
-                              >
-                                {prodLogEstadoOptions.map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block font-bold text-ink-muted mb-1">Notas / Instrucciones</label>
-                            <input
-                              type="text"
-                              placeholder="Ej: coordinar retiro, despacho, fabricación o instalación..."
-                              value={newProdLogNotas}
-                              onChange={(e) => setNewProdLogNotas(e.target.value)}
-                              className="w-full bg-surface text-ink border border-line rounded-md px-3 py-1.5 focus:outline-none focus:border-accent"
-                            />
-                          </div>
-
-                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
-                            <button
-                              type="button"
-                              onClick={() => setShowAddProdLogEventForm(false)}
-                              className="px-3 py-1.5 bg-surface-muted hover:bg-surface-muted text-ink rounded-md font-bold transition"
-                            >
-                              Cancelar
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => saveProdLogEvent('produccion_logistica')}
-                              className="px-4 py-1.5 bg-accent hover:bg-accent-hover text-on-accent rounded-md font-semibold transition shadow-xs"
-                            >
-                              {editingProdLogEventId ? 'Guardar cambios' : 'Guardar evento'}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {produccionEventos.length === 0 ? (
-                        <div className="py-4 text-center text-ink-muted italic text-xs bg-surface-muted rounded-lg border border-dashed border-line">
-                          No hay eventos registrados. Haz clic en <strong>&quot;+ Agregar Evento&quot;</strong> para programar obra, logística o producción.
-                        </div>
-                      ) : (
-                        <div className="space-y-2.5">
-                          {produccionEventos.map((event) => {
-                            const { fecha, hora } = getEventDateParts(event);
-
-                            return (
-                              <div
-                                key={event.id}
-                                className="bg-surface p-3.5 rounded-lg border border-line flex flex-col gap-3 text-ink hover:border-line transition shadow-xs"
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className="font-bold uppercase tracking-normal text-[11px] px-2 py-1 rounded-md text-accent-ink bg-accent-soft border border-accent/30">
-                                      {getResponsableEventoNombre(event)}
-                                    </span>
-                                    <span className={`text-[11px] font-bold px-2 py-1 rounded-md border ${getProdLogTipoClasses(event.tipo_evento)}`}>
-                                      {getProdLogTipoLabel(event.tipo_evento)}
-                                    </span>
-                                    <span className={`text-[11px] font-semibold px-2 py-1 rounded-md border ${getProdLogEstadoClasses(event.estado)}`}>
-                                      {getProdLogEstadoLabel(event.estado)}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => startEditProdLogEvent(event)}
-                                      className="p-1.5 bg-surface hover:bg-accent-soft text-accent-ink border border-line rounded-lg transition"
-                                      title="Editar evento"
-                                    >
-                                      <Edit className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => deleteProdLogEvent(event)}
-                                      className="p-1.5 bg-surface hover:bg-danger-soft text-danger border border-line rounded-lg transition"
-                                      title="Eliminar evento"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                </div>
-                                <div className="space-y-1">
-                                  <strong className="text-ink text-sm block">{event.titulo}</strong>
-                                  <div className="flex flex-wrap items-center gap-3 text-xs text-ink-muted font-bold">
-                                    <span className="font-mono flex items-center gap-1 text-ink">
-                                      <Calendar className="w-3.5 h-3.5 text-accent-ink" />
-                                      {fecha}
-                                    </span>
-                                    <span className="font-mono flex items-center gap-1 text-ink-muted">
-                                      <Clock className="w-3.5 h-3.5 text-ink-subtle" />
-                                      {hora}
-                                    </span>
-                                  </div>
-                                  {event.observaciones && (
-                                    <span className="block text-xs text-ink-muted">{event.observaciones}</span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                    )}
-                    {openSections.produccionEventos && !produccionEventosEnabled && (
-                      <div className="p-4 text-xs text-ink-muted bg-surface">
-                        Habilita eventos para registrar obra, logística o producción.
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Accordion 2.3: Órdenes de Compra (OC) en Producción (Ajustes 11 - Req 7) */}
-                  {selectedOp.estado_pipeline?.startsWith('prod_') && (
-                  <div className="bg-surface rounded-lg border border-line overflow-hidden shadow-xs">
-                    <div className="w-full p-3 bg-surface-muted text-ink font-semibold text-xs flex flex-wrap items-center justify-between gap-3 border-b border-line">
-                      <button
-                        type="button"
-                        onClick={() => setOpenSections({ ...openSections, produccionOc: !openSections.produccionOc })}
-                        className="flex items-center gap-2.5 hover:text-[var(--color-accent-hover)] transition cursor-pointer text-left font-semibold text-xs text-ink"
-                      >
-                        <ShoppingCart className="w-4 h-4 text-accent-ink" />
-                        <span>Órdenes de Compra (OC) — Insumos de Fabricación</span>
-                        <span className="text-xs text-[var(--color-accent-hover)] font-mono font-bold">
-                          {opOrdenesCompra.length} {opOrdenesCompra.length === 1 ? 'OC' : 'OCs'}
-                        </span>
-                        {openSections.produccionOc ? <ChevronUp className="w-4 h-4 text-ink-muted" /> : <ChevronDown className="w-4 h-4 text-ink-muted" />}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setShowCreateOcModal(true)}
-                        className="bg-accent hover:bg-accent-hover text-on-accent font-semibold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Crear Orden de Compra</span>
-                      </button>
-                    </div>
-
-                    {openSections.produccionOc && (
-                    <div className="p-4 space-y-3 text-xs bg-surface text-ink">
-                      {loadingOpOrdenes ? (
-                        <div className="text-center py-4 text-ink-muted">Cargando órdenes de compra...</div>
-                      ) : opOrdenesCompra.length === 0 ? (
-                        <div className="p-4 bg-surface-muted rounded-lg text-ink-muted text-center italic border border-line">
-                          No hay órdenes de compra emitidas para esta oportunidad.
-                        </div>
-                      ) : (
-                        <div className="overflow-x-auto rounded-lg border border-line">
-                          <table className="w-full text-left text-xs bg-surface">
-                            <thead className="bg-surface-muted text-ink-muted font-bold uppercase t-micro border-b border-line">
-                              <tr>
-	                                <th className="py-2.5 px-3">Folio OC</th>
-	                                <th className="py-2.5 px-3 text-center">Version</th>
-	                                <th className="py-2.5 px-3">Proveedor</th>
-                                <th className="py-2.5 px-3 text-center">Fecha</th>
-                                <th className="py-2.5 px-3 text-right">Costo asignado</th>
-                                <th className="py-2.5 px-3 text-center">Estado</th>
-                                <th className="py-2.5 px-3 text-center">Acciones</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-line-subtle">
-                              {opOrdenesCompra.map((oc) => (
-                                <tr key={oc.id} className="hover:bg-surface-muted">
-	                                  <td className="py-2.5 px-3 font-mono font-bold text-[var(--color-accent-hover)]">
-	                                    {oc.numero_oc}
-	                                  </td>
-	                                  <td className="py-2.5 px-3 text-center font-mono text-ink-muted">
-	                                    v{oc.version || 1}
-	                                  </td>
-	                                  <td className="py-2.5 px-3 font-bold text-ink">
-                                    {oc.proveedor?.nombre || 'Proveedor'}
-                                  </td>
-                                  <td className="py-2.5 px-3 text-center font-mono text-ink-muted">
-                                    {oc.fecha_emision}
-                                  </td>
-                                  <td className="py-2.5 px-3 text-right font-mono font-bold text-ink">
-                                    ${(oc.asignaciones || []).reduce((sum, a) => sum + Number(a.costo_asignado), 0).toLocaleString('es-CL')}
-                                  </td>
-                                  <td className="py-2.5 px-3 text-center">
-                                    <span className="t-micro font-bold uppercase px-2 py-0.5 bg-accent-soft text-[var(--color-accent-hover)] border border-accent/30 rounded">
-                                      {oc.estado}
-                                    </span>
-                                  </td>
-                                  <td className="py-2.5 px-3 text-center">
-                                    <button
-                                      type="button"
-                                      onClick={() => setPdfPreviewOc(oc)}
-                                      className="px-2.5 py-1 bg-surface hover:bg-accent-soft text-[var(--color-accent-hover)] rounded-lg transition border border-line font-bold text-[11px] flex items-center gap-1 mx-auto cursor-pointer"
-                                    >
-                                      <FileText className="w-3 h-3" />
-                                      <span>Ver / Imprimir OC</span>
-                                    </button>
-                                    <Link href={`/ordenes-compra/${oc.id}/asignaciones`} className="block text-[11px] text-accent-ink font-bold mt-1">Ver asignaciones</Link>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                    )}
-                  </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Reventa y Logística */}
-            <div className="bg-surface rounded-lg border border-line overflow-hidden shadow-xs">
-              <AreaCardHeader
-                icon={Truck}
-                title="Reventa y Logística"
-                open={areaExpanded.reventa}
-                onToggle={() => setAreaExpanded((prev) => ({ ...prev, reventa: !prev.reventa }))}
-              />
-
-              {areaExpanded.reventa && (
-                <div className="border-t border-line p-3 sm:p-4 space-y-3.5">
-                  <div className="bg-surface rounded-lg border border-line overflow-hidden shadow-xs">
-                    <div className="w-full p-3 bg-surface-muted text-ink font-semibold text-xs flex flex-wrap items-center justify-between gap-3 border-b border-line">
-                      <button
-                        type="button"
-                        onClick={() => setOpenSections({ ...openSections, reventaEventos: !openSections.reventaEventos })}
-                        className="flex items-center gap-2.5 hover:text-[var(--color-accent-hover)] transition cursor-pointer text-left font-semibold text-xs text-ink"
-                      >
-                        <Calendar className="w-4 h-4 text-accent-ink" />
-                        <span>Eventos de Reventa y Logística</span>
-                        {reventaEventos.length > 0 && (
-                          <span className="text-xs bg-accent text-on-accent font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
-                            {reventaEventos.length}
-                          </span>
-                        )}
-                        {openSections.reventaEventos ? <ChevronUp className="w-4 h-4 text-ink-muted" /> : <ChevronDown className="w-4 h-4 text-ink-muted" />}
-                      </button>
-
-                      <div className="flex items-center gap-3">
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={reventaEventosEnabled}
-                            onChange={(e) => setReventaEventosEnabled(e.target.checked)}
-                            className="sr-only peer"
-                          />
-                          <div className="w-9 h-5 bg-surface-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface after:border-line after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent"></div>
-                          <span className="ml-2 text-xs font-bold text-ink capitalize tracking-normal">
-                            {reventaEventosEnabled ? 'Habilitado' : 'No Requiere'}
-                          </span>
-                        </label>
-                        {reventaEventosEnabled && (
-                          <Link
-                            href={`/reventa/calendario?opId=${selectedOp.id}`}
-                            className="text-[11px] bg-accent hover:bg-accent-hover text-on-accent px-2.5 py-1 rounded-md font-bold flex items-center gap-1 transition lowercase tracking-normal"
-                          >
-                            <span>Ver Calendario</span>
-                          </Link>
-                        )}
-                      </div>
-                    </div>
-
-                    {openSections.reventaEventos && reventaEventosEnabled && (
-                      <div className="p-4 space-y-4 text-xs text-ink bg-surface">
-                        <div className="flex items-center justify-between border-b border-line pb-3">
-                          <span className="font-bold text-ink text-xs">Eventos registrados para esta oportunidad:</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              resetProdLogForm('reventa_logistica', 'reventa');
-                              setShowAddProdLogEventForm(!showAddProdLogEventForm || newProdLogContexto !== 'reventa_logistica');
-                            }}
-                            className="bg-accent hover:bg-accent-hover text-on-accent font-semibold text-xs px-3 py-1.5 rounded-md transition flex items-center gap-1.5 shadow-xs"
-                          >
-                            <Plus className="w-4 h-4" />
-                            <span>Agregar Evento</span>
-                          </button>
-                        </div>
-
-                        {showAddProdLogEventForm && newProdLogContexto === 'reventa_logistica' && (
-                          <div className="bg-surface-muted p-4 rounded-lg border border-accent/30 space-y-3">
-                            <h4 className="font-semibold text-[var(--color-accent-hover)] text-xs uppercase flex items-center gap-1.5">
-                              <Plus className="w-4 h-4" />
-                              <span>Registrar Evento</span>
-                            </h4>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                              <div>
-                                <label className="block font-bold text-ink-muted mb-1">Tipo de evento *</label>
-                                <select
-                                  value={newProdLogTipo}
-                                  onChange={(e) => {
-                                    const nextTipo = e.target.value as TipoEventoProduccionLogistica;
-                                    setNewProdLogTipo(nextTipo);
-                                  }}
-                                  className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-accent"
-                                >
-                                  <option value="logistica">Logística</option>
-                                  <option value="reventa">Reventa</option>
-                                </select>
-                              </div>
-
-                              <div>
-                                <label className="block font-bold text-ink-muted mb-1">Fecha *</label>
-                                <input
-                                  type="date"
-                                  required
-                                  value={newProdLogFecha}
-                                  onChange={(e) => setNewProdLogFecha(e.target.value)}
-                                  className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-accent"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block font-bold text-ink-muted mb-1">Hora</label>
-                                <input
-                                  type="time"
-                                  value={newProdLogHora}
-                                  onChange={(e) => setNewProdLogHora(e.target.value)}
-                                  className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-accent"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                              <div>
-                                <label className="block font-bold text-ink-muted mb-1">Título *</label>
-                                <input
-                                  type="text"
-                                  value={newProdLogTitulo}
-                                  onChange={(e) => setNewProdLogTitulo(e.target.value)}
-                                  className="w-full bg-surface text-ink border border-line rounded-md px-3 py-1.5 font-bold focus:outline-none focus:border-accent"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block font-bold text-ink-muted mb-1">Responsable</label>
-                                <select
-                                  value={newProdLogResponsableId}
-                                  onChange={(e) => setNewProdLogResponsableId(e.target.value)}
-                                  className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-bold focus:outline-none focus:border-accent"
-                                >
-                                  <option value="">-- Sin asignar --</option>
-                                  {(responsablesReventaLogistica.length > 0 ? responsablesReventaLogistica : personalTerrenoList).map((p) => (
-                                    <option key={p.id} value={p.id}>
-                                      {p.nombre}{p.rut ? ` - ${p.rut}` : ''}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              <div>
-                                <label className="block font-bold text-ink-muted mb-1">Estado Inicial</label>
-                                <select
-                                  value={newProdLogEstado}
-                                  onChange={(e) => setNewProdLogEstado(e.target.value as EstadoEventoProduccionLogistica)}
-                                  className="w-full bg-surface text-ink border border-line rounded-md px-2.5 py-1.5 font-semibold uppercase focus:outline-none focus:border-accent"
-                                >
-                                  {prodLogEstadoOptions.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
-
-                            <div>
-                              <label className="block font-bold text-ink-muted mb-1">Notas / Instrucciones</label>
-                              <input
-                                type="text"
-                                placeholder="Ej: coordinar proveedor, retiro, despacho o entrega..."
-                                value={newProdLogNotas}
-                                onChange={(e) => setNewProdLogNotas(e.target.value)}
-                                className="w-full bg-surface text-ink border border-line rounded-md px-3 py-1.5 focus:outline-none focus:border-accent"
-                              />
-                            </div>
-
-                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
-                              <button
-                                type="button"
-                                onClick={() => setShowAddProdLogEventForm(false)}
-                                className="px-3 py-1.5 bg-surface-muted hover:bg-surface-muted text-ink rounded-md font-bold transition"
-                              >
-                                Cancelar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => saveProdLogEvent('reventa_logistica')}
-                                className="px-4 py-1.5 bg-accent hover:bg-accent-hover text-on-accent rounded-md font-semibold transition shadow-xs"
-                              >
-                                {editingProdLogEventId ? 'Guardar cambios' : 'Guardar evento'}
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        {reventaEventos.length === 0 ? (
-                          <div className="py-4 text-center text-ink-muted italic text-xs bg-surface-muted rounded-lg border border-dashed border-line">
-                            No hay eventos registrados. Haz clic en <strong>&quot;+ Agregar Evento&quot;</strong> para programar obra, logística o producción.
-                          </div>
-                        ) : (
-                          <div className="space-y-2.5">
-                            {reventaEventos.map((event) => {
-                              const { fecha, hora } = getEventDateParts(event);
-
-                              return (
-                                <div
-                                  key={event.id}
-                                  className="bg-surface p-3.5 rounded-lg border border-line flex flex-col gap-3 text-ink hover:border-line transition shadow-xs"
-                                >
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="font-bold uppercase tracking-normal text-[11px] px-2 py-1 rounded-md text-accent-ink bg-accent-soft border border-accent/30">
-                                        {getResponsableEventoNombre(event)}
-                                      </span>
-                                      <span className={`text-[11px] font-bold px-2 py-1 rounded-md border ${getProdLogTipoClasses(event.tipo_evento)}`}>
-                                        {getProdLogTipoLabel(event.tipo_evento)}
-                                      </span>
-                                      <span className={`text-[11px] font-semibold px-2 py-1 rounded-md border ${getProdLogEstadoClasses(event.estado)}`}>
-                                        {getProdLogEstadoLabel(event.estado)}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => startEditProdLogEvent(event)}
-                                        className="p-1.5 bg-surface hover:bg-accent-soft text-accent-ink border border-line rounded-lg transition"
-                                        title="Editar evento"
-                                      >
-                                        <Edit className="w-4 h-4" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => deleteProdLogEvent(event)}
-                                        className="p-1.5 bg-surface hover:bg-danger-soft text-danger border border-line rounded-lg transition"
-                                        title="Eliminar evento"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                  <div className="space-y-1">
-                                    <strong className="text-ink text-sm block">{event.titulo}</strong>
-                                    <div className="flex flex-wrap items-center gap-3 text-xs text-ink-muted font-bold">
-                                      <span className="font-mono flex items-center gap-1 text-ink">
-                                        <Calendar className="w-3.5 h-3.5 text-accent-ink" />
-                                        {fecha}
-                                      </span>
-                                      <span className="font-mono flex items-center gap-1 text-ink-muted">
-                                        <Clock className="w-3.5 h-3.5 text-ink-subtle" />
-                                        {hora}
-                                      </span>
-                                    </div>
-                                    {event.observaciones && (
-                                      <span className="block text-xs text-ink-muted">{event.observaciones}</span>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {openSections.reventaEventos && !reventaEventosEnabled && (
-                      <div className="p-4 text-xs text-ink-muted bg-surface">
-                        Habilita eventos para registrar obra, logística o producción.
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Accordion 3.2: Órdenes de Compra (OC) en Reventa (Ajustes 11 - Req 7) */}
-                  {selectedOp.estado_pipeline?.startsWith('rev_') && (
-                  <div className="bg-surface rounded-lg border border-line overflow-hidden shadow-xs">
-                    <div className="w-full p-3 bg-surface-muted text-ink font-semibold text-xs flex flex-wrap items-center justify-between gap-3 border-b border-line">
-                      <button
-                        type="button"
-                        onClick={() => setOpenSections({ ...openSections, reventaOc: !openSections.reventaOc })}
-                        className="flex items-center gap-2.5 hover:text-[var(--color-accent-hover)] transition cursor-pointer text-left font-semibold text-xs text-ink"
-                      >
-                        <ShoppingCart className="w-4 h-4 text-accent-ink" />
-                        <span>Órdenes de Compra a Proveedores / Distribución</span>
-                        <span className="text-xs text-[var(--color-accent-hover)] font-mono font-bold">
-                          {opOrdenesCompra.length} {opOrdenesCompra.length === 1 ? 'OC' : 'OCs'}
-                        </span>
-                        {openSections.reventaOc ? <ChevronUp className="w-4 h-4 text-ink-muted" /> : <ChevronDown className="w-4 h-4 text-ink-muted" />}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setShowCreateOcModal(true)}
-                        className="bg-accent hover:bg-accent-hover text-on-accent font-semibold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Crear Orden de Compra</span>
-                      </button>
-                    </div>
-
-                    {openSections.reventaOc && (
-                    <div className="p-4 space-y-3 text-xs bg-surface text-ink">
-                      {loadingOpOrdenes ? (
-                        <div className="text-center py-4 text-ink-muted">Cargando órdenes de compra...</div>
-                      ) : opOrdenesCompra.length === 0 ? (
-                        <div className="p-4 bg-surface-muted rounded-lg text-ink-muted text-center italic border border-line">
-                          No hay órdenes de compra emitidas para esta oportunidad.
-                        </div>
-                      ) : (
-                        <div className="overflow-x-auto rounded-lg border border-line">
-                          <table className="w-full text-left text-xs bg-surface">
-                            <thead className="bg-surface-muted text-ink-muted font-bold uppercase t-micro border-b border-line">
-                              <tr>
-	                                <th className="py-2.5 px-3">Folio OC</th>
-	                                <th className="py-2.5 px-3 text-center">Version</th>
-	                                <th className="py-2.5 px-3">Proveedor</th>
-                                <th className="py-2.5 px-3 text-center">Fecha</th>
-                                <th className="py-2.5 px-3 text-right">Costo asignado</th>
-                                <th className="py-2.5 px-3 text-center">Estado</th>
-                                <th className="py-2.5 px-3 text-center">Acciones</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-line-subtle">
-                              {opOrdenesCompra.map((oc) => (
-                                <tr key={oc.id} className="hover:bg-surface-muted">
-	                                  <td className="py-2.5 px-3 font-mono font-bold text-[var(--color-accent-hover)]">
-	                                    {oc.numero_oc}
-	                                  </td>
-	                                  <td className="py-2.5 px-3 text-center font-mono text-ink-muted">
-	                                    v{oc.version || 1}
-	                                  </td>
-	                                  <td className="py-2.5 px-3 font-bold text-ink">
-                                    {oc.proveedor?.nombre || 'Proveedor'}
-                                  </td>
-                                  <td className="py-2.5 px-3 text-center font-mono text-ink-muted">
-                                    {oc.fecha_emision}
-                                  </td>
-                                  <td className="py-2.5 px-3 text-right font-mono font-bold text-ink">
-                                    ${(oc.asignaciones || []).reduce((sum, a) => sum + Number(a.costo_asignado), 0).toLocaleString('es-CL')}
-                                  </td>
-                                  <td className="py-2.5 px-3 text-center">
-                                    <span className="t-micro font-bold uppercase px-2 py-0.5 bg-accent-soft text-[var(--color-accent-hover)] border border-accent/30 rounded">
-                                      {oc.estado}
-                                    </span>
-                                  </td>
-                                  <td className="py-2.5 px-3 text-center">
-                                    <button
-                                      type="button"
-                                      onClick={() => setPdfPreviewOc(oc)}
-                                      className="px-2.5 py-1 bg-surface hover:bg-accent-soft text-[var(--color-accent-hover)] rounded-lg transition border border-line font-bold text-[11px] flex items-center gap-1 mx-auto cursor-pointer"
-                                    >
-                                      <FileText className="w-3 h-3" />
-                                      <span>Ver / Imprimir OC</span>
-                                    </button>
-                                    <Link href={`/ordenes-compra/${oc.id}/asignaciones`} className="block text-[11px] text-accent-ink font-bold mt-1">Ver asignaciones</Link>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                    )}
-                  </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-                {/* Accordion: Archivos Adjuntos (Ubicado debajo de Reventa y Logística) */}
-                <div className="bg-surface rounded-lg border border-line overflow-hidden shadow-xs">
-                  <div className="w-full p-3 bg-surface hover:bg-surface-muted text-ink font-semibold text-sm flex flex-wrap items-center justify-between gap-3 border-b border-line transition">
-                    <button
-                      type="button"
-                      onClick={() => setOpenSections({ ...openSections, antecedentes: !openSections.antecedentes })}
-                      className="flex items-center gap-2.5 hover:text-[var(--color-accent-hover)] transition cursor-pointer text-left font-semibold text-sm text-ink"
-                    >
-                      <Paperclip className="w-4 h-4 text-accent-ink" />
-                      <span>Archivos adjuntos</span>
-                      {opAntecedentesList.length > 0 && (
-                        <span className="text-xs bg-accent text-on-accent font-mono font-bold px-2 py-0.5 rounded-full lowercase tracking-normal">
-                          {opAntecedentesList.length}
-                        </span>
-                      )}
-                      {openSections.antecedentes ? <ChevronUp className="w-4 h-4 text-ink-muted" /> : <ChevronDown className="w-4 h-4 text-ink-muted" />}
-                    </button>
-
-                    <label className="text-xs font-semibold bg-accent-soft hover:bg-accent text-accent-ink hover:text-white border border-accent/30 px-3 py-1.5 rounded-md transition flex items-center gap-1.5 cursor-pointer">
-                      <Paperclip className="w-3.5 h-3.5" />
-                      <span>{antecedenteUploading ? 'Subiendo...' : 'Adjuntar archivo'}</span>
-                      <input
-                        type="file"
-                        className="hidden"
-                        disabled={antecedenteUploading}
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file || !selectedOp) return;
-                          try {
-                            setAntecedenteUploading(true);
-                            const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-                            const storagePath = `antecedentes/${selectedOp.id}/${Date.now()}_${cleanFileName}`;
-                            const { error: uploadError } = await supabase.storage
-                              .from('documentos')
-                              .upload(storagePath, file, { contentType: file.type || undefined, upsert: false });
-                            if (uploadError) throw uploadError;
-
-                            const { data: urlData } = supabase.storage.from('documentos').getPublicUrl(storagePath);
-                            const publicUrl = urlData?.publicUrl || '#';
-                            const userName = currentUser?.nombre || 'Usuario';
-                            const userId = currentUser?.id && isUUID(currentUser.id) ? currentUser.id : null;
-
-                            const { data: inserted, error: insertError } = await supabase
-                              .from('oportunidad_antecedentes')
-                              .insert({
-                                oportunidad_id: selectedOp.id,
-                                nombre: file.name,
-                                tipo: 'otro',
-                                bucket_id: 'documentos',
-                                storage_path: storagePath,
-                                public_url: publicUrl,
-                                mime_type: file.type || null,
-                                size_bytes: file.size,
-                                subido_por_id: userId,
-                                subido_por_nombre: userName,
-                              })
-                              .select()
-                              .single();
-
-                            if (!insertError && inserted) {
-                              const newDoc = mapAntecedenteRecord(inserted);
-                              const existingDocs = antecedentesCacheRef.current[selectedOp.id] || opAntecedentesList;
-                              const updatedDocs = [newDoc, ...existingDocs];
-                              antecedentesCacheRef.current[selectedOp.id] = updatedDocs;
-                              setOpAntecedentesList(updatedDocs);
-                              updateOportunidadField(selectedOp.id, 'antecedentes', updatedDocs);
-
-                              await addOportunidadActividad(
-                                selectedOp.id,
-                                `Archivo adjuntado: "${file.name}" por ${userName}.`,
-                                'actualizacion'
-                              );
-                            }
-                          } catch (err: any) {
-                            console.error('Error uploading file:', err);
-                            toast({ message: `Error al subir archivo: ${mensajeError(err, 'Error desconocido')}`, tone: 'danger' });
-                          } finally {
-                            setAntecedenteUploading(false);
-                            e.target.value = '';
-                          }
-                        }}
-                      />
-                    </label>
-                  </div>
-
-                  {openSections.antecedentes && (
-                    <div className="p-4 space-y-3 text-xs bg-surface text-ink">
-                      {opAntecedentesList.length === 0 ? (
-                        <div className="p-6 text-center text-ink-muted bg-surface-muted rounded-lg border border-dashed border-line space-y-2">
-                          <Paperclip className="w-8 h-8 text-ink-subtle mx-auto opacity-50" />
-                          <p className="font-semibold text-ink">No hay archivos adjuntos en esta oportunidad.</p>
-                          <p className="text-[11px] text-ink-muted">
-                            Puedes adjuntar archivos desde el botón superior o enviándolos directamente en el chat de actividad.
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-line-subtle bg-surface rounded-lg border border-line overflow-hidden shadow-xs">
-                          {opAntecedentesList.map((doc) => {
-                            const isImg = doc.mime_type?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(doc.nombre);
-                            const isPdf = doc.mime_type?.includes('pdf') || /\.pdf$/i.test(doc.nombre);
-
-                            return (
-                              <div
-                                key={doc.id}
-                                className="p-3 hover:bg-surface-muted transition flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                              >
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <div className="w-8 h-8 rounded-lg bg-surface-muted border border-line flex items-center justify-center shrink-0">
-                                    {isPdf ? (
-                                      <FileText className="w-4 h-4 text-danger" />
-                                    ) : isImg ? (
-                                      <Paperclip className="w-4 h-4 text-info" />
-                                    ) : (
-                                      <FileCheck className="w-4 h-4 text-accent-ink" />
-                                    )}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-semibold text-ink text-xs truncate max-w-xs sm:max-w-md block" title={doc.nombre}>
-                                        {doc.nombre}
-                                      </span>
-                                    </div>
-                                    <div className="text-[11px] text-ink-muted flex items-center gap-2 mt-0.5 font-mono">
-                                      {doc.size_bytes ? (
-                                        <span>{Math.round(doc.size_bytes / 1024)} KB</span>
-                                      ) : null}
-                                      <span>•</span>
-                                      <span>Subido por: {doc.subido_por || 'Usuario'}</span>
-                                      {doc.fecha_iso && (
-                                        <>
-                                          <span>•</span>
-                                          <span>{new Date(doc.fecha_iso).toLocaleDateString('es-CL')}</span>
-                                        </>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-                                  <a
-                                    href={doc.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="px-3 py-1.5 bg-surface hover:bg-accent-soft text-ink hover:text-accent-ink rounded-md font-bold border border-line transition text-xs flex items-center gap-1.5"
-                                  >
-                                    <Eye className="w-3.5 h-3.5" />
-                                    <span>Ver / Descargar</span>
-                                  </a>
+                                    <option value="borrador">Borrador</option>
+                                    <option value="enviada">Enviada</option>
+                                    <option value="aprobada">Aprobada</option>
+                                    <option value="rechazada">Rechazada</option>
+                                  </select>
                                   <button
                                     type="button"
-                                    onClick={() => handleDeleteAntecedente(doc.id)}
-                                    className="p-1.5 bg-surface hover:bg-danger-soft text-ink-subtle hover:text-danger rounded-md border border-line transition"
-                                    title="Eliminar archivo adjunto"
+                                    onClick={() => setPreviewCotizacion(cot)}
+                                    className="px-2.5 py-1 rounded-md border border-line bg-surface-muted hover:bg-accent-soft text-ink hover:text-accent-ink font-semibold text-xs inline-flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>PDF</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setCotToDeleteInModal(cot)}
+                                    className="p-1 text-ink-subtle hover:text-danger transition cursor-pointer"
+                                    title="Eliminar cotización"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
@@ -5347,283 +3366,456 @@ export default function PipelineVentasPage() {
                           })}
                         </div>
                       )}
-                    </div>
-                  )}
-                </div>
+                    </section>
 
-                {/* Cierre y traspaso a operación (checklist + ruta operativa) */}
-                {(() => {
-                  const cierreItems: { label: string; ready: boolean; target?: string }[] = [
-                    { label: 'Cotización vigente', ready: getOportunidadTotalValue(selectedOp) > 0 },
-                    { label: 'Dirección de obra', ready: Boolean(selectedOp.direccion_obra || (selectedOp.direccion && selectedOp.comuna)), target: 'cierre-direccion_obra' },
-                    { label: 'Fecha prometida', ready: Boolean(selectedOp.fecha_prometida || selectedOp.fecha_limite), target: 'cierre-fecha_prometida' },
-                    { label: 'Forma de entrega', ready: Boolean(selectedOp.forma_entrega), target: 'cierre-forma_entrega' },
-                    { label: 'Abastecimiento', ready: Boolean(selectedOp.abastecimiento), target: 'cierre-abastecimiento' },
-                    { label: 'Condición de pago', ready: Boolean(selectedOp.condicion_pago), target: 'cierre-condicion_pago' },
-                  ];
-                  const completos = cierreItems.filter((item) => item.ready).length;
-                  const fieldLabel = 'text-[11px] font-medium text-ink-muted';
-                  const fieldClass = 'mt-0.5 block w-full h-8 bg-surface hover:bg-surface-muted border border-line hover:border-line rounded-md px-3 text-xs font-bold text-ink focus:outline-none focus:border-accent transition shadow-xs';
+                    {/* Abonos y Comprobantes de Pago */}
+                    <section className="border-t border-line pt-5 space-y-3 first:border-t-0 first:pt-0">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="t-section text-ink">Abonos y Comprobantes de Pago ({pagosList.length})</h3>
+                        <button
+                          type="button"
+                          onClick={() => { setAbonoErrorMsg(''); setShowAbonoModal(true); }}
+                          className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-on-accent transition hover:bg-accent-hover"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Registrar abono</span>
+                        </button>
+                        </div>
 
-                  return (
-                    <div key={`cierre-${selectedOp.id}`} className="bg-surface rounded-lg border border-line overflow-hidden shadow-xs">
-                      <AreaCardHeader
-                        icon={ClipboardCheck}
-                        title="Cierre y traspaso a operación"
-                        open={areaExpanded.cierre}
-                        onToggle={() => setAreaExpanded((prev) => ({ ...prev, cierre: !prev.cierre }))}
-                        aside={
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
-                            completos === cierreItems.length
-                              ? 'bg-success-soft text-success border-success/30'
-                              : 'bg-accent-soft text-[var(--color-accent-hover)] border-accent/30'
-                          }`}>
-                            {completos}/{cierreItems.length} completos
-                          </span>
+                      <Dialog
+                        open={showAbonoModal}
+                        onClose={() => setShowAbonoModal(false)}
+                        title="Registrar abono"
+                        footer={
+                          <>
+                            <Button onClick={() => setShowAbonoModal(false)}>Cancelar</Button>
+                            <Button variant="primary" disabled={abonoSaving || !nuevoAbonoMonto || !nuevoAbonoFile} onClick={enviarAbono}>
+                              {abonoSaving ? 'Registrando...' : 'Enviar abono a Caja'}
+                            </Button>
+                          </>
                         }
-                      />
-
-                      {areaExpanded.cierre && (
-                        <div className="border-t border-line p-3 sm:p-4 space-y-4 text-xs">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                            {cierreItems.map((item) => (
-                              <button
-                                key={item.label}
-                                type="button"
-                                disabled={item.ready || !item.target}
-                                onClick={() => {
-                                  const el = item.target ? document.getElementById(item.target) : null;
-                                  el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                  el?.focus();
+                      >
+                        <div className="space-y-4">
+                          <Field label="Monto del abono (CLP)" required>
+                            {(f) => <TextInput {...f} type="number" min={1} className="t-num" placeholder="Ej: 450000" value={nuevoAbonoMonto} onChange={(e) => setNuevoAbonoMonto(e.target.value)} />}
+                          </Field>
+                          <Field label="Nota / referencia">
+                            {(f) => <TextInput {...f} placeholder="Ej: Transferencia 50%" value={nuevoAbonoNota} onChange={(e) => setNuevoAbonoNota(e.target.value)} />}
+                          </Field>
+                          <Field label="Comprobante (PDF o imagen)" required>
+                            {(f) => (
+                              <TextInput
+                                {...f}
+                                type="file"
+                                accept="image/*,.pdf"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0] || null;
+                                  setNuevoAbonoFile(file);
+                                  setNuevoAbonoFileName(file?.name || '');
                                 }}
-                                className={`text-left text-xs font-semibold flex items-center gap-1.5 rounded-md px-2 py-1 transition ${
-                                  item.ready ? 'text-success' : 'text-warning-ink hover:bg-warning-soft enabled:cursor-pointer disabled:cursor-default'
-                                }`}
-                              >
-                                {item.ready ? <CheckCircle className="w-3.5 h-3.5" /> : <Circle className="w-3.5 h-3.5" />}
-                                {item.label}
-                              </button>
-                            ))}
-                          </div>
+                              />
+                            )}
+                          </Field>
+                          {abonoErrorMsg && <p className="text-xs font-medium text-danger">{abonoErrorMsg}</p>}
+                        </div>
+                      </Dialog>
 
-                          <div className="border-t border-line pt-3">
-                            <p className="text-[11px] text-ink-muted mb-2">Estos datos alimentan la página de Operación y la guía de despacho.</p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
-                              <label className={fieldLabel}>
-                                Abastecimiento
-                                <select
-                                  id="cierre-abastecimiento"
-                                  value={selectedOp.abastecimiento || ''}
-                                  onChange={async (e) => {
-                                    await updateOportunidadField(selectedOp.id, 'abastecimiento', e.target.value || null);
-                                    await addOportunidadActividad(selectedOp.id, `Abastecimiento: ${e.target.selectedOptions[0].text}.`);
-                                  }}
-                                  className={fieldClass}
+                      {abonoErrorMsg && <p className="text-xs text-danger font-medium">{abonoErrorMsg}</p>}
+
+                      {pagosList.length === 0 ? null : (
+                        <div className="divide-y divide-line-subtle">
+                          {pagosList.map((pago) => (
+                            <div key={pago.id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <strong className="text-sm font-semibold text-ink t-num">
+                                    ${Number(pago.monto || 0).toLocaleString('es-CL')}
+                                  </strong>
+                                  <StatusBadge
+                                    tone={
+                                      pago.estado === 'validado'
+                                        ? 'success'
+                                        : pago.estado === 'rechazado'
+                                          ? 'danger'
+                                          : 'warning'
+                                    }
+                                  >
+                                    {pago.estado === 'validado'
+                                      ? 'Validado en Caja'
+                                      : pago.estado === 'rechazado'
+                                        ? 'Rechazado'
+                                        : 'Pendiente en Caja'}
+                                  </StatusBadge>
+                                </div>
+                                <span className="t-caption block">
+                                  {pago.fecha} · {pago.nota || 'Sin nota'}
+                                </span>
+                              </div>
+                              {(pago.comprobante_url || (pago as Record<string, unknown>).url) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => abrirComprobante(String(pago.comprobante_url || (pago as Record<string, unknown>).url))}
+                                  className="px-2.5 py-1 rounded-md border border-line bg-surface-muted hover:bg-accent-soft text-ink hover:text-accent-ink font-semibold text-xs cursor-pointer"
                                 >
-                                  <option value="">Definir abastecimiento</option>
-                                  <option value="fabricar">Fabricar</option>
-                                  <option value="compra_proveedor">Comprar a proveedor</option>
-                                  <option value="stock">Stock disponible</option>
-                                </select>
-                              </label>
-                              <label className={fieldLabel}>
-                                Forma de entrega
-                                <select
-                                  id="cierre-forma_entrega"
-                                  value={selectedOp.forma_entrega || ''}
-                                  onChange={async (e) => {
-                                    await updateOportunidadField(selectedOp.id, 'forma_entrega', e.target.value || null);
-                                    await addOportunidadActividad(selectedOp.id, `Entrega: ${e.target.selectedOptions[0].text}.`);
-                                  }}
-                                  className={fieldClass}
-                                >
-                                  <option value="">Definir entrega</option>
-                                  <option value="retiro_cliente">Retiro por cliente</option>
-                                  <option value="retiro_proveedor">Retiro en proveedor</option>
-                                  <option value="despacho_propio">Despacho propio</option>
-                                  <option value="despacho_subcontratado">Despacho subcontratado</option>
-                                </select>
-                              </label>
-                              <label className={fieldLabel}>
-                                Condición de pago
-                                <select
-                                  id="cierre-condicion_pago"
-                                  value={selectedOp.condicion_pago || ''}
-                                  onChange={async (e) => {
-                                    await updateOportunidadField(selectedOp.id, 'condicion_pago', e.target.value || null);
-                                    await addOportunidadActividad(selectedOp.id, `Condición de pago: ${e.target.selectedOptions[0].text}.`);
-                                  }}
-                                  className={fieldClass}
-                                >
-                                  <option value="">Definir condición</option>
-                                  <option value="total">Pago total</option>
-                                  <option value="abono50">Abono 50%</option>
-                                  <option value="oc">Orden de compra</option>
-                                  <option value="especial">Especial</option>
-                                </select>
-                              </label>
-                              <label className={fieldLabel}>
-                                Responsable operativo
-                                <select
-                                  value={selectedOp.responsable_operativo_id || ''}
-                                  onChange={(e) => updateOportunidadField(selectedOp.id, 'responsable_operativo_id', e.target.value || null)}
-                                  className={fieldClass}
-                                >
-                                  <option value="">Sin responsable operativo</option>
-                                  {usuariosApp.map((user) => <option key={user.id} value={user.id}>{user.nombre}</option>)}
-                                </select>
-                              </label>
-                              {([
-                                ['fecha_prometida', 'Fecha prometida'],
-                                ['fecha_tentativa_produccion', 'Producción tentativa'],
-                                ['fecha_tentativa_entrega', 'Entrega tentativa'],
-                              ] as [keyof OportunidadVenta, string][]).map(([field, label]) => (
-                                <label key={field} className={fieldLabel}>
-                                  {label}
-                                  <input
-                                    id={`cierre-${field}`}
-                                    type="date"
-                                    value={String(selectedOp[field] || '').slice(0, 10)}
-                                    onChange={(e) => updateOportunidadField(selectedOp.id, field, e.target.value || null)}
-                                    className={`${fieldClass} font-mono [color-scheme:light]`}
-                                  />
-                                </label>
-                              ))}
-                              <label className={fieldLabel}>
-                                Vehículo o transporte
-                                <input
-                                  placeholder="Vehículo o transporte"
-                                  defaultValue={selectedOp.transporte || ''}
-                                  onBlur={(e) => updateOportunidadField(selectedOp.id, 'transporte', e.target.value.trim() || null)}
-                                  className={fieldClass}
-                                />
-                              </label>
-                              <label className={`${fieldLabel} sm:col-span-2`}>
-                                Dirección de obra
-                                <input
-                                  id="cierre-direccion_obra"
-                                  placeholder={selectedOp.direccion || 'Dirección de obra'}
-                                  defaultValue={selectedOp.direccion_obra || ''}
-                                  onBlur={(e) => updateOportunidadField(selectedOp.id, 'direccion_obra', e.target.value.trim() || null)}
-                                  className={fieldClass}
-                                />
-                              </label>
+                                  Ver comprobante
+                                </button>
+                              ) : null}
                             </div>
-                          </div>
-
-                          <p className="text-[11px] text-ink-muted">
-                            Abonos registrados: ${getOportunidadAbonadoValue(selectedOp).toLocaleString('es-CL')}. Los pendientes no impiden avanzar.
-                          </p>
+                          ))}
                         </div>
                       )}
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
+                    </section>
+                  </div>
+                );
+              })()}
 
-            {/* Separador Vertical Resizable (Barra para arrastrar y cambiar ancho) */}
+              {/* =========================================================
+                  PESTAÑA 3: ABASTECIMIENTO Y OC (En Sitio)
+                 ========================================================= */}
+              {opDetailTab === 'abastecimiento' && (
+                <div className="space-y-6">
+                  <section className="border-t border-line pt-5 space-y-3 first:border-t-0 first:pt-0">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="t-section text-ink flex items-center gap-1.5">
+                        <ShoppingCart className="w-4 h-4 text-accent-ink" />
+                        <span>Órdenes de Compra asignadas ({opOrdenesCompra.length})</span>
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateOcModal(true)}
+                        className="px-3 py-1.5 rounded-md bg-accent hover:bg-accent-hover text-on-accent font-semibold text-xs inline-flex items-center gap-1.5 transition shadow-xs cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Nueva orden de compra</span>
+                      </button>
+                    </div>
+
+                    {loadingOpOrdenes ? (
+                      <p className="t-caption py-3">Cargando órdenes de compra...</p>
+                    ) : opOrdenesCompra.length === 0 ? null : (
+                      <div className="divide-y divide-line-subtle">
+                        {opOrdenesCompra.map((oc) => {
+                          const asig = (oc as OrdenCompra & { asignaciones?: OrdenCompraAsignacion[] }).asignaciones?.find(
+                            (a) => a.oportunidad_id === selectedOp.id
+                          );
+                          const montoAsig = asig ? Number(asig.costo_asignado || 0) : Number(oc.monto_total || 0);
+                          return (
+                            <div key={oc.id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <CodeStamp>{oc.numero_oc || oc.id.slice(0, 8)}</CodeStamp>
+                                  <span className="font-semibold text-ink">{oc.proveedor?.nombre || 'Proveedor'}</span>
+                                  <StatusBadge tone={oc.estado === 'pagada' || oc.estado === 'aprobada' ? 'success' : oc.estado === 'cancelada' ? 'danger' : 'accent'}>
+                                    {oc.estado}
+                                  </StatusBadge>
+                                </div>
+                                <span className="t-caption t-num block">
+                                  Emisión: {oc.fecha_emision} · Asignado a esta NV: <strong className="text-ink">${montoAsig.toLocaleString('es-CL')}</strong>
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setPdfPreviewOc(oc)}
+                                className="px-2.5 py-1 rounded-md border border-line bg-surface-muted hover:bg-accent-soft text-ink hover:text-accent-ink font-semibold text-xs inline-flex items-center gap-1 cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>Ver PDF</span>
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Partidas de la Cotización Vigente */}
+                  <section className="border-t border-line pt-5 space-y-3 first:border-t-0 first:pt-0">
+                    <h3 className="t-section text-ink">Partidas de la Cotización Vigente ({cotizacionItemsOp.length})</h3>
+                    {cotizacionItemsOp.length === 0 ? null : (
+                      <div className="divide-y divide-line-subtle">
+                        {cotizacionItemsOp.map((item, idx) => (
+                          <div key={item.id || idx} className="py-2 flex items-center justify-between gap-2">
+                            <span className="font-medium text-ink truncate">{item.producto || item.descripcion}</span>
+                            <span className="t-caption t-num shrink-0">
+                              Cant: <strong className="text-ink">{item.cantidad}</strong> · Subtotal: <strong className="text-ink">${Number(item.total_item || 0).toLocaleString('es-CL')}</strong>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                </div>
+              )}
+
+              {/* =========================================================
+                  PESTAÑA 4: PRODUCCIÓN Y GUÍAS (En Sitio)
+                 ========================================================= */}
+              {opDetailTab === 'operacion' && (
+                <div className="space-y-6">
+                  {/* Bitácora de Producción Diaria */}
+                  <section className="border-t border-line pt-5 space-y-3 first:border-t-0 first:pt-0">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="t-section text-ink flex items-center gap-1.5">
+                      <Factory className="w-4 h-4 text-accent-ink" />
+                      <span>Bitácora de Producción Diaria ({opProduccionDiaria.length})</span>
+                    </h3>
+                      <button
+                        type="button"
+                        onClick={abrirModalProduccion}
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-on-accent transition hover:bg-accent-hover"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Registrar producción</span>
+                      </button>
+                      </div>
+
+                    <Dialog
+                      open={showProdModal}
+                      onClose={() => setShowProdModal(false)}
+                      title="Registrar producción diaria"
+                      footer={
+                        <>
+                          <Button onClick={() => setShowProdModal(false)}>Cancelar</Button>
+                          <Button
+                            variant="primary"
+                            disabled={prodSaving || !newProdItemId || newProdCantidad <= 0}
+                            onClick={handleRegisterProduccionDiaria}
+                          >
+                            {prodSaving ? 'Guardando...' : 'Registrar producción'}
+                          </Button>
+                        </>
+                      }
+                    >
+                      {(() => {
+                        const itemSel = cotizacionItemsOp.find((i) => i.id === newProdItemId);
+                        const catId = itemSel?.producto_catalogo_id || null;
+                        const stockActual = catId ? stockCatalogo[catId] : undefined;
+                        return (
+                          <div className="space-y-4">
+                            <Field label="Producto fabricado" required>
+                              {(f) => (
+                                <Select {...f} value={newProdItemId} onChange={(e) => setNewProdItemId(e.target.value)}>
+                                  {cotizacionItemsOp.filter((i) => i.id).map((i) => (
+                                    <option key={i.id} value={i.id}>{i.producto} (pedido: {i.cantidad})</option>
+                                  ))}
+                                </Select>
+                              )}
+                            </Field>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                              <Field label="Cantidad fabricada" required>
+                                {(f) => (
+                                  <TextInput {...f} type="number" min={1} className="t-num" value={newProdCantidad || ''} onChange={(e) => setNewProdCantidad(Number(e.target.value))} />
+                                )}
+                              </Field>
+                              <Field label="Fecha de producción" required>
+                                {(f) => <TextInput {...f} type="date" className="t-num" value={newProdFecha} onChange={(e) => setNewProdFecha(e.target.value)} />}
+                              </Field>
+                            </div>
+                            <Field label="Responsable">
+                              {(f) => (
+                                <Select {...f} value={newProdResponsableId} onChange={(e) => setNewProdResponsableId(e.target.value)}>
+                                  <option value="">Sin responsable</option>
+                                  {responsablesProduccionLogistica.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                                </Select>
+                              )}
+                            </Field>
+                            <Field label="Observaciones">
+                              {(f) => <TextInput {...f} value={newProdObservaciones} onChange={(e) => setNewProdObservaciones(e.target.value)} placeholder="Ej: tanda de la mañana, 2 piezas con falla" />}
+                            </Field>
+                            <div className="rounded-control border border-line bg-surface-muted/60 px-3 py-2.5 text-xs">
+                              {catId ? (
+                                <p className="text-ink">
+                                  Inventario de <strong>{itemSel?.producto}</strong>:{' '}
+                                  <span className="t-num font-semibold">{stockActual ?? '—'}</span>
+                                  {newProdCantidad > 0 && stockActual !== undefined && (
+                                    <> → <span className="t-num font-semibold text-accent-ink">{stockActual + newProdCantidad}</span> tras esta tanda</>
+                                  )}
+                                </p>
+                              ) : (
+                                <p className="text-ink-muted">Esta partida no está vinculada al catálogo de productos, así que no sumará inventario.</p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </Dialog>
+
+                    {loadingProduccionDiaria ? (
+                      <p className="t-caption">Cargando bitácora de producción...</p>
+                    ) : opProduccionDiaria.length === 0 ? null : (
+                      <div className="divide-y divide-line-subtle">
+                        {opProduccionDiaria.map((prod) => (
+                          <div key={prod.id} className="py-2 flex items-center justify-between gap-2">
+                            <div>
+                              <span className="font-semibold text-ink">{prod.producto}</span>
+                              <span className="t-caption t-num block">
+                                Fecha: {prod.fecha_produccion} {prod.observaciones ? `· ${prod.observaciones}` : ''}
+                              </span>
+                            </div>
+                            <StatusBadge tone="success">{prod.cantidad_producida} un.</StatusBadge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Eventos de producción y logística */}
+                  {(() => {
+                    const contextoEvento: ContextoEventoProduccionLogistica = selectedOp.rama_destino === 'reventa' || selectedOp.estado_pipeline.startsWith('rev_') ? 'reventa_logistica' : 'produccion_logistica';
+                    const responsablesEvento = contextoEvento === 'reventa_logistica' ? responsablesReventaLogistica : responsablesProduccionLogistica;
+                    const tiposEvento: [TipoEventoProduccionLogistica, string][] = [
+                      ['produccion', 'Producción'],
+                      ['instalacion', 'Instalación'],
+                      ['despacho_cliente', 'Despacho a cliente'],
+                      ['retiro_proveedor', 'Retiro en proveedor'],
+                      ['obra', 'Obra'],
+                      ['postventa', 'Postventa'],
+                      ['logistica', 'Logística'],
+                    ];
+                    return (
+                      <section className="border-t border-line pt-5 space-y-3 first:border-t-0 first:pt-0">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h3 className="t-section text-ink flex items-center gap-1.5">
+                            <Calendar className="w-4 h-4 text-accent-ink" />
+                            <span>Eventos de producción y logística</span>
+                            <span className="t-num rounded-full bg-surface-muted px-2 text-[11px] font-semibold text-ink-muted">{opEventosProdLog.length}</span>
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              resetProdLogForm(contextoEvento, 'produccion');
+                              setShowAddProdLogEventForm(true);
+                            }}
+                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-on-accent transition hover:bg-accent-hover"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Agregar evento</span>
+                          </button>
+                        </div>
+
+                        <Dialog
+                          open={showAddProdLogEventForm}
+                          onClose={() => { setShowAddProdLogEventForm(false); setEditingProdLogEventId(null); }}
+                          title={editingProdLogEventId ? 'Editar evento' : 'Nuevo evento de producción o logística'}
+                          footer={
+                            <>
+                              <Button onClick={() => { setShowAddProdLogEventForm(false); setEditingProdLogEventId(null); }}>Cancelar</Button>
+                              <Button variant="primary" disabled={!newProdLogFecha || !newProdLogTitulo.trim()} onClick={() => saveProdLogEvent(contextoEvento)}>
+                                {editingProdLogEventId ? 'Guardar cambios' : 'Guardar evento'}
+                              </Button>
+                            </>
+                          }
+                        >
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                              <Field label="Tipo">
+                                {(f) => (
+                                  <Select {...f} value={newProdLogTipo} onChange={(e) => setNewProdLogTipo(e.target.value as TipoEventoProduccionLogistica)}>
+                                    {tiposEvento.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                                  </Select>
+                                )}
+                              </Field>
+                              <Field label="Estado">
+                                {(f) => (
+                                  <Select {...f} value={newProdLogEstado} onChange={(e) => setNewProdLogEstado(e.target.value as EstadoEventoProduccionLogistica)}>
+                                    {prodLogEstadoOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                  </Select>
+                                )}
+                              </Field>
+                            </div>
+                            <Field label="Título" required>
+                              {(f) => <TextInput {...f} value={newProdLogTitulo} onChange={(e) => setNewProdLogTitulo(e.target.value)} />}
+                            </Field>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                              <Field label="Fecha" required>
+                                {(f) => <TextInput {...f} type="date" className="t-num" value={newProdLogFecha} onChange={(e) => setNewProdLogFecha(e.target.value)} />}
+                              </Field>
+                              <Field label="Hora">
+                                {(f) => <TextInput {...f} type="time" className="t-num" value={newProdLogHora} onChange={(e) => setNewProdLogHora(e.target.value)} />}
+                              </Field>
+                            </div>
+                            <Field label="Responsable">
+                              {(f) => (
+                                <Select {...f} value={newProdLogResponsableId} onChange={(e) => setNewProdLogResponsableId(e.target.value)}>
+                                  <option value="">Sin responsable</option>
+                                  {responsablesEvento.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                                </Select>
+                              )}
+                            </Field>
+                            <Field label="Notas">
+                              {(f) => <TextInput {...f} value={newProdLogNotas} onChange={(e) => setNewProdLogNotas(e.target.value)} placeholder="Instrucciones o detalles del evento" />}
+                            </Field>
+                          </div>
+                        </Dialog>
+
+                        {opEventosProdLog.length === 0 ? null : (
+                          <ul className="divide-y divide-line-subtle rounded-lg border border-line">
+                            {opEventosProdLog.map((ev) => {
+                              const { fecha, hora } = getEventDateParts(ev);
+                              return (
+                                <li key={ev.id} className="flex items-center gap-3 px-4 py-3">
+                                  <div className="min-w-0 flex-1">
+                                    <span className="block truncate font-semibold text-ink">{ev.titulo}</span>
+                                    <span className="t-caption t-num block truncate">
+                                      {getProdLogTipoLabel(ev.tipo_evento)} · {fecha} {hora} · {getResponsableEventoNombre(ev)}
+                                    </span>
+                                  </div>
+                                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold ${getProdLogEstadoClasses(ev.estado)}`}>
+                                    {getProdLogEstadoLabel(ev.estado)}
+                                  </span>
+                                  <button type="button" onClick={() => startEditProdLogEvent(ev)} className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-md text-ink-subtle transition hover:bg-surface-muted hover:text-ink" title="Editar evento" aria-label="Editar evento">
+                                    <Edit className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button type="button" onClick={() => deleteProdLogEvent(ev)} className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-md text-ink-subtle transition hover:bg-danger-soft hover:text-danger" title="Eliminar evento" aria-label="Eliminar evento">
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </section>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+            </div>
+          </div>
+
+            {/* Separador redimensionable (delgado, sobre la línea divisoria) */}
             <div
               onMouseDown={handleMouseDownModalResizer}
-              className="hidden lg:flex w-4 hover:w-4 bg-transparent hover:bg-warning-soft/20 active:bg-warning-soft/30 cursor-col-resize select-none items-center justify-center group z-20 relative mx-1 transition-all rounded-full shrink-0"
-              title="Arrastrar para ajustar el ancho entre Información y Actividad (Tu configuración se guardará automáticamente)"
-            >
-              <div className="w-1.5 h-14 rounded-full bg-surface-muted group-hover:bg-accent group-active:bg-accent transition-colors shadow-xs" />
-            </div>
+              className="relative z-20 hidden w-1 shrink-0 cursor-col-resize select-none bg-transparent transition-colors hover:bg-accent/30 active:bg-accent/40 lg:block"
+              title="Arrastrar para ajustar el ancho entre Información y Actividad"
+            />
 
-            {/* Columna Derecha: Feed de Actividades (Ancho Resizable) */}
+            {/* Columna Derecha: Feed de Actividades (Siempre visible junto a cualquier pestaña) */}
             <div
               style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${100 - modalLeftColRatio}%` : '100%' }}
-              className="flex-1 bg-surface-muted rounded-lg border border-line p-4 sm:p-5 flex flex-col justify-between h-[45vh] lg:h-full overflow-hidden shadow-xs shrink-0"
+              className="flex-1 border-t border-line lg:border-l lg:border-t-0 flex flex-col justify-between h-[45vh] lg:h-full overflow-hidden shrink-0"
             >
               <OpportunityActivity key={selectedOp.id} onClose={handleCloseOportunidad}>
-              <div className="space-y-3.5 flex-1 flex flex-col overflow-hidden">
-                {/* Header de Actividad con Título e Íconos ClickUp */}
-                <div className="flex items-center justify-between border-b border-line pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <h3 className="font-bold text-base sm:text-lg text-ink uppercase tracking-normal flex items-center gap-2">
-                      <MessageSquare className="w-5 h-5 text-accent-ink" />
+              <div className="flex-1 flex flex-col gap-3 overflow-hidden">
+                {/* Header de Actividad con tipografía estandarizada */}
+                <div className="flex items-center justify-between border-b border-line px-5 py-3">
+                  <div className="flex items-center gap-2">
+                    <h3 className="t-section text-ink flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-accent-ink" />
                       <span>Actividad</span>
                     </h3>
-                    <span className="text-xs bg-surface text-ink font-bold px-2.5 py-0.5 rounded-full border border-line font-mono">
+                    <span className="text-xs bg-surface text-ink font-semibold px-2 py-0.5 rounded-full border border-line t-num">
                       {(selectedOp.chat_interno || []).length}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    {/* Botón Cerrar Modal */}
-                    <button
-                      onClick={handleCloseOportunidad}
-                      className="p-1 text-ink-subtle hover:text-ink rounded-lg hover:bg-surface-muted transition font-bold text-lg leading-none ml-1"
-                      title="Cerrar Modal"
-                    >
-                      ✕
-                    </button>
                   </div>
-                </div>
-
-                {/* Barra de Filtros de Actividad (Todos / Comentarios / Acciones / Reclamos) */}
-                <div className="flex items-center gap-1.5 p-1 bg-surface rounded-md border border-line text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setActivityFilter('all')}
-                    className={`flex-1 py-1 px-1.5 rounded-lg font-semibold transition flex items-center justify-center gap-1 ${
-                      activityFilter === 'all'
-                        ? 'bg-accent text-on-accent shadow-xs'
-                        : 'text-ink-muted hover:text-ink hover:bg-surface-muted'
-                    }`}
-                  >
-                    <span>Todos</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActivityFilter('comentarios')}
-                    className={`flex-1 py-1 px-1.5 rounded-lg font-semibold transition flex items-center justify-center gap-1 ${
-                      activityFilter === 'comentarios'
-                        ? 'bg-accent text-on-accent shadow-xs'
-                        : 'text-ink-muted hover:text-ink hover:bg-surface-muted'
-                    }`}
-                  >
-                    <span>Comentarios</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActivityFilter('sistema')}
-                    className={`flex-1 py-1 px-1.5 rounded-lg font-semibold transition flex items-center justify-center gap-1 ${
-                      activityFilter === 'sistema'
-                        ? 'bg-accent text-on-accent shadow-xs'
-                        : 'text-ink-muted hover:text-ink hover:bg-surface-muted'
-                    }`}
-                  >
-                    <span>Acciones</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActivityFilter('reclamos')}
-                    className={`flex-1 py-1 px-1.5 rounded-lg font-semibold transition flex items-center justify-center gap-1 ${
-                      activityFilter === 'reclamos'
-                        ? 'bg-danger-soft text-white shadow-xs'
-                        : 'text-danger hover:text-danger hover:bg-danger-soft'
-                    }`}
-                  >
-                    <span>Reclamos</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActivityFilter('seguimiento')}
-                    className={`flex-1 py-1 px-1.5 rounded-lg font-semibold transition flex items-center justify-center gap-1 ${
-                      activityFilter === 'seguimiento'
-                        ? 'bg-warning-soft text-white shadow-xs'
-                        : 'text-warning-ink hover:text-warning-ink hover:bg-warning-soft'
-                    }`}
-                  >
-                    <span>Seguimiento</span>
-                  </button>
                 </div>
 
                 {/* Input de Búsqueda Flotante de Actividad */}
                 {showActivitySearch && (
-                  <div className="">
+                  <div className="px-5">
                     <input
                       type="text"
                       placeholder="Filtrar mensajes o cambios..."
@@ -5637,7 +3829,7 @@ export default function PipelineVentasPage() {
 
                 {/* Feed de Actividades & Comentarios con Scroll Completo y Auto-Scroll al final */}
                 <div
-                  className="flex-1 overflow-y-auto space-y-3 pr-1 text-sm scrollbar-thin relative"
+                  className="flex-1 overflow-y-auto space-y-3 px-5 text-sm scrollbar-thin relative"
                   ref={activityScrollRef}
                   onScroll={handleActivityScroll}
                 >
@@ -5652,24 +3844,6 @@ export default function PipelineVentasPage() {
                         (m) =>
                           m.contenido?.toLowerCase().includes(q) ||
                           m.usuario_nombre?.toLowerCase().includes(q)
-                      );
-                    }
-
-                    if (activityFilter === 'comentarios') {
-                      filteredList = filteredList.filter(
-                        (m) => m.tipo === 'comentario' || (!m.tipo && !m.contenido?.startsWith('['))
-                      );
-                    } else if (activityFilter === 'sistema') {
-                      filteredList = filteredList.filter(
-                        (m) => m.tipo !== 'comentario' && m.tipo !== 'reclamo' && m.tipo !== 'seguimiento' && (m.tipo || m.contenido?.startsWith('['))
-                      );
-                    } else if (activityFilter === 'reclamos') {
-                      filteredList = filteredList.filter(
-                        (m) => m.tipo === 'reclamo'
-                      );
-                    } else if (activityFilter === 'seguimiento') {
-                      filteredList = filteredList.filter(
-                        (m) => m.tipo === 'seguimiento'
                       );
                     }
 
@@ -5760,7 +3934,7 @@ export default function PipelineVentasPage() {
                                 </div>
                               </div>
 
-                              <span className="text-ink-subtle text-xs font-mono">
+                              <span className="text-ink-subtle text-xs t-num">
                                 {formattedDate} {formattedTime}
                               </span>
                             </div>
@@ -5770,8 +3944,8 @@ export default function PipelineVentasPage() {
                               return (
                                 <div className="rounded-lg bg-surface border border-warning/30 p-3 space-y-2.5">
                                   <div>
-                                    <span className="t-micro font-bold uppercase tracking-wide text-warning-ink">Próxima acción</span>
-                                    <p className="text-sm font-bold text-ink leading-snug break-words">
+                                    <span className="t-caption text-warning-ink font-semibold block">Próxima acción</span>
+                                    <p className="text-sm font-semibold text-ink leading-snug break-words">
                                       {campos['Próxima acción'] || msg.contenido}
                                     </p>
                                   </div>
@@ -5780,7 +3954,7 @@ export default function PipelineVentasPage() {
                                       <Calendar className="w-3.5 h-3.5 text-warning-ink shrink-0" />
                                       <div className="min-w-0">
                                         <span className="block t-micro font-medium text-ink-muted leading-none mb-0.5">Fecha del recordatorio</span>
-                                        <span className="block text-xs font-semibold text-ink truncate">{campos['Fecha'] || 'Sin fecha'}</span>
+                                        <span className="block text-xs font-semibold text-ink t-num truncate">{campos['Fecha'] || 'Sin fecha'}</span>
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-2 rounded-md bg-warning-soft/60 border border-warning/30 px-2.5 py-1.5 min-w-0">
@@ -5800,16 +3974,16 @@ export default function PipelineVentasPage() {
                                 </div>
                               );
                             })() : (
-                              <p className="text-ink text-sm whitespace-pre-wrap leading-relaxed">
+                              <div className="text-ink text-sm whitespace-pre-wrap leading-relaxed">
                                 {renderMessageContentWithMentions(msg.contenido)}
-                              </p>
+                              </div>
                             )}
 
                             <div className="flex items-center justify-end pt-2 border-t border-line text-xs">
                               <button
                                 type="button"
                                 onClick={() => setChatInput(`@${msg.usuario_nombre} `)}
-                                className="font-bold text-ink-muted hover:text-accent-ink transition flex items-center gap-1"
+                                className="font-semibold text-ink-muted hover:text-accent-ink transition flex items-center gap-1"
                               >
                                 <Reply className="w-3.5 h-3.5" />
                                 <span>Respuesta</span>
@@ -5823,18 +3997,16 @@ export default function PipelineVentasPage() {
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-start gap-2.5 py-2 px-3 rounded-md hover:bg-surface-muted transition text-xs sm:text-sm"
+                          className="flex items-start gap-2.5 rounded-md px-2 py-2 text-xs transition hover:bg-surface-muted"
                         >
-                          <span className="text-accent-ink font-bold text-base select-none shrink-0">•</span>
-                          <div className="flex-1 flex flex-wrap items-center justify-between gap-1.5">
-                            <span className="text-ink-muted">
-                              <strong className="text-ink font-bold">{msg.usuario_nombre}</strong>{' '}
-                              <span className="text-ink-muted ml-1">{msg.contenido}</span>
-                            </span>
-                            <span className="text-ink-subtle text-xs font-mono shrink-0 ml-auto">
-                              {formattedDate} {formattedTime}
-                            </span>
-                          </div>
+                          <span className="select-none pt-px text-sm font-semibold text-accent-ink shrink-0">•</span>
+                          <p className="min-w-0 flex-1 break-words leading-snug text-ink-muted">
+                            <strong className="font-semibold text-ink">{msg.usuario_nombre}</strong>{' '}
+                            <span>{msg.contenido}</span>
+                          </p>
+                          <span className="t-num shrink-0 whitespace-nowrap pt-px text-[11px] text-ink-subtle">
+                            {formattedDate} {formattedTime}
+                          </span>
                         </div>
                       );
                     });
@@ -5847,26 +4019,27 @@ export default function PipelineVentasPage() {
                     <button
                       type="button"
                       onClick={scrollToBottomActivity}
-                      className="bg-accent hover:bg-accent-hover text-on-accent px-3 py-1.5 rounded-full shadow-md transition flex items-center gap-1.5 text-xs font-bold border border-white/20 active:scale-95"
+                      className="grid h-9 w-9 cursor-pointer place-items-center rounded-full bg-accent text-on-accent shadow-md transition hover:bg-accent-hover active:scale-95"
                       title="Ir a la actividad más reciente"
+                      aria-label="Ir a la actividad más reciente"
                     >
-                      <span>Ir a la más reciente</span>
                       <ChevronDown className="w-4 h-4 stroke-[3]" />
                     </button>
                   </div>
                 )}
               </div>
+              </OpportunityActivity>
 
-              {/* Input de Comentarios en el Fondo del Panel Lateral (Estilo ClickUp con Barra de Botones) */}
-              <div className="pt-3 border-t border-line relative text-sm" ref={mentionRef}>
+              {/* Input de Comentarios en el Fondo del Panel Lateral */}
+              <div className="border-t border-line px-5 py-3 relative text-sm" ref={mentionRef}>
                 {mentionMenuOpen && filteredMentionUsers.length > 0 && (
                   <div className="absolute bottom-full mb-3 left-0 right-0 bg-surface border border-line rounded-lg shadow-lg z-50 overflow-hidden">
-                    <div className="p-2.5 bg-surface-muted text-ink-muted font-bold text-xs uppercase tracking-normal border-b border-line flex justify-between items-center">
+                    <div className="p-2.5 bg-surface-muted text-ink-muted font-semibold text-xs border-b border-line flex justify-between items-center">
                       <span>Mencionar integrante:</span>
                       <button
                         type="button"
                         onClick={() => setMentionMenuOpen(false)}
-                        className="text-ink-subtle hover:text-ink font-bold text-xs"
+                        className="text-ink-subtle hover:text-ink font-semibold text-xs"
                       >
                         ✕
                       </button>
@@ -5881,8 +4054,8 @@ export default function PipelineVentasPage() {
                             idx === selectedMentionIndex ? 'bg-accent text-on-accent' : 'text-ink hover:bg-accent-soft hover:text-accent-ink'
                           }`}
                         >
-                          <span className="font-bold">{usr.nombre}</span>
-                          <span className="t-micro opacity-80 uppercase font-mono">{ROL_NOMBRE[usr.rol] ?? usr.rol}</span>
+                          <span className="font-semibold">{usr.nombre}</span>
+                          <span className="t-caption opacity-80">{ROL_NOMBRE[usr.rol] ?? usr.rol}</span>
                         </button>
                       ))}
                     </div>
@@ -5892,7 +4065,7 @@ export default function PipelineVentasPage() {
                 {isSeguimientoMode && (
                   <div className="bg-warning-soft/70 border border-warning/30 rounded-lg p-3 shadow-xs space-y-2.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="flex items-center gap-2 text-xs font-bold text-warning-ink">
+                      <span className="flex items-center gap-2 text-xs font-semibold text-warning-ink">
                         <AlarmClock className="w-4 h-4" />
                         Nuevo recordatorio de seguimiento
                       </span>
@@ -5906,7 +4079,7 @@ export default function PipelineVentasPage() {
                       </button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      <label className="sm:col-span-2 text-[11px] font-medium text-ink-muted">
+                      <label className="sm:col-span-2 t-caption">
                         Próxima acción *
                         <input
                           autoFocus
@@ -5916,16 +4089,16 @@ export default function PipelineVentasPage() {
                           className="mt-0.5 block w-full bg-surface border border-line rounded-md px-3 py-2 text-xs text-ink focus:outline-none focus:border-warning/30"
                         />
                       </label>
-                      <label className="text-[11px] font-medium text-ink-muted">
+                      <label className="t-caption">
                         Fecha y hora
                         <input
                           type="datetime-local"
                           value={seguimientoDraft.fecha}
                           onChange={(e) => setSeguimientoDraft((d) => ({ ...d, fecha: e.target.value }))}
-                          className="mt-0.5 block w-full bg-surface border border-line rounded-md px-3 py-2 text-xs text-ink focus:outline-none focus:border-warning/30 [color-scheme:light]"
+                          className="mt-0.5 block w-full bg-surface border border-line rounded-md px-3 py-2 text-xs text-ink t-num focus:outline-none focus:border-warning/30 [color-scheme:light]"
                         />
                       </label>
-                      <label className="text-[11px] font-medium text-ink-muted">
+                      <label className="t-caption">
                         Responsable
                         <select
                           value={seguimientoDraft.responsable}
@@ -5936,7 +4109,7 @@ export default function PipelineVentasPage() {
                           {usuariosApp.map((user) => <option key={user.id} value={user.id}>{user.nombre}</option>)}
                         </select>
                       </label>
-                      <label className="sm:col-span-2 text-[11px] font-medium text-ink-muted">
+                      <label className="sm:col-span-2 t-caption">
                         Resultado del último contacto (opcional)
                         <input
                           value={seguimientoDraft.resultado}
@@ -5958,7 +4131,7 @@ export default function PipelineVentasPage() {
                         type="button"
                         disabled={!seguimientoDraft.accion.trim() || seguimientoSaving}
                         onClick={handleSaveSeguimiento}
-                        className="px-3 py-1.5 text-xs font-bold text-white bg-warning-soft hover:bg-warning-soft rounded-md transition shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-3 py-1.5 text-xs font-semibold text-white bg-warning-soft hover:bg-warning-soft rounded-md transition shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {seguimientoSaving ? 'Guardando...' : 'Guardar recordatorio'}
                       </button>
@@ -5966,7 +4139,7 @@ export default function PipelineVentasPage() {
                   </div>
                 )}
 
-                <div className="bg-surface border border-line focus-within:border-accent rounded-lg p-3 shadow-xs space-y-2 transition">
+                <div className="space-y-2">
                   <textarea
                     rows={2}
                     placeholder="Escribe un comentario... Usa @ para mencionar"
@@ -6031,7 +4204,7 @@ export default function PipelineVentasPage() {
                         handleSendChatMessage();
                       }
                     }}
-                    className="w-full bg-transparent text-ink font-medium text-sm focus:outline-none placeholder-gray-400 min-h-[50px] resize-none"
+                    className="w-full bg-transparent text-ink font-medium text-sm focus:outline-none placeholder:text-ink-muted min-h-[56px] resize-none"
                   />
 
                   {/* Fichas de archivos encolados para enviar con este comentario */}
@@ -6044,11 +4217,11 @@ export default function PipelineVentasPage() {
                         >
                           <Paperclip className="w-3.5 h-3.5 text-accent-ink shrink-0" />
                           <span className="font-medium truncate max-w-[160px]">{f.name}</span>
-                          <span className="t-micro text-ink-subtle font-mono">({Math.round(f.size / 1024)} KB)</span>
+                          <span className="t-caption t-num">({Math.round(f.size / 1024)} KB)</span>
                           <button
                             type="button"
                             onClick={() => setStagedChatFiles((prev) => prev.filter((_, i) => i !== idx))}
-                            className="text-ink-subtle hover:text-danger ml-1 font-bold text-xs"
+                            className="text-ink-subtle hover:text-danger ml-1 font-semibold text-xs"
                             title="Quitar archivo"
                           >
                             ✕
@@ -6059,8 +4232,8 @@ export default function PipelineVentasPage() {
                   )}
 
                   {/* Barra Inferior de Herramientas del Comentario */}
-                  <div className="flex items-center justify-between border-t border-line pt-2">
-                    <div className="flex items-center gap-2 text-ink-subtle">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1 text-ink-subtle">
                       {/* Botón Adjuntar Archivos al mensaje */}
                       <label className="p-1.5 hover:text-accent-ink hover:bg-surface-muted rounded-lg transition cursor-pointer" title="Adjuntar archivo(s) al mensaje">
                         <Paperclip className="w-4 h-4" />
@@ -6093,7 +4266,7 @@ export default function PipelineVentasPage() {
                           setIsSeguimientoMode(false);
                           setIsReclamoMode(!isReclamoMode);
                         }}
-                        className={`px-2.5 py-1 rounded-md transition flex items-center gap-1 text-xs font-bold ${
+                        className={`px-2.5 py-1 rounded-md transition flex items-center gap-1 text-xs font-semibold ${
                           isReclamoMode
                             ? 'bg-danger-soft text-white shadow-xs'
                             : 'text-ink-muted hover:text-danger hover:bg-danger-soft'
@@ -6107,7 +4280,7 @@ export default function PipelineVentasPage() {
                       <button
                         type="button"
                         onClick={() => (isSeguimientoMode ? setIsSeguimientoMode(false) : openSeguimientoPanel())}
-                        className={`px-2.5 py-1 rounded-md transition flex items-center gap-1 text-xs font-bold ${
+                        className={`px-2.5 py-1 rounded-md transition flex items-center gap-1 text-xs font-semibold ${
                           isSeguimientoMode
                             ? 'bg-warning-soft text-white shadow-xs'
                             : 'text-ink-muted hover:text-warning-ink hover:bg-warning-soft'
@@ -6137,10 +4310,10 @@ export default function PipelineVentasPage() {
                   </div>
                 </div>
               </div>
-              </OpportunityActivity>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
       {/* Cotización Modal Unificado */}
       <CotizacionModal
@@ -6425,16 +4598,16 @@ export default function PipelineVentasPage() {
                 Para cambiar la oportunidad <strong className="font-mono text-accent-ink">{abonoWarningModal.op.codigo}</strong> al estado de Venta Aprobada o Producción, se requiere registrar un abono equivalente a al menos el <strong className="text-warning-ink font-bold">50% o 100%</strong> del monto total.
               </p>
 
-              <div className="bg-surface-muted p-3.5 rounded-lg border border-line space-y-2 font-mono text-xs">
+              <div className="bg-surface-muted p-3.5 rounded-lg border border-line space-y-2 t-num text-xs">
                 <div className="flex justify-between text-ink-muted">
                   <span>Monto Total Venta:</span>
-                  <span className="font-bold text-ink">${abonoWarningModal.montoTotal.toLocaleString('es-CL')}</span>
+                  <span className="font-semibold text-ink">${abonoWarningModal.montoTotal.toLocaleString('es-CL')}</span>
                 </div>
                 <div className="flex justify-between text-ink-muted">
                   <span>Abonado actualmente:</span>
-                  <span className="font-bold text-warning-ink">${abonoWarningModal.montoAbonado.toLocaleString('es-CL')} ({abonoWarningModal.porcentajeActual}%)</span>
+                  <span className="font-semibold text-warning-ink">${abonoWarningModal.montoAbonado.toLocaleString('es-CL')} ({abonoWarningModal.porcentajeActual}%)</span>
                 </div>
-                <div className="flex justify-between text-accent-ink font-bold border-t border-line pt-2 text-xs">
+                <div className="flex justify-between text-accent-ink font-semibold border-t border-line pt-2 text-xs">
                   <span>Requerido mínimo (50%):</span>
                   <span>${Math.round(abonoWarningModal.montoTotal * 0.5).toLocaleString('es-CL')}</span>
                 </div>
@@ -6445,7 +4618,7 @@ export default function PipelineVentasPage() {
               <button
                 type="button"
                 onClick={() => setAbonoWarningModal(null)}
-                className="px-4 py-2 bg-surface-muted hover:bg-surface-muted text-ink font-bold rounded-md transition"
+                className="px-4 py-2 bg-surface-muted hover:bg-surface-muted text-ink font-semibold rounded-md transition"
               >
                 Entendido
               </button>
@@ -6454,19 +4627,7 @@ export default function PipelineVentasPage() {
                 onClick={() => {
                   const targetOp = abonoWarningModal.op;
                   setAbonoWarningModal(null);
-                  handleOpenOportunidad(targetOp);
-                  setOpenSections({
-                    contacto: false,
-                    productos: false,
-                    finanzas: true,
-                    antecedentes: false,
-                    visita: false,
-                    produccionEventos: false,
-                    produccionBitacora: false,
-                    produccionOc: false,
-                    reventaEventos: false,
-                    reventaOc: false,
-                  });
+                  handleOpenOportunidad(targetOp, 'cotizaciones');
                 }}
                 className="px-4 py-2 bg-accent hover:bg-accent-hover text-on-accent font-semibold rounded-md transition shadow-sm flex items-center gap-1.5"
               >

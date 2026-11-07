@@ -1,9 +1,11 @@
 'use client';
 
+/* eslint-disable react-hooks/set-state-in-effect, react-hooks/purity */
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { createClient } from '../lib/supabase/client';
 import { useAuth } from '../lib/context/AuthContext';
-import { Cliente, Cotizacion, CotizacionItem, OportunidadVenta, PRODUCTOS_HORMIGLASS } from '../lib/types';
+import { Cliente, Cotizacion, CotizacionItem, OportunidadVenta, ProductoCatalogo, PRODUCTOS_HORMIGLASS } from '../lib/types';
 import { logSistema } from '../lib/logger';
 import {
   FileText,
@@ -17,15 +19,18 @@ import {
   AlertTriangle,
   Calendar,
   Tag,
+  Search,
+  X,
 } from 'lucide-react';
 import { mensajeError } from '../lib/errores';
-import { Button, CodeStamp } from './ui/crm';
+import { Button, CodeStamp, IconButton } from './ui/crm';
 
 interface CotizacionModalProps {
   isOpen: boolean;
   onClose: () => void;
   clienteIdInicial?: string;
   oportunidadIdInicial?: string;
+  editCotizacionIdInicial?: string;
   initialCotizacion?: Cotizacion | null;
   onSuccess?: () => void;
 }
@@ -35,6 +40,7 @@ export function CotizacionModal({
   onClose,
   clienteIdInicial,
   oportunidadIdInicial,
+  editCotizacionIdInicial,
   initialCotizacion,
   onSuccess,
 }: CotizacionModalProps) {
@@ -43,7 +49,9 @@ export function CotizacionModal({
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
+  const [catalogo, setCatalogo] = useState<ProductoCatalogo[]>([]);
   const [clienteId, setClienteId] = useState<string>(clienteIdInicial || '');
+  const [clientSearchQuery, setClientSearchQuery] = useState<string>('');
   const [oportunidadId, setOportunidadId] = useState<string>(oportunidadIdInicial || '');
 
   // Meta fields
@@ -124,20 +132,91 @@ export function CotizacionModal({
 
   useEffect(() => {
     async function loadAux() {
-      const [{ data: cData }, { data: oData }] = await Promise.all([
+      const [{ data: cData }, { data: oData }, { data: pData }] = await Promise.all([
         supabase.from('clientes').select('*').order('nombre'),
         supabase.from('oportunidades').select('*').order('created_at', { ascending: false }),
+        supabase.from('catalogo_productos').select('*').eq('activo', true).order('nombre'),
       ]);
-      setClientes((cData || []) as Cliente[]);
+      const loadedClientes = (cData || []) as Cliente[];
+      setClientes(loadedClientes);
       setOportunidades((oData || []) as OportunidadVenta[]);
+      setCatalogo((pData || []) as ProductoCatalogo[]);
+
+      if (!initialCotizacion && !clienteIdInicial && loadedClientes.length > 0) {
+        setClienteId((prev) => prev || loadedClientes[0].id);
+      }
+
+      if (editCotizacionIdInicial && !initialCotizacion) {
+        const { data: baseCot } = await supabase
+          .from('cotizaciones')
+          .select('*, items:cotizacion_items(*)')
+          .eq('id', editCotizacionIdInicial)
+          .single();
+        if (baseCot) {
+          const cot = baseCot as Cotizacion;
+          setClienteId(cot.cliente_id);
+          setOportunidadId(cot.oportunidad_id || '');
+          setReferenciaCliente(cot.referencia_cliente || '');
+          if (cot.fecha_validez) setFechaValidez(cot.fecha_validez.split('T')[0]);
+          if (cot.plazo_entrega) setPlazoEntrega(cot.plazo_entrega);
+          if (cot.condiciones_pago) setCondicionesPago(cot.condiciones_pago);
+          if (cot.observaciones) setObservaciones(cot.observaciones);
+          if (cot.items && cot.items.length > 0) {
+            setItems(
+              cot.items.map((it) => ({
+                producto: it.producto,
+                producto_catalogo_id: it.producto_catalogo_id,
+                cantidad: it.cantidad,
+                precio_unitario: it.precio_unitario,
+                descuento_porcentaje: it.descuento_porcentaje || 0,
+                total_item: it.total_item,
+              }))
+            );
+          }
+        }
+      }
     }
     if (isOpen) {
       loadAux();
     }
-  }, [isOpen, supabase]);
+  }, [isOpen, supabase, initialCotizacion, clienteIdInicial, editCotizacionIdInicial]);
 
   const clientOportunidades = oportunidades.filter((o) => o.cliente_id === clienteId);
   const selectedClient = clientes.find((c) => c.id === clienteId);
+  const filteredClientes = clientes.filter((c) => {
+    if (!clientSearchQuery.trim()) return true;
+    const q = clientSearchQuery.toLowerCase();
+    return (
+      c.nombre.toLowerCase().includes(q) ||
+      (c.apellido_razon_social && c.apellido_razon_social.toLowerCase().includes(q)) ||
+      (c.rut && c.rut.toLowerCase().includes(q)) ||
+      (c.correo && c.correo.toLowerCase().includes(q))
+    );
+  });
+
+  const selectCatalogItem = (index: number, productoCatalogoId: string) => {
+    const prod = catalogo.find((p) => p.id === productoCatalogoId);
+    if (!prod) return;
+
+    setItems((prev) => {
+      const updated = [...prev];
+      const current = updated[index];
+      const precio = Number(prod.precio_referencia) || 0;
+      const cant = Number(current.cantidad) || 1;
+      const dto = Number(current.descuento_porcentaje) || 0;
+      const subtotal = cant * precio;
+      const totalItem = Math.round(subtotal - subtotal * (dto / 100));
+
+      updated[index] = {
+        ...current,
+        producto_catalogo_id: prod.id,
+        producto: `${prod.nombre} (${prod.unidad})${prod.codigo ? ` · ${prod.codigo}` : ''}`,
+        precio_unitario: precio,
+        total_item: totalItem,
+      };
+      return updated;
+    });
+  };
 
   const handleAddItem = () => {
     setItems((prev) => [
@@ -312,15 +391,20 @@ export function CotizacionModal({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
-  return (
-    <div className="fixed inset-0 bg-ink/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 z-50">
-      <div className="bg-surface border border-line rounded-lg max-w-3xl w-full p-5 sm:p-6 space-y-4 shadow-sm text-ink max-h-[92vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-line pb-3">
-          <h3 className="text-base font-semibold text-ink flex items-center gap-2">
-            <FileText className="w-5 h-5 text-accent-ink" />
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] bg-ink/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="bg-surface border border-line rounded-panel max-w-3xl w-full shadow-[var(--hg-shadow-popover)] text-ink max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
+        {/* Header Fijo */}
+        <header className="shrink-0 flex items-center justify-between border-b border-line-subtle px-5 py-4 bg-surface">
+          <h3 className="t-section flex items-center gap-2">
+            <FileText className="w-5 h-5 text-accent-ink shrink-0" />
             <span>
               {initialCotizacion ? (
                 <>Editar Cotización <CodeStamp>{initialCotizacion.numero_cotizacion}</CodeStamp></>
@@ -329,26 +413,27 @@ export function CotizacionModal({
               )}
             </span>
           </h3>
-          <button onClick={onClose} className="text-ink-muted hover:text-ink text-lg font-semibold px-2 py-1">
-            ✕
-          </button>
-        </div>
+          <IconButton icon={X} label="Cerrar" onClick={onClose} />
+        </header>
 
-        {errorMsg && (
-          <div className="bg-danger/10 border border-danger/30 text-danger p-3 rounded-md text-xs font-semibold">
-            {errorMsg}
-          </div>
-        )}
+        {/* Cuerpo Scrollable */}
+        <form id="form-cotizacion-modal" onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4 text-xs">
+          {errorMsg && (
+            <div className="bg-danger-soft border border-danger-line text-danger p-3 rounded-md text-xs font-semibold flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {/* Cliente & Oportunidad vinculada */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-surface-muted p-4 rounded-lg border border-line">
             {/* Cliente */}
             <div className="relative">
               <label className="block font-semibold text-ink mb-1">Cliente *</label>
-              <div
+              <button
+                type="button"
                 onClick={() => setIsClientSearchOpen(!isClientSearchOpen)}
-                className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink font-medium flex items-center justify-between cursor-pointer hover:border-accent transition"
+                className="hg-field flex items-center justify-between text-left font-medium cursor-pointer"
               >
                 {selectedClient ? (
                   <span className="font-semibold text-ink truncate">{selectedClient.nombre}</span>
@@ -356,11 +441,21 @@ export function CotizacionModal({
                   <span className="text-ink-muted">Seleccionar Cliente...</span>
                 )}
                 <ChevronDown className="w-4 h-4 text-ink-muted shrink-0" />
-              </div>
+              </button>
 
               {isClientSearchOpen && (
-                <div className="absolute left-0 right-0 mt-1 bg-surface border border-line rounded-lg shadow-sm z-50 p-2 max-h-52 overflow-y-auto space-y-1">
-                  {clientes.map((c) => (
+                <div className="absolute left-0 right-0 mt-1 bg-surface border border-line rounded-lg shadow-sm z-50 p-2 max-h-60 overflow-y-auto space-y-1">
+                  <div className="relative mb-1.5">
+                    <Search className="w-3.5 h-3.5 text-ink-muted absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={clientSearchQuery}
+                      onChange={(e) => setClientSearchQuery(e.target.value)}
+                      placeholder="Buscar por nombre o RUT..."
+                      className="w-full bg-surface-muted border border-line rounded-md pl-8 pr-2.5 py-1.5 text-xs text-ink focus:outline-none focus:border-accent"
+                    />
+                  </div>
+                  {filteredClientes.map((c) => (
                     <div
                       key={c.id}
                       onClick={() => {
@@ -377,6 +472,9 @@ export function CotizacionModal({
                       {c.id === clienteId && <Check className="w-4 h-4 text-accent-ink" />}
                     </div>
                   ))}
+                  {filteredClientes.length === 0 && (
+                    <p className="text-[11px] text-ink-muted text-center py-2">Sin clientes coincidentes</p>
+                  )}
                 </div>
               )}
             </div>
@@ -387,7 +485,7 @@ export function CotizacionModal({
               <select
                 value={oportunidadId}
                 onChange={(e) => setOportunidadId(e.target.value)}
-                className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink font-medium focus:outline-none focus:border-accent"
+                className="hg-field font-medium"
               >
                 <option value="">-- Sin Oportunidad Vinculada --</option>
                 {clientOportunidades.map((op) => (
@@ -411,7 +509,7 @@ export function CotizacionModal({
                 value={referenciaCliente}
                 onChange={(e) => setReferenciaCliente(e.target.value)}
                 placeholder="Ej: NEMICEPS o PROY-2026"
-                className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink font-medium focus:outline-none focus:border-accent"
+                className="hg-field font-medium"
               />
             </div>
 
@@ -424,14 +522,14 @@ export function CotizacionModal({
                 type="date"
                 value={fechaValidez}
                 onChange={(e) => setFechaValidez(e.target.value)}
-                className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink font-medium focus:outline-none focus:border-accent"
+                className="hg-field font-medium"
               />
             </div>
           </div>
 
           {/* Lista de Ítems / Productos con Dto % */}
           <div className="space-y-3 bg-surface p-4 rounded-lg border border-line">
-            <div className="flex items-center justify-between border-b border-line-subtle pb-2">
+            <div className="flex items-center justify-between border-b border-line-subtle pb-2.5">
               <span className="font-semibold text-ink flex items-center gap-1.5">
                 <Calculator className="w-4 h-4 text-accent-ink" />
                 <span>Partidas y Productos (Valores en CLP)</span>
@@ -446,74 +544,108 @@ export function CotizacionModal({
               </Button>
             </div>
 
-            <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
-              {items.map((item, idx) => (
-                <div key={idx} className="p-3 bg-surface-muted rounded-lg border border-line space-y-2">
-                  <div className="flex gap-2 items-center">
-                    <textarea
-                      rows={2}
-                      value={item.producto}
-                      onChange={(e) => handleItemChange(idx, 'producto', e.target.value)}
-                      placeholder="Descripción del Producto / Servicio..."
-                      className="flex-1 bg-surface border border-line rounded-md px-3 py-1.5 text-xs font-medium text-ink focus:outline-none focus:border-accent"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveItem(idx)}
-                      disabled={items.length === 1}
-                      className="p-2 text-danger hover:bg-danger/10 rounded-md transition disabled:opacity-30"
-                      title="Eliminar partida"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+            <div className="space-y-3">
+              {items.map((item, idx) => {
+                const selectedCatalogoProd = catalogo.find((p) => p.id === item.producto_catalogo_id);
+                return (
+                  <div key={idx} className="p-3.5 bg-surface-muted rounded-lg border border-line space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                        Partida #{idx + 1}
+                      </span>
+                      <div className="flex items-center gap-2 flex-1 justify-end">
+                        {catalogo.length > 0 && (
+                          <select
+                            aria-label={`Producto del catálogo ${idx + 1}`}
+                            value={item.producto_catalogo_id || ''}
+                            onChange={(e) => selectCatalogItem(idx, e.target.value)}
+                            className="w-full sm:w-72 bg-surface border border-line rounded-md px-2.5 py-1.5 text-xs font-medium text-ink focus:outline-none focus:border-accent"
+                          >
+                            <option value="">-- Seleccionar desde Catálogo (Opcional) --</option>
+                            {catalogo.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                [{p.codigo}] {p.nombre} — ${(p.precio_referencia || 0).toLocaleString('es-CL')}
+                                {p.requiere_revision ? ' (Verificar Bottai)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(idx)}
+                          disabled={items.length === 1}
+                          className="p-1.5 text-danger hover:bg-danger-soft rounded-md transition disabled:opacity-30 shrink-0"
+                          title="Eliminar partida"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
 
-                  <div className="grid grid-cols-4 gap-2">
+                    {selectedCatalogoProd?.requiere_revision && (
+                      <div className="bg-warning-soft border border-warning-line rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-warning flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        <span>Precio referencial OCR (Bottai) — Verificar con lista oficial antes de emitir.</span>
+                      </div>
+                    )}
+
                     <div>
-                      <label className="block text-[11px] text-ink-muted font-medium mb-0.5">Cantidad</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.cantidad}
-                        onChange={(e) => handleItemChange(idx, 'cantidad', Number(e.target.value))}
-                        className="w-full bg-surface border border-line rounded-md px-2 py-1 text-center font-semibold text-ink t-num"
+                      <textarea
+                        rows={2}
+                        value={item.producto}
+                        onChange={(e) => handleItemChange(idx, 'producto', e.target.value)}
+                        placeholder="Descripción de la partida o producto..."
+                        className="w-full bg-surface border border-line rounded-md px-3 py-2 text-xs font-medium text-ink focus:outline-none focus:border-accent"
                       />
                     </div>
-                    <div>
-                      <label className="block text-[11px] text-ink-muted font-medium mb-0.5">P.U. Neto ($)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={item.precio_unitario}
-                        onChange={(e) => handleItemChange(idx, 'precio_unitario', Number(e.target.value))}
-                        className="w-full bg-surface border border-line rounded-md px-2 py-1 text-right font-semibold text-ink t-num"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-ink-muted font-medium mb-0.5">Dto. %</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={item.descuento_porcentaje || 0}
-                        onChange={(e) => handleItemChange(idx, 'descuento_porcentaje', Number(e.target.value))}
-                        className="w-full bg-surface border border-line rounded-md px-2 py-1 text-center font-semibold text-ink t-num"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-ink-muted font-medium mb-0.5">Base Imp. ($)</label>
-                      <div className="bg-surface border border-line rounded-md px-2 py-1 text-right t-num font-semibold text-ink">
-                        ${(item.total_item || 0).toLocaleString('es-CL')}
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] text-ink-muted font-medium mb-1">Cantidad</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.cantidad}
+                          onChange={(e) => handleItemChange(idx, 'cantidad', Number(e.target.value))}
+                          className="w-full bg-surface border border-line rounded-md px-2.5 py-1.5 text-center font-semibold text-ink t-num"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-ink-muted font-medium mb-1">P.U. Neto ($)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={item.precio_unitario}
+                          onChange={(e) => handleItemChange(idx, 'precio_unitario', Number(e.target.value))}
+                          className="w-full bg-surface border border-line rounded-md px-2.5 py-1.5 text-right font-semibold text-ink t-num"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-ink-muted font-medium mb-1">Dto. %</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={item.descuento_porcentaje || 0}
+                          onChange={(e) => handleItemChange(idx, 'descuento_porcentaje', Number(e.target.value))}
+                          className="w-full bg-surface border border-line rounded-md px-2.5 py-1.5 text-center font-semibold text-ink t-num"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-ink-muted font-medium mb-1">Base Imp. ($)</label>
+                        <div className="bg-surface border border-line rounded-md px-2.5 py-1.5 text-right t-num font-semibold text-ink">
+                          ${(item.total_item || 0).toLocaleString('es-CL')}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Totales desglosados */}
             <div className="flex flex-col items-end space-y-1 pt-2 border-t border-line-subtle">
-              <div className="w-72 space-y-1 text-xs bg-surface-muted p-3 rounded-md border border-line">
+              <div className="w-full sm:w-72 space-y-1 text-xs bg-surface-muted p-3 rounded-md border border-line">
                 <div className="flex justify-between text-ink-muted">
                   <span>Total neto antes descuento:</span>
                   <span className="t-num font-semibold text-ink">${totalNetoAntesDescuento.toLocaleString('es-CL')}</span>
@@ -547,7 +679,7 @@ export function CotizacionModal({
                 value={plazoEntrega}
                 onChange={(e) => setPlazoEntrega(e.target.value)}
                 placeholder="Inmediato / 5 días hábiles"
-                className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink font-medium"
+                className="hg-field font-medium"
               />
             </div>
             <div>
@@ -557,7 +689,7 @@ export function CotizacionModal({
                 value={condicionesPago}
                 onChange={(e) => setCondicionesPago(e.target.value)}
                 placeholder="Acuse de recibo / 50% abono"
-                className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink font-medium"
+                className="hg-field font-medium"
               />
             </div>
             <div className="sm:col-span-2">
@@ -573,32 +705,33 @@ export function CotizacionModal({
               />
             </div>
           </div>
-
-          {/* Botones de acción */}
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
-            <Button
-              variant="secondary"
-              onClick={onClose}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="primary"
-              type="submit"
-              disabled={loading}
-            >
-              <Save className="w-4 h-4" />
-              <span>{loading ? 'Guardando...' : initialCotizacion ? 'Guardar Cambios' : 'Emitir Cotización'}</span>
-            </Button>
-          </div>
         </form>
+
+        {/* Footer Fijo con Botones de Acción */}
+        <footer className="shrink-0 flex items-center justify-end gap-2 border-t border-line-subtle bg-app px-5 py-3.5">
+          <Button
+            variant="secondary"
+            onClick={onClose}
+          >
+            Cancelar
+          </Button>
+          <Button
+            variant="primary"
+            type="submit"
+            form="form-cotizacion-modal"
+            disabled={loading}
+          >
+            <Save className="w-4 h-4" />
+            <span>{loading ? 'Guardando...' : initialCotizacion ? 'Guardar Cambios' : 'Emitir Cotización'}</span>
+          </Button>
+        </footer>
 
         {/* Modal de confirmación de versionado */}
         {showVersionConfirmModal && initialCotizacion && (
-          <div className="fixed inset-0 bg-ink/70 backdrop-blur-xs flex items-center justify-center p-4 z-60">
-            <div className="bg-surface border border-line rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-ink">
+          <div className="fixed inset-0 bg-ink/60 backdrop-blur-xs flex items-center justify-center p-4 z-[110]">
+            <div className="bg-surface border border-line rounded-panel max-w-md w-full p-6 space-y-4 shadow-[var(--hg-shadow-popover)] text-ink">
               <div className="flex items-center gap-3 text-warning">
-                <AlertTriangle className="w-6 h-6" />
+                <AlertTriangle className="w-6 h-6 shrink-0" />
                 <h4 className="font-semibold text-base text-ink">Confirmar Modificación de Cotización</h4>
               </div>
               <p className="text-xs text-ink-muted leading-relaxed">
@@ -633,6 +766,7 @@ export function CotizacionModal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
