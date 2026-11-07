@@ -262,6 +262,11 @@ EXECUTE FUNCTION public.trg_sync_visitas_terreno_to_oportunidad();
 ALTER TABLE public.actividades_op
   ADD COLUMN IF NOT EXISTS cliente_id UUID REFERENCES public.clientes(id) ON DELETE SET NULL;
 
+-- Campos de recordatorio (misma forma que notas_actividad) para unir ambos flujos en la vista
+ALTER TABLE public.actividades_op
+  ADD COLUMN IF NOT EXISTS fecha_recordatorio timestamptz,
+  ADD COLUMN IF NOT EXISTS hora_recordatorio text;
+
 CREATE INDEX IF NOT EXISTS idx_actividades_op_cliente_id
   ON public.actividades_op(cliente_id);
 
@@ -311,7 +316,7 @@ SELECT
   n.contenido,
   n.fecha_recordatorio,
   n.hora_recordatorio,
-  COALESCE(n.fecha, n.created_at) AS fecha_evento
+  n.fecha AS fecha_evento
 FROM public.notas_actividad n
 LEFT JOIN public.usuarios u ON u.id = n.usuario_id
 UNION ALL
