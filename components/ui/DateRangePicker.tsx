@@ -8,12 +8,12 @@ import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
    Al pulsar el mes o el año se abre un selector para saltar rápido. Valores YYYY-MM-DD ('' = sin límite). */
 
 const pad = (n: number) => String(n).padStart(2, '0');
-const toKey = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const fromKey = (k: string) => {
+export const toKey = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+export const fromKey = (k: string) => {
   const [y, m, d] = k.split('-').map(Number);
   return new Date(y, m - 1, d);
 };
-const firstOfMonth = (k: string) => {
+export const firstOfMonth = (k: string) => {
   const base = k ? fromKey(k) : new Date();
   return new Date(base.getFullYear(), base.getMonth(), 1);
 };
@@ -29,7 +29,7 @@ function buildGrid(month: Date) {
 
 type Mode = 'days' | 'months' | 'years';
 
-function CalendarPane({
+export function CalendarPane({
   title,
   view,
   onView,
@@ -40,12 +40,12 @@ function CalendarPane({
   max,
   onPick,
 }: {
-  title: string;
+  title?: string;
   view: Date;
   onView: (d: Date) => void;
   value: string;
-  rangeFrom: string;
-  rangeTo: string;
+  rangeFrom?: string;
+  rangeTo?: string;
   min?: string;
   max?: string;
   onPick: (key: string) => void;
@@ -63,7 +63,7 @@ function CalendarPane({
 
   return (
     <div className="min-w-0 flex-1">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">{title}</p>
+      {title && <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">{title}</p>}
 
       <div className="flex items-center justify-between">
         <button

@@ -231,7 +231,7 @@ export function RecordLayout({ sidebar, children, aside }: {
 export function PropertyPanel({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="hg-panel p-4">
-      <h2 className="t-caption mb-3">{title}</h2>
+      <h2 className="t-section mb-3 border-b border-line-subtle pb-2">{title}</h2>
       <div className="space-y-3">{children}</div>
     </section>
   );
@@ -396,31 +396,8 @@ export const TextInput = React.forwardRef<HTMLInputElement, React.InputHTMLAttri
   },
 );
 
-export function Select({
-  className,
-  selectClassName,
-  children,
-  ...props
-}: React.SelectHTMLAttributes<HTMLSelectElement> & { selectClassName?: string }) {
-  return (
-    <div className={clsx('relative', className)}>
-      <select
-        className={clsx(
-          'hg-field appearance-none pr-8 cursor-pointer transition-colors',
-          selectClassName,
-        )}
-        {...props}
-      >
-        {children}
-      </select>
-      <ChevronDown
-        size={14}
-        aria-hidden
-        className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted"
-      />
-    </div>
-  );
-}
+import { Select } from './FormControls';
+export { Select };
 
 /** Filtro con etiqueta propia (no "Origen: Todos" dentro del valor). */
 export function FilterSelect({ label, className, children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement> & { label: string }) {
@@ -610,25 +587,64 @@ export function ActionMenu({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ right: number; top?: number; bottom?: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    function close(event: MouseEvent | KeyboardEvent) {
-      if (event instanceof KeyboardEvent ? event.key === 'Escape' : !ref.current?.contains(event.target as Node)) setOpen(false);
+    function close(event: Event) {
+      if (event instanceof KeyboardEvent) {
+        if (event.key === 'Escape') setOpen(false);
+        return;
+      }
+      const target = event.target as Node;
+      if (event.type === 'scroll' && menuRef.current?.contains(target)) return;
+      if (event.type === 'mousedown' && (ref.current?.contains(target) || menuRef.current?.contains(target))) return;
+      setOpen(false);
     }
     document.addEventListener('mousedown', close);
     document.addEventListener('keydown', close);
-    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', close); };
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
   }, [open]);
+
+  const toggle = () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    const rect = ref.current?.getBoundingClientRect();
+    if (rect) {
+      const up = window.innerHeight - rect.bottom < 200 && rect.top > 200;
+      setPos({
+        right: Math.max(8, window.innerWidth - rect.right),
+        ...(up ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 }),
+      });
+    }
+    setOpen(true);
+  };
 
   return (
     <div ref={ref} className="relative inline-flex">
-      <IconButton icon={Icon} label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)} />
-      {open && (
-        <div role="menu" onClick={() => setOpen(false)} className="absolute right-0 top-full z-30 mt-1 min-w-48 rounded-panel border border-line bg-surface p-1 shadow-[var(--hg-shadow-popover)]">
+      <IconButton icon={Icon} label={label} aria-haspopup="menu" aria-expanded={open} onClick={toggle} />
+      {open && pos && createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          onClick={() => setOpen(false)}
+          style={{ position: 'fixed', ...pos }}
+          className="z-[130] min-w-48 rounded-panel border border-line bg-surface p-1 shadow-[var(--hg-shadow-popover)]"
+        >
           {children}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
