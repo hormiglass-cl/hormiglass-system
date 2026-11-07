@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { useBreadcrumb } from '../../../lib/context/BreadcrumbContext';
 import { createClient } from '../../../lib/supabase/client';
 import { useAuth } from '../../../lib/context/AuthContext';
 import {
@@ -26,13 +27,15 @@ import {
   RecurrenciaRecordatorio,
   SeccionAdministracionEmpresa,
   ROL_NOMBRE,
+  ROLES_ASIGNABLES,
+  UserRole,
   OportunidadVenta,
 } from '../../../lib/types';
+import { mensajeError } from '../../../lib/errores';
 import { completeRecordatorio } from '../../../lib/recordatorios';
 import {
   ArrowLeft,
   Edit,
-  DollarSign,
   Coins,
   FileText,
   Clock,
@@ -41,6 +44,8 @@ import {
   Plus,
   Trash2,
   ExternalLink,
+  MoreHorizontal,
+  Check,
   MessageSquare,
   Lock,
   Send,
@@ -48,14 +53,13 @@ import {
   UserRound,
   Link2,
   Circle,
+  Hourglass,
 } from 'lucide-react';
 import { TODAS_COMUNAS_CHILE } from '../../../lib/chile-data';
 import {
-  PageHeader,
   RecordLayout,
   PropertyPanel,
   Panel,
-  Tabs,
   Button,
   IconButton,
   StatusBadge,
@@ -67,6 +71,8 @@ import {
   Tone,
 } from '../../../components/ui/crm';
 import { useConfirm, useToast } from '../../../components/ui/feedback';
+import { MetricCard } from '../../../components/ui/MetricCard';
+import { DateInput } from '../../../components/ui/FormControls';
 
 const DISPONIBILIDAD_LABELS: Record<EstadoDisponibilidad, string> = {
   disponible: 'Disponible',
@@ -75,15 +81,6 @@ const DISPONIBILIDAD_LABELS: Record<EstadoDisponibilidad, string> = {
   licencia: 'Licencia médica',
   vacaciones: 'Vacaciones',
   falta: 'Falta / ausente',
-};
-
-const DISPONIBILIDAD_TONE: Record<EstadoDisponibilidad, Tone> = {
-  disponible: 'success',
-  en_terreno: 'info',
-  permiso: 'warning',
-  licencia: 'accent',
-  vacaciones: 'neutral',
-  falta: 'danger',
 };
 
 const CATEGORIAS_DOCUMENTOS: { id: CategoriaDocumentoTrabajador; label: string }[] = [
@@ -120,16 +117,104 @@ const ASISTENCIA_TONE: Record<EstadoAsistencia, Tone> = {
   ausente_injustificado: 'danger',
 };
 
+/** Menú ⋯ para elegir qué tipo de documentos mostrar. */
+function DocumentosFiltroMenu({
+  value,
+  onChange,
+  total,
+  counts,
+}: {
+  value: string;
+  onChange: (value: never) => void;
+  total: number;
+  counts: Record<string, number>;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const opciones: { id: string; label: string; count: number }[] = [
+    { id: 'todas', label: 'Todos', count: total },
+    ...CATEGORIAS_DOCUMENTOS.map((c) => ({ id: c.id, label: c.label, count: counts[c.id] ?? 0 })),
+  ];
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        type="button"
+        aria-label="Elegir tipo de documentos"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="grid h-8 w-8 place-items-center rounded-lg border border-line-subtle bg-surface text-ink shadow-[var(--hg-shadow-card)] transition hover:bg-surface-muted"
+      >
+        <MoreHorizontal size={16} aria-hidden />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-30 mt-1.5 min-w-52 rounded-panel border border-line bg-surface p-1 shadow-[var(--hg-shadow-popover)]"
+        >
+          <div className="mb-1 border-b border-line-subtle px-2.5 py-1.5 text-[11px] font-semibold text-ink-muted">
+            Mostrar documentos de
+          </div>
+          {opciones.map((op) => (
+            <button
+              key={op.id}
+              type="button"
+              role="menuitemradio"
+              aria-checked={value === op.id}
+              onClick={() => {
+                onChange(op.id as never);
+                setOpen(false);
+              }}
+              className="flex w-full items-center justify-between gap-3 rounded-control px-2.5 py-1.5 text-left text-xs font-medium text-ink transition hover:bg-surface-muted"
+            >
+              <span className="flex items-center gap-2">
+                <span className="grid h-4 w-4 place-items-center">
+                  {value === op.id && <Check size={14} className="text-accent-ink" aria-hidden />}
+                </span>
+                {op.label}
+              </span>
+              <span className="t-num text-ink-muted">{op.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TrabajadorDetailPage() {
   const params = useParams();
   const workerId = params?.id as string;
-  const { currentUser } = useAuth();
+  const { currentUser, addUser, refreshUsers } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
   const supabase = useMemo(() => createClient(), []);
 
   const [loading, setLoading] = useState(true);
   const [trabajador, setTrabajador] = useState<Trabajador | null>(null);
+  const { setCustomTitle: setBreadcrumbTitle } = useBreadcrumb();
+  useEffect(() => {
+    setBreadcrumbTitle(trabajador?.nombre ?? null);
+    return () => setBreadcrumbTitle(null);
+  }, [trabajador?.nombre, setBreadcrumbTitle]);
   const [documentos, setDocumentos] = useState<TrabajadorDocumento[]>([]);
   const [permisos, setPermisos] = useState<TrabajadorPermisoAusencia[]>([]);
   const [liquidaciones, setLiquidaciones] = useState<TrabajadorLiquidacion[]>([]);
@@ -516,6 +601,82 @@ export default function TrabajadorDetailPage() {
       void supabase.removeChannel(channel);
     };
   }, [loadWorkerFullData, supabase, workerId]);
+
+  // Crear una cuenta CRM nueva para este colaborador (el usuario recibe el código por correo)
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [createUserError, setCreateUserError] = useState<string | null>(null);
+  const [newUserForm, setNewUserForm] = useState<{
+    email: string;
+    rol: UserRole;
+    calVisitas: boolean;
+    calProduccion: boolean;
+    calReventa: boolean;
+  }>({ email: '', rol: 'user', calVisitas: true, calProduccion: true, calReventa: true });
+
+  const openCreateUser = () => {
+    setCreateUserError(null);
+    setNewUserForm({ email: trabajador?.email ?? '', rol: 'user', calVisitas: true, calProduccion: true, calReventa: true });
+    setShowCreateUserModal(true);
+  };
+
+  const handleCreateUser = async () => {
+    if (!trabajador) return;
+    const email = newUserForm.email.trim();
+    if (!email || !email.includes('@')) {
+      setCreateUserError('Ingresa un correo válido: ahí llegará el código para crear la contraseña.');
+      return;
+    }
+    setCreatingUser(true);
+    setCreateUserError(null);
+    try {
+      // El alta enlaza por correo: la ficha debe tener el mismo correo para no duplicar al colaborador.
+      if ((trabajador.email ?? '').toLowerCase() !== email.toLowerCase()) {
+        const { error: emailError } = await supabase
+          .from('trabajadores')
+          .update({ email, updated_at: new Date().toISOString() })
+          .eq('id', trabajador.id);
+        if (emailError) throw emailError;
+      }
+
+      await addUser({
+        nombre: trabajador.nombre,
+        email,
+        rol: newUserForm.rol,
+        activo: true,
+        calendario_visitas: newUserForm.calVisitas,
+        calendario_produccion: newUserForm.calProduccion,
+        calendario_reventa: newUserForm.calReventa,
+        rut: trabajador.rut,
+      });
+
+      const { data: createdUser } = await supabase
+        .from('usuarios')
+        .select('id')
+        .ilike('email', email)
+        .maybeSingle();
+
+      // El alta automática cambia cargo y área; se conservan los de la ficha.
+      await supabase
+        .from('trabajadores')
+        .update({
+          usuario_id: createdUser?.id ?? null,
+          cargo: trabajador.cargo,
+          area: trabajador.area,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', trabajador.id);
+
+      await refreshUsers();
+      setShowCreateUserModal(false);
+      toast({ message: `Cuenta creada. ${email} recibirá un código para definir su contraseña.`, tone: 'success' });
+      void loadWorkerFullData();
+    } catch (err) {
+      setCreateUserError(mensajeError(err, 'No se pudo crear la cuenta CRM.'));
+    } finally {
+      setCreatingUser(false);
+    }
+  };
 
   // Vincular o desvincular cuenta de usuario
   const handleLinkUser = async (newUsuarioId: string | null) => {
@@ -1092,7 +1253,7 @@ export default function TrabajadorDetailPage() {
     };
   }, [comisionesVentas]);
 
-  const canManageComisiones = currentUser?.rol === 'admin' || currentUser?.rol === 'finanzas';
+  const canManageComisiones = currentUser?.rol === 'admin';
 
   // Usuario vinculado en el CRM
   const linkedUsuario = useMemo(() => {
@@ -1126,106 +1287,79 @@ export default function TrabajadorDetailPage() {
 
   return (
     <div className="space-y-6">
-      {/* 1. CABECERA & ACCIÓN PRINCIPAL */}
-      <PageHeader
-        title={
-          <div className="flex flex-wrap items-center gap-3">
-            <span>{trabajador.nombre}</span>
-            <CodeStamp title={`RUT: ${trabajador.rut}`}>{trabajador.rut || 'Sin RUT'}</CodeStamp>
-            <StatusBadge tone={DISPONIBILIDAD_TONE[trabajador.estado_disponibilidad]}>
-              {DISPONIBILIDAD_LABELS[trabajador.estado_disponibilidad]}
-            </StatusBadge>
-          </div>
-        }
-        description={`${trabajador.cargo} · ${trabajador.area}`}
-        actions={
-          <>
-            <Link href="/rrhh">
-              <Button variant="secondary" icon={ArrowLeft}>
-                Directorio
-              </Button>
-            </Link>
-            <Button
-              variant="primary"
-              icon={Edit}
-              onClick={() => setShowEditInfoModal(true)}
-            >
-              Editar ficha
-            </Button>
-          </>
-        }
-      />
-
       {/* 2. RECORD LAYOUT CON 3 COLUMNAS */}
       <RecordLayout
         sidebar={
           <div className="space-y-4">
             {/* Panel Principal de Perfil */}
-            <Panel className="p-4 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-control bg-accent-soft text-accent-ink font-semibold">
-                  <UserRound size={24} aria-hidden />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-semibold text-ink truncate">{trabajador.nombre}</h3>
-                  <p className="t-caption text-ink-muted truncate">{trabajador.cargo}</p>
-                </div>
-              </div>
-
-              {/* Selector de Disponibilidad */}
-              <div className="border-t border-line-subtle pt-3 space-y-1.5">
-                <label className="t-caption font-semibold block text-ink-muted uppercase tracking-wider">
-                  Disponibilidad:
-                </label>
-                <Select
-                  value={trabajador.estado_disponibilidad}
-                  onChange={(e) =>
-                    void handleUpdateDisponibilidad(e.target.value as EstadoDisponibilidad)
-                  }
-                  className="text-xs"
+            <Panel>
+              <div className="p-4 space-y-4">
+                <Link
+                  href="/rrhh"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-muted transition-colors hover:text-ink"
                 >
-                  {Object.entries(DISPONIBILIDAD_LABELS).map(([estado, label]) => (
-                    <option key={estado} value={estado}>
-                      {label}
-                    </option>
+                  <ArrowLeft size={15} aria-hidden />
+                  <span>Volver</span>
+                </Link>
+
+                <div className="flex flex-col items-center text-center space-y-2">
+                  <div
+                    aria-hidden
+                    className="grid h-16 w-16 place-items-center rounded-full border border-accent-line bg-accent-soft text-xl font-semibold text-accent-ink select-none"
+                  >
+                    <UserRound size={30} aria-hidden />
+                  </div>
+                  <div className="min-w-0 max-w-full">
+                    <h2 className="t-section text-ink truncate">{trabajador.nombre}</h2>
+                    <p className="t-caption text-ink-muted truncate">
+                      {[trabajador.cargo, trabajador.area].filter(Boolean).join(' · ') || 'Sin cargo'}
+                    </p>
+                    <div className="mt-1">
+                      <CodeStamp title={`RUT: ${trabajador.rut}`}>{trabajador.rut || 'Sin RUT'}</CodeStamp>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Acciones rápidas */}
+                <div className="grid grid-cols-4 gap-1 text-center">
+                  {[
+                    { label: 'Permiso', icon: Clock, onClick: () => setShowNewPermisoModal(true) },
+                    { label: 'Documento', icon: FileText, onClick: () => setShowNewDocModal(true) },
+                    { label: 'Nota', icon: MessageSquare, onClick: () => setActiveTab('bitacora') },
+                    { label: 'Editar', icon: Edit, onClick: () => setShowEditInfoModal(true) },
+                  ].map(({ label, icon: Icon, onClick }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={onClick}
+                      className="group flex flex-col items-center gap-1 text-ink-muted transition-colors hover:text-ink"
+                    >
+                      <span className="grid h-9 w-9 place-items-center rounded-full border border-line bg-surface transition-colors group-hover:bg-surface-muted">
+                        <Icon size={16} aria-hidden />
+                      </span>
+                      <span className="t-micro font-semibold">{label}</span>
+                    </button>
                   ))}
-                </Select>
-              </div>
+                </div>
 
-              {/* Acciones Rápidas */}
-              <div className="border-t border-line-subtle pt-3 grid grid-cols-2 gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={Clock}
-                  onClick={() => setShowNewPermisoModal(true)}
-                >
-                  Permiso
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={FileText}
-                  onClick={() => setShowNewDocModal(true)}
-                >
-                  Documento
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={DollarSign}
-                  onClick={() => setShowNewLiquidacionModal(true)}
-                >
-                  Liquidación
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={MessageSquare}
-                  onClick={() => setActiveTab('bitacora')}
-                >
-                  Nota
-                </Button>
+                <div className="-mx-4 border-t border-line-subtle" />
+
+                <div className="space-y-1 text-xs">
+                  <span className="t-caption text-ink-muted block">Disponibilidad</span>
+                  <Select
+                    value={trabajador.estado_disponibilidad}
+                    onChange={(e) =>
+                      void handleUpdateDisponibilidad(e.target.value as EstadoDisponibilidad)
+                    }
+                    className="hg-field-compact w-full"
+                  >
+                    {Object.entries(DISPONIBILIDAD_LABELS).map(([estado, label]) => (
+                      <option key={estado} value={estado}>
+                        {label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
               </div>
             </Panel>
 
@@ -1355,20 +1489,25 @@ export default function TrabajadorDetailPage() {
               ) : (
                 <div className="space-y-3 pt-1">
                   <p className="t-caption text-ink-muted">
-                    Colaborador operativo sin acceso directo al CRM. Puedes vincularlo a un usuario registrado.
+                    Sin acceso al CRM. Crea su usuario (recibirá un código por correo) o vincula uno existente.
                   </p>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={Link2}
-                    className="w-full"
-                    onClick={() => {
-                      setSelectedLinkUserId('');
-                      setShowLinkUserModal(true);
-                    }}
-                  >
-                    Vincular cuenta CRM
-                  </Button>
+                  <div className="grid grid-cols-1 gap-2">
+                    <Button variant="primary" size="sm" icon={Plus} className="w-full" onClick={openCreateUser}>
+                      Crear usuario
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={Link2}
+                      className="w-full"
+                      onClick={() => {
+                        setSelectedLinkUserId('');
+                        setShowLinkUserModal(true);
+                      }}
+                    >
+                      Vincular existente
+                    </Button>
+                  </div>
                 </div>
               )}
             </PropertyPanel>
@@ -1435,77 +1574,73 @@ export default function TrabajadorDetailPage() {
       >
         <div className="space-y-4">
           {/* Barra de Pestañas */}
-          <Tabs
-            active={activeTab}
-            onChange={(id) => setActiveTab(id as typeof activeTab)}
-            label="Secciones del colaborador"
-            items={[
-              { id: 'documentos', label: 'Carpetas & Contratos', count: documentos.length },
-              { id: 'permisos', label: 'Permisos & Ausencias', count: permisos.length },
-              { id: 'liquidaciones', label: 'Sueldos', count: liquidaciones.length },
-              {
-                id: 'comisiones',
-                label: 'Comisiones',
-                count: statsComisiones.countListaPago > 0 ? statsComisiones.countListaPago : comisionesVentas.length,
-              },
-              {
-                id: 'recordatorios',
-                label: 'Tareas',
-                count: statsRecordatorios.pendientes,
-              },
-              { id: 'asistencia', label: 'Asistencia', count: statsAsistencia.total },
-              { id: 'bitacora', label: 'Bitácora', count: notas.length },
-            ]}
-          />
+          <div role="tablist" aria-label="Secciones del colaborador" className="flex w-full items-center gap-0.5 rounded-xl bg-surface-muted p-1">
+            {(
+              [
+                { id: 'documentos', label: 'Carpetas', count: documentos.length },
+                { id: 'permisos', label: 'Permisos', count: permisos.length },
+                { id: 'liquidaciones', label: 'Sueldos', count: liquidaciones.length },
+                {
+                  id: 'comisiones',
+                  label: 'Comisiones',
+                  count: statsComisiones.countListaPago > 0 ? statsComisiones.countListaPago : comisionesVentas.length,
+                },
+                { id: 'recordatorios', label: 'Tareas', count: statsRecordatorios.pendientes },
+                { id: 'asistencia', label: 'Asistencia', count: statsAsistencia.total },
+                { id: 'bitacora', label: 'Bitácora', count: notas.length },
+              ] as const
+            ).map((tab) => {
+              const selected = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${
+                    selected
+                      ? 'bg-surface text-ink shadow-[var(--hg-shadow-card)]'
+                      : 'text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  {tab.label}
+                  <span className="t-num text-[11px] font-medium text-ink-muted">{tab.count}</span>
+                </button>
+              );
+            })}
+          </div>
 
           {/* TAB 1: CARPETAS DE DOCUMENTOS */}
           {activeTab === 'documentos' && (
             <Panel
-              title="Carpetas de Documentos"
+              title={
+                categoriaDocFiltro === 'todas'
+                  ? 'Documentos'
+                  : `Documentos · ${CATEGORIAS_DOCUMENTOS.find((c) => c.id === categoriaDocFiltro)?.label ?? ''}`
+              }
               actions={
-                <Button
-                  variant="primary"
-                  size="sm"
-                  icon={Plus}
-                  onClick={() => setShowNewDocModal(true)}
-                >
-                  Subir documento
-                </Button>
+                <>
+                  <DocumentosFiltroMenu
+                    value={categoriaDocFiltro}
+                    onChange={setCategoriaDocFiltro}
+                    total={documentos.length}
+                    counts={Object.fromEntries(
+                      CATEGORIAS_DOCUMENTOS.map((c) => [c.id, documentos.filter((d) => d.categoria === c.id).length])
+                    )}
+                  />
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={Plus}
+                    onClick={() => setShowNewDocModal(true)}
+                  >
+                    Subir documento
+                  </Button>
+                </>
               }
               className="p-4 space-y-4"
             >
-              {/* Filtro por subcarpetas */}
-              <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setCategoriaDocFiltro('todas')}
-                  className={`px-3 py-1 rounded-control transition-colors font-semibold ${
-                    categoriaDocFiltro === 'todas'
-                      ? 'bg-accent text-on-accent'
-                      : 'bg-surface-muted text-ink-muted hover:text-ink'
-                  }`}
-                >
-                  Todos ({documentos.length})
-                </button>
-                {CATEGORIAS_DOCUMENTOS.map((cat) => {
-                  const count = documentos.filter((d) => d.categoria === cat.id).length;
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setCategoriaDocFiltro(cat.id)}
-                      className={`px-3 py-1 rounded-control transition-colors font-semibold ${
-                        categoriaDocFiltro === cat.id
-                          ? 'bg-accent text-on-accent'
-                          : 'bg-surface-muted text-ink-muted hover:text-ink'
-                      }`}
-                    >
-                      {cat.label} ({count})
-                    </button>
-                  );
-                })}
-              </div>
-
               {/* Lista de Documentos */}
               {filteredDocs.length === 0 ? (
                 <div className="p-8 text-center text-ink-muted t-caption italic border border-dashed border-line-subtle rounded-panel">
@@ -1747,51 +1882,46 @@ export default function TrabajadorDetailPage() {
             <Panel
               title="Comisiones Comerciales"
               actions={
-                <span className="t-caption text-ink-muted">
-                  Regla estándar: 3% del monto estimado cotizado
-                </span>
+                <Link
+                  href="/comisiones"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-accent-ink hover:underline"
+                >
+                  Ver todas las comisiones
+                  <ExternalLink size={12} aria-hidden />
+                </Link>
               }
               className="p-4 space-y-4"
             >
-              {/* Tarjetas KPI de Comisiones */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                <div className="p-3 rounded-panel border border-line-subtle bg-surface-muted">
-                  <span className="t-caption block text-ink-muted">Comisión proyectada</span>
-                  <span className="t-num text-lg font-semibold text-ink">
-                    ${statsComisiones.comisionTotal.toLocaleString('es-CL')}
-                  </span>
-                  <span className="t-caption block text-ink-muted mt-0.5">
-                    {statsComisiones.totalVentas}{' '}
-                    {statsComisiones.totalVentas === 1 ? 'oportunidad' : 'oportunidades'}
-                  </span>
-                </div>
-                <div className="p-3 rounded-panel border border-line-subtle bg-surface-muted">
-                  <span className="t-caption block text-ink-muted">Listas para pago</span>
-                  <span className="t-num text-lg font-semibold text-warning">
-                    ${statsComisiones.comisionListaPago.toLocaleString('es-CL')}
-                  </span>
-                  <span className="t-caption block text-ink-muted mt-0.5">
-                    {statsComisiones.countListaPago} por liquidar
-                  </span>
-                </div>
-                <div className="p-3 rounded-panel border border-line-subtle bg-surface-muted">
-                  <span className="t-caption block text-ink-muted">Pagadas / Liquidadas</span>
-                  <span className="t-num text-lg font-semibold text-success">
-                    ${statsComisiones.comisionPagada.toLocaleString('es-CL')}
-                  </span>
-                  <span className="t-caption block text-ink-muted mt-0.5">
-                    {statsComisiones.countPagada} liquidadas
-                  </span>
-                </div>
-                <div className="p-3 rounded-panel border border-line-subtle bg-surface-muted">
-                  <span className="t-caption block text-ink-muted">En proceso / Pendientes</span>
-                  <span className="t-num text-lg font-semibold text-ink-muted">
-                    ${statsComisiones.comisionPendiente.toLocaleString('es-CL')}
-                  </span>
-                  <span className="t-caption block text-ink-muted mt-0.5">
-                    {statsComisiones.countPendiente} pendientes
-                  </span>
-                </div>
+              {/* KPIs de comisiones: dos filas de dos */}
+              <div className="grid grid-cols-2 gap-4">
+                <MetricCard
+                  title="Comisión proyectada"
+                  value={`$${statsComisiones.comisionTotal.toLocaleString('es-CL')}`}
+                  icon={Coins}
+                  tone="info"
+                  subtitle={`${statsComisiones.totalVentas} ${statsComisiones.totalVentas === 1 ? 'oportunidad' : 'oportunidades'}`}
+                />
+                <MetricCard
+                  title="Listas para pago"
+                  value={`$${statsComisiones.comisionListaPago.toLocaleString('es-CL')}`}
+                  icon={Clock}
+                  tone="warning"
+                  subtitle={`${statsComisiones.countListaPago} por liquidar`}
+                />
+                <MetricCard
+                  title="Pagadas"
+                  value={`$${statsComisiones.comisionPagada.toLocaleString('es-CL')}`}
+                  icon={CheckCircle2}
+                  tone="success"
+                  subtitle={`${statsComisiones.countPagada} liquidadas`}
+                />
+                <MetricCard
+                  title="Pendientes"
+                  value={`$${statsComisiones.comisionPendiente.toLocaleString('es-CL')}`}
+                  icon={Hourglass}
+                  tone="neutral"
+                  subtitle={`${statsComisiones.countPendiente} en proceso`}
+                />
               </div>
 
               {/* Banner de aviso si no tiene usuario CRM vinculado */}
@@ -1822,19 +1952,16 @@ export default function TrabajadorDetailPage() {
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-control border border-line-subtle">
-                  <table className="w-full text-xs text-left">
-                    <thead className="border-b border-line-subtle bg-surface-muted text-ink-muted font-semibold">
+                  <table className="hg-table min-w-max whitespace-nowrap">
+                    <thead>
                       <tr>
-                        <th className="py-2.5 px-3">Oportunidad / Venta</th>
-                        <th className="py-2.5 px-3">Cliente</th>
-                        <th className="py-2.5 px-3 text-right">Monto Venta</th>
-                        <th className="py-2.5 px-3 text-center">% Com.</th>
-                        <th className="py-2.5 px-3 text-right">Monto Comisión</th>
-                        <th className="py-2.5 px-3 text-center">Estado</th>
-                        <th className="py-2.5 px-3 text-right">Acción</th>
+                        <th>Oportunidad de venta</th>
+                        <th>Monto</th>
+                        <th>Comisión</th>
+                        <th>Estado</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-line-subtle bg-surface">
+                    <tbody>
                       {comisionesVentas.map((op) => {
                         const pct =
                           typeof op.comision_porcentaje === 'number' && op.comision_porcentaje >= 0
@@ -1846,81 +1973,47 @@ export default function TrabajadorDetailPage() {
                             : Math.round(((op.monto_estimado || 0) * pct) / 100);
                         const estado = op.comision_estado || 'pendiente';
                         const tone: Tone =
-                          estado === 'pagada'
-                            ? 'success'
-                            : estado === 'lista_para_pago'
-                            ? 'warning'
-                            : 'neutral';
+                          estado === 'pagada' ? 'success' : estado === 'lista_para_pago' ? 'warning' : 'neutral';
                         const isLiquidando = liquidandoComisionId === op.id;
 
                         return (
-                          <tr key={op.id} className="hover:bg-surface-muted transition-colors">
-                            <td className="py-2.5 px-3">
+                          <tr key={op.id}>
+                            <td>
                               <Link
                                 href={`/ventas?oportunidad=${op.id}`}
-                                className="font-semibold text-accent hover:underline inline-flex items-center gap-1.5"
+                                className="font-semibold text-ink hover:text-accent-ink hover:underline"
                               >
-                                <span>{op.titulo || op.codigo || op.id.slice(0, 8)}</span>
-                                <ExternalLink className="w-3 h-3 text-ink-muted" />
+                                {op.codigo || op.id.slice(0, 8)}
                               </Link>
-                              {op.codigo && (
-                                <span className="t-caption font-mono text-ink-muted block mt-0.5">
-                                  {op.codigo}
-                                </span>
-                              )}
                             </td>
-                            <td className="py-2.5 px-3 text-ink">
-                              <div>
-                                {op.cliente?.nombre ||
-                                  op.cliente?.apellido_razon_social ||
-                                  'Cliente directo'}
-                              </div>
-                              {op.cliente?.rut && (
-                                <div className="t-caption text-ink-muted font-mono">
-                                  {op.cliente.rut}
-                                </div>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-ink tabular-nums">
+                            <td className="t-num text-ink">
                               ${Number(op.monto_estimado || 0).toLocaleString('es-CL')}
                             </td>
-                            <td className="py-2.5 px-3 text-center font-mono text-ink-muted tabular-nums">
-                              {pct}%
+                            <td>
+                              <span className="t-num font-semibold text-ink">${montoComision.toLocaleString('es-CL')}</span>
+                              <span className="t-caption block text-ink-muted">{pct}%</span>
                             </td>
-                            <td className="py-2.5 px-3 text-right font-mono font-semibold text-ink tabular-nums">
-                              ${montoComision.toLocaleString('es-CL')}
-                            </td>
-                            <td className="py-2.5 px-3 text-center">
-                              <StatusBadge tone={tone} icon={false}>
-                                {estado === 'lista_para_pago'
-                                  ? 'Lista para pago'
-                                  : estado === 'pagada'
-                                  ? 'Pagada'
-                                  : 'Pendiente'}
-                              </StatusBadge>
+                            <td>
+                              <div className="flex items-center gap-2">
+                                <StatusBadge tone={tone} icon={false}>
+                                  {estado === 'lista_para_pago' ? 'Lista para pago' : estado === 'pagada' ? 'Pagada' : 'Pendiente'}
+                                </StatusBadge>
+                                {estado === 'lista_para_pago' && canManageComisiones && (
+                                  <Button
+                                    variant="primary"
+                                    size="sm"
+                                    icon={Coins}
+                                    disabled={isLiquidando}
+                                    onClick={() => void handleLiquidarComisionEnPerfil(op)}
+                                  >
+                                    {isLiquidando ? 'Pagando...' : 'Liquidar'}
+                                  </Button>
+                                )}
+                              </div>
                               {estado === 'pagada' && op.comision_fecha_pago && (
-                                <span className="t-caption font-mono text-ink-muted block mt-0.5">
+                                <span className="t-caption t-num block text-ink-muted">
                                   {op.comision_fecha_pago.split('T')[0]}
                                 </span>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-3 text-right">
-                              {estado === 'lista_para_pago' && canManageComisiones ? (
-                                <Button
-                                  variant="primary"
-                                  size="sm"
-                                  icon={Coins}
-                                  disabled={isLiquidando}
-                                  onClick={() => void handleLiquidarComisionEnPerfil(op)}
-                                >
-                                  {isLiquidando ? 'Pagando...' : 'Liquidar'}
-                                </Button>
-                              ) : estado === 'pagada' ? (
-                                <span className="t-caption text-success font-medium inline-flex items-center gap-1">
-                                  <CheckCircle2 className="w-3.5 h-3.5" /> Liquidada
-                                </span>
-                              ) : (
-                                <span className="t-caption text-ink-muted italic">En proceso</span>
                               )}
                             </td>
                           </tr>
@@ -2100,21 +2193,6 @@ export default function TrabajadorDetailPage() {
               }
               className="p-4 space-y-4"
             >
-              {/* Banner de Integración Externa */}
-              <div className="p-3.5 rounded-panel border border-info-line bg-info-soft text-info space-y-1">
-                <div className="flex items-center gap-2 font-semibold text-xs">
-                  <AlertCircle size={16} aria-hidden />
-                  <span>Integración de reloj control biométrico en preparación</span>
-                </div>
-                <p className="t-caption text-ink">
-                  Conectores compatibles: <strong>GeoVictoria API / ZKTeco Biométrico</strong>.
-                </p>
-                <div className="inline-flex items-center gap-1.5 t-micro text-ink-muted font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-                  <span>Estado: Integración externa pendiente de credenciales</span>
-                </div>
-              </div>
-
               {/* Métricas de Asistencia */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                 <div className="p-3 rounded-panel border border-line-subtle bg-surface-muted">
@@ -2469,9 +2547,8 @@ export default function TrabajadorDetailPage() {
 
             <Field label="Fecha de ingreso">
               {({ id }) => (
-                <TextInput
+                <DateInput
                   id={id}
-                  type="date"
                   value={editFormData.fecha_ingreso}
                   onChange={(e) =>
                     setEditFormData({ ...editFormData, fecha_ingreso: e.target.value })
@@ -2628,9 +2705,8 @@ export default function TrabajadorDetailPage() {
 
           <Field label="Fecha de emisión">
             {({ id }) => (
-              <TextInput
+              <DateInput
                 id={id}
-                type="date"
                 value={newDocData.fecha_emision}
                 onChange={(e) =>
                   setNewDocData({ ...newDocData, fecha_emision: e.target.value })
@@ -2691,9 +2767,8 @@ export default function TrabajadorDetailPage() {
           <div className="grid grid-cols-2 gap-3">
             <Field label="Fecha inicio" required>
               {({ id }) => (
-                <TextInput
+                <DateInput
                   id={id}
-                  type="date"
                   required
                   value={newPermisoData.fecha_inicio}
                   onChange={(e) =>
@@ -2705,9 +2780,8 @@ export default function TrabajadorDetailPage() {
 
             <Field label="Fecha fin" required>
               {({ id }) => (
-                <TextInput
+                <DateInput
                   id={id}
-                  type="date"
                   required
                   value={newPermisoData.fecha_fin}
                   onChange={(e) =>
@@ -3020,9 +3094,8 @@ export default function TrabajadorDetailPage() {
           <div className="grid grid-cols-2 gap-3">
             <Field label="Fecha vencimiento" required>
               {({ id }) => (
-                <TextInput
+                <DateInput
                   id={id}
-                  type="date"
                   required
                   value={newRecordatorioData.fecha_vencimiento}
                   onChange={(e) =>
@@ -3088,9 +3161,8 @@ export default function TrabajadorDetailPage() {
           <div className="grid grid-cols-2 gap-3">
             <Field label="Fecha" required>
               {({ id }) => (
-                <TextInput
+                <DateInput
                   id={id}
-                  type="date"
                   required
                   value={newAsistenciaData.fecha}
                   onChange={(e) =>
@@ -3187,6 +3259,83 @@ export default function TrabajadorDetailPage() {
             )}
           </Field>
         </form>
+      </Dialog>
+
+
+      {/* DIALOG: CREAR USUARIO CRM */}
+      <Dialog
+        open={showCreateUserModal}
+        title="Crear usuario CRM"
+        description={`Cuenta de acceso para ${trabajador.nombre}.`}
+        size="sm"
+        onClose={() => setShowCreateUserModal(false)}
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <Button variant="secondary" onClick={() => setShowCreateUserModal(false)} disabled={creatingUser}>
+              Cancelar
+            </Button>
+            <Button variant="primary" onClick={() => void handleCreateUser()} disabled={creatingUser}>
+              {creatingUser ? 'Creando...' : 'Crear y enviar código'}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4 text-xs">
+          {createUserError && (
+            <div className="rounded-control border border-danger-line bg-danger-soft px-3 py-2 font-medium text-danger">
+              {createUserError}
+            </div>
+          )}
+          <Field label="Correo" required>
+            {({ id }) => (
+              <TextInput
+                id={id}
+                type="email"
+                value={newUserForm.email}
+                onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                placeholder="correo@dominio.cl"
+              />
+            )}
+          </Field>
+          <Field label="Rol de acceso">
+            {({ id }) => (
+              <Select
+                id={id}
+                value={newUserForm.rol}
+                onChange={(e) => setNewUserForm({ ...newUserForm, rol: e.target.value as UserRole })}
+              >
+                {ROLES_ASIGNABLES.map((rol) => (
+                  <option key={rol} value={rol}>
+                    {ROL_NOMBRE[rol]}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="t-micro uppercase font-semibold text-ink-muted">Calendarios:</span>
+            {(
+              [
+                { key: 'calVisitas', label: 'Visitas' },
+                { key: 'calProduccion', label: 'Producción' },
+                { key: 'calReventa', label: 'Reventa' },
+              ] as const
+            ).map(({ key, label }) => (
+              <label key={key} className="inline-flex cursor-pointer items-center gap-1.5 font-medium text-ink">
+                <input
+                  type="checkbox"
+                  checked={newUserForm[key]}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, [key]: e.target.checked })}
+                  className="rounded-control"
+                />
+                <span>{label}</span>
+              </label>
+            ))}
+          </div>
+          <p className="t-caption text-ink-muted leading-relaxed">
+            Le llegará un correo con un código de un solo uso. Con él entra a «Recuperar contraseña», define su clave y queda con la cuenta activa.
+          </p>
+        </div>
       </Dialog>
 
       {/* DIALOG 7: VINCULAR CUENTA DE USUARIO CRM */}

@@ -17,6 +17,7 @@ interface LogSistemaParams {
     | 'usuarios'
     | 'trabajadores'
     | 'cuentas_bancarias'
+    | 'empresas'
     | 'sistema';
   entidad_id?: string;
   descripcion: string;

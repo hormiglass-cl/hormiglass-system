@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { createClient } from '../../lib/supabase/client';
 import {
   Abono,
@@ -10,32 +10,22 @@ import {
   TipoMovimientoCaja,
 } from '../../lib/types';
 import {
-  Plus,
-  ArrowUpRight,
-  ArrowDownRight,
-  Building,
+  Clock,
   CheckCircle2,
   XCircle,
   Eye,
   Landmark,
   Check,
   X,
-  RefreshCw,
-  TrendingUp,
 } from 'lucide-react';
 import { useAuth } from '../../lib/context/AuthContext';
 import { Pagination } from '../../components/Pagination';
 import { mensajeError } from '../../lib/errores';
 import {
-  PageHeader,
   Panel,
   Button,
   IconButton,
-  Tabs,
-  SummaryLine,
-  FilterBar,
   SearchField,
-  FilterSelect,
   StatusBadge,
   CodeStamp,
   Dialog,
@@ -44,12 +34,56 @@ import {
   Select,
 } from '../../components/ui/crm';
 import { useToast } from '../../components/ui/feedback';
+import { DateRangePicker } from '../../components/ui/DateRangePicker';
+import { ColumnMenu, useColumnPrefs } from '../../components/ui/ColumnMenu';
+import { MetricCard } from '../../components/ui/MetricCard';
+import { Fab } from '../../components/ui/Fab';
+import { PillTabs, PillTabsBar } from '../../components/ui/PillTabs';
+import { CajaResumen } from '../../components/caja/CajaResumen';
+import { CategoriasCostos } from '../../components/caja/CategoriasCostos';
 import { swrCache } from '../../lib/cache/swr-cache';
+
+type AbonoCol = 'nv' | 'cliente' | 'monto' | 'fecha' | 'comprobante' | 'banco' | 'estado' | 'acciones';
+
+const ABONO_COL_ORDER: AbonoCol[] = ['nv', 'cliente', 'monto', 'fecha', 'comprobante', 'banco', 'estado', 'acciones'];
+
+const ABONO_COL_VISIBLE: Record<AbonoCol, boolean> = {
+  nv: true,
+  cliente: true,
+  monto: true,
+  fecha: true,
+  comprobante: true,
+  banco: true,
+  estado: true,
+  acciones: true,
+};
+
+const ABONO_COL_LABELS: Record<AbonoCol, string> = {
+  nv: 'Nota de venta',
+  cliente: 'Cliente',
+  monto: 'Monto',
+  fecha: 'Fecha y vendedor',
+  comprobante: 'Comprobante',
+  banco: 'Banco',
+  estado: 'Estado',
+  acciones: 'Acciones',
+};
+
+const ABONO_COL_ALIGN: Record<AbonoCol, string> = {
+  nv: '',
+  cliente: '',
+  monto: 'text-right',
+  fecha: '',
+  comprobante: '',
+  banco: '',
+  estado: 'text-center',
+  acciones: 'text-right',
+};
 
 export default function CajaPage() {
   const { currentUser } = useAuth();
-  const router = useRouter();
   const searchParams = useSearchParams();
+  const colPrefs = useColumnPrefs<AbonoCol>('hormiglass_abonos_cols_v1', ABONO_COL_ORDER, ABONO_COL_VISIBLE);
   const toast = useToast();
   const supabase = useMemo(() => createClient(), []);
 
@@ -57,15 +91,26 @@ export default function CajaPage() {
   const abonoParam = searchParams.get('abono');
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'validacion' | 'movimientos'>(
-    tabParam === 'movimientos' ? 'movimientos' : 'validacion'
+  const [activeTab, setActiveTab] = useState<'caja' | 'movimientos' | 'validacion' | 'categorias'>(
+    tabParam === 'validacion' || abonoParam ? 'validacion' : tabParam === 'movimientos' ? 'movimientos' : tabParam === 'categorias' ? 'categorias' : 'caja'
   );
+  const puedeVerCategorias = currentUser?.rol === 'admin';
+
+  // Período de los gráficos y movimientos: por defecto el mes en curso, del día 1 hasta hoy.
+  const [desde, setDesde] = useState(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [hasta, setHasta] = useState(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+  });
 
   // Estados principales con SWR para render instantáneo
   const [movimientos, setMovimientos] = useState<MovimientoCaja[]>(() => swrCache.get('caja:movimientos') || []);
   const [abonos, setAbonos] = useState<Abono[]>(() => swrCache.get('caja:abonos') || []);
   const [cuentas, setCuentas] = useState<CuentaBancaria[]>(() => swrCache.get('caja:cuentas') || []);
-  const [loading, setLoading] = useState<boolean>(() => !swrCache.has('caja:cuentas'));
+  const [, setLoading] = useState<boolean>(() => !swrCache.has('caja:cuentas'));
 
   // Mapeo de banco seleccionado por abono pendiente: { [abonoId]: cuentaBancariaId }
   const [selectedBanks, setSelectedBanks] = useState<Record<string, string>>({});
@@ -88,10 +133,6 @@ export default function CajaPage() {
   // Filtros de validación
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroEstadoAbono, setFiltroEstadoAbono] = useState<'todos' | 'pendiente' | 'validado' | 'rechazado'>('pendiente');
-
-  // Paginación para movimientos
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Paginación para historial de abonos
   const [abonosPage, setAbonosPage] = useState(1);
@@ -178,9 +219,9 @@ export default function CajaPage() {
   }, [loadData, supabase]);
 
   useEffect(() => {
-    if (tabParam === 'movimientos' || tabParam === 'validacion') {
+    if (tabParam === 'movimientos' || tabParam === 'caja' || tabParam === 'validacion') {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza la pestaña y la búsqueda con la URL
-      setActiveTab(tabParam);
+      setActiveTab(tabParam === 'validacion' ? 'validacion' : tabParam === 'movimientos' ? 'movimientos' : 'caja');
     }
     if (abonoParam) {
       setSearchTerm(abonoParam);
@@ -206,22 +247,14 @@ export default function CajaPage() {
     }
   }, [cuentas, abonos]);
 
-  // Cálculos de KPIs
-  const totalIngresos = movimientos
-    .filter((m) => m.tipo === 'ingreso')
-    .reduce((acc, m) => acc + Number(m.monto || 0), 0);
-
-  const totalEgresos = movimientos
-    .filter((m) => m.tipo === 'egreso')
-    .reduce((acc, m) => acc + Number(m.monto || 0), 0);
-
-  const flujoNeto = totalIngresos - totalEgresos;
-
   const abonosPendientes = abonos.filter((a) => a.estado === 'pendiente');
   const totalMontoPendiente = abonosPendientes.reduce((acc, a) => acc + Number(a.monto || 0), 0);
 
   const abonosValidados = abonos.filter((a) => a.estado === 'validado');
   const totalMontoValidado = abonosValidados.reduce((acc, a) => acc + Number(a.monto || 0), 0);
+
+  const abonosRechazados = abonos.filter((a) => a.estado === 'rechazado');
+  const totalMontoRechazado = abonosRechazados.reduce((acc, a) => acc + Number(a.monto || 0), 0);
 
   // Apertura de comprobante seguro
   const handleVerComprobante = async (storedUrl?: string | null) => {
@@ -393,166 +426,135 @@ export default function CajaPage() {
     abonosPage * abonosPerPage
   );
 
-  // Paginación movimientos
-  const paginatedMovimientos = movimientos.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
   return (
-    <div className="hg-page space-y-5">
-      {/* Header */}
-      <PageHeader
-        title="Caja y validación de pagos"
-        description="Valida comprobantes de ventas ingresándolos directamente al banco respectivo y controla el flujo de caja diario."
-        actions={
-          <>
-            <IconButton
-              icon={RefreshCw}
-              label="Recargar datos"
-              onClick={() => void loadData()}
-              className={loading ? 'animate-spin' : undefined}
-            />
-            {(currentUser?.rol === 'admin' || currentUser?.rol === 'finanzas') && (
-              <Button
-                variant="secondary"
-                icon={Building}
-                onClick={() => router.push('/caja/configuracion')}
-              >
-                Bancos y empresas
-              </Button>
-            )}
-            <Button
-              variant="secondary"
-              onClick={() => router.push('/reportes')}
-            >
-              Ver reportes
-            </Button>
-            <Button
-              variant="primary"
-              icon={Plus}
-              onClick={() => setShowModal(true)}
-            >
-              Registrar movimiento
-            </Button>
-          </>
+    <div className="hg-page space-y-5 pb-24">
+      {/* Interruptor de secciones centrado y filtro de período */}
+      <PillTabsBar
+        tabs={
+          <PillTabs
+            label="Secciones de caja"
+            items={[
+              { id: 'caja', label: 'Caja' },
+              { id: 'movimientos', label: 'Movimientos de caja' },
+              { id: 'validacion', label: 'Validación de pagos', count: abonosPendientes.length },
+              ...(puedeVerCategorias ? [{ id: 'categorias', label: 'Categorías de costos' }] : []),
+            ]}
+            active={activeTab}
+            onChange={(id) => setActiveTab(id as 'caja' | 'movimientos' | 'validacion' | 'categorias')}
+          />
         }
-      />
-
-      {/* Selector de Pestañas Principales */}
-      <Tabs
-        items={[
-          { id: 'validacion', label: 'Validación de pagos', count: abonosPendientes.length },
-          { id: 'movimientos', label: 'Movimientos de caja', count: movimientos.length },
-        ]}
-        active={activeTab}
-        onChange={(id) => setActiveTab(id as 'validacion' | 'movimientos')}
+        right={
+          activeTab !== 'validacion' && activeTab !== 'categorias' ? (
+            <DateRangePicker
+              from={desde}
+              to={hasta}
+              onChange={(d, h) => {
+                setDesde(d);
+                setHasta(h);
+              }}
+            />
+          ) : undefined
+        }
       />
 
       {/* PESTAÑA 1: VALIDACIÓN DE PAGOS */}
       {activeTab === 'validacion' && (
         <div className="space-y-4">
-          {/* Resumen accionable en una línea */}
-          <Panel className="p-3">
-            <SummaryLine
-              items={[
-                {
-                  label: `pendientes (${abonosPendientes.length})`,
-                  value: `$${totalMontoPendiente.toLocaleString('es-CL')}`,
-                  tone: 'warning',
-                  active: filtroEstadoAbono === 'pendiente',
-                  onClick: () => {
-                    setFiltroEstadoAbono('pendiente');
-                    setAbonosPage(1);
-                  },
-                },
-                {
-                  label: `validados (${abonosValidados.length})`,
-                  value: `$${totalMontoValidado.toLocaleString('es-CL')}`,
-                  tone: 'success',
-                  active: filtroEstadoAbono === 'validado',
-                  onClick: () => {
-                    setFiltroEstadoAbono('validado');
-                    setAbonosPage(1);
-                  },
-                },
-                {
-                  label: 'cuentas bancarias operativas',
-                  value: cuentas.length,
-                  tone: 'neutral',
-                },
-              ]}
+          {/* KPIs: mismas tarjetas del panel operativo; cada una filtra la tabla */}
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              title="Por validar"
+              value={abonosPendientes.length}
+              icon={Clock}
+              tone="warning"
+              subtitle={`$${totalMontoPendiente.toLocaleString('es-CL')} esperando revisión`}
+              active={filtroEstadoAbono === 'pendiente'}
+              onClick={() => {
+                setFiltroEstadoAbono('pendiente');
+                setAbonosPage(1);
+              }}
             />
-          </Panel>
+            <MetricCard
+              title="Validados"
+              value={abonosValidados.length}
+              icon={CheckCircle2}
+              tone="success"
+              subtitle={`$${totalMontoValidado.toLocaleString('es-CL')} ingresados a caja`}
+              active={filtroEstadoAbono === 'validado'}
+              onClick={() => {
+                setFiltroEstadoAbono('validado');
+                setAbonosPage(1);
+              }}
+            />
+            <MetricCard
+              title="Rechazados"
+              value={abonosRechazados.length}
+              icon={XCircle}
+              tone="danger"
+              subtitle={`$${totalMontoRechazado.toLocaleString('es-CL')} devueltos a ventas`}
+              active={filtroEstadoAbono === 'rechazado'}
+              onClick={() => {
+                setFiltroEstadoAbono('rechazado');
+                setAbonosPage(1);
+              }}
+            />
+            <MetricCard
+              title="Total de abonos"
+              value={abonos.length}
+              icon={Landmark}
+              tone="info"
+              subtitle={`$${(totalMontoPendiente + totalMontoValidado + totalMontoRechazado).toLocaleString('es-CL')} en total`}
+              active={filtroEstadoAbono === 'todos'}
+              onClick={() => {
+                setFiltroEstadoAbono('todos');
+                setAbonosPage(1);
+              }}
+            />
+          </div>
 
-          {/* Filtros y Búsqueda */}
-          <FilterBar>
+          {/* Búsqueda y columnas */}
+          <div className="flex flex-wrap items-center gap-3">
             <SearchField
-              placeholder="Buscar por NV, cliente o vendedora..."
+              className="max-w-xs"
+              placeholder="Buscar por NV, cliente o vendedora"
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
                 setAbonosPage(1);
               }}
             />
-
-            <FilterSelect
-              label="Estado"
-              value={filtroEstadoAbono}
-              onChange={(e) => {
-                setFiltroEstadoAbono(e.target.value as 'todos' | 'pendiente' | 'validado' | 'rechazado');
-                setAbonosPage(1);
-              }}
-            >
-              <option value="pendiente">Pendientes ({abonosPendientes.length})</option>
-              <option value="validado">Validados ({abonosValidados.length})</option>
-              <option value="rechazado">Rechazados</option>
-              <option value="todos">Todos los comprobantes</option>
-            </FilterSelect>
-          </FilterBar>
+            <div className="ml-auto">
+              <ColumnMenu labels={ABONO_COL_LABELS} prefs={colPrefs} locked={['acciones']} align="right" />
+            </div>
+          </div>
 
           {/* Tabla de Abonos */}
-          <Panel
-            title={
-              <span className="flex items-center gap-2">
-                <span>Comprobantes de pago y abonos</span>
-                <span className="t-caption">
-                  ({filteredAbonos.length} {filtroEstadoAbono})
-                </span>
-              </span>
-            }
-          >
-            {filteredAbonos.length === 0 ? (
-              <div className="p-8 text-center text-ink-muted">
-                <CheckCircle2 className="w-10 h-10 text-success mx-auto mb-2 opacity-50" />
-                <p className="text-sm font-semibold text-ink">No hay comprobantes en este estado.</p>
-                <p className="t-caption mt-1">
-                  Cuando el equipo comercial suba un comprobante en ventas, aparecerá aquí inmediatamente.
-                </p>
-              </div>
-            ) : (
+          <Panel>
+            {(
               <div className="overflow-x-auto">
                 <table className="hg-table w-full text-left text-xs min-w-[950px]">
                   <thead>
                     <tr>
-                      <th className="p-3">Nota de Venta / Ref</th>
-                      <th className="p-3">Cliente</th>
-                      <th className="p-3 text-right">Monto</th>
-                      <th className="p-3">Fecha / Subido por</th>
-                      <th className="p-3">Comprobante</th>
-                      <th className="p-3">Asignar a banco</th>
-                      <th className="p-3 text-center">Estado</th>
-                      <th className="p-3 text-right">Acciones</th>
+                      {colPrefs.visibleOrder.map((k) => (
+                        <th key={k} className={`p-3 ${ABONO_COL_ALIGN[k]}`}>{ABONO_COL_LABELS[k]}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
+                    {paginatedAbonos.length === 0 && (
+                      <tr>
+                        <td colSpan={colPrefs.visibleOrder.length || 1} className="p-10 text-center text-ink-muted">
+                          <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-success opacity-50" />
+                          <p className="text-sm font-semibold text-ink">No hay comprobantes en este estado.</p>
+                        </td>
+                      </tr>
+                    )}
                     {paginatedAbonos.map((ab) => {
                       const isPending = ab.estado === 'pendiente';
                       const isActing = actionLoadingId === ab.id;
 
-                      return (
-                        <tr key={ab.id}>
-                          {/* Nota de Venta */}
+                        const celdas: Record<AbonoCol, React.ReactNode> = {
+                          nv: (
                           <td className="p-3 align-top">
                             <CodeStamp title={ab.oportunidad?.titulo || 'Venta'}>
                               {ab.oportunidad?.codigo || 'NV-S/C'}
@@ -566,8 +568,8 @@ export default function CajaPage() {
                               </div>
                             )}
                           </td>
-
-                          {/* Cliente */}
+                          ),
+                          cliente: (
                           <td className="p-3 align-top">
                             <div className="font-semibold text-ink">
                               {ab.oportunidad?.cliente?.apellido_razon_social ||
@@ -582,15 +584,15 @@ export default function CajaPage() {
                               </div>
                             )}
                           </td>
-
-                          {/* Monto */}
+                          ),
+                          monto: (
                           <td className="p-3 align-top text-right">
                             <span className="t-num font-semibold text-sm text-success">
                               +${Number(ab.monto || 0).toLocaleString('es-CL')}
                             </span>
                           </td>
-
-                          {/* Fecha y Vendedora */}
+                          ),
+                          fecha: (
                           <td className="p-3 align-top text-ink-muted">
                             <div className="t-num">
                               {new Date(ab.fecha).toLocaleDateString('es-CL', {
@@ -604,8 +606,8 @@ export default function CajaPage() {
                               {ab.creado_por_nombre || 'Equipo Comercial'}
                             </div>
                           </td>
-
-                          {/* Comprobante */}
+                          ),
+                          comprobante: (
                           <td className="p-3 align-top">
                             {ab.comprobante_url ? (
                               <Button
@@ -622,11 +624,11 @@ export default function CajaPage() {
                               <span className="text-ink-muted italic t-micro">Sin archivo</span>
                             )}
                           </td>
-
-                          {/* Selector de Banco */}
+                          ),
+                          banco: (
                           <td className="p-3 align-top">
                             {isPending ? (
-                              <select
+                              <Select
                                 value={selectedBanks[ab.id] || cuentas[0]?.id || ''}
                                 onChange={(e) =>
                                   setSelectedBanks((prev) => ({
@@ -638,10 +640,10 @@ export default function CajaPage() {
                               >
                                 {cuentas.map((c) => (
                                   <option key={c.id} value={c.id}>
-                                    {c.alias} ({c.banco})
+                                    {c.alias} · {c.banco}
                                   </option>
                                 ))}
-                              </select>
+                              </Select>
                             ) : (
                               <div className="text-ink font-medium flex items-center gap-1.5">
                                 <Landmark className="w-3.5 h-3.5 text-ink-muted" />
@@ -649,8 +651,8 @@ export default function CajaPage() {
                               </div>
                             )}
                           </td>
-
-                          {/* Estado */}
+                          ),
+                          estado: (
                           <td className="p-3 align-top text-center">
                             {ab.estado === 'pendiente' && (
                               <StatusBadge tone="warning">Por validar</StatusBadge>
@@ -669,8 +671,8 @@ export default function CajaPage() {
                               </div>
                             )}
                           </td>
-
-                          {/* Acciones */}
+                          ),
+                          acciones: (
                           <td className="p-3 align-top text-right">
                             {isPending ? (
                               <div className="inline-flex items-center gap-1.5">
@@ -699,6 +701,11 @@ export default function CajaPage() {
                               </div>
                             )}
                           </td>
+                          ),
+                        };
+                      return (
+                        <tr key={ab.id}>
+                          {colPrefs.visibleOrder.map((k) => React.cloneElement(celdas[k] as React.ReactElement, { key: k }))}
                         </tr>
                       );
                     })}
@@ -721,148 +728,20 @@ export default function CajaPage() {
         </div>
       )}
 
-      {/* PESTAÑA 2: MOVIMIENTOS DE CAJA & FLUJO */}
-      {activeTab === 'movimientos' && (
-        <div className="space-y-4">
-          {/* Resumen accionable de resultados */}
-          <Panel className="p-3">
-            <SummaryLine
-              items={[
-                {
-                  label: 'ingresos registrados',
-                  value: `+$${totalIngresos.toLocaleString('es-CL')}`,
-                  tone: 'success',
-                },
-                {
-                  label: 'egresos registrados',
-                  value: `−$${totalEgresos.toLocaleString('es-CL')}`,
-                  tone: 'danger',
-                },
-                {
-                  label: 'saldo neto de caja',
-                  value: `${flujoNeto >= 0 ? '+' : '−'}$${Math.abs(flujoNeto).toLocaleString('es-CL')}`,
-                  tone: flujoNeto >= 0 ? 'accent' : 'danger',
-                },
-              ]}
-            />
-          </Panel>
-
-          {/* Tarjetas informativas con tokens semánticos */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Panel className="p-4">
-              <div className="flex items-center justify-between">
-                <span className="t-caption">Total Ingresos</span>
-                <span className="p-1.5 bg-success-soft text-success rounded-control">
-                  <ArrowUpRight className="w-4 h-4" />
-                </span>
-              </div>
-              <p className="t-num text-xl font-bold text-success mt-2">
-                +${totalIngresos.toLocaleString('es-CL')}
-              </p>
-              <span className="t-micro text-ink-muted">Abonos y ventas liquidadas</span>
-            </Panel>
-
-            <Panel className="p-4">
-              <div className="flex items-center justify-between">
-                <span className="t-caption">Total Egresos</span>
-                <span className="p-1.5 bg-danger-soft text-danger rounded-control">
-                  <ArrowDownRight className="w-4 h-4" />
-                </span>
-              </div>
-              <p className="t-num text-xl font-bold text-danger mt-2">
-                −${totalEgresos.toLocaleString('es-CL')}
-              </p>
-              <span className="t-micro text-ink-muted">Pagos a proveedores y operación</span>
-            </Panel>
-
-            <Panel className="p-4">
-              <div className="flex items-center justify-between">
-                <span className="t-caption">Saldo Neto de Caja</span>
-                <span className="p-1.5 bg-accent-soft text-accent-ink rounded-control">
-                  <TrendingUp className="w-4 h-4" />
-                </span>
-              </div>
-              <p className="t-num text-xl font-bold text-ink mt-2">
-                {flujoNeto >= 0 ? '+' : '−'}${Math.abs(flujoNeto).toLocaleString('es-CL')}
-              </p>
-              <span className="t-micro text-ink-muted">Ingresos menos egresos registrados</span>
-            </Panel>
-          </div>
-
-          {/* Historial de Movimientos de Caja */}
-          <Panel
-            title={
-              <span className="flex items-center gap-2">
-                <span>Historial de movimientos de caja</span>
-                <span className="t-caption">({movimientos.length})</span>
-              </span>
-            }
-          >
-            <div className="overflow-x-auto">
-              <table className="hg-table w-full min-w-[750px] text-left text-xs">
-                <thead>
-                  <tr>
-                    <th className="p-3">Fecha</th>
-                    <th className="p-3">Tipo</th>
-                    <th className="p-3">Categoría</th>
-                    <th className="p-3">Descripción / Glosa</th>
-                    <th className="p-3">Cuenta Bancaria</th>
-                    <th className="p-3 text-right">Monto ($)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedMovimientos.map((m) => (
-                    <tr key={m.id}>
-                      <td className="p-3 text-ink-muted font-mono t-micro">
-                        {new Date(m.fecha).toLocaleDateString('es-CL', {
-                          day: '2-digit',
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </td>
-                      <td className="p-3">
-                        <StatusBadge tone={m.tipo === 'ingreso' ? 'success' : 'danger'}>
-                          {m.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}
-                        </StatusBadge>
-                      </td>
-                      <td className="p-3 font-semibold text-ink">{m.categoria}</td>
-                      <td className="p-3 text-ink-muted">{m.descripcion || '—'}</td>
-                      <td className="p-3 text-ink">
-                        {m.cuenta_bancaria?.alias ? (
-                          <span className="inline-flex items-center gap-1 font-medium bg-surface-muted border border-line px-2 py-0.5 rounded-control t-micro">
-                            <Landmark className="w-3 h-3 text-accent-ink" />
-                            <span>{m.cuenta_bancaria.alias}</span>
-                          </span>
-                        ) : (
-                          <span className="text-ink-muted italic t-micro">—</span>
-                        )}
-                      </td>
-                      <td
-                        className={`p-3 text-right t-num font-semibold text-sm ${
-                          m.tipo === 'ingreso' ? 'text-success' : 'text-danger'
-                        }`}
-                      >
-                        {m.tipo === 'ingreso' ? '+' : '−'}${m.monto.toLocaleString('es-CL')}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="p-3 border-t border-line-subtle">
-              <Pagination
-                currentPage={currentPage}
-                totalItems={movimientos.length}
-                itemsPerPage={itemsPerPage}
-                onPageChange={setCurrentPage}
-                onItemsPerPageChange={setItemsPerPage}
-              />
-            </div>
-          </Panel>
-        </div>
+      {/* CAJA (resumen y gráficos) y MOVIMIENTOS */}
+      {(activeTab === 'caja' || activeTab === 'movimientos') && (
+        <CajaResumen
+          vista={activeTab === 'movimientos' ? 'movimientos' : 'resumen'}
+          desde={desde}
+          hasta={hasta}
+          movimientos={movimientos}
+          cuentas={cuentas}
+          canEdit={currentUser?.rol === 'admin'}
+          onReload={loadData}
+        />
       )}
+
+      {activeTab === 'categorias' && puedeVerCategorias && <CategoriasCostos />}
 
       {/* MODAL: Rechazar Abono con Motivo */}
       <Dialog
@@ -960,13 +839,13 @@ export default function CajaPage() {
                 value={tipo}
                 onChange={(e) => setTipo(e.target.value as TipoMovimientoCaja)}
               >
-                <option value="ingreso">Ingreso (Abono / Cobro Venta)</option>
-                <option value="egreso">Egreso (Pago Proveedor / Gasto Operativo)</option>
+                <option value="ingreso">Ingreso</option>
+                <option value="egreso">Egreso</option>
               </Select>
             )}
           </Field>
 
-          <Field label="Monto ($)" required>
+          <Field label="Monto" required>
             {({ id }) => (
               <TextInput
                 id={id}
@@ -985,10 +864,10 @@ export default function CajaPage() {
                 value={modalCuentaId}
                 onChange={(e) => setModalCuentaId(e.target.value)}
               >
-                <option value="">(Sin asignar o Caja Efectivo)</option>
+                <option value="">Sin asignar</option>
                 {cuentas.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.alias} ({c.banco})
+                    {c.alias} · {c.banco}
                   </option>
                 ))}
               </Select>
@@ -1022,6 +901,8 @@ export default function CajaPage() {
           </Field>
         </form>
       </Dialog>
+
+      {activeTab !== 'categorias' && <Fab label="Registrar movimiento" onClick={() => setShowModal(true)} />}
     </div>
   );
 }

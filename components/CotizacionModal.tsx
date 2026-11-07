@@ -8,22 +8,19 @@ import { useAuth } from '../lib/context/AuthContext';
 import { Cliente, Cotizacion, CotizacionItem, OportunidadVenta, ProductoCatalogo, PRODUCTOS_HORMIGLASS } from '../lib/types';
 import { logSistema } from '../lib/logger';
 import {
-  FileText,
-  TrendingUp,
   Plus,
   Trash2,
-  Calculator,
   Save,
-  Check,
-  ChevronDown,
   AlertTriangle,
-  Calendar,
-  Tag,
-  Search,
+  TrendingUp,
   X,
 } from 'lucide-react';
 import { mensajeError } from '../lib/errores';
+import { useAjuste } from '../lib/ajustes';
+import { etiquetaProducto } from '../lib/productos';
 import { Button, CodeStamp, IconButton } from './ui/crm';
+import { SearchSelect } from './ui/SearchSelect';
+import { DateInput } from './ui/FormControls';
 
 interface CotizacionModalProps {
   isOpen: boolean;
@@ -46,19 +43,22 @@ export function CotizacionModal({
 }: CotizacionModalProps) {
   const { currentUser } = useAuth();
   const supabase = createClient();
+  const { valor: cfgCot } = useAjuste('cotizaciones');
+  const observacionesInicial = [cfgCot.nota_pie || 'Cotización oficial emitida desde CRM Hormiglass', cfgCot.condiciones_comerciales]
+    .filter(Boolean)
+    .join('\n');
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
   const [catalogo, setCatalogo] = useState<ProductoCatalogo[]>([]);
   const [clienteId, setClienteId] = useState<string>(clienteIdInicial || '');
-  const [clientSearchQuery, setClientSearchQuery] = useState<string>('');
   const [oportunidadId, setOportunidadId] = useState<string>(oportunidadIdInicial || '');
 
   // Meta fields
   const [referenciaCliente, setReferenciaCliente] = useState('');
   const [fechaValidez, setFechaValidez] = useState(() => {
     const d = new Date();
-    d.setDate(d.getDate() + 30);
+    d.setDate(d.getDate() + cfgCot.validez_dias);
     return d.toISOString().split('T')[0];
   });
 
@@ -74,14 +74,11 @@ export function CotizacionModal({
   ]);
 
   const [plazoEntrega, setPlazoEntrega] = useState('Inmediato');
-  const [condicionesPago, setCondicionesPago] = useState('Acuse de recibo');
-  const [observaciones, setObservaciones] = useState('Cotización oficial emitida desde CRM Hormiglass');
+  const [condicionesPago, setCondicionesPago] = useState(cfgCot.condicion_pago);
+  const [observaciones, setObservaciones] = useState(observacionesInicial);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [showVersionConfirmModal, setShowVersionConfirmModal] = useState(false);
-
-  // Dropdown states
-  const [isClientSearchOpen, setIsClientSearchOpen] = useState(false);
 
   useEffect(() => {
     if (initialCotizacion) {
@@ -111,7 +108,7 @@ export function CotizacionModal({
       setOportunidadId(oportunidadIdInicial || '');
       setReferenciaCliente('');
       const d = new Date();
-      d.setDate(d.getDate() + 30);
+      d.setDate(d.getDate() + cfgCot.validez_dias);
       setFechaValidez(d.toISOString().split('T')[0]);
       setItems([
         {
@@ -123,11 +120,12 @@ export function CotizacionModal({
         },
       ]);
       setPlazoEntrega('Inmediato');
-      setCondicionesPago('Acuse de recibo');
-      setObservaciones('Cotización oficial emitida desde CRM Hormiglass');
+      setCondicionesPago(cfgCot.condicion_pago);
+      setObservaciones(observacionesInicial);
     }
     setErrorMsg('');
     setShowVersionConfirmModal(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- los valores por defecto solo se leen al abrir
   }, [initialCotizacion, clienteIdInicial, oportunidadIdInicial, isOpen]);
 
   useEffect(() => {
@@ -182,18 +180,6 @@ export function CotizacionModal({
   }, [isOpen, supabase, initialCotizacion, clienteIdInicial, editCotizacionIdInicial]);
 
   const clientOportunidades = oportunidades.filter((o) => o.cliente_id === clienteId);
-  const selectedClient = clientes.find((c) => c.id === clienteId);
-  const filteredClientes = clientes.filter((c) => {
-    if (!clientSearchQuery.trim()) return true;
-    const q = clientSearchQuery.toLowerCase();
-    return (
-      c.nombre.toLowerCase().includes(q) ||
-      (c.apellido_razon_social && c.apellido_razon_social.toLowerCase().includes(q)) ||
-      (c.rut && c.rut.toLowerCase().includes(q)) ||
-      (c.correo && c.correo.toLowerCase().includes(q))
-    );
-  });
-
   const selectCatalogItem = (index: number, productoCatalogoId: string) => {
     const prod = catalogo.find((p) => p.id === productoCatalogoId);
     if (!prod) return;
@@ -210,7 +196,7 @@ export function CotizacionModal({
       updated[index] = {
         ...current,
         producto_catalogo_id: prod.id,
-        producto: `${prod.nombre} (${prod.unidad})${prod.codigo ? ` · ${prod.codigo}` : ''}`,
+        producto: `${etiquetaProducto(prod)} (${prod.unidad})${prod.codigo ? ` · ${prod.codigo}` : ''}`,
         precio_unitario: precio,
         total_item: totalItem,
       };
@@ -259,7 +245,7 @@ export function CotizacionModal({
   const totalNetoAntesDescuento = items.reduce((acc, it) => acc + (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0), 0);
   const totalSinIva = items.reduce((acc, it) => acc + (Number(it.total_item) || 0), 0);
   const descuentoTotal = totalNetoAntesDescuento - totalSinIva;
-  const ivaCalculado = Math.round(totalSinIva * 0.19);
+  const ivaCalculado = Math.round(totalSinIva * (cfgCot.iva_porcentaje / 100));
   const totalFinal = totalSinIva + ivaCalculado;
 
   const isValidUuid = (val?: string | null): boolean => {
@@ -402,16 +388,13 @@ export function CotizacionModal({
     >
       <div className="bg-surface border border-line rounded-panel max-w-3xl w-full shadow-[var(--hg-shadow-popover)] text-ink max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
         {/* Header Fijo */}
-        <header className="shrink-0 flex items-center justify-between border-b border-line-subtle px-5 py-4 bg-surface">
+        <header className="shrink-0 flex items-center justify-between border-b border-line-subtle px-5 py-3.5 bg-surface">
           <h3 className="t-section flex items-center gap-2">
-            <FileText className="w-5 h-5 text-accent-ink shrink-0" />
-            <span>
-              {initialCotizacion ? (
-                <>Editar Cotización <CodeStamp>{initialCotizacion.numero_cotizacion}</CodeStamp></>
-              ) : (
-                'Emitir Nueva Cotización Oficial'
-              )}
-            </span>
+            {initialCotizacion ? (
+              <>Editar cotización <CodeStamp>{initialCotizacion.numero_cotizacion}</CodeStamp></>
+            ) : (
+              'Nueva cotización'
+            )}
           </h3>
           <IconButton icon={X} label="Cerrar" onClick={onClose} />
         </header>
@@ -425,215 +408,154 @@ export function CotizacionModal({
             </div>
           )}
 
-          {/* Cliente & Oportunidad vinculada */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-surface-muted p-4 rounded-lg border border-line">
-            {/* Cliente */}
-            <div className="relative">
-              <label className="block font-semibold text-ink mb-1">Cliente *</label>
-              <button
-                type="button"
-                onClick={() => setIsClientSearchOpen(!isClientSearchOpen)}
-                className="hg-field flex items-center justify-between text-left font-medium cursor-pointer"
-              >
-                {selectedClient ? (
-                  <span className="font-semibold text-ink truncate">{selectedClient.nombre}</span>
-                ) : (
-                  <span className="text-ink-muted">Seleccionar Cliente...</span>
-                )}
-                <ChevronDown className="w-4 h-4 text-ink-muted shrink-0" />
-              </button>
-
-              {isClientSearchOpen && (
-                <div className="absolute left-0 right-0 mt-1 bg-surface border border-line rounded-lg shadow-sm z-50 p-2 max-h-60 overflow-y-auto space-y-1">
-                  <div className="relative mb-1.5">
-                    <Search className="w-3.5 h-3.5 text-ink-muted absolute left-2.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={clientSearchQuery}
-                      onChange={(e) => setClientSearchQuery(e.target.value)}
-                      placeholder="Buscar por nombre o RUT..."
-                      className="w-full bg-surface-muted border border-line rounded-md pl-8 pr-2.5 py-1.5 text-xs text-ink focus:outline-none focus:border-accent"
-                    />
-                  </div>
-                  {filteredClientes.map((c) => (
-                    <div
-                      key={c.id}
-                      onClick={() => {
-                        setClienteId(c.id);
-                        setOportunidadId('');
-                        setIsClientSearchOpen(false);
-                      }}
-                      className="p-2 hover:bg-surface-muted rounded-md cursor-pointer flex items-center justify-between transition"
-                    >
-                      <div>
-                        <p className="font-semibold text-ink">{c.nombre}</p>
-                        <p className="text-[11px] text-ink-muted t-num">RUT: {c.rut}</p>
-                      </div>
-                      {c.id === clienteId && <Check className="w-4 h-4 text-accent-ink" />}
-                    </div>
-                  ))}
-                  {filteredClientes.length === 0 && (
-                    <p className="text-[11px] text-ink-muted text-center py-2">Sin clientes coincidentes</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Oportunidad de Venta asociada */}
+          {/* Datos generales */}
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="block font-semibold text-ink mb-1">Oportunidad de Venta Asociada (Opcional)</label>
-              <select
+              <label className="mb-1 block t-caption font-semibold text-ink">Cliente *</label>
+              <SearchSelect
+                value={clienteId}
+                onChange={(v) => {
+                  setClienteId(v);
+                  setOportunidadId('');
+                }}
+                options={clientes.map((c) => ({ value: c.id, label: c.nombre, hint: c.rut }))}
+                placeholder="Seleccionar cliente"
+                searchPlaceholder="Buscar por nombre o RUT..."
+                searchable
+                ariaLabel="Cliente"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block t-caption font-semibold text-ink">Oportunidad de venta</label>
+              <SearchSelect
                 value={oportunidadId}
-                onChange={(e) => setOportunidadId(e.target.value)}
-                className="hg-field font-medium"
-              >
-                <option value="">-- Sin Oportunidad Vinculada --</option>
-                {clientOportunidades.map((op) => (
-                  <option key={op.id} value={op.id}>
-                    {op.codigo} — {op.titulo}
-                  </option>
-                ))}
-              </select>
+                onChange={setOportunidadId}
+                options={clientOportunidades.map((op) => ({ value: op.id, label: op.codigo, hint: op.titulo }))}
+                clearLabel="Sin oportunidad"
+                placeholder="Sin oportunidad"
+                searchPlaceholder="Buscar oportunidad..."
+                disabled={!clienteId}
+                ariaLabel="Oportunidad de venta"
+              />
             </div>
-          </div>
-
-          {/* Metadatos de Cabecera: Ref. Cliente & Fecha de Validez */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-surface-muted p-4 rounded-lg border border-line">
             <div>
-              <label className="block font-semibold text-ink mb-1 flex items-center gap-1.5">
-                <Tag className="w-3.5 h-3.5 text-accent-ink" />
-                <span>Ref. Cliente (Ej: Proyecto / Orden / Código)</span>
-              </label>
+              <label className="mb-1 block t-caption font-semibold text-ink">Referencia del cliente</label>
               <input
                 type="text"
                 value={referenciaCliente}
                 onChange={(e) => setReferenciaCliente(e.target.value)}
-                placeholder="Ej: NEMICEPS o PROY-2026"
-                className="hg-field font-medium"
+                placeholder="Proyecto, orden o código"
+                className="hg-field-compact w-full"
               />
             </div>
-
             <div>
-              <label className="block font-semibold text-ink mb-1 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-accent-ink" />
-                <span>Validar Fecha de Término (Validez)</span>
-              </label>
-              <input
-                type="date"
+              <label className="mb-1 block t-caption font-semibold text-ink">Válida hasta</label>
+              <DateInput
                 value={fechaValidez}
                 onChange={(e) => setFechaValidez(e.target.value)}
-                className="hg-field font-medium"
+                className="hg-field-compact w-full"
               />
             </div>
-          </div>
+          </section>
 
-          {/* Lista de Ítems / Productos con Dto % */}
-          <div className="space-y-3 bg-surface p-4 rounded-lg border border-line">
-            <div className="flex items-center justify-between border-b border-line-subtle pb-2.5">
-              <span className="font-semibold text-ink flex items-center gap-1.5">
-                <Calculator className="w-4 h-4 text-accent-ink" />
-                <span>Partidas y Productos (Valores en CLP)</span>
-              </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleAddItem}
-              >
+          {/* Productos */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between border-b border-line-subtle pb-2">
+              <span className="font-semibold text-ink">Productos <span className="font-normal text-ink-muted">(CLP, neto)</span></span>
+              <Button variant="secondary" size="sm" onClick={handleAddItem}>
                 <Plus className="w-3.5 h-3.5" />
-                <span>Agregar Producto</span>
+                <span>Agregar producto</span>
               </Button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               {items.map((item, idx) => {
                 const selectedCatalogoProd = catalogo.find((p) => p.id === item.producto_catalogo_id);
                 return (
-                  <div key={idx} className="p-3.5 bg-surface-muted rounded-lg border border-line space-y-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
-                        Partida #{idx + 1}
-                      </span>
-                      <div className="flex items-center gap-2 flex-1 justify-end">
-                        {catalogo.length > 0 && (
-                          <select
-                            aria-label={`Producto del catálogo ${idx + 1}`}
+                  <div key={idx} className="space-y-2 border-b border-line-subtle pb-4 last:border-b-0 last:pb-0">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 shrink-0 t-caption font-semibold text-ink-muted t-num">{idx + 1}.</span>
+                      {catalogo.length > 0 && (
+                        <div className="min-w-0 flex-1">
+                          <SearchSelect
                             value={item.producto_catalogo_id || ''}
-                            onChange={(e) => selectCatalogItem(idx, e.target.value)}
-                            className="w-full sm:w-72 bg-surface border border-line rounded-md px-2.5 py-1.5 text-xs font-medium text-ink focus:outline-none focus:border-accent"
-                          >
-                            <option value="">-- Seleccionar desde Catálogo (Opcional) --</option>
-                            {catalogo.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                [{p.codigo}] {p.nombre} — ${(p.precio_referencia || 0).toLocaleString('es-CL')}
-                                {p.requiere_revision ? ' (Verificar Bottai)' : ''}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(idx)}
-                          disabled={items.length === 1}
-                          className="p-1.5 text-danger hover:bg-danger-soft rounded-md transition disabled:opacity-30 shrink-0"
-                          title="Eliminar partida"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                            onChange={(v) => v && selectCatalogItem(idx, v)}
+                            options={catalogo.map((pr) => ({
+                              value: pr.id,
+                              label: `${pr.codigo ? `[${pr.codigo}] ` : ''}${etiquetaProducto(pr)}`,
+                              hint: `$${(pr.precio_referencia || 0).toLocaleString('es-CL')} · ${pr.unidad}`,
+                            }))}
+                            placeholder="Elegir del catálogo (opcional)"
+                            searchPlaceholder="Buscar producto o código..."
+                            searchable
+                            menuMinWidth={380}
+                            ariaLabel={`Producto del catálogo ${idx + 1}`}
+                          />
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(idx)}
+                        disabled={items.length === 1}
+                        className="shrink-0 rounded-md p-1.5 text-danger transition hover:bg-danger-soft disabled:opacity-30"
+                        title="Eliminar producto"
+                        aria-label="Eliminar producto"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
 
                     {selectedCatalogoProd?.requiere_revision && (
-                      <div className="bg-warning-soft border border-warning-line rounded-md px-2.5 py-1.5 text-[11px] font-semibold text-warning flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 rounded-md border border-warning-line bg-warning-soft px-2.5 py-1.5 text-[11px] font-semibold text-warning">
                         <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                        <span>Precio referencial OCR (Bottai) — Verificar con lista oficial antes de emitir.</span>
+                        <span>Precio referencial (Bottai): verifica con la lista oficial antes de emitir.</span>
                       </div>
                     )}
 
-                    <div>
-                      <textarea
-                        rows={2}
-                        value={item.producto}
-                        onChange={(e) => handleItemChange(idx, 'producto', e.target.value)}
-                        placeholder="Descripción de la partida o producto..."
-                        className="w-full bg-surface border border-line rounded-md px-3 py-2 text-xs font-medium text-ink focus:outline-none focus:border-accent"
-                      />
-                    </div>
+                    <textarea
+                      rows={2}
+                      value={item.producto}
+                      onChange={(e) => handleItemChange(idx, 'producto', e.target.value)}
+                      placeholder="Descripción del producto o partida"
+                      aria-label={`Descripción del producto ${idx + 1}`}
+                      className="hg-field-compact w-full resize-y"
+                    />
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                       <div>
-                        <label className="block text-[11px] text-ink-muted font-medium mb-1">Cantidad</label>
+                        <label className="mb-1 block t-caption text-ink-muted">Cantidad</label>
                         <input
                           type="number"
                           min="1"
                           value={item.cantidad}
                           onChange={(e) => handleItemChange(idx, 'cantidad', Number(e.target.value))}
-                          className="w-full bg-surface border border-line rounded-md px-2.5 py-1.5 text-center font-semibold text-ink t-num"
+                          className="hg-field-compact w-full text-right t-num"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] text-ink-muted font-medium mb-1">P.U. Neto ($)</label>
+                        <label className="mb-1 block t-caption text-ink-muted">Precio unitario</label>
                         <input
                           type="number"
                           min="0"
                           value={item.precio_unitario}
                           onChange={(e) => handleItemChange(idx, 'precio_unitario', Number(e.target.value))}
-                          className="w-full bg-surface border border-line rounded-md px-2.5 py-1.5 text-right font-semibold text-ink t-num"
+                          className="hg-field-compact w-full text-right t-num"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] text-ink-muted font-medium mb-1">Dto. %</label>
+                        <label className="mb-1 block t-caption text-ink-muted">Descuento %</label>
                         <input
                           type="number"
                           min="0"
                           max="100"
                           value={item.descuento_porcentaje || 0}
                           onChange={(e) => handleItemChange(idx, 'descuento_porcentaje', Number(e.target.value))}
-                          className="w-full bg-surface border border-line rounded-md px-2.5 py-1.5 text-center font-semibold text-ink t-num"
+                          className="hg-field-compact w-full text-right t-num"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] text-ink-muted font-medium mb-1">Base Imp. ($)</label>
-                        <div className="bg-surface border border-line rounded-md px-2.5 py-1.5 text-right t-num font-semibold text-ink">
+                        <label className="mb-1 block t-caption text-ink-muted">Subtotal</label>
+                        <div className="flex min-h-8 items-center justify-end rounded-md bg-surface-muted px-2.5 t-num font-semibold text-ink">
                           ${(item.total_item || 0).toLocaleString('es-CL')}
                         </div>
                       </div>
@@ -643,68 +565,61 @@ export function CotizacionModal({
               })}
             </div>
 
-            {/* Totales desglosados */}
-            <div className="flex flex-col items-end space-y-1 pt-2 border-t border-line-subtle">
-              <div className="w-full sm:w-72 space-y-1 text-xs bg-surface-muted p-3 rounded-md border border-line">
+            {/* Totales */}
+            <dl className="ml-auto w-full space-y-1 rounded-lg bg-surface-muted p-3 sm:w-72">
+              {descuentoTotal > 0 && (
                 <div className="flex justify-between text-ink-muted">
-                  <span>Total neto antes descuento:</span>
-                  <span className="t-num font-semibold text-ink">${totalNetoAntesDescuento.toLocaleString('es-CL')}</span>
+                  <dt>Descuento</dt>
+                  <dd className="t-num text-danger">-${descuentoTotal.toLocaleString('es-CL')}</dd>
                 </div>
-                <div className="flex justify-between text-ink-muted">
-                  <span>Descuento total:</span>
-                  <span className="t-num font-semibold text-danger">-${descuentoTotal.toLocaleString('es-CL')}</span>
-                </div>
-                <div className="flex justify-between text-ink font-semibold">
-                  <span>Total (sin IVA):</span>
-                  <span className="t-num">${totalSinIva.toLocaleString('es-CL')}</span>
-                </div>
-                <div className="flex justify-between text-ink-muted">
-                  <span>Total impuestos 19%:</span>
-                  <span className="t-num font-semibold text-ink">${ivaCalculado.toLocaleString('es-CL')}</span>
-                </div>
-                <div className="flex justify-between font-semibold text-sm text-accent-ink pt-1.5 border-t border-line p-1">
-                  <span>Total (impuesto inc.):</span>
-                  <span className="t-num">${totalFinal.toLocaleString('es-CL')}</span>
-                </div>
+              )}
+              <div className="flex justify-between text-ink-muted">
+                <dt>Neto</dt>
+                <dd className="t-num text-ink">${totalSinIva.toLocaleString('es-CL')}</dd>
               </div>
-            </div>
-          </div>
+              <div className="flex justify-between text-ink-muted">
+                <dt>IVA {cfgCot.iva_porcentaje}%</dt>
+                <dd className="t-num text-ink">${ivaCalculado.toLocaleString('es-CL')}</dd>
+              </div>
+              <div className="flex justify-between border-t border-line pt-1.5 text-sm font-semibold text-ink">
+                <dt>Total</dt>
+                <dd className="t-num">${totalFinal.toLocaleString('es-CL')}</dd>
+              </div>
+            </dl>
+          </section>
 
-          {/* Condiciones Comerciales & Observaciones */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-surface-muted p-4 rounded-lg border border-line">
+          {/* Condiciones */}
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="block font-semibold text-ink mb-1">Plazo de Entrega</label>
+              <label className="mb-1 block t-caption font-semibold text-ink">Plazo de entrega</label>
               <input
                 type="text"
                 value={plazoEntrega}
                 onChange={(e) => setPlazoEntrega(e.target.value)}
                 placeholder="Inmediato / 5 días hábiles"
-                className="hg-field font-medium"
+                className="hg-field-compact w-full"
               />
             </div>
             <div>
-              <label className="block font-semibold text-ink mb-1">Términos de pago</label>
+              <label className="mb-1 block t-caption font-semibold text-ink">Condiciones de pago</label>
               <input
                 type="text"
                 value={condicionesPago}
                 onChange={(e) => setCondicionesPago(e.target.value)}
                 placeholder="Acuse de recibo / 50% abono"
-                className="hg-field font-medium"
+                className="hg-field-compact w-full"
               />
             </div>
             <div className="sm:col-span-2">
-              <label className="block font-semibold text-ink mb-1">
-                Condiciones / Incluye (aparece bajo los productos)
-              </label>
+              <label className="mb-1 block t-caption font-semibold text-ink">Observaciones <span className="font-normal text-ink-muted">(se muestran bajo los productos en el PDF)</span></label>
               <textarea
                 value={observaciones}
                 onChange={(e) => setObservaciones(e.target.value)}
                 rows={2}
-                placeholder="Condiciones comerciales o servicios incluidos visibles bajo los productos en el PDF..."
-                className="w-full bg-surface border border-line rounded-md p-2.5 text-ink font-medium focus:outline-none focus:border-accent"
+                className="hg-field-compact w-full resize-y"
               />
             </div>
-          </div>
+          </section>
         </form>
 
         {/* Footer Fijo con Botones de Acción */}
@@ -722,7 +637,7 @@ export function CotizacionModal({
             disabled={loading}
           >
             <Save className="w-4 h-4" />
-            <span>{loading ? 'Guardando...' : initialCotizacion ? 'Guardar Cambios' : 'Emitir Cotización'}</span>
+            <span>{loading ? 'Guardando...' : initialCotizacion ? 'Guardar cambios' : 'Crear cotización'}</span>
           </Button>
         </footer>
 

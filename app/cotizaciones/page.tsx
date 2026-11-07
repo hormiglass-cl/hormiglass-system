@@ -13,19 +13,26 @@ import {
   Search,
   Download,
   Eye,
-  CheckSquare,
-  Square,
   Edit3,
-  TrendingUp,
   Trash2,
+  FileText,
+  PencilLine,
+  Send,
+  CheckCircle2,
+  XCircle,
+  Link2,
+  Unlink,
+  type LucideIcon,
 } from 'lucide-react';
 import { Pagination } from '../../components/Pagination';
 import { mensajeError } from '../../lib/errores';
-import { Button, CodeStamp, PageHeader, Panel, StatusBadge } from '../../components/ui/crm';
+import { ActionMenu, ActionMenuItem, Button, CodeStamp, Panel, StatusBadge, type Tone } from '../../components/ui/crm';
+import { MetricCard } from '../../components/ui/MetricCard';
+import { SearchSelect } from '../../components/ui/SearchSelect';
 import { useConfirm, useToast } from '../../components/ui/feedback';
 import { AvatarBadge } from '../../components/ui/AvatarBadge';
 import { FloatingActionBar } from '../../components/ui/FloatingActionBar';
-import { FilterPills, FilterDefinition } from '../../components/ui/FilterPills';
+import { FilterMenu, FilterBar, useFilterUi, FilterDefinition, matchNumberFilter, matchMultiFilter } from '../../components/ui/FilterPills';
 import clsx from 'clsx';
 import { swrCache } from '../../lib/cache/swr-cache';
 
@@ -69,6 +76,7 @@ export default function CotizacionesPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const confirmDialog = useConfirm();
+  const filterUi = useFilterUi();
   const toast = useToast();
   const { currentUser } = useAuth();
   const supabase = useMemo(() => createClient(), []);
@@ -153,14 +161,57 @@ export default function CotizacionesPage() {
         { value: 'enviada', label: 'Enviada' },
         { value: 'aprobada', label: 'Aprobada' },
         { value: 'rechazada', label: 'Rechazada' },
-        { value: 'declinada', label: 'Declinada' },
       ],
     },
+    {
+      id: 'asignacion',
+      label: 'Oportunidad',
+      allLabel: 'Todas',
+      options: [
+        { value: 'asignada', label: 'Asignada a una oportunidad' },
+        { value: 'sin_asignar', label: 'Sin asignar' },
+      ],
+    },
+    {
+      id: 'monto',
+      label: 'Monto total',
+      type: 'number',
+      options: [],
+    },
   ], []);
+
+  // Oportunidad vinculada de cada cotización (por id o por la relación embebida)
+  const getLinkedOp = React.useCallback(
+    (cot: Cotizacion): OportunidadVenta | null => {
+      if (cot.oportunidad_id && isUUID(cot.oportunidad_id)) {
+        return oportunidades.find((o) => o.id === cot.oportunidad_id) ?? cot.oportunidad ?? null;
+      }
+      return cot.oportunidad?.id ? cot.oportunidad : null;
+    },
+    [oportunidades]
+  );
+
+  const kpis = useMemo(() => {
+    let borrador = 0, enviada = 0, aprobada = 0, rechazada = 0, asignadas = 0;
+    for (const c of cotizaciones) {
+      if (c.estado === 'borrador') borrador++;
+      else if (c.estado === 'enviada') enviada++;
+      else if (c.estado === 'aprobada') aprobada++;
+      else if (c.estado === 'rechazada' || c.estado === 'declinada') rechazada++;
+      if (getLinkedOp(c)) asignadas++;
+    }
+    return {
+      total: cotizaciones.length,
+      borrador, enviada, aprobada, rechazada,
+      asignadas,
+      sinAsignar: cotizaciones.length - asignadas,
+    };
+  }, [cotizaciones, getLinkedOp]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     const estadoFiltro = activeFilters.estado;
+    const asignacionFiltro = activeFilters.asignacion;
 
     return cotizaciones.filter((c) => {
       const matchSearch =
@@ -170,11 +221,19 @@ export default function CotizacionesPage() {
         (c.cliente && c.cliente.nombre.toLowerCase().includes(q)) ||
         (c.cliente && c.cliente.rut.toLowerCase().includes(q));
 
-      const matchEstado = !estadoFiltro || estadoFiltro === 'todos' || c.estado === estadoFiltro;
+      const matchEstado = matchMultiFilter(
+        estadoFiltro,
+        (v) => c.estado === v || (v === 'rechazada' && c.estado === 'declinada')
+      );
 
-      return matchSearch && matchEstado;
+      const linked = !!getLinkedOp(c);
+      const matchAsignacion = matchMultiFilter(asignacionFiltro, (v) => (v === 'asignada' ? linked : !linked));
+
+      const matchMonto = matchNumberFilter(activeFilters.monto, Number(c.monto_total || 0));
+
+      return matchSearch && matchEstado && matchAsignacion && matchMonto;
     });
-  }, [cotizaciones, search, activeFilters]);
+  }, [cotizaciones, search, activeFilters, getLinkedOp]);
 
   // Calculate pagination
   const totalItems = filtered.length;
@@ -286,60 +345,150 @@ export default function CotizacionesPage() {
     return 'neutral';
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <PageHeader
-        title="Cotizaciones Emitidas"
-        description="Gestiona estados, versiones y vínculos con oportunidades de venta."
-        actions={
-          <div className="flex items-center gap-2">
-            {selectedIds.length > 0 && (
-              <Button variant="secondary" onClick={handleDownloadSelected}>
-                <Download className="w-4 h-4 text-accent-ink" />
-                <span>Ver PDF Selección ({selectedIds.length})</span>
-              </Button>
-            )}
-            <Button
-              variant="primary"
-              onClick={() => {
-                setEditingCotizacion(null);
-                setModalClienteIdInicial(undefined);
-                setModalOportunidadIdInicial(undefined);
-                setModalEditCotIdInicial(undefined);
-                setShowEditModal(true);
-              }}
-            >
-              <Plus className="w-4 h-4" />
-              <span>Crear Nueva Cotización</span>
-            </Button>
-          </div>
-        }
-      />
 
-      {/* Barra Búsqueda y Filtros Next-Gen (Attio Style) */}
-      <FilterPills
-        filters={filterDefinitions}
-        activeFilters={activeFilters}
-        onFilterChange={(id, val) => setActiveFilters((prev) => ({ ...prev, [id]: val }))}
-        onClearAll={() => {
-          setActiveFilters({});
-          setSearch('');
-        }}
-        totalResults={cotizaciones.length}
-        filteredResults={filtered.length}
-      >
-        <div className="relative flex-1 min-w-[240px] max-w-md">
-          <Search className="w-3.5 h-3.5 text-ink-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Buscar por N° cotización, cliente o RUT..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-surface border border-line rounded-control text-ink placeholder:text-ink-muted focus:outline-none focus:border-accent"
+  const handleAssignOportunidad = async (cot: Cotizacion, targetOpId: string) => {
+    if (!targetOpId) return;
+    const previousOpId = cot.oportunidad_id;
+    setCotizaciones((prev) =>
+      prev.map((c) => (c.id === cot.id ? { ...c, oportunidad_id: targetOpId } : c))
+    );
+    try {
+      const { error } = await supabase.from('cotizaciones').update({ oportunidad_id: targetOpId }).eq('id', cot.id);
+      if (error) throw error;
+      await supabase.from('actividades_op').insert({
+        oportunidad_id: targetOpId,
+        usuario_id: currentUser?.id || null,
+        usuario_nombre: currentUser?.nombre || 'Sistema',
+        contenido: `Cotización ${cot.numero_cotizacion} vinculada a la oportunidad.`,
+        tipo: 'actualizacion',
+      });
+      toast({ message: 'Oportunidad vinculada.', tone: 'success' });
+    } catch (err) {
+      console.error('Error linking op:', err);
+      setCotizaciones((prev) =>
+        prev.map((c) => (c.id === cot.id ? { ...c, oportunidad_id: previousOpId } : c))
+      );
+    }
+  };
+
+  const toggleKpiFilter = (id: string, value: string) => {
+    setCurrentPage(1);
+    setActiveFilters((prev) => {
+      const next = { ...prev };
+      if (next[id] === value) delete next[id];
+      else next[id] = value;
+      return next;
+    });
+  };
+
+  const kpiTiles: { key: string; label: string; value: number; icon: LucideIcon; tone: Tone; filter?: [string, string] }[] = [
+    { key: 'total', label: 'Cotizaciones', value: kpis.total, icon: FileText, tone: 'neutral' },
+    { key: 'borrador', label: 'Borrador', value: kpis.borrador, icon: PencilLine, tone: 'neutral', filter: ['estado', 'borrador'] },
+    { key: 'enviada', label: 'Enviadas', value: kpis.enviada, icon: Send, tone: 'accent', filter: ['estado', 'enviada'] },
+    { key: 'aprobada', label: 'Aprobadas', value: kpis.aprobada, icon: CheckCircle2, tone: 'success', filter: ['estado', 'aprobada'] },
+    { key: 'rechazada', label: 'Rechazadas', value: kpis.rechazada, icon: XCircle, tone: 'danger', filter: ['estado', 'rechazada'] },
+    { key: 'asignada', label: 'Con oportunidad', value: kpis.asignadas, icon: Link2, tone: 'info', filter: ['asignacion', 'asignada'] },
+    { key: 'sin_asignar', label: 'Sin oportunidad', value: kpis.sinAsignar, icon: Unlink, tone: 'warning', filter: ['asignacion', 'sin_asignar'] },
+  ];
+
+  const statusOptions = [
+    { value: 'borrador', label: 'Borrador' },
+    { value: 'enviada', label: 'Enviada' },
+    { value: 'aprobada', label: 'Aprobada' },
+    { value: 'rechazada', label: 'Rechazada' },
+  ];
+
+  const oportunidadOptions = oportunidades.map((op) => ({
+    value: op.id,
+    label: `${op.codigo} · ${op.titulo}`,
+  }));
+
+  const openNewCotizacion = () => {
+    setEditingCotizacion(null);
+    setModalClienteIdInicial(undefined);
+    setModalOportunidadIdInicial(undefined);
+    setModalEditCotIdInicial(undefined);
+    setShowEditModal(true);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* KPIs: totales por estado y asignación (clic para filtrar) */}
+      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 py-1">
+        {kpiTiles.map((k) => (
+          <MetricCard
+            key={k.key}
+            compact
+            className="min-w-[130px] flex-1"
+            title={k.label}
+            value={k.value}
+            icon={k.icon}
+            tone={k.tone}
+            active={k.filter ? activeFilters[k.filter[0]] === k.filter[1] : false}
+            onClick={() => {
+              if (k.filter) toggleKpiFilter(k.filter[0], k.filter[1]);
+              else {
+                setActiveFilters({});
+                setCurrentPage(1);
+              }
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Barra de herramientas: búsqueda, filtros y acciones */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="inline-flex flex-wrap items-center gap-1 rounded-xl bg-surface-muted p-1">
+          <div className="relative w-full sm:w-96">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" />
+            <input
+              type="text"
+              aria-label="Buscar cotizaciones"
+              placeholder="Buscar por N° cotización, cliente o RUT..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="min-h-9 w-full rounded-lg border border-line-subtle bg-surface pl-8 pr-3 text-[13px] text-ink shadow-[var(--hg-shadow-card)] placeholder:text-ink-muted focus:border-accent focus:outline-none"
+            />
+          </div>
+
+          <FilterMenu
+            triggerClassName="min-h-9 justify-center rounded-lg px-2.5 text-[13px]"
+            filters={filterDefinitions}
+            activeFilters={activeFilters}
+            ui={filterUi}
           />
         </div>
-      </FilterPills>
+
+        <div className="ml-auto flex items-center gap-2">
+          {selectedIds.length > 0 && (
+            <Button variant="secondary" onClick={handleDownloadSelected}>
+              <Download className="w-4 h-4 text-accent-ink" />
+              <span>Ver PDF ({selectedIds.length})</span>
+            </Button>
+          )}
+          <Button variant="primary" onClick={openNewCotizacion}>
+            <Plus className="w-4 h-4" />
+            <span>Nueva cotización</span>
+          </Button>
+        </div>
+      </div>
+
+      <FilterBar
+        filters={filterDefinitions}
+        activeFilters={activeFilters}
+        onFilterChange={(id, val) => {
+          setCurrentPage(1);
+          setActiveFilters((prev) => ({ ...prev, [id]: val }));
+        }}
+        onClearAll={() => {
+              setActiveFilters({});
+              setSearch('');
+            }}
+        ui={filterUi}
+      />
 
       {loadError && (
         <div role="alert" className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-medium text-danger">
@@ -347,7 +496,7 @@ export default function CotizacionesPage() {
         </div>
       )}
 
-      {/* Tabla de Cotizaciones */}
+      {/* Lista de cotizaciones */}
       <Panel className="overflow-hidden">
         <div className="md:hidden divide-y divide-line-subtle">
           {loading ? (
@@ -356,17 +505,16 @@ export default function CotizacionesPage() {
             <p className="p-5 text-sm text-ink-muted">No se encontraron cotizaciones.</p>
           ) : (
             paginatedCotizaciones.map((cot) => (
-              <div key={cot.id} className="p-4 space-y-2 hover:bg-surface-muted transition">
+              <div key={cot.id} className="p-3 space-y-2 hover:bg-surface-muted/60 transition">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => toggleSelectOne(cot.id)}
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(cot.id)}
+                      onChange={() => toggleSelectOne(cot.id)}
                       aria-label={`Seleccionar cotización ${cot.numero_cotizacion}`}
-                      className="shrink-0 text-ink-muted"
-                    >
-                      {selectedIds.includes(cot.id) ? <CheckSquare size={16} className="text-accent" /> : <Square size={16} />}
-                    </button>
+                      className="shrink-0 accent-accent"
+                    />
                     <CodeStamp>{cot.numero_cotizacion}</CodeStamp>
                     <span className="text-xs text-ink-muted font-medium">v{cot.version || 1}</span>
                   </div>
@@ -376,7 +524,7 @@ export default function CotizacionesPage() {
                   <span className="text-ink-muted truncate">{cot.cliente?.nombre || 'Cliente registrado'}</span>
                   <StatusBadge tone={getStatusTone(cot.estado)}>{cot.estado}</StatusBadge>
                 </div>
-                <div className="flex items-center justify-end gap-2 pt-1 border-t border-line-subtle">
+                <div className="flex items-center justify-end gap-1 pt-1 border-t border-line-subtle">
                   <Button variant="subtle" size="sm" onClick={() => setPreviewCotizacion(cot)}>
                     <Eye className="w-3.5 h-3.5" />
                     <span>Ver</span>
@@ -385,7 +533,7 @@ export default function CotizacionesPage() {
                     <Edit3 className="w-3.5 h-3.5" />
                     <span>Editar</span>
                   </Button>
-                  <Button variant="subtle" size="sm" onClick={() => handleDeleteCotizacion(cot)}>
+                  <Button variant="subtle" size="sm" onClick={() => handleDeleteCotizacion(cot)} aria-label="Eliminar cotización">
                     <Trash2 className="w-3.5 h-3.5 text-danger" />
                   </Button>
                 </div>
@@ -395,75 +543,63 @@ export default function CotizacionesPage() {
         </div>
 
         <div className="hidden overflow-x-auto md:block">
-          <table className="w-full text-left text-xs min-w-[950px]">
-            <thead className="bg-surface-muted/50 text-ink-muted uppercase text-[11px] font-semibold tracking-normal border-b border-line">
-              <tr>
-                <th className="py-2.5 px-3 w-10 text-center">
-                  <button onClick={toggleSelectAll} className="text-ink-muted hover:text-accent" aria-label="Seleccionar todas las cotizaciones">
-                    {selectedIds.length === filtered.length && filtered.length > 0 ? (
-                      <CheckSquare className="w-4 h-4 text-accent" />
-                    ) : (
-                      <Square className="w-4 h-4" />
-                    )}
-                  </button>
+          <table className="w-full text-left min-w-[1000px] text-[13px]">
+            <thead>
+              <tr className="bg-surface-muted/60 text-ink-muted text-xs font-medium border-b border-line">
+                <th className="py-3 px-3 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.length === filtered.length && filtered.length > 0}
+                    onChange={toggleSelectAll}
+                    aria-label="Seleccionar todas las cotizaciones"
+                    className="rounded cursor-pointer accent-accent"
+                  />
                 </th>
-                <th className="py-2.5 px-3 font-semibold text-ink">N° Cotización</th>
-                <th className="py-2.5 px-3 font-semibold text-ink">Versión</th>
-                <th className="py-2.5 px-3 font-semibold text-ink">Cliente & RUT</th>
-                <th className="py-2.5 px-3 font-semibold text-ink">Oportunidad de Venta</th>
-                <th className="py-2.5 px-3 font-semibold text-ink">Estado</th>
-                <th className="py-2.5 px-3 text-right font-semibold text-ink">Monto Total</th>
-                <th className="py-2.5 px-3 text-center font-semibold text-ink">Acciones</th>
+                <th className="py-3 px-3 min-w-[150px] font-medium">N° Cotización</th>
+                <th className="py-3 px-3 w-20 font-medium">Versión</th>
+                <th className="py-3 px-3 min-w-[200px] font-medium">Cliente</th>
+                <th className="py-3 px-3 min-w-[120px] font-medium">RUT</th>
+                <th className="py-3 px-3 min-w-[220px] font-medium">Oportunidad de venta</th>
+                <th className="py-3 px-3 min-w-[130px] font-medium">Estado</th>
+                <th className="py-3 px-3 min-w-[120px] text-right font-medium">Monto total</th>
+                <th className="py-3 px-3 w-12"><span className="sr-only">Acciones</span></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-line-subtle text-xs">
+            <tbody className="divide-y divide-line-subtle text-[13px] text-ink">
               {loading ? (
                 [...Array(6)].map((_, idx) => (
                   <tr key={`skel-cot-${idx}`} className="animate-pulse">
-                    <td className="py-2 px-3 text-center">
+                    <td className="py-3 px-3 text-center">
                       <div className="w-4 h-4 rounded bg-surface-muted hg-skeleton mx-auto" />
                     </td>
-                    <td className="py-2 px-3">
-                      <div className="h-4 w-24 rounded bg-surface-muted hg-skeleton" />
-                    </td>
-                    <td className="py-2 px-3">
-                      <div className="h-3.5 w-8 rounded bg-surface-muted hg-skeleton" />
-                    </td>
-                    <td className="py-2 px-3">
+                    <td className="py-3 px-3"><div className="h-4 w-28 rounded bg-surface-muted hg-skeleton" /></td>
+                    <td className="py-3 px-3"><div className="h-3.5 w-8 rounded bg-surface-muted hg-skeleton" /></td>
+                    <td className="py-3 px-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded-full bg-surface-muted hg-skeleton shrink-0" />
+                        <div className="w-8 h-8 rounded-full bg-surface-muted hg-skeleton shrink-0" />
                         <div className="space-y-1 flex-1">
                           <div className="h-3.5 w-32 rounded bg-surface-muted hg-skeleton" />
                           <div className="h-2.5 w-20 rounded bg-surface-muted hg-skeleton" />
                         </div>
                       </div>
                     </td>
-                    <td className="py-2 px-3">
-                      <div className="h-3.5 w-28 rounded bg-surface-muted hg-skeleton" />
-                    </td>
-                    <td className="py-2 px-3">
-                      <div className="h-4 w-16 rounded-full bg-surface-muted hg-skeleton" />
-                    </td>
-                    <td className="py-2 px-3 text-right">
-                      <div className="h-4 w-20 rounded bg-surface-muted hg-skeleton ml-auto" />
-                    </td>
-                    <td className="py-2 px-3 text-center">
-                      <div className="h-6 w-16 rounded-control bg-surface-muted hg-skeleton mx-auto" />
-                    </td>
+                    <td className="py-3 px-3"><div className="h-3.5 w-20 rounded bg-surface-muted hg-skeleton" /></td>
+                    <td className="py-3 px-3"><div className="h-3.5 w-28 rounded bg-surface-muted hg-skeleton" /></td>
+                    <td className="py-3 px-3"><div className="h-3.5 w-16 rounded bg-surface-muted hg-skeleton" /></td>
+                    <td className="py-3 px-3"><div className="h-3.5 w-20 rounded bg-surface-muted hg-skeleton ml-auto" /></td>
+                    <td className="py-3 px-3"><div className="h-6 w-16 rounded-control bg-surface-muted hg-skeleton mx-auto" /></td>
                   </tr>
                 ))
               ) : loadError ? null : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-ink-muted font-medium">
+                  <td colSpan={9} className="py-8 text-center text-ink-muted font-medium">
                     No se encontraron cotizaciones.
                   </td>
                 </tr>
               ) : (
                 paginatedCotizaciones.map((cot) => {
                   const isSelected = selectedIds.includes(cot.id);
-                  const linkedOp = (cot.oportunidad_id && isUUID(cot.oportunidad_id))
-                    ? oportunidades.find((o) => o.id === cot.oportunidad_id)
-                    : (cot.oportunidad?.id ? cot.oportunidad : null);
+                  const linkedOp = getLinkedOp(cot);
 
                   return (
                     <tr
@@ -473,147 +609,106 @@ export default function CotizacionesPage() {
                         isSelected ? 'bg-surface-muted/90' : ''
                       )}
                     >
-                      <td className="py-2 px-3 text-center">
-                        <button
-                          onClick={() => toggleSelectOne(cot.id)}
-                          className="text-ink-muted hover:text-accent"
-                        >
-                          {isSelected ? (
-                            <CheckSquare className="w-4 h-4 text-accent" />
-                          ) : (
-                            <Square className="w-4 h-4 text-ink-muted" />
-                          )}
-                        </button>
-                      </td>
-                      <td className="py-2 px-3 font-semibold text-ink">
-                        <CodeStamp>{cot.numero_cotizacion}</CodeStamp>
-                      </td>
-                      <td className="py-2 px-3">
-                        <span className="text-[11px] font-semibold text-ink-muted bg-surface-muted border border-line px-1.5 py-0.5 rounded-control">
-                          v{cot.version || 1}
-                        </span>
+                      <td className="py-3 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectOne(cot.id)}
+                          aria-label={`Seleccionar cotización ${cot.numero_cotizacion}`}
+                          className="rounded cursor-pointer accent-accent"
+                        />
                       </td>
 
-                      {/* Cliente & RUT con AvatarBadge */}
-                      <td className="py-2 px-3">
-                        <Link
-                          href={`/clientes/${cot.cliente_id}`}
-                          className="group flex items-center gap-2 hover:text-accent transition min-w-0"
-                        >
-                          <AvatarBadge name={cot.cliente?.nombre || 'Cliente'} size="xs" className="shrink-0" />
+                      <td className="py-3 px-3">
+                        <span className="t-num font-semibold text-ink">{cot.numero_cotizacion}</span>
+                      </td>
+
+                      {/* Versión */}
+                      <td className="py-3 px-3">
+                        <span className="t-num text-ink">v{cot.version || 1}</span>
+                      </td>
+
+                      {/* Cliente */}
+                      <td className="py-3 px-3 font-semibold">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <AvatarBadge name={cot.cliente?.nombre || 'Cliente'} size="md" className="shrink-0" />
                           <div className="min-w-0 flex-1">
-                            <span className="text-xs font-semibold text-ink group-hover:text-accent truncate block">
-                              {cot.cliente?.nombre || 'Cliente Registrado'}
-                            </span>
-                            <span className="text-[11px] text-ink-muted t-num block truncate">
-                              RUT: {cot.cliente?.rut || 'Sin RUT'}
-                            </span>
+                            <Link
+                              href={`/clientes/${cot.cliente_id}`}
+                              className="text-[13px] font-semibold leading-tight text-ink hover:text-accent-ink hover:underline transition truncate block"
+                            >
+                              {cot.cliente?.nombre || 'Cliente registrado'}
+                            </Link>
                           </div>
-                        </Link>
+                        </div>
                       </td>
 
-                      {/* Oportunidad Vinculada */}
-                      <td className="py-2 px-3 max-w-[240px]">
+                      {/* RUT */}
+                      <td className="py-3 px-3">
+                        <span className="t-num text-ink">{cot.cliente?.rut || '—'}</span>
+                      </td>
+
+                      {/* Oportunidad vinculada */}
+                      <td className="py-3 px-3 max-w-[260px]">
                         {linkedOp ? (
                           <Link
                             href={`/ventas?oportunidad=${linkedOp.id}`}
-                            className="flex items-center gap-1.5 text-xs text-ink hover:text-accent transition font-medium group truncate"
+                            className="inline-flex max-w-full items-center gap-2 text-ink hover:text-accent-ink transition"
                           >
-                            <TrendingUp className="w-3.5 h-3.5 text-accent-ink shrink-0" />
                             <CodeStamp>{linkedOp.codigo}</CodeStamp>
-                            <StatusBadge tone="neutral">{linkedOp.estado_pipeline}</StatusBadge>
+                            <span className="truncate text-xs text-ink-muted">{linkedOp.estado_pipeline}</span>
                           </Link>
                         ) : (
-                          <div className="space-y-1">
-                            <select
-                              defaultValue=""
-                              onChange={async (e) => {
-                                const targetOpId = e.target.value;
-                                if (!targetOpId) return;
-                                setCotizaciones((prev) =>
-                                  prev.map((c) => (c.id === cot.id ? { ...c, oportunidad_id: targetOpId } : c))
-                                );
-                                try {
-                                  const { error } = await supabase.from('cotizaciones').update({ oportunidad_id: targetOpId }).eq('id', cot.id);
-                                  if (error) throw error;
-                                  await supabase.from('actividades_op').insert({
-                                    oportunidad_id: targetOpId,
-                                    usuario_id: currentUser?.id || null,
-                                    usuario_nombre: currentUser?.nombre || 'Sistema',
-                                    contenido: `Cotización ${cot.numero_cotizacion} vinculada a la oportunidad.`,
-                                    tipo: 'actualizacion',
-                                  });
-                                  toast({
-                                    message: 'Oportunidad vinculada.',
-                                    tone: 'success',
-                                  });
-                                } catch (err) {
-                                  console.error('Error linking op:', err);
-                                  setCotizaciones((prev) => prev.map((c) => c.id === cot.id ? { ...c, oportunidad_id: cot.oportunidad_id } : c));
-                                }
-                              }}
-                              className="bg-surface border border-line rounded-control px-2 py-0.5 text-[11px] text-ink font-medium focus:outline-none focus:border-accent w-full"
-                            >
-                              <option value="">-- Asignar Oportunidad --</option>
-                              {oportunidades.map((op) => (
-                                <option key={op.id} value={op.id}>
-                                  {op.codigo} - {op.titulo}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                          <SearchSelect
+                            variant="plain"
+                            value=""
+                            ariaLabel={`Asignar oportunidad a ${cot.numero_cotizacion}`}
+                            placeholder="Asignar oportunidad"
+                            searchPlaceholder="Buscar oportunidad..."
+                            options={oportunidadOptions}
+                            menuMinWidth={300}
+                            onChange={(v) => void handleAssignOportunidad(cot, v)}
+                            className="text-ink-muted"
+                          />
                         )}
                       </td>
 
-                      {/* Selector de Estado */}
-                      <td className="py-2 px-3">
-                        <select
-                          value={cot.estado}
-                          onChange={(e) => handleChangeStatus(cot.id, e.target.value as EstadoCotizacion)}
-                          className="text-[11px] font-semibold bg-surface border border-line rounded-control px-2 py-0.5 text-ink focus:outline-none focus:border-accent cursor-pointer"
-                        >
-                          <option value="borrador">Borrador</option>
-                          <option value="enviada">Enviada</option>
-                          <option value="aprobada">Aprobada</option>
-                          <option value="rechazada">Rechazada</option>
-                        </select>
+                      {/* Estado */}
+                      <td className="py-3 px-3">
+                        <SearchSelect
+                          variant="plain"
+                          value={cot.estado === 'declinada' ? 'rechazada' : cot.estado}
+                          ariaLabel={`Estado de ${cot.numero_cotizacion}`}
+                          options={statusOptions}
+                          menuMinWidth={160}
+                          onChange={(v) => void handleChangeStatus(cot.id, v as EstadoCotizacion)}
+                          renderValue={(opt) => (
+                            <StatusBadge tone={getStatusTone(opt.value as EstadoCotizacion)}>{opt.label}</StatusBadge>
+                          )}
+                        />
                       </td>
 
-                      <td className="py-2 px-3 text-right font-bold text-ink text-xs t-num">
+                      <td className="py-3 px-3 text-right t-num text-ink">
                         ${(cot.monto_total || 0).toLocaleString('es-CL')}
                       </td>
-                      <td className="py-2 px-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button
-                            variant="subtle"
-                            size="sm"
-                            onClick={() => setPreviewCotizacion(cot)}
-                            title="Previsualizar PDF"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </Button>
-
-                          <Button
-                            variant="subtle"
-                            size="sm"
+                      <td className="py-3 px-3 text-right">
+                        <ActionMenu label={`Acciones para ${cot.numero_cotizacion}`}>
+                          <ActionMenuItem icon={Eye} onClick={() => setPreviewCotizacion(cot)}>
+                            Previsualizar
+                          </ActionMenuItem>
+                          <ActionMenuItem
+                            icon={Edit3}
                             onClick={() => {
                               setEditingCotizacion(cot);
                               setShowEditModal(true);
                             }}
-                            title="Editar Cotización"
                           >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </Button>
-
-                          <Button
-                            variant="subtle"
-                            size="sm"
-                            onClick={() => handleDeleteCotizacion(cot)}
-                            title="Eliminar Cotización"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-danger" />
-                          </Button>
-                        </div>
+                            Editar
+                          </ActionMenuItem>
+                          <ActionMenuItem icon={Trash2} destructive onClick={() => handleDeleteCotizacion(cot)}>
+                            Eliminar
+                          </ActionMenuItem>
+                        </ActionMenu>
                       </td>
                     </tr>
                   );
@@ -666,7 +761,7 @@ export default function CotizacionesPage() {
         onClose={() => setPreviewCotizacion(null)}
       />
 
-      {/* Barra de Acciones Masivas Flotante (Twenty CRM Style) */}
+      {/* Barra de Acciones Masivas Flotante */}
       <FloatingActionBar
         selectedCount={selectedIds.length}
         onClearSelection={() => setSelectedIds([])}

@@ -134,12 +134,6 @@ export async function proxy(request: NextRequest) {
       url.searchParams.set('error', 'inactivo');
       return NextResponse.redirect(url);
     }
-
-    if (perfil.rol === 'mano_obra' && (pathname === '/caja' || pathname.startsWith('/caja/') || pathname === '/reportes' || pathname.startsWith('/reportes/'))) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/';
-      return NextResponse.redirect(url);
-    }
   }
 
   return supabaseResponse;
