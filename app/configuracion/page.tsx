@@ -33,6 +33,7 @@ import {
   DatabaseBackup,
 } from 'lucide-react';
 import { mensajeError } from '../../lib/errores';
+import { formatearRutEnVivo, errorDeRut } from '../../lib/rut';
 import { recoveryRedirectUrl } from '../../lib/site-url';
 import {
   SearchField,
@@ -121,6 +122,7 @@ export default function ConfiguracionPage() {
   const [userNombre, setUserNombre] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userRut, setUserRut] = useState('');
+  const [userRutTocado, setUserRutTocado] = useState(false);
   const [userRol, setUserRol] = useState<UserRole>('user');
 
   // Edit User State
@@ -218,6 +220,12 @@ export default function ConfiguracionPage() {
       toast({ message: 'El nombre completo y correo electrónico son obligatorios.', tone: 'warning' });
       return;
     }
+    const errRut = errorDeRut(userRut);
+    if (errRut) {
+      setUserRutTocado(true);
+      toast({ message: errRut, tone: 'warning' });
+      return;
+    }
 
     setSubmittingUser(true);
     try {
@@ -229,7 +237,7 @@ export default function ConfiguracionPage() {
         calendario_visitas: true,
         calendario_produccion: true,
         calendario_reventa: true,
-        rut: userRut.trim() || undefined,
+        rut: userRut.trim(),
       });
 
       toast({
@@ -241,6 +249,7 @@ export default function ConfiguracionPage() {
       setUserNombre('');
       setUserEmail('');
       setUserRut('');
+      setUserRutTocado(false);
       setUserRol('user');
       await refreshUsers();
     } catch (err: unknown) {
@@ -586,14 +595,19 @@ export default function ConfiguracionPage() {
             )}
           </Field>
 
-          <Field label="RUT chileno (opcional)">
-            {({ id }) => (
+          <Field label="RUT chileno" required error={userRutTocado ? errorDeRut(userRut) : null}>
+            {(fieldProps) => (
               <TextInput
-                id={id}
+                {...fieldProps}
                 type="text"
+                inputMode="text"
+                autoComplete="off"
+                required
+                maxLength={12}
                 value={userRut}
-                onChange={(e) => setUserRut(e.target.value)}
-                placeholder="12.345.678-9 (opcional para RRHH)"
+                onChange={(e) => setUserRut(formatearRutEnVivo(e.target.value))}
+                onBlur={() => setUserRutTocado(true)}
+                placeholder="12.345.678-9"
               />
             )}
           </Field>
