@@ -1,7 +1,8 @@
 'use client';
 
-import { Fragment, useRef, useState } from 'react';
-import { ActionMenu, ActionMenuItem, Button, StatusBadge } from '../ui/crm';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { MoreHorizontal } from 'lucide-react';
+import { ActionMenuItem, Button, IconButton, StatusBadge } from '../ui/crm';
 import type { ChatMessage, Conversation, ConversationState } from '../../lib/whatsapp/types';
 
 const states = {
@@ -16,6 +17,32 @@ export function ChatStateBadge({ state }: { state: ConversationState }) {
 }
 
 export type ChatAction = 'claim' | 'release' | 'close';
+
+/**
+ * Inline menu for the chat header. The shared ActionMenu portals to <body>, which
+ * breaks Tab order from its trigger; rendering in place keeps keyboard access.
+ */
+function ChatActionsMenu({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function close(event: MouseEvent | KeyboardEvent) {
+      if (event instanceof KeyboardEvent ? event.key === 'Escape' : !ref.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', close);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', close); };
+  }, [open]);
+
+  return <div ref={ref} className="relative inline-flex">
+    <IconButton icon={MoreHorizontal} label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(value => !value)} />
+    {open && <div role="menu" onClick={() => setOpen(false)} className="absolute right-0 top-full z-30 mt-1 min-w-48 rounded-panel border border-line bg-surface p-1 shadow-[var(--hg-shadow-popover)]">
+      {children}
+    </div>}
+  </div>;
+}
 
 export function ChatHeader({ chat, now, onAction, onHistory }: {
   chat: Conversation; now: number; onAction: (action: ChatAction) => void; onHistory: () => void;
@@ -40,11 +67,11 @@ export function ChatHeader({ chat, now, onAction, onHistory }: {
         // Keep focus usable when the shared menu unmounts its active item.
         if ((event.target as HTMLElement).closest('[role="menuitem"]')) focusMenuTrigger();
       }}>
-        <ActionMenu label="Acciones del chat">
+        <ChatActionsMenu label="Acciones del chat">
           {chat.state === 'seller' && <ActionMenuItem onClick={() => onAction('release')}>Devolver al asistente</ActionMenuItem>}
           {chat.state !== 'closed' && <ActionMenuItem onClick={() => onAction('close')}>Cerrar</ActionMenuItem>}
           <ActionMenuItem onClick={onHistory}>Historial</ActionMenuItem>
-        </ActionMenu>
+        </ChatActionsMenu>
       </div>
     </div>
   </header>;

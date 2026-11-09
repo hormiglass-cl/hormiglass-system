@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Button, Dialog, Field, Select } from '../ui/crm';
+import { ChevronDown } from 'lucide-react';
+import { Button, Dialog, Field } from '../ui/crm';
 import { datasheetMessage, findMockDatasheet, mockDatasheets } from '../../lib/whatsapp/mock-documents';
 import type { Conversation } from '../../lib/whatsapp/types';
 
@@ -46,13 +47,17 @@ export function MockDatasheetDialog({ chat, open, onClose, canSend, onConfirm }:
     <div className="space-y-4 break-words text-sm text-ink">
       <p>Para: <strong className="font-semibold">{chat.contact.name}</strong> · {chat.opportunity.code}</p>
       <Field label="Producto y documento" hint="Elige una muestra para revisarla. Seleccionar no envía nada.">
-        {props => <Select {...props} value={documentId} onChange={event => {
-          setDocumentId(event.target.value);
-          setError('');
-        }}>
-          <option value="">Selecciona un producto demo</option>
-          {mockDatasheets.map(document => <option key={document.id} value={document.id}>{document.product}</option>)}
-        </Select>}
+        {/* Native select: the shared Select drops the id, which would detach this label. */}
+        {props => <div className="relative">
+          <select {...props} className="hg-field cursor-pointer appearance-none pr-8 transition-colors" value={documentId} onChange={event => {
+            setDocumentId(event.target.value);
+            setError('');
+          }}>
+            <option value="">Selecciona un producto demo</option>
+            {mockDatasheets.map(document => <option key={document.id} value={document.id}>{document.product}</option>)}
+          </select>
+          <ChevronDown size={14} aria-hidden className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
+        </div>}
       </Field>
       {selected ? <>
         <section aria-label="Vista previa ficticia" className="space-y-2 rounded-panel border border-line bg-surface-muted p-3">
