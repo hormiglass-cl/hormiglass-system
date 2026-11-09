@@ -9,7 +9,7 @@ import { ChatWorkspace } from '../../components/whatsapp/ChatWorkspace';
 import { ConversationDetails, ConversationList, DemoNotice, NoticeBanners } from '../../components/whatsapp/InboxParts';
 
 export default function ConversacionesPage() {
-  const { chats, notices, selection, openChat, act, threadRequested, setThreadRequested } = useConversations();
+  const { chats, now, notices, selection, openChat, act, threadRequested, setThreadRequested } = useConversations();
   const [mobileChat, setMobileChat] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const chat = chats.find(item => item.id === selection?.id);
@@ -33,7 +33,7 @@ export default function ConversacionesPage() {
     </div>}
     <div className={`grid min-h-0 ${showDetails ? 'flex-none xl:flex-1' : 'flex-1'} items-stretch gap-4 xl:grid-cols-[288px_minmax(0,1fr)_280px]`}>
       <div className={viewingChat ? 'hidden min-h-0 min-w-0 xl:block' : 'min-h-0 min-w-0 overflow-y-auto'}>
-        <ConversationList chats={chats} selectedId={chat?.id} onSelect={selectChat} />
+        <ConversationList chats={chats} now={now} selectedId={chat?.id} onSelect={selectChat} />
       </div>
       {chat ? <>
         <div className={`${viewingChat ? 'flex' : 'hidden'} ${showDetails ? 'h-[calc(100dvh-136px)] xl:h-auto' : ''} min-h-0 min-w-0 xl:flex`}>

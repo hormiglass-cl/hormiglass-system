@@ -60,13 +60,7 @@ export function ContactAvatar({ name, size = 'md' }: { name: string; size?: 'md'
     size === 'lg' ? 'h-11 w-11 text-sm' : 'h-9 w-9 text-xs', avatarTones[hash % avatarTones.length])}>{initials}</span>;
 }
 
-const timeFormat = new Intl.DateTimeFormat('es-CL', { timeZone: 'America/Santiago', hour: '2-digit', minute: '2-digit' });
 const fullFormat = new Intl.DateTimeFormat('es-CL', { timeZone: 'America/Santiago', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-
-/** Short list timestamp (time of day) for the inbox rows. */
-export function formatChatTime(at: number): string {
-  return timeFormat.format(new Date(at));
-}
 
 export function ChatHeader({ chat, now, onAction, onHistory }: {
   chat: Conversation; now: number; onAction: (action: ChatAction) => void; onHistory: () => void;
@@ -75,7 +69,7 @@ export function ChatHeader({ chat, now, onAction, onHistory }: {
   const menu = useRef<HTMLDivElement>(null);
   const focusMenuTrigger = () => menu.current?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')?.focus();
   const captions = { assistant: 'Asistente', waiting: 'Esperando', seller: 'Atendiendo tú', closed: 'Cerrada' };
-  return <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-subtle bg-surface px-3 py-2 text-sm text-ink">
+  return <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-t-[inherit] border-b border-line-subtle bg-surface px-3 py-2 text-sm text-ink">
     <div className="flex min-w-[220px] flex-1 items-center gap-2.5">
       <ContactAvatar name={chat.contact.name} />
       <div className="min-w-0">
@@ -148,7 +142,7 @@ export function ChatComposer({ locked, onSend, onCreateQuote, onSelectDatasheet 
   onSelectDatasheet?: () => void;
 }) {
   const [draft, setDraft] = useState('');
-  return <form className="shrink-0 space-y-2 border-t border-line-subtle bg-surface px-3 py-2.5 text-sm" onSubmit={event => { event.preventDefault(); if (onSend(draft)) setDraft(''); }}>
+  return <form className="shrink-0 space-y-2 rounded-b-[inherit] border-t border-line-subtle bg-surface px-3 py-2.5 text-sm" onSubmit={event => { event.preventDefault(); if (onSend(draft)) setDraft(''); }}>
     <div className="flex gap-1.5 overflow-x-auto whitespace-nowrap [&>button]:shrink-0" role="group" aria-label="Atajos comerciales">
       <Button size="sm" variant="subtle" icon={Receipt} disabled={!onCreateQuote} onClick={onCreateQuote}>Crear cotización</Button>
       <Button size="sm" variant="subtle" icon={FileText} disabled={!onSelectDatasheet} onClick={onSelectDatasheet}>Enviar ficha técnica</Button>

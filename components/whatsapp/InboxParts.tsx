@@ -5,7 +5,8 @@ import clsx from 'clsx';
 import { BellRing, Check, Info, Sparkles } from 'lucide-react';
 import { Button, EmptyState, Panel, SearchField } from '../ui/crm';
 import type { ChatNotice, Conversation } from '../../lib/whatsapp/types';
-import { ChatStateBadge, ContactAvatar, formatChatTime } from './ChatPrimitives';
+import { ChatStateBadge, ContactAvatar } from './ChatPrimitives';
+import { formatListTimestamp } from '../../lib/whatsapp/format';
 
 export function DemoNotice() {
   return <p className="t-caption flex items-start gap-1.5"><Info size={14} aria-hidden className="mt-px shrink-0 text-info" />Datos ficticios · sin conexión a WhatsApp ni a oportunidades reales. No se envían mensajes reales. Los cambios se pierden al recargar.</p>;
@@ -33,7 +34,7 @@ function FilterPills({ active, onChange }: { active: string; onChange: (id: stri
   </div>;
 }
 
-export function ConversationList({ chats, selectedId, onSelect }: { chats: Conversation[]; selectedId?: string; onSelect: (id: string) => void }) {
+export function ConversationList({ chats, selectedId, onSelect, now }: { chats: Conversation[]; selectedId?: string; onSelect: (id: string) => void; now?: number }) {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const query = search.trim().toLocaleLowerCase('es');
@@ -54,7 +55,7 @@ export function ConversationList({ chats, selectedId, onSelect }: { chats: Conve
           <span className="min-w-0 flex-1 space-y-1">
             <span className="flex items-center justify-between gap-2">
               <span className="truncate text-sm font-semibold text-ink">{chat.contact.name}</span>
-              {last && <time dateTime={new Date(last.at).toISOString()} className="t-micro t-num shrink-0 text-ink-muted">{formatChatTime(last.at)}</time>}
+              {last && <time dateTime={new Date(last.at).toISOString()} className="t-micro t-num shrink-0 text-ink-muted">{formatListTimestamp(last.at, now ?? last.at)}</time>}
             </span>
             <span className="flex items-center justify-between gap-2">
               <span className="t-caption block truncate">{last?.text}</span>
