@@ -36,7 +36,7 @@ export function CardTitle({ title, hint, href, hrefLabel }: { title: string; hin
 export interface ColumnDatum { label: string; a: number; b?: number }
 
 export function ColumnChart({
-  title, hint, data, aLabel, bLabel, format = formatShortMoney, empty = 'Sin datos en este período.', compact = false,
+  title, hint, data, aLabel, bLabel, format = formatShortMoney, empty = 'Sin datos en este período.', compact = false, showEmpty = false, aClass = 'bg-accent', bClass = 'bg-success',
 }: {
   title: string;
   hint?: string;
@@ -46,6 +46,11 @@ export function ColumnChart({
   format?: (n: number) => string;
   empty?: string;
   compact?: boolean;
+  /** Dibuja las columnas en cero en vez del mensaje de vacío. */
+  showEmpty?: boolean;
+  /** Clases de color de cada serie (por defecto naranja y verde). */
+  aClass?: string;
+  bClass?: string;
 }) {
   const max = Math.max(...data.flatMap((d) => [d.a, d.b ?? 0]), 1);
   const hasData = data.some((d) => d.a > 0 || (d.b ?? 0) > 0);
@@ -54,18 +59,18 @@ export function ColumnChart({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <CardTitle title={title} hint={hint} />
         <div className="flex items-center gap-4 text-xs font-medium text-ink-muted">
-          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-accent" />{aLabel}</span>
-          {bLabel && <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-success" />{bLabel}</span>}
+          <span className="flex items-center gap-1.5"><span className={clsx('h-2.5 w-2.5 rounded-full', aClass)} />{aLabel}</span>
+          {bLabel && <span className="flex items-center gap-1.5"><span className={clsx('h-2.5 w-2.5 rounded-full', bClass)} />{bLabel}</span>}
         </div>
       </div>
-      {!hasData ? (
+      {!hasData && !showEmpty ? (
         <p className="py-16 text-center text-sm text-ink-muted">{empty}</p>
       ) : (
         <div className={clsx('flex items-end gap-3 border-b border-line', compact ? 'mt-3 h-32' : 'mt-6 h-52')}>
           {data.map((d) => (
             <div key={d.label} className="flex h-full min-w-0 flex-1 flex-col justify-end">
               <div className="flex flex-1 items-end justify-center gap-1.5">
-                {[{ v: d.a, c: 'bg-accent', n: aLabel }, ...(bLabel ? [{ v: d.b ?? 0, c: 'bg-success', n: bLabel }] : [])].map((bar) => (
+                {[{ v: d.a, c: aClass, n: aLabel }, ...(bLabel ? [{ v: d.b ?? 0, c: bClass, n: bLabel }] : [])].map((bar) => (
                   <div key={bar.n} className="group relative flex h-full w-full max-w-9 flex-col justify-end" title={`${d.label} · ${bar.n}: ${format(bar.v)}`}>
                     <span className="mb-1 text-center text-[11px] font-semibold text-ink-muted opacity-0 transition group-hover:opacity-100 t-num">{format(bar.v)}</span>
                     <div className={clsx('w-full rounded-t-lg transition-all duration-500', bar.c)} style={{ height: `${Math.max(bar.v > 0 ? 3 : 0, (bar.v / max) * 85)}%` }} />
@@ -76,7 +81,7 @@ export function ColumnChart({
           ))}
         </div>
       )}
-      {hasData && (
+      {(hasData || showEmpty) && (
         <div className="mt-2 flex gap-3">
           {data.map((d) => <span key={d.label} className="min-w-0 flex-1 truncate text-center text-[11px] text-ink-muted">{d.label}</span>)}
         </div>
@@ -113,16 +118,25 @@ function layoutTreemap(items: TreemapDatum[], x: number, y: number, w: number, h
 const TREEMAP_TONES = ['bg-accent text-on-accent', 'bg-info-soft text-ink', 'bg-success-soft text-ink', 'bg-warning-soft text-ink', 'bg-accent-soft text-ink', 'bg-surface-muted text-ink'];
 
 export function TreemapChart({
-  title, hint, items, maxItems = 8, format = formatShortMoney, empty = 'Sin datos en este período.',
+  title, hint, items, maxItems = 8, format = formatShortMoney, empty = 'Sin datos en este período.', showEmpty = false,
 }: {
-  title: string; hint?: string; items: TreemapDatum[]; maxItems?: number; format?: (n: number) => string; empty?: string;
+  title: string; hint?: string; items: TreemapDatum[]; maxItems?: number; format?: (n: number) => string; empty?: string; showEmpty?: boolean;
 }) {
   const data = items.filter((i) => i.value > 0).sort((a, b) => b.value - a.value).slice(0, maxItems);
   const rects = layoutTreemap(data, 0, 0, 100, 100);
   return (
     <section className={clsx(CARD, 'h-full')}>
       <CardTitle title={title} hint={hint} />
-      {data.length === 0 ? (
+      {data.length === 0 && showEmpty && items.length > 0 ? (
+        <div className="mt-5 grid h-64 grid-cols-2 gap-1.5 sm:grid-cols-4">
+          {items.slice(0, maxItems).map((i) => (
+            <div key={i.id} className="flex flex-col justify-between rounded-xl border border-dashed border-line p-2.5">
+              <span className="truncate text-xs font-semibold text-ink-muted">{i.label}</span>
+              <span className="t-num text-sm font-bold text-ink-muted">{format(0)}</span>
+            </div>
+          ))}
+        </div>
+      ) : data.length === 0 ? (
         <p className="py-16 text-center text-sm text-ink-muted">{empty}</p>
       ) : (
         <div className="relative mt-5 h-64 w-full">
@@ -216,12 +230,12 @@ export function WeekAgenda({ title, hint, events, href, hrefLabel }: { title: st
 
 export interface SegmentDatum { id: string; label: string; value: number; color: string }
 
-export function StackedBar({ title, hint, segments, href, hrefLabel, empty = 'Sin casos abiertos.' }: { title: string; hint?: string; segments: SegmentDatum[]; href?: string; hrefLabel?: string; empty?: string }) {
+export function StackedBar({ title, hint, segments, href, hrefLabel, empty = 'Sin casos abiertos.', showEmpty = false }: { title: string; hint?: string; segments: SegmentDatum[]; href?: string; hrefLabel?: string; empty?: string; showEmpty?: boolean }) {
   const total = segments.reduce((s, x) => s + x.value, 0);
   return (
     <section className={clsx(CARD, 'h-full')}>
       <CardTitle title={title} hint={hint} href={href} hrefLabel={hrefLabel} />
-      {total === 0 ? (
+      {total === 0 && !showEmpty ? (
         <p className="py-10 text-center text-sm text-ink-muted">{empty}</p>
       ) : (
         <>

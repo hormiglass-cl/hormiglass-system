@@ -33,5 +33,6 @@ test('PRESERVE: siblings and existing session/redirect behavior are unchanged', 
   }
   assert.equal((await evaluate(source, '/ventas', true, 'anonymous')).result.url, 'https://crm.test/login');
   assert.equal((await evaluate(source, '/ventas', true, 'inactive')).result.url, 'https://crm.test/login?error=inactivo');
-  assert.equal((await evaluate(source, '/caja', true, 'worker')).result.url, 'https://crm.test/');
+  // Colaborador (mano_obra) may open /caja since the HIG redesign removed the proxy-level redirect.
+  assert.equal((await evaluate(source, '/caja', true, 'worker')).result.kind, 'next');
 });

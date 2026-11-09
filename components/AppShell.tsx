@@ -7,6 +7,9 @@ import { Sidebar } from './Sidebar';
 import { CommandPalette } from './CommandPalette';
 import { ConversationProvider } from '../lib/whatsapp/store';
 import { BreadcrumbProvider } from '../lib/context/BreadcrumbContext';
+import { useAuth } from '../lib/context/AuthContext';
+import { SECCIONES_SOLO_ADMIN } from '../lib/types';
+import { AccesoRestringido } from './ui/AccesoRestringido';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -17,6 +20,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 function AppFrame({ pathname, children }: { pathname: string; children: React.ReactNode }) {
   const searchParams = useSearchParams();
+  const { currentUser } = useAuth();
+  const seccionRestringida =
+    currentUser && currentUser.rol !== 'admin'
+      ? SECCIONES_SOLO_ADMIN.find((s) => pathname === s.prefijo || pathname.startsWith(`${s.prefijo}/`))
+      : undefined;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
@@ -58,7 +66,7 @@ function AppFrame({ pathname, children }: { pathname: string; children: React.Re
           <Navbar onMenuClick={() => setMobileOpen(true)} />
           <main className="hg-app-main w-full flex-1 px-4 py-5 sm:px-6 lg:px-8">
             <div key={pathname} className="mx-auto max-w-[1800px] hg-page-transition">
-              {children}
+              {seccionRestringida ? <AccesoRestringido seccion={seccionRestringida.nombre} /> : children}
             </div>
           </main>
         </div>

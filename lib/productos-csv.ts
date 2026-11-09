@@ -101,9 +101,11 @@ export function parseProductosCsv(
     try {
       const values = cells(lines[i], separator);
       const codigoRaw = getCol(values, 'código interno', 'codigo interno', 'codigo').toUpperCase();
-      const nombre = getCol(values, 'descripción', 'descripcion', 'nombre');
+      const nombreCol = getCol(values, 'nombre');
+      const descripcionCol = getCol(values, 'descripción', 'descripcion');
+      const nombre = nombreCol || descripcionCol;
       const catField = getCol(values, 'categoría', 'categoria');
-      const subcategoria = getCol(values, 'subcategoría / terminación', 'subcategoria');
+      const subcategoria = getCol(values, 'subcategoría / terminación', 'subcategoría', 'subcategoria');
       const codigoProveedor = getCol(values, 'código proveedor', 'codigo_proveedor');
       const medidas = getCol(values, 'medidas');
       const color = getCol(values, 'color');
@@ -174,7 +176,7 @@ export function parseProductosCsv(
         peso_kg: peso,
         precio_referencia: precio,
         costo_referencia: costo,
-        descripcion: getCol(values, 'descripcion', 'descripción') || null,
+        descripcion: (nombreCol ? descripcionCol : '') || null,
         observaciones: observaciones || null,
         requiere_revision: !!requiereRevision,
         activo,
@@ -226,9 +228,14 @@ export function parseProductosExcel(
       };
 
       let codigo = getVal('Código interno', 'codigo', 'Código', 'CODIGO').toUpperCase();
-      let nombre = getVal('Descripción', 'nombre', 'Descripcion', 'DESCRIPCION');
+      const nombreCol = getVal('Nombre', 'nombre');
+      const descripcionCol = getVal('Descripción', 'Descripcion', 'DESCRIPCION');
+      let nombre = nombreCol || descripcionCol;
       const categoriaExcel = getVal('Categoría', 'categoria', 'Familia', 'CATEGORIA');
-      const subcategoria = getVal('Subcategoría / Terminación', 'subcategoria', 'Subcategoria');
+      const familiaCol = getVal('Familia', 'familia');
+      const tipoCol = getVal('Categoría', 'categoria').toLowerCase();
+      const tipoValido = ['producto', 'insumo', 'servicio'].includes(tipoCol);
+      const subcategoria = getVal('Subcategoría / Terminación', 'Subcategoría', 'subcategoria', 'Subcategoria');
       const codigoProveedor = getVal('Código proveedor', 'codigo_proveedor');
       const medidas = getVal('Medidas', 'medidas');
       const color = getVal('Color', 'color');
@@ -283,8 +290,8 @@ export function parseProductosExcel(
         codigo,
         codigo_proveedor: codigoProveedor || null,
         nombre,
-        categoria: 'producto',
-        familia: categoriaExcel || null,
+        categoria: (tipoValido ? tipoCol : 'producto') as ProductoImportado['categoria'],
+        familia: familiaCol || (tipoValido ? '' : categoriaExcel) || null,
         subcategoria: subcategoria || null,
         origen,
         proveedor_id: proveedorId,
@@ -295,7 +302,7 @@ export function parseProductosExcel(
         peso_kg: peso,
         precio_referencia: precio,
         costo_referencia: costo,
-        descripcion: getVal('descripcion', 'descripción') || null,
+        descripcion: (nombreCol ? descripcionCol : '') || null,
         observaciones: observaciones || null,
         requiere_revision: !!requiereRevision,
         activo,

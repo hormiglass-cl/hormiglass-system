@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import clsx from 'clsx';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { ChevronDown, ChevronsLeft, ChevronsRight, LogOut, Search, X } from 'lucide-react';
 import { useAuth } from '../lib/context/AuthContext';
 import { createClient } from '../lib/supabase/client';
@@ -29,7 +29,7 @@ function writePrefs(prefs: { collapsed: boolean; closedGroups: string[] }) {
   try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs)); } catch { /* sin almacenamiento: no se recuerda */ }
 }
 
-const DEFAULT_CLOSED_GROUPS = ['inicio', 'comercial', 'compras', 'calendarios', 'finanzas', 'administracion', 'sistema'];
+const DEFAULT_CLOSED_GROUPS = ['inicio', 'comercial', 'compras', 'calendarios', 'administracion', 'sistema'];
 
 const GLASS_BUTTON =
   'grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/[0.06] text-night-muted transition-colors hover:bg-white/10 hover:text-night-ink';
@@ -49,7 +49,6 @@ export function Sidebar({
   onSearch?: () => void;
 }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const router = useRouter();
   const { currentUser, logout } = useAuth();
   const { chats } = useConversations();
@@ -57,7 +56,7 @@ export function Sidebar({
   const assignmentCount = useAssignments().length;
   const isMac = useIsMac();
   const groups = useMemo(() => navGroupsFor(currentUser?.rol), [currentUser?.rol]);
-  const active = findActiveItem(pathname, searchParams.get('empresa'), currentUser?.rol);
+  const active = findActiveItem(pathname, currentUser?.rol);
 
   const [collapsed, setCollapsed] = useState(false);
   // Por defecto, todos los grupos colapsables inician contraídos a menos que el usuario guarde preferencias
@@ -90,13 +89,17 @@ export function Sidebar({
     const userId = currentUser.id;
 
     async function refreshCount() {
-      const { count } = await supabase.from('notificaciones').select('id', { count: 'exact', head: true })
-        .eq('usuario_id', userId).eq('leido', false);
-      if (alive) setUnreadCount(count || 0);
+      try {
+        const { count } = await supabase.from('notificaciones').select('id', { count: 'exact', head: true })
+          .eq('usuario_id', userId).eq('leido', false);
+        if (alive) setUnreadCount(count || 0);
+      } catch {
+        // Sin conexión o Supabase inalcanzable: se conserva el último conteo y se reintenta en el próximo ciclo.
+      }
     }
 
     // Sincronizar seguimientos una sola vez al inicio de sesión de forma desacoplada
-    void syncSeguimientoNotificaciones(supabase, userId);
+    void syncSeguimientoNotificaciones(supabase, userId).catch(() => {});
     void refreshCount();
 
     const interval = window.setInterval(refreshCount, 60_000);
@@ -108,16 +111,20 @@ export function Sidebar({
 
   useEffect(() => {
     if (!currentUser?.id) return;
-    const isFinanzasAdmin = ['admin', 'finanzas'].includes(currentUser.rol || '');
+    const isFinanzasAdmin = currentUser.rol === 'admin';
     if (!isFinanzasAdmin) return;
     let alive = true;
 
     async function refreshPendingAbonos() {
-      const { count } = await supabase
-        .from('abonos')
-        .select('id', { count: 'exact', head: true })
-        .eq('estado', 'pendiente');
-      if (alive) setPendingAbonosCount(count || 0);
+      try {
+        const { count } = await supabase
+          .from('abonos')
+          .select('id', { count: 'exact', head: true })
+          .eq('estado', 'pendiente');
+        if (alive) setPendingAbonosCount(count || 0);
+      } catch {
+        // Sin conexión: se conserva el último conteo.
+      }
     }
 
     void refreshPendingAbonos();
@@ -169,12 +176,13 @@ export function Sidebar({
   const compact = collapsed && !mobileOpen;
   const homeItems = groups.find((g) => g.id === 'inicio')?.items ?? [];
   const navGroups = groups.filter((g) => g.id !== 'sistema' && g.id !== 'inicio');
+  const isFlat = (g: (typeof groups)[number]) => g.flat === true;
   const systemItems = groups.find((g) => g.id === 'sistema')?.items ?? [];
 
   function itemBadge(href: string) {
     if (href === '/conversaciones') return demoUnreadCount;
     if (href === '/notificaciones') return unreadCount + assignmentCount;
-    if (href === '/caja' && ['admin', 'finanzas'].includes(currentUser?.rol || '')) return pendingAbonosCount;
+    if (href === '/caja' && currentUser?.rol === 'admin') return pendingAbonosCount;
     return 0;
   }
 
@@ -292,6 +300,7 @@ export function Sidebar({
             {navGroups.map((group) => {
               const GroupIcon = group.icon;
               const hasActive = group.items.some((item) => item === active?.item);
+              if (isFlat(group)) return <li key={group.id}>{renderLink(group.items[0])}</li>;
               return <li key={group.id}>
                 <button
                   type="button"
@@ -311,6 +320,7 @@ export function Sidebar({
             })}
           </ul>
         ) : navGroups.map((group) => {
+          if (isFlat(group)) return <ul key={group.id} className="mb-2 space-y-1">{group.items.map((item) => <li key={item.href}>{renderLink(item)}</li>)}</ul>;
           const isCollapsible = group.collapsible !== false;
           const groupOpen = !(isCollapsible && closedGroups.includes(group.id));
           const hasActiveItem = group.items.some((item) => item === active?.item);

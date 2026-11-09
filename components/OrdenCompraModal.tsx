@@ -7,9 +7,12 @@ import { createClient } from '../lib/supabase/client';
 import { useAuth } from '../lib/context/AuthContext';
 import { EstadoOrdenCompra, OrdenCompra, OrdenCompraItem, Proveedor, OportunidadVenta, ProductoCatalogo } from '../lib/types';
 import { logSistema } from '../lib/logger';
-import { AlertTriangle, Calculator, Check, ChevronDown, FileText, Plus, Save, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Plus, Save, Trash2, TrendingUp, X } from 'lucide-react';
 import { mensajeError } from '../lib/errores';
+import { etiquetaProducto } from '../lib/productos';
 import { Button, IconButton, CodeStamp } from './ui/crm';
+import { DateInput } from './ui/FormControls';
+import { SearchSelect } from './ui/SearchSelect';
 
 interface OrdenCompraModalProps {
   isOpen: boolean;
@@ -22,7 +25,7 @@ interface OrdenCompraModalProps {
 
 const defaultItem: OrdenCompraItem = {
   articulo_codigo: '',
-  descripcion: 'BALDOSA MINVU 0 40X40 COLOR GRIS',
+  descripcion: '',
   cantidad: 1,
   precio_unitario: 0,
   total_item: 0,
@@ -44,12 +47,15 @@ const generateOcNumber = () => {
   return `OC-${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
 };
 
-const formatCLP = (value: number) =>
-  new Intl.NumberFormat('es-CL', {
-    style: 'currency',
-    currency: 'CLP',
-    maximumFractionDigits: 0,
-  }).format(Number(value || 0));
+const formatCLP = (value: number) => `$${Number(value || 0).toLocaleString('es-CL')}`;
+
+const ESTADO_OPTIONS = [
+  { value: 'borrador', label: 'Borrador' },
+  { value: 'emitida', label: 'Emitida' },
+  { value: 'aprobada', label: 'Aprobada' },
+  { value: 'recibida', label: 'Recibida' },
+  { value: 'cancelada', label: 'Cancelada' },
+];
 
 export function OrdenCompraModal({
   isOpen,
@@ -84,8 +90,6 @@ export function OrdenCompraModal({
   const [items, setItems] = useState<OrdenCompraItem[]>([defaultItem]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [supplierSearch, setSupplierSearch] = useState('');
-  const [supplierOpen, setSupplierOpen] = useState(false);
   const [showVersionConfirmModal, setShowVersionConfirmModal] = useState(false);
   const [nextVersionPreview, setNextVersionPreview] = useState<number | null>(null);
 
@@ -99,18 +103,13 @@ export function OrdenCompraModal({
         supabase.from('catalogo_productos').select('*').eq('activo', true).order('nombre'),
       ]);
 
-      const loadedProveedores = (provRes.data || []) as Proveedor[];
-      setProveedores(loadedProveedores);
+      setProveedores((provRes.data || []) as Proveedor[]);
       setCatalogo((productRes.data || []) as ProductoCatalogo[]);
       setOportunidades((opRes.data || []) as OportunidadVenta[]);
-
-      if (!initialOrden && !proveedorIdInicial && loadedProveedores.length > 0) {
-        setProveedorId(loadedProveedores[0].id);
-      }
     }
 
     loadData();
-  }, [isOpen, initialOrden, proveedorIdInicial, supabase]);
+  }, [isOpen, supabase]);
 
   useEffect(() => {
     if (initialOrden) {
@@ -152,13 +151,6 @@ export function OrdenCompraModal({
     }
   }, [initialOrden, isOpen, proveedorIdInicial, oportunidadIdInicial]);
 
-  const selectedProveedor = proveedores.find((p) => p.id === proveedorId);
-  const filteredProveedores = proveedores.filter((p) => {
-    const q = supplierSearch.trim().toLowerCase();
-    if (!q) return true;
-    return [p.nombre, p.rut, p.contacto, p.correo, p.telefono].some((value) => value?.toLowerCase().includes(q));
-  });
-
   const subtotal = useMemo(() => items.reduce((acc, item) => acc + Number(item.total_item || 0), 0), [items]);
   const montoIva = Math.round(subtotal * 0.19);
   const montoTotal = subtotal + montoIva + Number(costoEnvio || 0) + Number(otrosCargos || 0);
@@ -181,7 +173,7 @@ export function OrdenCompraModal({
     if (!product) return;
     setItems((previous) => previous.map((item, itemIndex) => itemIndex === index
       ? { ...item, producto_catalogo_id: product.id, articulo_codigo: product.codigo,
-          descripcion: product.nombre, precio_unitario: Number(product.costo_referencia),
+          descripcion: etiquetaProducto(product), precio_unitario: Number(product.costo_referencia),
           total_item: Number(item.cantidad) * Number(product.costo_referencia) }
       : item));
   };
@@ -453,329 +445,381 @@ export function OrdenCompraModal({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="bg-surface border border-line rounded-panel max-w-4xl w-full shadow-[var(--hg-shadow-popover)] text-ink max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
-        <header className="shrink-0 flex items-center justify-between border-b border-line-subtle px-5 py-4 bg-surface">
+      <div className="bg-surface border border-line rounded-panel max-w-3xl w-full shadow-[var(--hg-shadow-popover)] text-ink max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
+        {/* Header Fijo */}
+        <header className="shrink-0 flex items-center justify-between border-b border-line-subtle px-5 py-3.5 bg-surface">
           <h3 className="t-section flex items-center gap-2">
-            <FileText className="w-5 h-5 text-accent-ink shrink-0" />
-            <span>{initialOrden ? `Editar OC ${initialOrden.numero_oc}` : 'Emitir Nueva Orden de Compra'}</span>
+            {initialOrden ? (
+              <>Editar orden de compra <CodeStamp>{initialOrden.numero_oc}</CodeStamp></>
+            ) : (
+              'Nueva orden de compra'
+            )}
           </h3>
           <IconButton icon={X} label="Cerrar" onClick={onClose} />
         </header>
 
+        {/* Cuerpo Scrollable */}
         <form id="form-oc-modal" onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4 text-xs">
           {errorMsg && (
-            <div className="bg-danger-soft border border-danger-line text-danger p-3.5 rounded-lg text-xs font-semibold flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-danger shrink-0" />
+            <div className="bg-danger-soft border border-danger-line text-danger p-3 rounded-md text-xs font-semibold flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
               <span>{errorMsg}</span>
             </div>
           )}
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 bg-surface-muted p-4 rounded-lg border border-line">
-            <div className="lg:col-span-2 relative">
-              <label className="block font-semibold text-ink mb-1">Proveedor *</label>
-              <button
-                type="button"
-                onClick={() => setSupplierOpen(!supplierOpen)}
-                className="w-full bg-surface border border-line rounded-md px-3 py-2 text-left font-semibold text-ink flex items-center justify-between hover:border-accent transition cursor-pointer"
-              >
-                <span className="truncate">{selectedProveedor ? selectedProveedor.nombre : 'Seleccionar proveedor...'}</span>
-                <ChevronDown className="w-4 h-4 text-ink-muted shrink-0" />
-              </button>
-              {supplierOpen && (
-                <div className="absolute left-0 right-0 mt-1 bg-surface border border-line rounded-lg shadow-sm z-50 p-2 max-h-64 overflow-y-auto space-y-1">
-                  <input
-                    type="text"
-                    value={supplierSearch}
-                    onChange={(e) => setSupplierSearch(e.target.value)}
-                    placeholder="Buscar proveedor..."
-                    className="w-full bg-surface-muted border border-line rounded-md px-3 py-2 text-xs mb-1 text-ink focus:outline-none focus:border-accent"
-                  />
-                  {filteredProveedores.map((prov) => (
-                    <button
-                      key={prov.id}
-                      type="button"
-                      onClick={() => {
-                        setProveedorId(prov.id);
-                        setSupplierOpen(false);
-                      }}
-                      className="w-full p-2 hover:bg-surface-muted rounded-md cursor-pointer flex items-center justify-between text-left transition"
-                    >
-                      <span>
-                        <span className="block font-semibold text-ink">{prov.nombre}</span>
-                        <span className="block text-[11px] text-ink-muted font-mono">RUT: {prov.rut}</span>
-                      </span>
-                      {prov.id === proveedorId && <Check className="w-4 h-4 text-accent-ink" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
 
+          {/* Datos generales */}
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="block font-semibold text-ink mb-1">Número OC *</label>
+              <label className="mb-1 block t-caption font-semibold text-ink">Proveedor *</label>
+              <SearchSelect
+                value={proveedorId}
+                onChange={setProveedorId}
+                options={proveedores.map((p) => ({ value: p.id, label: p.nombre, hint: p.rut }))}
+                placeholder="Seleccionar proveedor"
+                searchPlaceholder="Buscar por nombre o RUT..."
+                searchable
+                ariaLabel="Proveedor"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block t-caption font-semibold text-ink">Oportunidad de venta</label>
+              <SearchSelect
+                value={oportunidadId}
+                onChange={setOportunidadId}
+                options={oportunidades.map((op) => ({ value: op.id, label: op.codigo, hint: op.titulo }))}
+                clearLabel="Sin oportunidad"
+                placeholder="Sin oportunidad"
+                searchPlaceholder="Buscar oportunidad..."
+                searchable
+                ariaLabel="Oportunidad de venta"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block t-caption font-semibold text-ink">N° de orden *</label>
               <input
+                type="text"
                 value={numeroOc}
                 onChange={(e) => setNumeroOc(e.target.value)}
-                className="w-full bg-surface border border-line rounded-md px-3 py-2 font-mono font-semibold text-ink focus:outline-none focus:border-accent"
+                className="hg-field-compact w-full t-num"
               />
             </div>
-
             <div>
-              <label className="block font-semibold text-ink mb-1">Fecha</label>
-              <input
-                type="date"
+              <label className="mb-1 block t-caption font-semibold text-ink">Fecha de emisión</label>
+              <DateInput
                 value={fechaEmision}
                 onChange={(e) => setFechaEmision(e.target.value)}
-                className="w-full bg-surface border border-line rounded-md px-3 py-2 font-semibold text-ink focus:outline-none focus:border-accent"
+                className="hg-field-compact w-full"
               />
             </div>
-
-            <div>
-              <label className="block font-semibold text-ink mb-1">Estado</label>
-              <select
-                value={estado}
-                onChange={(e) => setEstado(e.target.value as EstadoOrdenCompra)}
-                className="w-full bg-surface border border-line rounded-md px-3 py-2 font-semibold text-ink focus:outline-none focus:border-accent"
-              >
-                <option value="borrador">Borrador</option>
-                <option value="emitida">Emitida</option>
-                <option value="aprobada">Aprobada</option>
-                <option value="recibida">Recibida</option>
-                <option value="cancelada">Cancelada</option>
-              </select>
-            </div>
-
-            <div className="lg:col-span-3">
-              <label className="block font-semibold text-ink mb-1">Oportunidad asociada</label>
-              <select
-                value={oportunidadId}
-                onChange={(e) => setOportunidadId(e.target.value)}
-                className="w-full bg-surface border border-line rounded-md px-3 py-2 font-semibold text-ink focus:outline-none focus:border-accent"
-              >
-                <option value="">-- Sin oportunidad vinculada --</option>
-                {oportunidades.map((op) => (
-                  <option key={op.id} value={op.id}>{op.codigo} - {op.titulo}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-surface p-4 rounded-lg border border-line space-y-3">
-              <h4 className="font-semibold text-accent-ink text-xs uppercase tracking-wide">Envío</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input value="Sociedad Inmobiliaria Hormiglass Spa" disabled className="sm:col-span-2 bg-surface-muted border border-line rounded-md px-3 py-2 text-ink font-semibold" />
-                <input value="77.615.313-3" disabled className="bg-surface-muted border border-line rounded-md px-3 py-2 text-ink font-semibold font-mono" />
-                <input value={envieAContacto} onChange={(e) => setEnvieAContacto(e.target.value)} placeholder="Contacto" className="bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent" />
-                <input value={envieADireccion} onChange={(e) => setEnvieADireccion(e.target.value)} placeholder="Dirección" className="sm:col-span-2 bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent" />
-                <input value={envieATelefono} onChange={(e) => setEnvieATelefono(e.target.value)} placeholder="Teléfono" className="bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent" />
-                <input value={envieAEmail} onChange={(e) => setEnvieAEmail(e.target.value)} placeholder="Email" className="bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent" />
+            {initialOrden && estado !== 'pagada' && (
+              <div>
+                <label className="mb-1 block t-caption font-semibold text-ink">Estado</label>
+                <SearchSelect
+                  value={estado}
+                  onChange={(v) => v && setEstado(v as EstadoOrdenCompra)}
+                  options={ESTADO_OPTIONS}
+                  ariaLabel="Estado de la orden"
+                />
               </div>
-            </div>
+            )}
+          </section>
 
-            <div className="bg-surface p-4 rounded-lg border border-line space-y-3">
-              <h4 className="font-semibold text-accent-ink text-xs uppercase tracking-wide">Condiciones de pago</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input value={condicionPago} onChange={(e) => setCondicionPago(e.target.value)} placeholder="Condición de pago" className="bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent" />
-                <input value={contactoPagoNombre} onChange={(e) => setContactoPagoNombre(e.target.value)} placeholder="Nombre contacto" className="bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent" />
-                <input value={contactoPagoTelefono} onChange={(e) => setContactoPagoTelefono(e.target.value)} placeholder="Teléfono" className="bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent" />
-                <input value={contactoPagoEmail} onChange={(e) => setContactoPagoEmail(e.target.value)} placeholder="Email" className="bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent" />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-3 bg-surface p-4 rounded-lg border border-line">
+          {/* Productos */}
+          <section className="space-y-3">
             <div className="flex items-center justify-between border-b border-line-subtle pb-2">
-              <span className="font-semibold text-ink flex items-center gap-1.5">
-                <Calculator className="w-4 h-4 text-accent-ink" />
-                <span>Artículos (valores netos en peso chileno)</span>
-              </span>
+              <span className="font-semibold text-ink">Productos <span className="font-normal text-ink-muted">(CLP, neto)</span></span>
               <Button variant="secondary" size="sm" onClick={handleAddItem}>
                 <Plus className="w-3.5 h-3.5" />
-                <span>Agregar ítem</span>
+                <span>Agregar producto</span>
               </Button>
             </div>
 
-            <div className="space-y-2.5">
-              <div className="hidden sm:grid grid-cols-12 gap-2 px-2 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
-                <span className="col-span-2">Código</span>
-                <span className="col-span-4">Descripción</span>
-                <span className="col-span-2 text-right">Cantidad</span>
-                <span className="col-span-2 text-right">Precio Unitario CLP</span>
-                <span className="col-span-1 text-right">Total CLP</span>
-                <span className="col-span-1 text-center">Quitar</span>
-              </div>
-              {items.map((item, index) => (
-                <div key={index} className="grid grid-cols-12 gap-2 items-center bg-surface-muted p-3 rounded-lg border border-line">
-                  <select
-                    aria-label={`Producto de compra ${index + 1}`}
-                    value={item.producto_catalogo_id || ''}
-                    onChange={(e) => selectCatalogItem(index, e.target.value)}
-                    className="col-span-12 bg-surface border border-line rounded-md px-2.5 py-1.5 text-ink font-medium focus:outline-none focus:border-accent"
-                  >
-                    <option value="">Partida libre / seleccionar catálogo</option>
-                    {catalogo.map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.requiere_revision ? '⚠️ ' : ''}{product.codigo} · {product.nombre} ({product.unidad}){product.requiere_revision ? ' [Revisar costo]' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  {catalogo.find((p) => p.id === item.producto_catalogo_id)?.requiere_revision && (
-                    <div className="col-span-12 text-[11px] text-warning bg-warning-soft border border-warning-line rounded-md px-2.5 py-1.5 font-medium flex items-center gap-1.5">
-                      <span>⚠️</span>
-                      <span>Producto con costo referencial / OCR. Confirmar costo con la cotización oficial del proveedor antes de emitir la OC.</span>
+            <div className="space-y-4">
+              {items.map((item, idx) => {
+                const selectedCatalogoProd = catalogo.find((p) => p.id === item.producto_catalogo_id);
+                return (
+                  <div key={idx} className="space-y-2 border-b border-line-subtle pb-4 last:border-b-0 last:pb-0">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 shrink-0 t-caption font-semibold text-ink-muted t-num">{idx + 1}.</span>
+                      {catalogo.length > 0 && (
+                        <div className="min-w-0 flex-1">
+                          <SearchSelect
+                            value={item.producto_catalogo_id || ''}
+                            onChange={(v) => v && selectCatalogItem(idx, v)}
+                            options={catalogo.map((pr) => ({
+                              value: pr.id,
+                              label: `${pr.codigo ? `[${pr.codigo}] ` : ''}${etiquetaProducto(pr)}`,
+                              hint: `$${(pr.costo_referencia || 0).toLocaleString('es-CL')} · ${pr.unidad}`,
+                            }))}
+                            placeholder="Elegir del catálogo (opcional)"
+                            searchPlaceholder="Buscar producto o código..."
+                            searchable
+                            menuMinWidth={380}
+                            ariaLabel={`Producto del catálogo ${idx + 1}`}
+                          />
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(idx)}
+                        disabled={items.length === 1}
+                        className="shrink-0 rounded-md p-1.5 text-danger transition hover:bg-danger-soft disabled:opacity-30"
+                        title="Eliminar producto"
+                        aria-label="Eliminar producto"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                  )}
-                  <input
-                    value={item.articulo_codigo || ''}
-                    onChange={(e) => handleItemChange(index, 'articulo_codigo', e.target.value)}
-                    placeholder="Código"
-                    aria-label="Código artículo"
-                    className="col-span-12 sm:col-span-2 bg-surface border border-line rounded-md px-2.5 py-1.5 text-ink font-mono focus:outline-none focus:border-accent"
-                  />
-                  <input
-                    value={item.descripcion}
-                    onChange={(e) => handleItemChange(index, 'descripcion', e.target.value)}
-                    placeholder="Descripción"
-                    aria-label="Descripción artículo"
-                    className="col-span-12 sm:col-span-4 bg-surface border border-line rounded-md px-2.5 py-1.5 font-semibold text-ink focus:outline-none focus:border-accent"
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={item.cantidad}
-                    onChange={(e) => handleItemChange(index, 'cantidad', e.target.value)}
-                    aria-label="Cantidad"
-                    className="col-span-6 sm:col-span-2 bg-surface border border-line rounded-md px-2.5 py-1.5 text-right font-semibold text-ink t-num focus:outline-none focus:border-accent"
-                  />
-                  <div className="col-span-6 sm:col-span-2 relative">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-ink-muted">CLP</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={item.precio_unitario}
-                      onChange={(e) => handleItemChange(index, 'precio_unitario', e.target.value)}
-                      aria-label="Precio unitario en pesos chilenos"
-                      className="w-full bg-surface border border-line rounded-md pl-9 pr-2.5 py-1.5 text-right font-semibold text-ink t-num focus:outline-none focus:border-accent"
-                    />
-                  </div>
-                  <div className="col-span-10 sm:col-span-1 font-bold text-right text-ink t-num">
-                    {formatCLP(Number(item.total_item || 0))}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveItem(index)}
-                    aria-label="Quitar ítem"
-                    className="col-span-2 sm:col-span-1 text-ink-muted hover:text-danger flex justify-center transition cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
-            <div>
-              <label className="block font-semibold text-ink mb-1">Comentarios o instrucciones especiales</label>
-              <textarea
-                value={instrucciones}
-                onChange={(e) => setInstrucciones(e.target.value)}
-                rows={5}
-                className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent"
-              />
+                    {selectedCatalogoProd?.requiere_revision && (
+                      <div className="flex items-center gap-1.5 rounded-md border border-warning-line bg-warning-soft px-2.5 py-1.5 text-[11px] font-semibold text-warning">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        <span>Costo referencial: confirma el valor con la cotización oficial del proveedor antes de emitir la OC.</span>
+                      </div>
+                    )}
+
+                    <textarea
+                      rows={2}
+                      value={item.descripcion}
+                      onChange={(e) => handleItemChange(idx, 'descripcion', e.target.value)}
+                      placeholder="Descripción del producto o partida"
+                      aria-label={`Descripción del producto ${idx + 1}`}
+                      className="hg-field-compact w-full resize-y"
+                    />
+
+                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                      <div>
+                        <label className="mb-1 block t-caption text-ink-muted">Código</label>
+                        <input
+                          type="text"
+                          value={item.articulo_codigo || ''}
+                          onChange={(e) => handleItemChange(idx, 'articulo_codigo', e.target.value)}
+                          placeholder="Opcional"
+                          className="hg-field-compact w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block t-caption text-ink-muted">Cantidad</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.cantidad}
+                          onChange={(e) => handleItemChange(idx, 'cantidad', e.target.value)}
+                          className="hg-field-compact w-full text-right t-num"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block t-caption text-ink-muted">Precio unitario</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={item.precio_unitario}
+                          onChange={(e) => handleItemChange(idx, 'precio_unitario', e.target.value)}
+                          className="hg-field-compact w-full text-right t-num"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block t-caption text-ink-muted">Subtotal</label>
+                        <div className="flex min-h-8 items-center justify-end rounded-md bg-surface-muted px-2.5 t-num font-semibold text-ink">
+                          {formatCLP(Number(item.total_item || 0))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <div className="bg-surface-muted border border-line rounded-lg p-4 space-y-2 text-xs">
-              <div className="flex justify-between text-ink"><span className="text-ink-muted">Subtotal</span><strong className="t-num font-semibold">{formatCLP(subtotal)}</strong></div>
-              <div className="flex justify-between text-ink"><span className="text-ink-muted">IVA 19%</span><strong className="t-num font-semibold">{formatCLP(montoIva)}</strong></div>
-              <label className="flex items-center justify-between gap-3 text-ink">
-                <span className="text-ink-muted">Envío</span>
-                <span className="relative w-36">
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-ink-muted">CLP</span>
+
+            {/* Totales */}
+            <dl className="ml-auto w-full space-y-1 rounded-lg bg-surface-muted p-3 sm:w-72">
+              <div className="flex justify-between text-ink-muted">
+                <dt>Neto</dt>
+                <dd className="t-num text-ink">{formatCLP(subtotal)}</dd>
+              </div>
+              <div className="flex justify-between text-ink-muted">
+                <dt>IVA 19%</dt>
+                <dd className="t-num text-ink">{formatCLP(montoIva)}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-ink-muted">
+                <dt><label htmlFor="oc-costo-envio">Envío</label></dt>
+                <dd>
                   <input
+                    id="oc-costo-envio"
                     type="number"
                     min="0"
                     value={costoEnvio}
                     onChange={(e) => setCostoEnvio(Number(e.target.value) || 0)}
-                    aria-label="Envío en pesos chilenos"
-                    className="w-full bg-surface border border-line rounded-md pl-9 pr-2 py-1 text-right font-semibold text-ink t-num focus:outline-none focus:border-accent"
+                    className="hg-field-compact w-28 text-right t-num"
                   />
-                </span>
-              </label>
-              <label className="flex items-center justify-between gap-3 text-ink">
-                <span className="text-ink-muted">Otro</span>
-                <span className="relative w-36">
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-ink-muted">CLP</span>
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-ink-muted">
+                <dt><label htmlFor="oc-otros-cargos">Otros cargos</label></dt>
+                <dd>
                   <input
+                    id="oc-otros-cargos"
                     type="number"
                     value={otrosCargos}
                     onChange={(e) => setOtrosCargos(Number(e.target.value) || 0)}
-                    aria-label="Otros cargos en pesos chilenos"
-                    className="w-full bg-surface border border-line rounded-md pl-9 pr-2 py-1 text-right font-semibold text-ink t-num focus:outline-none focus:border-accent"
+                    className="hg-field-compact w-28 text-right t-num"
                   />
-                </span>
-              </label>
-              <div className="flex justify-between border-t border-line pt-3 text-sm text-ink font-bold">
-                <span>Total</span>
-                <span className="t-num text-accent-ink font-bold">{formatCLP(montoTotal)}</span>
+                </dd>
+              </div>
+              <div className="flex justify-between border-t border-line pt-1.5 text-sm font-semibold text-ink">
+                <dt>Total</dt>
+                <dd className="t-num">{formatCLP(montoTotal)}</dd>
+              </div>
+            </dl>
+          </section>
+
+          {/* Condiciones de pago */}
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block t-caption font-semibold text-ink">Condición de pago</label>
+              <input
+                type="text"
+                value={condicionPago}
+                onChange={(e) => setCondicionPago(e.target.value)}
+                placeholder="Contado / 30 días"
+                className="hg-field-compact w-full"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block t-caption font-semibold text-ink">Contacto de pago</label>
+              <input
+                type="text"
+                value={contactoPagoNombre}
+                onChange={(e) => setContactoPagoNombre(e.target.value)}
+                placeholder="Nombre"
+                className="hg-field-compact w-full"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block t-caption font-semibold text-ink">Teléfono de pago</label>
+              <input
+                type="text"
+                value={contactoPagoTelefono}
+                onChange={(e) => setContactoPagoTelefono(e.target.value)}
+                className="hg-field-compact w-full"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block t-caption font-semibold text-ink">Email de pago</label>
+              <input
+                type="email"
+                value={contactoPagoEmail}
+                onChange={(e) => setContactoPagoEmail(e.target.value)}
+                className="hg-field-compact w-full"
+              />
+            </div>
+          </section>
+
+          {/* Despacho */}
+          <section className="space-y-3">
+            <div className="border-b border-line-subtle pb-2">
+              <span className="font-semibold text-ink">Despacho <span className="font-normal text-ink-muted">(Sociedad Inmobiliaria Hormiglass Spa · 77.615.313-3)</span></span>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block t-caption font-semibold text-ink">Contacto de recepción</label>
+                <input
+                  type="text"
+                  value={envieAContacto}
+                  onChange={(e) => setEnvieAContacto(e.target.value)}
+                  className="hg-field-compact w-full"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block t-caption font-semibold text-ink">Teléfono</label>
+                <input
+                  type="text"
+                  value={envieATelefono}
+                  onChange={(e) => setEnvieATelefono(e.target.value)}
+                  className="hg-field-compact w-full"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block t-caption font-semibold text-ink">Dirección</label>
+                <input
+                  type="text"
+                  value={envieADireccion}
+                  onChange={(e) => setEnvieADireccion(e.target.value)}
+                  className="hg-field-compact w-full"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block t-caption font-semibold text-ink">Email</label>
+                <input
+                  type="email"
+                  value={envieAEmail}
+                  onChange={(e) => setEnvieAEmail(e.target.value)}
+                  className="hg-field-compact w-full"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block t-caption font-semibold text-ink">Observaciones <span className="font-normal text-ink-muted">(comentarios o instrucciones especiales para el proveedor)</span></label>
+                <textarea
+                  value={instrucciones}
+                  onChange={(e) => setInstrucciones(e.target.value)}
+                  rows={2}
+                  className="hg-field-compact w-full resize-y"
+                />
+              </div>
+            </div>
+          </section>
+        </form>
+
+        {/* Footer Fijo con Botones de Acción */}
+        <footer className="shrink-0 flex items-center justify-end gap-2 border-t border-line-subtle bg-app px-5 py-3.5">
+          <Button variant="secondary" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button variant="primary" type="submit" form="form-oc-modal" disabled={loading}>
+            <Save className="w-4 h-4" />
+            <span>{loading ? 'Guardando...' : initialOrden ? 'Guardar cambios' : 'Crear orden'}</span>
+          </Button>
+        </footer>
+
+        {/* Modal de confirmación de versionado */}
+        {showVersionConfirmModal && initialOrden && (
+          <div className="fixed inset-0 bg-ink/60 backdrop-blur-xs flex items-center justify-center p-4 z-[110]">
+            <div className="bg-surface border border-line rounded-panel max-w-md w-full p-6 space-y-4 shadow-[var(--hg-shadow-popover)] text-ink">
+              <div className="flex items-center gap-3 text-warning">
+                <AlertTriangle className="w-6 h-6 shrink-0" />
+                <h4 className="font-semibold text-base text-ink">Confirmar modificación de la orden</h4>
+              </div>
+              <p className="text-xs text-ink-muted leading-relaxed">
+                Estás editando la orden <strong className="text-ink">{initialOrden.numero_oc}</strong> (v{initialOrden.version || 1}). Crea una versión nueva para conservar el historial o sobrescribe la versión actual.
+              </p>
+              <div className="flex flex-col gap-2 pt-2">
+                <Button
+                  variant="primary"
+                  onClick={() => saveOrdenToBackend(true)}
+                  disabled={loading}
+                >
+                  <TrendingUp className="w-4 h-4" />
+                  <span>Crear Nueva Versión (v{nextVersionPreview || (initialOrden.version || 1) + 1})</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => saveOrdenToBackend(false)}
+                  disabled={loading}
+                >
+                  Sobrescribir Versión Actual (v{initialOrden.version || 1})
+                </Button>
+                <Button
+                  variant="subtle"
+                  onClick={() => setShowVersionConfirmModal(false)}
+                >
+                  Volver al formulario
+                </Button>
               </div>
             </div>
           </div>
-        </form>
-
-        <footer className="shrink-0 flex items-center justify-end gap-2 border-t border-line-subtle bg-app px-5 py-3.5">
-          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-          <Button variant="primary" type="submit" form="form-oc-modal" disabled={loading}>
-            <Save className="w-4 h-4" />
-            <span>{loading ? 'Guardando...' : 'Guardar OC'}</span>
-          </Button>
-        </footer>
+        )}
       </div>
-
-      {showVersionConfirmModal && initialOrden && (
-        <div className="fixed inset-0 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4 z-[110]">
-          <div className="bg-surface border border-line rounded-panel max-w-md w-full p-6 space-y-4 shadow-[var(--hg-shadow-popover)] text-ink">
-            <div className="flex items-center justify-between border-b border-line pb-3">
-              <h3 className="text-base font-bold text-ink flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-warning" />
-                <span>Confirmar Guardado de Cambios</span>
-              </h3>
-              <IconButton icon={X} label="Cerrar" onClick={() => setShowVersionConfirmModal(false)} />
-            </div>
-
-            <div className="space-y-3 text-xs text-ink">
-              <p>
-                Se detectaron cambios en la OC <CodeStamp>{initialOrden.numero_oc} (v{initialOrden.version || 1})</CodeStamp>.
-              </p>
-              <p className="bg-warning-soft p-3 rounded-md border border-warning-line text-warning font-medium">
-                Puedes guardar como una versión nueva incrementada (v{nextVersionPreview || (initialOrden.version || 1) + 1}) o sobreescribir la versión actual.
-              </p>
-            </div>
-
-            <div className="pt-2 flex flex-col sm:flex-row items-center justify-end gap-2 text-xs">
-              <Button
-                variant="secondary"
-                onClick={() => saveOrdenToBackend(false)}
-                disabled={loading}
-                className="w-full sm:w-auto"
-              >
-                Sobreescribir Versión Actual
-              </Button>
-
-              <Button
-                variant="primary"
-                onClick={() => saveOrdenToBackend(true)}
-                disabled={loading}
-                className="w-full sm:w-auto"
-              >
-                <Save className="w-4 h-4" />
-                <span>Crear Nueva Versión (v{nextVersionPreview || (initialOrden.version || 1) + 1})</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>,
     document.body
   );

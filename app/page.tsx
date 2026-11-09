@@ -37,6 +37,7 @@ import {
 import clsx from 'clsx';
 import { MetricCard } from '../components/ui/MetricCard';
 import { DateRangePicker } from '../components/ui/DateRangePicker';
+import { PillTabs, PillTabsBar } from '../components/ui/PillTabs';
 
 import { SalesTimelineChart } from '../components/dashboard/SalesTimelineChart';
 import { DonutChart, DonutSegment } from '../components/dashboard/DonutChart';
@@ -744,38 +745,27 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 pb-8">
       {/* Barra superior: pestañas y rango de fechas (sin título: la ruta ya lo indica) */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex h-11 items-center gap-1 rounded-full border border-line bg-surface-muted p-1">
-          {dashboardTabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={clsx(
-                  'flex h-full cursor-pointer select-none items-center gap-2 rounded-full px-4 text-xs font-semibold transition-all duration-200 sm:px-5 sm:text-sm',
-                  isActive ? 'bg-accent text-on-accent shadow-xs' : 'text-ink-muted hover:bg-surface/60 hover:text-ink'
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        <DateRangePicker
-          from={fechaDesde}
-          to={fechaHasta}
-          onChange={(desde, hasta) => {
-            setQuickFilter(desde || hasta ? 'custom' : 'all');
-            setFechaDesde(desde);
-            setFechaHasta(hasta);
-          }}
-        />
-      </div>
+      <PillTabsBar
+        tabs={
+          <PillTabs
+            label="Paneles"
+            items={dashboardTabs.map((tab) => ({ id: tab.id, label: tab.label, icon: tab.icon }))}
+            active={activeTab}
+            onChange={(id) => setActiveTab(id as DashboardTab)}
+          />
+        }
+        right={
+          <DateRangePicker
+            from={fechaDesde}
+            to={fechaHasta}
+            onChange={(desde, hasta) => {
+              setQuickFilter(desde || hasta ? 'custom' : 'all');
+              setFechaDesde(desde);
+              setFechaHasta(hasta);
+            }}
+          />
+        }
+      />
 
       {/* ===== GENERAL ===== */}
       {activeTab === 'general' && (

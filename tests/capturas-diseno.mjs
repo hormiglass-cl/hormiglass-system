@@ -8,7 +8,7 @@ const BASE = process.env.E2E_BASE_URL || 'http://127.0.0.1:3005';
 const [outName = 'diseno', ...routesArg] = process.argv.slice(2);
 const routes = routesArg.length ? routesArg : [
   '/', '/ventas', '/clientes', '/cotizaciones', '/postventa', '/ordenes-compra',
-  '/productos', '/caja', '/reportes', '/rrhh', '/configuracion',
+  '/productos', '/caja', '/rrhh', '/configuracion',
 ];
 
 if (!process.env.E2E_EMAIL || !process.env.E2E_PASSWORD) {

@@ -2,10 +2,21 @@ export type UserRole = 'admin' | 'user' | 'mano_obra' | 'finanzas';
 
 export const ROL_NOMBRE: Record<UserRole, string> = {
   admin: 'Administrador',
-  user: 'Ejecutivo Comercial',
-  mano_obra: 'Mano de Obra',
-  finanzas: 'Finanzas y Caja',
+  user: 'Colaborador',
+  mano_obra: 'Colaborador',
+  finanzas: 'Colaborador',
 };
+
+/** Roles que se pueden asignar hoy: solo Administrador y Colaborador. */
+export const ROLES_ASIGNABLES: UserRole[] = ['admin', 'user'];
+
+/** Secciones que solo puede consultar y editar un Administrador. */
+export const SECCIONES_SOLO_ADMIN: { prefijo: string; nombre: string }[] = [
+  { prefijo: '/rrhh', nombre: 'Recursos humanos' },
+  { prefijo: '/caja', nombre: 'Caja, bancos y empresas' },
+  { prefijo: '/configuracion', nombre: 'Configuración' },
+  { prefijo: '/administracion', nombre: 'Bancos y empresas' },
+];
 
 export interface Usuario {
   id: string;
@@ -63,6 +74,20 @@ export interface NotaActividad {
   tipo_actividad?: TipoNotaActividad;
   fecha_recordatorio?: string;
   hora_recordatorio?: string;
+  fecha: string;
+  usuario?: Usuario;
+}
+
+export type TipoNotaProveedor = TipoNotaActividad;
+
+export interface NotaProveedor {
+  id: string;
+  proveedor_id: string;
+  usuario_id?: string | null;
+  contenido: string;
+  tipo_actividad?: TipoNotaProveedor;
+  fecha_recordatorio?: string | null;
+  hora_recordatorio?: string | null;
   fecha: string;
   usuario?: Usuario;
 }
@@ -522,6 +547,7 @@ export interface Proveedor {
   direccion?: string;
   comuna?: string;
   region?: string;
+  rubro?: string;
   created_at?: string;
 }
 
@@ -811,6 +837,7 @@ export interface Notificacion {
   link_url?: string;
   leido: boolean;
   entidad_relacionada?: string;
+  creado_por?: string;
   fecha: string;
 }
 

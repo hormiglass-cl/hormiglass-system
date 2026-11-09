@@ -75,6 +75,7 @@ import {
   User,
   XCircle,
 } from 'lucide-react';
+import { Select, DateInput, DateTimeInput } from '../../../components/ui/FormControls';
 
 const PIPELINE_STAGES = [
   { id: 'nueva', label: 'Nueva' },
@@ -1363,7 +1364,7 @@ export default function FichaOportunidadPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                   <label className="space-y-1">
                     <span className="text-ink-muted block">Tipo de venta</span>
-                    <select
+                    <Select
                       value={op.tipo_venta || 'Instalación'}
                       onChange={(e) => void handleUpdateField('tipo_venta', e.target.value, `Tipo de venta actualizado a "${e.target.value}".`)}
                       className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 font-semibold text-ink"
@@ -1371,24 +1372,24 @@ export default function FichaOportunidadPage() {
                       <option value="Instalación">Instalación</option>
                       <option value="Suministro">Suministro</option>
                       <option value="Reventa de Material">Reventa de Material</option>
-                    </select>
+                    </Select>
                   </label>
 
                   <label className="space-y-1">
                     <span className="text-ink-muted block">Modalidad</span>
-                    <select
+                    <Select
                       value={op.modalidad_requerimiento || 'instalacion'}
                       onChange={(e) => void handleUpdateField('modalidad_requerimiento', e.target.value, `Modalidad actualizada a "${e.target.value}".`)}
                       className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 font-semibold text-ink"
                     >
                       <option value="instalacion">Material + Instalación</option>
                       <option value="solo_material">Sólo material</option>
-                    </select>
+                    </Select>
                   </label>
 
                   <label className="space-y-1">
                     <span className="text-ink-muted block">Prioridad</span>
-                    <select
+                    <Select
                       value={op.prioridad || 'normal'}
                       onChange={(e) => void handleUpdateField('prioridad', e.target.value, `Prioridad cambiada a "${e.target.value}".`)}
                       className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 font-semibold text-ink"
@@ -1396,12 +1397,12 @@ export default function FichaOportunidadPage() {
                       <option value="normal">Normal</option>
                       <option value="alta">Alta</option>
                       <option value="urgente">Urgente</option>
-                    </select>
+                    </Select>
                   </label>
 
                   <label className="space-y-1">
                     <span className="text-ink-muted block">Ejecutivo comercial</span>
-                    <select
+                    <Select
                       value={op.asignado_a || ''}
                       onChange={(e) => void handleUpdateField('asignado_a', e.target.value || null, 'Ejecutivo comercial actualizado.')}
                       className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 font-semibold text-ink"
@@ -1410,7 +1411,7 @@ export default function FichaOportunidadPage() {
                       {(usersList as Usuario[]).map((u) => (
                         <option key={u.id} value={u.id}>{u.nombre}</option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
                 </div>
               </div>
@@ -1434,8 +1435,7 @@ export default function FichaOportunidadPage() {
 
                 <label className="space-y-1">
                   <span className="t-micro text-ink-muted block">Fecha prometida / límite</span>
-                  <input
-                    type="date"
+                  <DateInput
                     value={op.fecha_prometida || op.fecha_limite || ''}
                     onChange={(e) => void handleUpdateField('fecha_prometida', e.target.value || null, `Fecha prometida actualizada a ${e.target.value}.`)}
                     className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-ink t-num"
@@ -1478,7 +1478,7 @@ export default function FichaOportunidadPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-line-subtle text-xs">
                 <label className="space-y-1">
                   <span className="text-ink-muted font-medium block">Abastecimiento</span>
-                  <select
+                  <Select
                     value={op.abastecimiento || ''}
                     onChange={(e) => void handleUpdateField('abastecimiento', e.target.value || null, `Abastecimiento definido: ${e.target.value}.`)}
                     className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-ink font-semibold"
@@ -1487,12 +1487,12 @@ export default function FichaOportunidadPage() {
                     <option value="fabricar">Fabricar (Planta Hormiglass)</option>
                     <option value="compra_proveedor">Compra a proveedor (Reventa)</option>
                     <option value="stock">Stock disponible en patio</option>
-                  </select>
+                  </Select>
                 </label>
 
                 <label className="space-y-1">
                   <span className="text-ink-muted font-medium block">Forma de entrega</span>
-                  <select
+                  <Select
                     value={op.forma_entrega || ''}
                     onChange={(e) => void handleUpdateField('forma_entrega', e.target.value || null, `Forma de entrega definida: ${e.target.value}.`)}
                     className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-ink font-semibold"
@@ -1501,12 +1501,12 @@ export default function FichaOportunidadPage() {
                     <option value="despacho">Despacho a obra</option>
                     <option value="retiro_cliente">Retiro en planta por cliente</option>
                     <option value="instalacion_obra">Instalación en obra</option>
-                  </select>
+                  </Select>
                 </label>
 
                 <label className="space-y-1">
                   <span className="text-ink-muted font-medium block">Condición de pago</span>
-                  <select
+                  <Select
                     value={op.condicion_pago || ''}
                     onChange={(e) => void handleUpdateField('condicion_pago', e.target.value || null, `Condición de pago: ${e.target.value}.`)}
                     className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-ink font-semibold"
@@ -1516,7 +1516,7 @@ export default function FichaOportunidadPage() {
                     <option value="50_50">50% Anticipo / 50% Contra entrega</option>
                     <option value="credito_30">Crédito 30 días / OC</option>
                     <option value="estados_pago">Estados de pago (Obra)</option>
-                  </select>
+                  </Select>
                 </label>
               </div>
             </Panel>
@@ -1526,7 +1526,7 @@ export default function FichaOportunidadPage() {
               title={`Documentos y Antecedentes (${antecedentes.length})`}
               actions={
                 <div className="flex items-center gap-2">
-                  <select
+                  <Select
                     value={nuevoDocTipo}
                     onChange={(e) => setNuevoDocTipo(e.target.value as TipoAntecedenteDocumento)}
                     className="rounded-md border border-line bg-surface p-1 text-xs text-ink"
@@ -1536,7 +1536,7 @@ export default function FichaOportunidadPage() {
                     <option value="anexo">Anexo</option>
                     <option value="documento_empresa">Doc. Empresa</option>
                     <option value="otro">Otro</option>
-                  </select>
+                  </Select>
                   <label className="cursor-pointer text-xs font-semibold text-accent-ink hover:underline flex items-center gap-1">
                     <Paperclip size={13} />
                     <span>{subiendoArchivo ? 'Subiendo...' : 'Adjuntar'}</span>
@@ -1722,7 +1722,7 @@ export default function FichaOportunidadPage() {
             <Panel title="Actividades y Notas" className="p-4 space-y-3">
               <form onSubmit={handleEnviarComentario} className="space-y-2">
                 <div className="flex gap-2">
-                  <select
+                  <Select
                     value={comentarioTipo}
                     onChange={(e) => setComentarioTipo(e.target.value as typeof comentarioTipo)}
                     className="rounded-md border border-line bg-surface p-1.5 text-xs text-ink"
@@ -1730,7 +1730,7 @@ export default function FichaOportunidadPage() {
                     <option value="comentario">Comentario</option>
                     <option value="actualizacion">Actualización</option>
                     <option value="seguimiento">Seguimiento</option>
-                  </select>
+                  </Select>
                 </div>
 
                 <textarea
@@ -1816,7 +1816,7 @@ export default function FichaOportunidadPage() {
             {/* Selector para vincular cotización existente del cliente */}
             {unassignedClientQuotes.length > 0 && (
               <div className="rounded-lg border border-line bg-surface-muted/50 p-3 flex flex-col sm:flex-row items-center gap-2.5 text-xs">
-                <select
+                <Select
                   value={selectedCandidateCotId}
                   onChange={(e) => setSelectedCandidateCotId(e.target.value)}
                   className="flex-1 rounded-md border border-line bg-surface px-3 py-2 font-semibold text-ink"
@@ -1827,7 +1827,7 @@ export default function FichaOportunidadPage() {
                       {c.numero_cotizacion} (v{c.version || 1}) — {money(c.monto_total)} ({c.estado})
                     </option>
                   ))}
-                </select>
+                </Select>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -1892,7 +1892,7 @@ export default function FichaOportunidadPage() {
                         <div className="flex items-center gap-2">
                           <CodeStamp>{q.numero_cotizacion}</CodeStamp>
                           <span className="text-ink-muted">v{q.version || 1}</span>
-                          <select
+                          <Select
                             aria-label={`Estado de cotización ${q.numero_cotizacion}`}
                             value={q.estado}
                             onChange={(e) => void handleQuoteStatusChange(q, e.target.value as EstadoCotizacion)}
@@ -1902,7 +1902,7 @@ export default function FichaOportunidadPage() {
                             <option value="enviada">Enviada</option>
                             <option value="aprobada">Aprobada</option>
                             <option value="rechazada">Rechazada</option>
-                          </select>
+                          </Select>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="t-num font-semibold text-ink">{money(q.monto_total)}</span>
@@ -2077,9 +2077,8 @@ export default function FichaOportunidadPage() {
             <div className="flex flex-wrap gap-2 items-end">
               <label className="text-ink">
                 <span className="block text-xs text-ink-muted mb-1">Vencimiento del cobro</span>
-                <input
+                <DateInput
                   aria-label="Vencimiento del cobro"
-                  type="date"
                   value={dueDate}
                   disabled={!delivered}
                   onChange={(e) => setDueDate(e.target.value)}
@@ -2339,9 +2338,8 @@ export default function FichaOportunidadPage() {
           {/* Orden de Producción y Registro Diario */}
           <Panel title="Orden de producción y bitácora de planta" className="p-4 space-y-3">
             <div className="flex flex-wrap gap-2">
-              <input
+              <DateInput
                 aria-label="Fecha objetivo de producción"
-                type="date"
                 value={productionDate}
                 onChange={(e) => setProductionDate(e.target.value)}
                 className="rounded-md border border-line bg-surface p-2 text-sm text-ink"
@@ -2359,7 +2357,7 @@ export default function FichaOportunidadPage() {
               <div key={order.id} className="border-t border-line-subtle pt-2 text-sm space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <strong className="text-ink">Orden {order.id.slice(0, 8)}</strong>
-                  <select
+                  <Select
                     aria-label={`Estado de orden ${order.id.slice(0, 8)}`}
                     value={order.estado}
                     onChange={async (e) => {
@@ -2376,7 +2374,7 @@ export default function FichaOportunidadPage() {
                     <option value="en_curso">En curso</option>
                     <option value="completada">Completada</option>
                     <option value="cancelada">Cancelada</option>
-                  </select>
+                  </Select>
                   <span className="text-ink-muted">Objetivo: {order.fecha_objetivo || 'Sin fecha'}</span>
                 </div>
                 <p className="text-ink-muted">
@@ -2398,7 +2396,7 @@ export default function FichaOportunidadPage() {
 
             {orders.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 border-t border-line-subtle pt-3">
-                <select
+                <Select
                   aria-label="Orden de producción"
                   value={productionOrderId}
                   onChange={(e) => {
@@ -2413,8 +2411,8 @@ export default function FichaOportunidadPage() {
                       {order.id.slice(0, 8)}
                     </option>
                   ))}
-                </select>
-                <select
+                </Select>
+                <Select
                   aria-label="Producto producido"
                   value={productionItemId}
                   onChange={(e) => setProductionItemId(e.target.value)}
@@ -2428,7 +2426,7 @@ export default function FichaOportunidadPage() {
                         {item.producto}
                       </option>
                     ))}
-                </select>
+                </Select>
                 <input
                   aria-label="Cantidad producida"
                   type="number"
@@ -2439,9 +2437,8 @@ export default function FichaOportunidadPage() {
                   onChange={(e) => setProducedQty(e.target.value)}
                   className="rounded-md border border-line bg-surface p-2 text-sm text-ink"
                 />
-                <input
+                <DateInput
                   aria-label="Fecha de producción"
-                  type="date"
                   value={producedDate}
                   onChange={(e) => setProducedDate(e.target.value)}
                   className="rounded-md border border-line bg-surface p-2 text-sm text-ink"
@@ -2476,9 +2473,8 @@ export default function FichaOportunidadPage() {
                 onChange={(e) => setGuideNumber(e.target.value)}
                 className="rounded-md border border-line bg-surface p-2 text-ink"
               />
-              <input
+              <DateTimeInput
                 aria-label="Fecha de salida"
-                type="datetime-local"
                 value={guideDate}
                 onChange={(e) => setGuideDate(e.target.value)}
                 className="rounded-md border border-line bg-surface p-2 text-ink"
@@ -2511,7 +2507,7 @@ export default function FichaOportunidadPage() {
                 onChange={(e) => setDriver(e.target.value)}
                 className="rounded-md border border-line bg-surface p-2 text-ink"
               />
-              <select
+              <Select
                 aria-label="Tipo de transporte"
                 value={transportType}
                 onChange={(e) => setTransportType(e.target.value as typeof transportType)}
@@ -2520,7 +2516,7 @@ export default function FichaOportunidadPage() {
                 <option value="propio">Transporte propio</option>
                 <option value="externo">Transporte externo</option>
                 <option value="retiro_cliente">Retiro por cliente</option>
-              </select>
+              </Select>
               <input
                 aria-label="Costo estimado del traslado"
                 type="number"
@@ -2772,7 +2768,7 @@ export default function FichaOportunidadPage() {
           {/* Postventa */}
           <Panel title="Postventa" className="p-4 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
-              <select
+              <Select
                 aria-label="Tipo de caso"
                 value={postventaType}
                 onChange={(e) => setPostventaType(e.target.value as PostventaCaso['tipo'])}
@@ -2782,10 +2778,9 @@ export default function FichaOportunidadPage() {
                 <option value="faltante">Faltante</option>
                 <option value="cantidad_adicional">Cantidad adicional</option>
                 <option value="otro">Otro</option>
-              </select>
-              <input
+              </Select>
+              <DateInput
                 aria-label="Fecha de compromiso"
-                type="date"
                 value={postventaDate}
                 onChange={(e) => setPostventaDate(e.target.value)}
                 className="rounded-md border border-line bg-surface p-2 text-ink"
@@ -2822,7 +2817,7 @@ export default function FichaOportunidadPage() {
               <div key={caso.id} className="border-t border-line-subtle pt-3 text-sm space-y-1 text-ink">
                 <div className="flex flex-wrap gap-2 items-center">
                   <strong>{caso.tipo}</strong>
-                  <select
+                  <Select
                     aria-label={`Estado de caso ${caso.id.slice(0, 8)}`}
                     value={caso.estado}
                     onChange={async (e) => {
@@ -2840,7 +2835,7 @@ export default function FichaOportunidadPage() {
                     <option value="en_curso">En curso</option>
                     <option value="resuelto">Resuelto</option>
                     <option value="cancelado">Cancelado</option>
-                  </select>
+                  </Select>
                   <span className="text-ink-muted">{caso.fecha_compromiso || 'Sin fecha'}</span>
                 </div>
                 <p className="text-ink">{caso.descripcion}</p>

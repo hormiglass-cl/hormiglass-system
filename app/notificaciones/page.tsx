@@ -16,19 +16,18 @@ import {
   Filter,
   Search,
   RotateCcw,
-  CheckCircle2,
   Circle,
   Bell,
-  ChevronRight,
-  Wallet,
-  Truck,
+  ExternalLink,
 } from 'lucide-react';
 import clsx from 'clsx';
 import {
-  PageHeader,
   Button,
   EmptyState,
 } from '../../components/ui';
+import { ActionMenu, ActionMenuItem } from '../../components/ui/crm';
+import { useAjuste } from '../../lib/ajustes';
+import { NAV_GROUPS } from '../../lib/navigation';
 import { AvatarBadge } from '../../components/ui/AvatarBadge';
 import { useConfirm, useToast } from '../../components/ui/feedback';
 
@@ -72,23 +71,20 @@ function getClickUpDateGroup(dateStr: string): string {
   return `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
 }
 
-/** Formatea fecha corta a la derecha estilo ClickUp: "14:30", "sep. 4", "jul. 20" */
-function formatClickUpDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-
-  const isToday =
-    date.getDate() === now.getDate() &&
-    date.getMonth() === now.getMonth() &&
-    date.getFullYear() === now.getFullYear();
-
-  if (isToday) {
-    return date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+/** Sección del CRM donde ocurrió el aviso, según el enlace al que lleva. */
+function lugarDeNotificacion(n: Notificacion): string {
+  const path = (n.link_url || '').split('?')[0];
+  if (path) {
+    const items = NAV_GROUPS.flatMap((g) => g.items).sort((x, y) => y.href.length - x.href.length);
+    const hit = items.find((it) => path === it.href || path.startsWith(it.href + '/') || (it.match && path.startsWith(it.match)));
+    if (hit) return hit.label;
   }
-
-  const monthShort = date.toLocaleDateString('es-CL', { month: 'short' }).replace('.', '');
-  const day = date.getDate();
-  return `${monthShort}. ${day}`;
+  const m = n.mensaje.toLowerCase();
+  if (m.includes('abono') || m.includes('cobro') || m.includes('pago')) return 'Caja';
+  if (m.includes('despacho') || m.includes('guía')) return 'Asignaciones';
+  if (m.includes('garantía') || m.includes('reclamo')) return 'Postventa y garantías';
+  if (m.includes('oportunidad') || m.includes('cotizaci')) return 'Pipeline de ventas';
+  return 'General';
 }
 
 /** Identifica si un aviso pertenece a la bandeja "Principal" (alta prioridad) o a "Otras" */
@@ -169,6 +165,8 @@ export default function NotificacionesPage() {
   const confirm = useConfirm();
   const toast = useToast();
 
+  const [ahora] = useState(() => Date.now());
+  const conservarLeidosDias = useAjuste('avisos').valor.conservar_leidos_dias;
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
@@ -318,7 +316,9 @@ export default function NotificacionesPage() {
 
   // Filtrado según pestaña activa y categorías
   const currentTabItems = useMemo(() => {
+    const limite = conservarLeidosDias > 0 ? ahora - conservarLeidosDias * 86400000 : 0;
     return notificaciones.filter((n) => {
+      if (n.leido && limite && new Date(n.fecha).getTime() < limite) return false;
       const isCleared = clearedIds.includes(n.id);
       const isSnoozed = !isCleared && snoozedIds.includes(n.id);
 
@@ -367,7 +367,7 @@ export default function NotificacionesPage() {
 
       return true;
     });
-  }, [notificaciones, clearedIds, snoozedIds, activeTab, filterCategory, searchQuery]);
+  }, [notificaciones, clearedIds, snoozedIds, activeTab, filterCategory, searchQuery, conservarLeidosDias, ahora]);
 
   // Agrupación cronológica estilo ClickUp Inbox
   const groupedNotifications = useMemo(() => {
@@ -635,23 +635,6 @@ export default function NotificacionesPage() {
 
   return (
     <div className="space-y-5 pb-8">
-      {/* Cabecera */}
-      <PageHeader
-        title="Bandeja de entrada"
-        description="Menciones, tareas, cobros y avisos operativos de Hormiglass."
-        actions={
-          <div className="flex items-center gap-2">
-            <Button
-              icon={CheckCheck}
-              onClick={handleClearCurrentTab}
-              disabled={currentTabItems.length === 0}
-            >
-              Marcar y limpiar todo
-            </Button>
-          </div>
-        }
-      />
-
       {errorMessage && (
         <div role="alert" className="rounded-control border border-danger-line bg-danger-soft p-3 text-sm text-danger">
           {errorMessage}
@@ -762,29 +745,55 @@ export default function NotificacionesPage() {
       {/* 2. PANEL DE BANDEJA: ACCIONES Y FEED DE AVISOS            */}
       {/* ========================================================= */}
       <div className="rounded-panel border border-line bg-surface shadow-xs overflow-hidden">
-        {/* Barra superior de la lista con Título de la sección, Búsqueda, Filtros y Acciones */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-5 py-3.5 border-b border-line bg-surface-muted/30">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            {/* Título de la vista activa */}
-            <div className="flex items-center gap-2 pr-2 border-r border-line/60">
-              <span className="text-sm font-semibold text-ink">
-                {activeTab === 'principal' && 'Bandeja Principal'}
-                {activeTab === 'otras' && 'Otras Notificaciones'}
-                {activeTab === 'mas_tarde' && 'Guardadas para más tarde'}
-                {activeTab === 'borradas' && 'Papelera de Borradas'}
-              </span>
-              <span className="text-xs text-ink-muted t-num">
-                ({currentTabItems.length + visibleAssignments})
-              </span>
-            </div>
+        {/* Barra superior: búsqueda a la izquierda; filtro y acciones a la derecha */}
+        <div className="flex flex-col gap-3 border-b border-line bg-surface-muted/30 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+            <input
+              type="text"
+              placeholder="Buscar aviso…"
+              aria-label="Buscar aviso"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="hg-field-compact w-full pl-9 pr-8 sm:w-72"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                aria-label="Limpiar búsqueda"
+                className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer text-xs text-ink-muted hover:text-ink"
+              >
+                ×
+              </button>
+            )}
+          </div>
 
-            {/* Botón Filtro */}
+          <div className="flex flex-wrap items-center gap-2">
+            {activeTab === 'borradas' ? (
+              counts.cleared > 0 && (
+                <Button size="sm" icon={Trash2} onClick={handleEmptyTrash}>
+                  Vaciar borradas
+                </Button>
+              )
+            ) : activeTab === 'mas_tarde' ? (
+              counts.snoozed > 0 && (
+                <Button size="sm" icon={RotateCcw} onClick={handleReactivateAllSnoozed}>
+                  Reactivar todas
+                </Button>
+              )
+            ) : (
+              <Button size="sm" icon={CheckCheck} onClick={handleClearCurrentTab} disabled={currentTabItems.length === 0}>
+                Marcar y limpiar todo
+              </Button>
+            )}
+
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setShowFilterMenu(!showFilterMenu)}
                 className={clsx(
-                  'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition cursor-pointer shadow-xs',
+                  'inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-xs transition',
                   filterCategory !== 'todas'
                     ? 'border-accent bg-accent-soft text-accent-ink'
                     : 'border-line bg-surface text-ink hover:bg-surface-muted'
@@ -793,14 +802,11 @@ export default function NotificacionesPage() {
                 <Filter size={13} />
                 <span>
                   Filtro
-                  {filterCategory !== 'todas' &&
-                    `: ${filterOptions.find((o) => o.id === filterCategory)?.label}`}
+                  {filterCategory !== 'todas' && `: ${filterOptions.find((o) => o.id === filterCategory)?.label}`}
                 </span>
               </button>
-
-              {/* Menú de Filtro desplegable */}
               {showFilterMenu && (
-                <div className="absolute left-0 mt-1.5 z-20 w-52 rounded-panel border border-line bg-surface p-1 shadow-lg space-y-0.5">
+                <div className="absolute right-0 z-20 mt-1.5 w-52 space-y-0.5 rounded-panel border border-line bg-surface p-1 shadow-lg">
                   {filterOptions.map((opt) => (
                     <button
                       key={opt.id}
@@ -810,10 +816,8 @@ export default function NotificacionesPage() {
                         setShowFilterMenu(false);
                       }}
                       className={clsx(
-                        'w-full flex items-center justify-between px-3 py-1.5 rounded-control text-xs transition cursor-pointer text-left',
-                        filterCategory === opt.id
-                          ? 'bg-accent-soft text-accent-ink font-semibold'
-                          : 'text-ink hover:bg-surface-muted'
+                        'flex w-full cursor-pointer items-center justify-between rounded-control px-3 py-1.5 text-left text-xs transition',
+                        filterCategory === opt.id ? 'bg-accent-soft font-semibold text-accent-ink' : 'text-ink hover:bg-surface-muted'
                       )}
                     >
                       <span>{opt.label}</span>
@@ -823,66 +827,6 @@ export default function NotificacionesPage() {
                 </div>
               )}
             </div>
-
-            {/* Búsqueda rápida */}
-            <div className="relative">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
-              <input
-                type="text"
-                placeholder="Buscar aviso…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="rounded-full border border-line bg-surface pl-8 pr-3 py-1 text-xs text-ink placeholder:text-ink-muted focus:outline-none focus:border-accent w-40 sm:w-52 shadow-xs"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink text-xs cursor-pointer"
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Acciones de la derecha: Borrar todo / Vaciar */}
-          <div className="flex items-center gap-2">
-            {activeTab === 'borradas' ? (
-              counts.cleared > 0 && (
-                <button
-                  type="button"
-                  onClick={handleEmptyTrash}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-danger-line bg-danger-soft px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger-soft/80 transition cursor-pointer shadow-xs"
-                >
-                  <Trash2 size={13} />
-                  <span>Vaciar borradas</span>
-                </button>
-              )
-            ) : activeTab === 'mas_tarde' ? (
-              counts.snoozed > 0 && (
-                <button
-                  type="button"
-                  onClick={handleReactivateAllSnoozed}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink hover:bg-surface-muted transition cursor-pointer shadow-xs"
-                >
-                  <RotateCcw size={13} />
-                  <span>Reactivar todas</span>
-                </button>
-              )
-            ) : (
-              currentTabItems.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleClearCurrentTab}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink hover:bg-surface-muted transition cursor-pointer shadow-xs"
-                  title="Mueve todos los avisos de esta pestaña a Borradas"
-                >
-                  <CheckCheck size={13} className="text-accent-ink" />
-                  <span>Borrar todo</span>
-                </button>
-              )
-            )}
           </div>
         </div>
 
@@ -931,167 +875,115 @@ export default function NotificacionesPage() {
             />
           </div>
         ) : (
-          <div>
-            {groupedNotifications.map((group) => (
-              <div key={group.label} className="border-b border-line-subtle last:border-b-0">
-                {/* Encabezado Cronológico de Grupo (estilo ClickUp: "septiembre", "julio", etc.) */}
-                <div className="sticky top-0 z-10 bg-surface-muted/95 px-5 py-2 backdrop-blur-xs border-y border-line-subtle flex items-center justify-between">
-                  <h3 className="t-caption font-semibold text-ink-muted capitalize">
-                    {group.label}
-                  </h3>
-                  <span className="t-micro text-ink-muted">
-                    {group.items.length} {group.items.length === 1 ? 'aviso' : 'avisos'}
-                  </span>
-                </div>
-
-                {/* Lista de Filas */}
-                <ul className="divide-y divide-line-subtle">
-                  {group.items.map((n) => {
-                    const parsed = parseNotificationContent(n);
-                    const isSelected = selectedIds.includes(n.id);
-
-                    return (
-                      <li
-                        key={n.id}
-                        onClick={() => handleMarkAsReadAndNavigate(n)}
-                        className={clsx(
-                          'group relative flex items-center justify-between gap-3 px-5 py-3 transition cursor-pointer select-none',
-                          isSelected
-                            ? 'bg-surface-muted'
-                            : !n.leido
-                            ? 'bg-accent-soft/20 hover:bg-surface-muted'
-                            : 'bg-surface hover:bg-surface-muted/60'
-                        )}
-                      >
-                        {/* Bloque Izquierdo: Checkbox + Estado Circular + Título + Avatar + Descripción */}
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          {/* Checkbox de Selección */}
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              toggleSelectOne(n.id);
-                            }}
-                            aria-label="Seleccionar aviso"
-                            className="h-4 w-4 shrink-0 rounded accent-accent cursor-pointer"
-                          />
-
-                          {/* Ícono de Estado Circular tipo ClickUp */}
-                          <span
-                            className={clsx(
-                              'grid h-6 w-6 shrink-0 place-items-center rounded-full border',
-                              n.leido
-                                ? 'border-line text-ink-muted bg-surface-muted'
-                                : parsed.category === 'mencion'
-                                ? 'border-accent-line text-accent-ink bg-accent-soft'
-                                : parsed.category === 'cobro'
-                                ? 'border-success-line text-success bg-success-soft'
-                                : parsed.category === 'recordatorio' || parsed.category === 'despacho'
-                                ? 'border-warning-line text-warning bg-warning-soft'
-                                : 'border-info-line text-info bg-info-soft'
-                            )}
-                          >
-                            {n.leido ? (
-                              <CheckCircle2 size={13} />
-                            ) : (
-                              <Circle size={9} className="fill-current" />
-                            )}
-                          </span>
-
-                          {/* Título en Negrita */}
-                          <span className="truncate text-xs sm:text-sm font-semibold text-ink shrink-0 max-w-[170px] sm:max-w-[260px]">
-                            {parsed.title}
-                          </span>
-
-                          {/* Avatar con Iniciales del Autor / Entidad */}
-                          {parsed.category === 'cobro' || parsed.category === 'despacho' || parsed.category === 'sistema' ? (
-                            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line bg-surface-muted text-ink-muted" aria-hidden>
-                              {parsed.category === 'cobro' ? <Wallet size={12} /> : parsed.category === 'despacho' ? <Truck size={12} /> : <Bell size={12} />}
-                            </span>
-                          ) : (
-                            <AvatarBadge name={parsed.title} size="xs" className="shrink-0" />
-                          )}
-
-                          {/* Texto del Mensaje / Preview */}
-                          <span className="truncate text-xs text-ink-muted min-w-0 flex-1 hidden md:inline">
-                            {parsed.body}
-                          </span>
-                        </div>
-
-                        {/* Bloque Derecho: Acciones al Hover + Fecha */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          {/* Acciones Rápidas (visibles siempre en móvil, al hover en desktop) */}
-                          <div className="flex items-center gap-1.5 opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                            {/* Posponer (Clock) */}
-                            {activeTab !== 'mas_tarde' && activeTab !== 'borradas' && (
-                              <button
-                                type="button"
-                                onClick={(e) => handleSnoozeSingle(e, n.id)}
-                                className="cursor-pointer p-1.5 rounded-control text-ink-muted hover:text-ink hover:bg-surface border border-transparent hover:border-line transition"
-                                title="Más tarde (posponer aviso)"
-                                aria-label="Posponer aviso"
-                              >
-                                <Clock size={14} />
-                              </button>
-                            )}
-
-                            {/* Alternar Leído */}
-                            <button
-                              type="button"
-                              onClick={(e) => handleToggleReadSingle(e, n)}
-                              className="cursor-pointer p-1.5 rounded-control text-ink-muted hover:text-ink hover:bg-surface border border-transparent hover:border-line transition"
-                              title={n.leido ? 'Marcar como no leída' : 'Marcar como leída'}
-                              aria-label={n.leido ? 'Marcar como no leída' : 'Marcar como leída'}
-                            >
-                              {n.leido ? <Check size={14} /> : <CheckCheck size={14} />}
-                            </button>
-
-                            {/* Botón Borrar Píldora (como en ClickUp: "✓ Borrar") */}
-                            {activeTab !== 'borradas' ? (
-                              <button
-                                type="button"
-                                onClick={(e) => handleClearSingle(e, n.id)}
-                                className="cursor-pointer rounded-control bg-accent text-on-accent px-2.5 py-1 text-[11px] font-semibold hover:opacity-90 flex items-center gap-1 shadow-2xs transition"
-                                title="Borrar / Limpiar aviso"
-                                aria-label="Borrar aviso"
-                              >
-                                <Check size={12} strokeWidth={2.5} />
-                                <span>Borrar</span>
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={(e) => handleRestoreSingle(e, n.id)}
-                                className="cursor-pointer rounded-control border border-line bg-surface text-ink px-2.5 py-1 text-[11px] font-semibold hover:bg-surface-muted flex items-center gap-1 shadow-2xs transition"
-                                title="Restaurar a principal"
-                                aria-label="Restaurar aviso"
-                              >
-                                <RotateCcw size={12} />
-                                <span>Restaurar</span>
-                              </button>
-                            )}
-                          </div>
-
-                          {/* Fecha corta a la derecha */}
-                          <span className="t-micro text-ink-muted whitespace-nowrap pl-2">
-                            {formatClickUpDate(n.fecha)}
-                          </span>
-
-                          {/* Flecha indicador de link */}
-                          {n.link_url && (
-                            <ChevronRight
-                              className="h-3.5 w-3.5 text-ink-muted/50 group-hover:text-ink transition shrink-0"
-                              aria-hidden
+          <div className="overflow-x-auto">
+            <table className="hg-table min-w-max whitespace-nowrap">
+              <thead>
+                <tr>
+                  <th className="w-10">
+                    <input
+                      type="checkbox"
+                      aria-label="Seleccionar todos los avisos"
+                      checked={currentTabItems.length > 0 && selectedIds.length === currentTabItems.length}
+                      onChange={(e) => setSelectedIds(e.target.checked ? currentTabItems.map((n) => n.id) : [])}
+                      className="h-4 w-4 cursor-pointer rounded accent-accent"
+                    />
+                  </th>
+                  <th>Persona encargada</th>
+                  <th>Lugar</th>
+                  <th>Descripción del aviso</th>
+                  <th>Fecha</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupedNotifications.map((group) => (
+                  <React.Fragment key={group.label}>
+                    <tr className="bg-surface-muted/60">
+                      <td colSpan={6} className="!py-1.5">
+                        <span className="t-caption font-semibold capitalize text-ink-muted">{group.label}</span>
+                        <span className="t-micro ml-2 text-ink-muted">
+                          {group.items.length} {group.items.length === 1 ? 'aviso' : 'avisos'}
+                        </span>
+                      </td>
+                    </tr>
+                    {group.items.map((n) => {
+                      const parsed = parseNotificationContent(n);
+                      const encargado = n.creado_por || 'Sistema';
+                      const lugar = lugarDeNotificacion(n);
+                      return (
+                        <tr
+                          key={n.id}
+                          onClick={() => handleMarkAsReadAndNavigate(n)}
+                          className={clsx('cursor-pointer', !n.leido && 'bg-accent-soft/20')}
+                        >
+                          <td onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(n.id)}
+                              onChange={() => toggleSelectOne(n.id)}
+                              aria-label="Seleccionar aviso"
+                              className="h-4 w-4 cursor-pointer rounded accent-accent"
                             />
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
+                          </td>
+                          <td>
+                            <span className="flex items-center gap-2">
+                              <span
+                                className={clsx('h-2 w-2 shrink-0 rounded-full', n.leido ? 'bg-line-strong' : 'bg-accent')}
+                                title={n.leido ? 'Leído' : 'Sin leer'}
+                              />
+                              {encargado !== 'Sistema' ? (
+                                <AvatarBadge name={encargado} size="xs" className="shrink-0" />
+                              ) : (
+                                <Bell size={14} className="shrink-0 text-ink-muted" aria-hidden />
+                              )}
+                              <span className={clsx('text-ink', !n.leido && 'font-semibold')}>{encargado}</span>
+                            </span>
+                          </td>
+                          <td className="text-ink">{lugar}</td>
+                          <td>
+                            <span className="block max-w-[520px] truncate text-ink" title={parsed.body}>
+                              <span className={clsx('mr-2', !n.leido ? 'font-semibold' : 'font-medium')}>{parsed.title}</span>
+                              <span className="text-ink-muted">{parsed.body}</span>
+                            </span>
+                          </td>
+                          <td className="t-num text-ink-muted">
+                            {new Date(n.fecha).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' }).replace('.', '')}
+                            {', '}
+                            {new Date(n.fecha).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td onClick={(e) => e.stopPropagation()}>
+                            <ActionMenu>
+                              {n.link_url && (
+                                <ActionMenuItem icon={ExternalLink} onClick={() => void handleMarkAsReadAndNavigate(n)}>
+                                  Ver
+                                </ActionMenuItem>
+                              )}
+                              <ActionMenuItem icon={n.leido ? Circle : CheckCheck} onClick={(e) => void handleToggleReadSingle(e, n)}>
+                                {n.leido ? 'Marcar como no leída' : 'Marcar como leída'}
+                              </ActionMenuItem>
+                              {activeTab !== 'mas_tarde' && activeTab !== 'borradas' && (
+                                <ActionMenuItem icon={Clock} onClick={(e) => handleSnoozeSingle(e, n.id)}>
+                                  Posponer
+                                </ActionMenuItem>
+                              )}
+                              {activeTab === 'borradas' ? (
+                                <ActionMenuItem icon={RotateCcw} onClick={(e) => handleRestoreSingle(e, n.id)}>
+                                  Restaurar
+                                </ActionMenuItem>
+                              ) : (
+                                <ActionMenuItem icon={Trash2} destructive onClick={(e) => void handleClearSingle(e, n.id)}>
+                                  Borrar
+                                </ActionMenuItem>
+                              )}
+                            </ActionMenu>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

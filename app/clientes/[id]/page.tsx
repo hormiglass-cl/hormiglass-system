@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '../../../lib/supabase/client';
 import { useAuth } from '../../../lib/context/AuthContext';
 import { useBreadcrumb } from '../../../lib/context/BreadcrumbContext';
+import { useAjuste } from '../../../lib/ajustes';
 import {
   Cliente,
   NotaActividad,
@@ -26,23 +27,18 @@ import {
   CodeStamp,
   Dialog,
   EmptyState,
-  PageHeader,
   Panel,
-  PropertyPanel,
   RecordLayout,
   StageRail,
   StatusBadge,
-  Tabs,
   Tone,
 } from '../../../components/ui/crm';
 import { useToast } from '../../../components/ui/feedback';
 import {
   ArrowLeft,
-  Building,
   FileText,
   MessageSquare,
   Send,
-  User,
   UserCheck,
   Edit,
   Save,
@@ -54,16 +50,16 @@ import {
   TrendingUp,
   Clock,
   Plus,
-  HardHat,
   AlertTriangle,
-  ChevronDown,
-  ChevronUp,
   ExternalLink,
-  Filter,
+  Search,
+  ChevronDown,
   Mail,
   Phone,
   MapPin,
+  UserRound,
 } from 'lucide-react';
+import { Select, DateInput } from '../../../components/ui/FormControls';
 
 const NICHOS_CLIENTE_DEFAULT = [
   'Constructora B2B',
@@ -190,6 +186,35 @@ function getEtapaObraIndex(estado?: string | null): number {
   }
 }
 
+function AsideSection({ title, count, open, onToggle, children }: {
+  title: string;
+  count?: number;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div className="flex items-center justify-between px-4 py-3">
+        <h2 className="flex items-center gap-1.5 text-xs font-semibold text-ink">
+          {title}
+          {count !== undefined && <span className="hg-list-count">{count}</span>}
+        </h2>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className="inline-flex items-center gap-0.5 text-xs font-semibold text-ink-muted transition-colors hover:text-ink"
+        >
+          {open ? 'Cerrar' : 'Ver'}
+          <ChevronDown size={13} className={open ? 'rotate-180' : ''} aria-hidden />
+        </button>
+      </div>
+      {open && <div className="space-y-2.5 px-4 pb-4">{children}</div>}
+    </section>
+  );
+}
+
 export default function ClienteDetailPage() {
   const params = useParams();
   const { currentUser } = useAuth();
@@ -198,7 +223,15 @@ export default function ClienteDetailPage() {
   const supabase = useMemo(() => createClient(), []);
 
   const [cliente, setCliente] = useState<Cliente | null>(null);
+  const router = useRouter();
   const { setCustomTitle: setBreadcrumbTitle } = useBreadcrumb();
+  const tiposVenta = useAjuste('tipos_venta').valor.lista;
+
+  // Vuelve a la oportunidad desde la que se llegó, o al listado de clientes.
+  const volverDesdeFicha = () => {
+    const desde = new URLSearchParams(window.location.search).get('desde');
+    router.push(desde ? `/ventas?oportunidad=${desde}` : '/clientes');
+  };
   useEffect(() => {
     setBreadcrumbTitle(cliente?.nombre ?? null);
     return () => setBreadcrumbTitle(null);
@@ -211,7 +244,11 @@ export default function ClienteDetailPage() {
   // Tab and view state
   const [activeTab, setActiveTab] = useState<'actividad' | 'notas' | 'reclamos' | 'metricas'>('actividad');
   const [filtroActividadTipo, setFiltroActividadTipo] = useState<string>('todos');
-  const [isContactInfoExpanded, setIsContactInfoExpanded] = useState(true);
+  const [busqueda, setBusqueda] = useState('');
+  const [showNotaDialog, setShowNotaDialog] = useState(false);
+  const [asideOpen, setAsideOpen] = useState({ op: true, cot: true, obras: true });
+  const toggleAside = (k: 'op' | 'cot' | 'obras') => setAsideOpen((prev) => ({ ...prev, [k]: !prev[k] }));
+  const [opTipoVenta, setOpTipoVenta] = useState('Instalación');
 
   // RUT validation helper functions
   const calcularDV = (rutBody: string): string => {
@@ -250,7 +287,6 @@ export default function ClienteDetailPage() {
   const [editRutBody, setEditRutBody] = useState('');
   const [editRutDv, setEditRutDv] = useState('');
   const [editNicho, setEditNicho] = useState('');
-  const [editTipoVenta, setEditTipoVenta] = useState('Instalación');
   const [editAsignadoA, setEditAsignadoA] = useState<string>('');
   const [editTelefono, setEditTelefono] = useState('');
   const [editCorreo, setEditCorreo] = useState('');
@@ -352,7 +388,6 @@ export default function ClienteDetailPage() {
         }
 
         setEditNicho(currentCli.nicho || 'Constructora B2B');
-        setEditTipoVenta(currentCli.tipo_venta || 'Instalación');
         setEditAsignadoA(currentCli.asignado_a || '');
         setEditTelefono(currentCli.telefono || '');
         setEditCorreo(currentCli.correo || '');
@@ -509,7 +544,6 @@ export default function ClienteDetailPage() {
       rut: formattedRut,
       tipo_cliente: tipoClienteCalculado,
       nicho: editNicho,
-      tipo_venta: editTipoVenta,
       asignado_a: editAsignadoA || null,
       telefono: editTelefono,
       correo: editCorreo,
@@ -725,11 +759,18 @@ export default function ClienteDetailPage() {
     })),
   ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
 
+  const q = busqueda.trim().toLowerCase();
+  const coincide = (...campos: (string | null | undefined)[]) =>
+    !q || campos.some((c) => (c || '').toLowerCase().includes(q));
+
   const filteredTimeline = unifiedTimeline.filter((item) => {
+    if (!coincide(item.contenido, item.usuario_nombre, item.oportunidad_codigo, item.tipo)) return false;
     if (filtroActividadTipo === 'todos') return true;
     if (filtroActividadTipo === 'oportunidades') return item.origen === 'oportunidad';
     return item.tipo === filtroActividadTipo;
   });
+  const notasFiltradas = notas.filter((n) => coincide(n.contenido, n.usuario?.nombre));
+  const reclamosFiltrados = reclamosList.filter((r) => coincide(r.contenido, r.oportunidad_codigo, r.usuario_nombre));
 
   if (loading) {
     return (
@@ -766,70 +807,73 @@ export default function ClienteDetailPage() {
 
   const tabItems = [
     { id: 'actividad', label: 'Actividad', count: unifiedTimeline.length },
-    { id: 'notas', label: 'Notas & recordatorios' },
-    { id: 'reclamos', label: 'Reclamos / postventa', count: reclamosList.length },
-    { id: 'metricas', label: 'Resumen & métricas' },
+    { id: 'notas', label: 'Notas', count: notas.length },
+    { id: 'reclamos', label: 'Reclamos', count: reclamosList.length },
+    { id: 'metricas', label: 'Resumen', count: undefined as number | undefined },
   ];
 
   return (
-    <div className="space-y-5 pb-12">
-      {/* Encabezado Principal */}
-      <PageHeader
-        title={cliente.nombre}
-        description={
-          <span className="inline-flex items-center gap-2">
-            <span>{cliente.apellido_razon_social || cliente.nombre}</span>
-            <span aria-hidden className="text-line">·</span>
-            <CodeStamp>{cliente.rut}</CodeStamp>
-          </span>
-        }
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href="/clientes">
-              <Button variant="secondary" icon={ArrowLeft} size="sm">
-                Directorio
-              </Button>
-            </Link>
-            <Button variant="secondary" icon={Edit} size="sm" onClick={() => setIsEditing(true)}>
-              Editar ficha
-            </Button>
-            <Button variant="secondary" icon={TrendingUp} size="sm" onClick={() => setShowCreateOpModal(true)}>
-              Oportunidad
-            </Button>
-            <Button variant="primary" icon={Plus} size="sm" onClick={() => setShowCreateQuoteModal(true)}>
-              Nueva cotización
-            </Button>
-          </div>
-        }
-      />
-
-      {/* Record Layout: Sidebar izquierda (Perfil) | Children centro (Pestañas) | Aside derecha (Asociados) */}
+    <div className="space-y-4 pb-12">
+      {/* Record Layout: Perfil (izquierda) | Pestañas de gestión (centro) | Asociados (derecha) */}
       <RecordLayout
         sidebar={
-          <div className="space-y-4">
-            {/* Tarjeta Perfil Resumido */}
-            <Panel>
-              <div className="p-4 space-y-4">
-                <div className="flex flex-col items-center text-center space-y-2">
-                  <div className="relative">
-                    <div className="h-16 w-16 rounded-full bg-accent-soft text-accent-ink border border-accent-line flex items-center justify-center">
-                      <User size={28} aria-hidden />
-                    </div>
-                  </div>
-                  <div>
-                    <h2 className="t-section text-ink">{cliente.nombre}</h2>
-                    <p className="t-caption text-ink-muted">{cliente.apellido_razon_social || cliente.nombre}</p>
-                    <div className="mt-1">
-                      <CodeStamp>{cliente.rut}</CodeStamp>
-                    </div>
+          <Panel>
+            <div className="p-4 space-y-4">
+              <button
+                type="button"
+                onClick={volverDesdeFicha}
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-muted transition-colors hover:text-ink"
+              >
+                <ArrowLeft size={15} aria-hidden />
+                <span>Volver</span>
+              </button>
+
+              {/* Perfil resumido */}
+              <div className="flex flex-col items-center text-center space-y-2">
+                <div
+                  aria-hidden
+                  className="grid h-16 w-16 place-items-center rounded-full border border-accent-line bg-accent-soft text-xl font-semibold text-accent-ink select-none"
+                >
+                  <UserRound size={30} aria-hidden />
+                </div>
+                <div className="min-w-0 max-w-full">
+                  <h2 className="t-section text-ink truncate">{cliente.nombre}</h2>
+                  <p className="t-caption text-ink-muted truncate">{cliente.apellido_razon_social || cliente.nombre}</p>
+                  <div className="mt-1">
+                    <CodeStamp>{cliente.rut}</CodeStamp>
                   </div>
                 </div>
+              </div>
 
-                {/* Atributos Clave */}
-                <div className="space-y-2.5 pt-3 border-t border-line-subtle text-xs">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="t-caption text-ink-muted">Nicho:</span>
-                    <select
+              {/* Acciones rápidas */}
+              <div className="grid grid-cols-4 gap-1 text-center">
+                {[
+                  { label: 'Nota', icon: MessageSquare, onClick: () => setActiveTab('notas') },
+                  { label: 'Venta', icon: TrendingUp, onClick: () => setShowCreateOpModal(true) },
+                  { label: 'Cotizar', icon: FileText, onClick: () => setShowCreateQuoteModal(true) },
+                  { label: 'Editar', icon: Edit, onClick: () => setIsEditing(true) },
+                ].map(({ label, icon: Icon, onClick }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={onClick}
+                    className="group flex flex-col items-center gap-1 text-ink-muted transition-colors hover:text-ink"
+                  >
+                    <span className="grid h-9 w-9 place-items-center rounded-full border border-line bg-surface transition-colors group-hover:bg-surface-muted">
+                      <Icon size={16} aria-hidden />
+                    </span>
+                    <span className="t-micro font-semibold">{label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Datos del cliente */}
+              <div className="-mx-4 border-t border-line-subtle" />
+
+              <div className="space-y-3 text-xs">
+                  <div className="space-y-1">
+                    <span className="t-caption text-ink-muted block">Nicho</span>
+                    <Select
                       value={cliente.nicho || nichosOptions[0] || 'Constructora B2B'}
                       onChange={async (e) => {
                         const newN = e.target.value;
@@ -841,39 +885,17 @@ export default function ClienteDetailPage() {
                           console.error('Error updating nicho:', err);
                         }
                       }}
-                      className="hg-field min-h-7 py-0.5 text-xs font-semibold w-auto max-w-[160px] truncate"
+                      className="hg-field-compact w-full"
                     >
                       {nichosOptions.map((n) => (
                         <option key={n} value={n}>{n}</option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
 
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="t-caption text-ink-muted">Tipo de venta:</span>
-                    <select
-                      value={cliente.tipo_venta || 'Instalación'}
-                      onChange={async (e) => {
-                        const newTipo = e.target.value;
-                        setCliente({ ...cliente, tipo_venta: newTipo });
-                        try {
-                          await supabase.from('clientes').update({ tipo_venta: newTipo }).eq('id', cliente.id);
-                          toast({ message: 'Tipo de venta actualizado', tone: 'success' });
-                        } catch (err) {
-                          console.error('Error updating tipo_venta:', err);
-                        }
-                      }}
-                      className="hg-field min-h-7 py-0.5 text-xs font-semibold w-auto max-w-[160px] truncate"
-                    >
-                      <option value="Instalación">Instalación</option>
-                      <option value="Suministro">Suministro</option>
-                      <option value="Reventa de Material">Reventa de Material</option>
-                    </select>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="t-caption text-ink-muted">Ejecutivo:</span>
-                    <select
+                  <div className="space-y-1">
+                    <span className="t-caption text-ink-muted block">Ejecutivo</span>
+                    <Select
                       value={cliente.asignado_a || ''}
                       onChange={async (e) => {
                         const newUid = e.target.value || null;
@@ -885,64 +907,15 @@ export default function ClienteDetailPage() {
                           console.error('Error updating asignado_a on cliente:', err);
                         }
                       }}
-                      className="hg-field min-h-7 py-0.5 text-xs font-semibold w-auto max-w-[160px] truncate"
+                      className="hg-field-compact w-full"
                     >
                       <option value="">-- Sin asignar --</option>
                       {usuariosList.map((u) => (
                         <option key={u.id} value={u.id}>{u.nombre}</option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
-                </div>
-
-                {/* Acciones Rápidas */}
-                <div className="grid grid-cols-3 gap-1.5 pt-3 border-t border-line-subtle text-center">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('notas')}
-                    className="flex flex-col items-center justify-center p-2 rounded-control border border-line bg-surface hover:bg-surface-muted text-ink transition-colors"
-                  >
-                    <MessageSquare size={15} className="mb-1 text-accent-ink" aria-hidden />
-                    <span className="t-micro font-semibold">Nota</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateOpModal(true)}
-                    className="flex flex-col items-center justify-center p-2 rounded-control border border-line bg-surface hover:bg-surface-muted text-ink transition-colors"
-                  >
-                    <TrendingUp size={15} className="mb-1 text-accent-ink" aria-hidden />
-                    <span className="t-micro font-semibold">Venta</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateQuoteModal(true)}
-                    className="flex flex-col items-center justify-center p-2 rounded-control border border-line bg-surface hover:bg-surface-muted text-ink transition-colors"
-                  >
-                    <FileText size={15} className="mb-1 text-accent-ink" aria-hidden />
-                    <span className="t-micro font-semibold">Cotizar</span>
-                  </button>
-                </div>
-              </div>
-            </Panel>
-
-            {/* Información de Contacto */}
-            <PropertyPanel
-              title={
-                <button
-                  type="button"
-                  onClick={() => setIsContactInfoExpanded(!isContactInfoExpanded)}
-                  className="w-full flex items-center justify-between text-left"
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    <Building size={14} className="text-accent-ink" aria-hidden />
-                    <span className="font-semibold text-ink">Información de contacto</span>
-                  </span>
-                  {isContactInfoExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                </button>
-              }
-            >
-              {isContactInfoExpanded && (
-                <div className="space-y-3 text-xs">
+                <div className="border-t border-line-subtle pt-3 space-y-3">
                   <div>
                     <span className="t-caption text-ink-muted block">Teléfono de contacto</span>
                     <span className="font-semibold text-ink inline-flex items-center gap-1.5 mt-0.5">
@@ -988,28 +961,14 @@ export default function ClienteDetailPage() {
                     Editar contacto
                   </Button>
                 </div>
-              )}
-            </PropertyPanel>
-          </div>
+              </div>
+            </div>
+          </Panel>
         }
         aside={
-          <div className="space-y-4">
-            {/* OPORTUNIDADES (DEALS) */}
-            <Panel
-              title={
-                <div className="flex items-center justify-between w-full">
-                  <span className="inline-flex items-center gap-1.5">
-                    <TrendingUp size={16} className="text-accent-ink" aria-hidden />
-                    <span>Oportunidades</span>
-                    <span className="hg-list-count">{oportunidades.length}</span>
-                  </span>
-                  <Button variant="subtle" size="sm" icon={Plus} onClick={() => setShowCreateOpModal(true)}>
-                    Agregar
-                  </Button>
-                </div>
-              }
-            >
-              <div className="p-3 space-y-2.5">
+          <div className="hg-panel divide-y divide-line-subtle">
+            <AsideSection title="Oportunidades" count={oportunidades.length} open={asideOpen.op} onToggle={() => toggleAside('op')}>
+              <div className="space-y-2.5">
                 {oportunidades.length === 0 ? (
                   <p className="t-caption text-ink-muted text-center py-4">Sin oportunidades registradas</p>
                 ) : (
@@ -1066,24 +1025,10 @@ export default function ClienteDetailPage() {
                   })
                 )}
               </div>
-            </Panel>
+            </AsideSection>
 
-            {/* COTIZACIONES */}
-            <Panel
-              title={
-                <div className="flex items-center justify-between w-full">
-                  <span className="inline-flex items-center gap-1.5">
-                    <FileText size={16} className="text-accent-ink" aria-hidden />
-                    <span>Cotizaciones</span>
-                    <span className="hg-list-count">{cotizaciones.length}</span>
-                  </span>
-                  <Button variant="subtle" size="sm" icon={Plus} onClick={() => setShowCreateQuoteModal(true)}>
-                    Crear
-                  </Button>
-                </div>
-              }
-            >
-              <div className="p-3 space-y-2">
+            <AsideSection title="Cotizaciones" count={cotizaciones.length} open={asideOpen.cot} onToggle={() => toggleAside('cot')}>
+              <div className="space-y-2.5">
                 {cotizaciones.length === 0 ? (
                   <p className="t-caption text-ink-muted text-center py-4">Sin cotizaciones registradas</p>
                 ) : (
@@ -1122,19 +1067,10 @@ export default function ClienteDetailPage() {
                   ))
                 )}
               </div>
-            </Panel>
+            </AsideSection>
 
-            {/* OBRAS & DESPACHOS */}
-            <Panel
-              title={
-                <span className="inline-flex items-center gap-1.5">
-                  <HardHat size={16} className="text-accent-ink" aria-hidden />
-                  <span>Obras & despachos</span>
-                  <span className="hg-list-count">{eventosList.length}</span>
-                </span>
-              }
-            >
-              <div className="p-3 space-y-2">
+            <AsideSection title="Obras y despachos" count={eventosList.length} open={asideOpen.obras} onToggle={() => toggleAside('obras')}>
+              <div className="space-y-2.5">
                 {eventosList.length === 0 ? (
                   <p className="t-caption text-ink-muted text-center py-4">Sin eventos programados</p>
                 ) : (
@@ -1154,27 +1090,58 @@ export default function ClienteDetailPage() {
                   ))
                 )}
               </div>
-            </Panel>
+            </AsideSection>
           </div>
         }
       >
-        {/* PANEL CENTRAL: Pestañas de Gestión */}
-        <Panel>
-          <Tabs items={tabItems} active={activeTab} onChange={(id) => setActiveTab(id as typeof activeTab)} />
+        {/* PANEL CENTRAL: buscador, pestañas y contenido */}
+        <div className="space-y-4">
+          <div className="relative">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden />
+            <input
+              type="search"
+              aria-label="Buscar en la ficha"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar en actividad, notas y reclamos..."
+              className="hg-field-compact min-h-9 w-full pl-9"
+            />
+          </div>
 
-          <div className="p-5">
-            {/* PESTAÑA 1: TIMELINE DE ACTIVIDAD UNIFICADO (CLIENTE + OPORTUNIDADES) */}
-            {activeTab === 'actividad' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between gap-2 border-b border-line-subtle pb-3">
-                  <div className="flex items-center gap-1.5 text-ink-muted t-caption">
-                    <Filter size={14} aria-hidden />
-                    <span>Filtrar por:</span>
-                  </div>
-                  <select
+          <div
+            role="tablist"
+            aria-label="Secciones de la ficha"
+            className="flex w-full items-center gap-0.5 rounded-xl bg-surface-muted p-1"
+          >
+            {tabItems.map((item) => {
+              const selected = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => setActiveTab(item.id as typeof activeTab)}
+                  className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-center text-xs font-semibold transition-colors ${
+                    selected ? 'bg-surface text-ink shadow-[var(--hg-shadow-card)]' : 'text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  {item.label}
+                  {item.count !== undefined && <span className="t-num text-[11px] font-medium text-ink-muted">{item.count}</span>}
+                </button>
+              );
+            })}
+          </div>
+
+          {(activeTab === 'actividad' || activeTab === 'notas') && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {activeTab === 'actividad' ? (
+                <div className="relative">
+                  <Select
+                    aria-label="Filtrar actividad"
                     value={filtroActividadTipo}
                     onChange={(e) => setFiltroActividadTipo(e.target.value)}
-                    className="hg-field min-h-8 py-1 text-xs font-semibold w-auto"
+                    className="hg-field-compact min-h-8"
                   >
                     <option value="todos">Toda la actividad ({unifiedTimeline.length})</option>
                     <option value="oportunidades">Bitácora de oportunidades ({actividadesOpList.length})</option>
@@ -1183,96 +1150,233 @@ export default function ClienteDetailPage() {
                     <option value="llamada">Llamadas telefónicas</option>
                     <option value="recordatorio">Recordatorios</option>
                     <option value="seguimiento">Seguimientos comerciales</option>
-                  </select>
+                  </Select>
                 </div>
+              ) : (
+                <span />
+              )}
+              <Button variant="primary" size="sm" icon={Plus} onClick={() => setShowNotaDialog(true)}>
+                Nueva nota
+              </Button>
+            </div>
+          )}
 
-                <div className="space-y-3">
-                  {filteredTimeline.length === 0 ? (
-                    <EmptyState
-                      icon={MessageSquare}
-                      title="Sin actividades registradas"
-                      description="No hay notas ni registros de oportunidades que coincidan con el filtro seleccionado."
-                      action={
-                        <Button variant="secondary" size="sm" onClick={() => setActiveTab('notas')}>
-                          Crear una nota
-                        </Button>
-                      }
-                    />
-                  ) : (
-                    filteredTimeline.map((n) => {
-                      const isReminder = n.tipo === 'recordatorio' || n.tipo === 'seguimiento';
-                      return (
-                        <div
-                          key={n.id}
-                          className={`p-3.5 rounded-panel border space-y-2 ${
-                            isReminder
-                              ? 'bg-warning-soft border-warning-line text-ink'
-                              : 'bg-surface border-line text-ink'
-                          }`}
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                            <div className="flex flex-wrap items-center gap-2">
-                              {isReminder ? (
-                                <Bell size={15} className="text-warning" aria-hidden />
-                              ) : n.tipo === 'llamada' ? (
-                                <PhoneCall size={15} className="text-info" aria-hidden />
-                              ) : n.tipo === 'reunion' ? (
-                                <UserCheck size={15} className="text-success" aria-hidden />
-                              ) : (
-                                <FileCheck size={15} className="text-accent-ink" aria-hidden />
-                              )}
-                              <span className="font-semibold text-ink">{n.usuario_nombre}</span>
-                              <StatusBadge tone={isReminder ? 'warning' : 'neutral'}>
-                                {n.tipo}
-                              </StatusBadge>
-                              {n.oportunidad_id && n.oportunidad_codigo && (
-                                <Link
-                                  href={`/ventas?oportunidad=${n.oportunidad_id}`}
-                                  title="Abrir oportunidad en Ventas"
-                                >
-                                  <CodeStamp>{n.oportunidad_codigo}</CodeStamp>
-                                </Link>
-                              )}
-                            </div>
-                            <span className="t-caption text-ink-muted t-num">
-                              {formatSantiagoDateTime(n.fecha)}
-                            </span>
-                          </div>
+          {/* PESTAÑA 1: ACTIVIDAD UNIFICADA (CLIENTE + OPORTUNIDADES) */}
+          {activeTab === 'actividad' && (() => {
+            const esRecordatorio = (n: (typeof filteredTimeline)[number]) => n.tipo === 'recordatorio' || n.tipo === 'seguimiento';
+            const pendientes = filteredTimeline.filter(esRecordatorio);
+            const historial = filteredTimeline.filter((n) => !esRecordatorio(n));
+            const renderItem = (n: (typeof filteredTimeline)[number]) => {
+              const isReminder = esRecordatorio(n);
+              const Icon = isReminder ? Bell : n.tipo === 'llamada' ? PhoneCall : n.tipo === 'reunion' ? UserCheck : FileCheck;
+              const tono = isReminder
+                ? 'bg-warning-soft text-warning'
+                : n.tipo === 'llamada'
+                  ? 'bg-info-soft text-info'
+                  : n.tipo === 'reunion'
+                    ? 'bg-success-soft text-success'
+                    : 'bg-accent-soft text-accent-ink';
+              return (
+                <article key={n.id} className="rounded-xl border border-line bg-surface p-3.5">
+                  <div className="flex items-start gap-3">
+                    <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${tono}`}>
+                      <Icon size={15} aria-hidden />
+                    </span>
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                        <p className="text-xs text-ink">
+                          <span className="font-semibold capitalize">{n.tipo}</span>{' '}
+                          <span className="text-ink-muted">por {n.usuario_nombre}</span>
+                        </p>
+                        <span className="t-caption t-num inline-flex items-center gap-1">
+                          <Calendar size={12} aria-hidden />
+                          {formatSantiagoDateTime(n.fecha)}
+                        </span>
+                      </div>
+                      <p className="text-xs leading-relaxed text-ink-muted">{n.contenido}</p>
+                      {n.oportunidad_id && n.oportunidad_codigo && (
+                        <Link href={`/ventas?oportunidad=${n.oportunidad_id}`} title="Abrir oportunidad en Ventas" className="inline-block">
+                          <CodeStamp>{n.oportunidad_codigo}</CodeStamp>
+                        </Link>
+                      )}
+                      {n.fecha_recordatorio && (
+                        <p className="t-caption font-semibold text-warning">
+                          Recordatorio: {formatSantiagoDateTime(n.fecha_recordatorio, n.hora_recordatorio)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              );
+            };
 
-                          <p className="text-xs leading-relaxed pl-3 border-l-2 border-line">
-                            {n.contenido}
-                          </p>
-
-                          {n.fecha_recordatorio && (
-                            <p className="t-caption font-semibold text-warning pt-0.5">
-                              Recordatorio: {formatSantiagoDateTime(n.fecha_recordatorio, n.hora_recordatorio)}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
+            if (filteredTimeline.length === 0) {
+              return (
+                <EmptyState
+                  icon={MessageSquare}
+                  title="Sin actividades registradas"
+                  description="No hay notas ni registros que coincidan con la búsqueda o el filtro."
+                  action={
+                    <Button variant="secondary" size="sm" onClick={() => setShowNotaDialog(true)}>
+                      Crear una nota
+                    </Button>
+                  }
+                />
+              );
+            }
+            return (
+              <div className="space-y-5">
+                {pendientes.length > 0 && (
+                  <section className="space-y-2.5">
+                    <h3 className="text-xs font-semibold text-ink">Próximos recordatorios</h3>
+                    {pendientes.map(renderItem)}
+                  </section>
+                )}
+                {historial.length > 0 && (
+                  <section className="space-y-2.5">
+                    <h3 className="text-xs font-semibold text-ink">Historial de actividad</h3>
+                    {historial.map(renderItem)}
+                  </section>
+                )}
               </div>
-            )}
+            );
+          })()}
 
-            {/* PESTAÑA 2: NOTAS & RECORDATORIOS */}
-            {activeTab === 'notas' && (
-              <div className="space-y-4">
-                <form onSubmit={handleAddNota} className="space-y-3 rounded-panel border border-line bg-surface-muted p-4">
+          {/* PESTAÑA 2: NOTAS */}
+          {activeTab === 'notas' && (
+            <div className="space-y-2.5">
+              {notasFiltradas.length === 0 ? (
+                <EmptyState
+                  icon={MessageSquare}
+                  title="Sin notas"
+                  description="Aún no hay notas que coincidan con la búsqueda."
+                />
+              ) : (
+                notasFiltradas.map((n) => (
+                  <article key={n.id} className="rounded-xl border border-line bg-surface p-3.5 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-ink">{n.usuario?.nombre || 'Usuario CRM'}</span>
+                      <span className="t-caption t-num">{new Date(n.fecha).toLocaleDateString('es-CL')}</span>
+                    </div>
+                    <p className="text-xs leading-relaxed text-ink-muted">{n.contenido}</p>
+                  </article>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* PESTAÑA 3: RECLAMOS Y POSTVENTA */}
+          {activeTab === 'reclamos' && (
+            <div className="space-y-2.5">
+              {reclamosFiltrados.length === 0 ? (
+                <EmptyState
+                  icon={AlertTriangle}
+                  title="Sin reclamos abiertos"
+                  description="No se registran incidencias ni casos de postventa para este cliente."
+                />
+              ) : (
+                reclamosFiltrados.map((rec) => (
+                  <article key={rec.id} className="rounded-xl border border-danger-line bg-danger-soft/40 p-3.5 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <CodeStamp>{rec.oportunidad_codigo}</CodeStamp>
+                        <span className="text-ink-muted">por {rec.usuario_nombre || 'Ejecutivo'}</span>
+                      </div>
+                      <span className="t-caption t-num">{new Date(rec.created_at).toLocaleDateString('es-CL')}</span>
+                    </div>
+                    <p className="text-xs leading-relaxed text-ink">{rec.contenido}</p>
+                  </article>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* PESTAÑA 4: RESUMEN */}
+          {activeTab === 'metricas' && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-line bg-surface p-4 space-y-1.5">
+                    <span className="flex items-center gap-1.5 t-caption"><span aria-hidden className="h-2 w-2 rounded-full bg-success" />Ventas acumuladas (100% pagadas)</span>
+                    <span className="t-num block text-xl font-semibold text-ink">${ventasAcumuladas100.toLocaleString('es-CL')} CLP</span>
+                    <span className="t-caption block">{oportunidadesPagadas.length} {oportunidadesPagadas.length === 1 ? 'oportunidad pagada' : 'oportunidades pagadas'}</span>
+                  </div>
+                  <div className="rounded-xl border border-line bg-surface p-4 space-y-1.5">
+                    <span className="flex items-center gap-1.5 t-caption"><span aria-hidden className="h-2 w-2 rounded-full bg-warning" />Saldo pendiente por cobrar</span>
+                    <span className="t-num block text-xl font-semibold text-ink">${saldoPendienteTotal.toLocaleString('es-CL')} CLP</span>
+                    <span className="t-caption block">En oportunidades comerciales activas</span>
+                  </div>
+                  <div className="rounded-xl border border-line bg-surface p-4 space-y-1.5">
+                    <span className="flex items-center gap-1.5 t-caption"><span aria-hidden className="h-2 w-2 rounded-full bg-info" />Obras y logística activas</span>
+                    <span className="t-num block text-xl font-semibold text-ink">{eventosActivosCount} <span className="text-xs font-normal text-ink-muted">eventos en curso</span></span>
+                    <span className="t-caption block">{eventosCompletadosCount} eventos completados</span>
+                  </div>
+                  <div className="rounded-xl border border-line bg-surface p-4 space-y-1.5">
+                    <span className="flex items-center gap-1.5 t-caption"><span aria-hidden className="h-2 w-2 rounded-full bg-accent" />Facturado en obras / montaje</span>
+                    <span className="t-num block text-xl font-semibold text-ink">${montoFacturadoObras.toLocaleString('es-CL')} CLP</span>
+                    <span className="t-caption block">Instalación y montaje en terreno</span>
+                  </div>
+                  <div className="rounded-xl border border-line bg-surface p-4 space-y-1.5">
+                    <span className="flex items-center gap-1.5 t-caption"><span aria-hidden className="h-2 w-2 rounded-full bg-ink-muted" />Días promedio de pago</span>
+                    <span className="t-num block text-xl font-semibold text-ink">{diasPromedioPago !== null ? `${diasPromedioPago} días` : '—'}</span>
+                    <span className="t-caption block">Entre aprobación y primer abono</span>
+                  </div>
+                  <div className="rounded-xl border border-line bg-surface p-4 space-y-1.5">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className="t-caption font-semibold text-ink block">Próxima actividad</span>
+                      {proximaActividad?.esVencida && (
+                        <StatusBadge tone="danger">Vencida</StatusBadge>
+                      )}
+                    </div>
+                    {proximaActividad ? (
+                      <>
+                        <span className="font-semibold text-ink block truncate">{proximaActividad.titulo}</span>
+                        <span className="t-caption font-mono text-ink-muted t-num block">{proximaActividad.fecha}</span>
+                      </>
+                    ) : (
+                      <span className="t-caption text-ink-muted italic">Sin actividades pendientes</span>
+                    )}
+                  </div>
+            </div>
+          )}
+        </div>
+      </RecordLayout>
+
+      {/* DIÁLOGO: NUEVA NOTA / RECORDATORIO */}
+      <Dialog
+        open={showNotaDialog}
+        onClose={() => setShowNotaDialog(false)}
+        title="Nueva nota"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowNotaDialog(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" form="form-nueva-nota" variant="primary" icon={Send}>
+              {tipoActividad === 'recordatorio' ? 'Guardar recordatorio' : 'Guardar nota'}
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="form-nueva-nota"
+          onSubmit={async (e) => {
+            await handleAddNota(e);
+            setShowNotaDialog(false);
+          }}
+          className="space-y-3"
+        >
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div>
                       <label className="block t-caption font-semibold text-ink mb-1">Tipo de actividad</label>
-                      <select
+                      <Select
                         value={tipoActividad}
                         onChange={(e) => setTipoActividad(e.target.value as TipoNotaActividad)}
-                        className="hg-field text-xs font-semibold"
+                        className="hg-field-compact w-full"
                       >
                         <option value="nota">Nota general</option>
                         <option value="reunion">Reunión con cliente</option>
                         <option value="llamada">Llamada telefónica</option>
                         <option value="recordatorio">Recordatorio programado</option>
-                      </select>
+                      </Select>
                     </div>
 
                     {tipoActividad === 'recordatorio' && (
@@ -1282,8 +1386,7 @@ export default function ClienteDetailPage() {
                             <Calendar size={13} className="text-warning" aria-hidden />
                             <span>Fecha *</span>
                           </label>
-                          <input
-                            type="date"
+                          <DateInput
                             required
                             value={fechaRecordatorio}
                             onChange={(e) => setFechaRecordatorio(e.target.value)}
@@ -1322,150 +1425,14 @@ export default function ClienteDetailPage() {
                     />
                   </div>
 
-                  <div className="flex justify-end">
-                    <Button type="submit" variant="primary" icon={Send}>
-                      {tipoActividad === 'recordatorio' ? 'Guardar recordatorio' : 'Guardar nota'}
-                    </Button>
-                  </div>
-                </form>
-
-                <div className="space-y-3">
-                  {notas.map((n) => (
-                    <div key={n.id} className="p-3.5 bg-surface rounded-panel border border-line text-xs space-y-1.5">
-                      <div className="flex justify-between items-center text-ink-muted">
-                        <span className="font-semibold text-ink">{n.usuario?.nombre || 'Usuario CRM'}</span>
-                        <span className="font-mono t-num">{new Date(n.fecha).toLocaleDateString('es-CL')}</span>
-                      </div>
-                      <p className="text-ink leading-relaxed">{n.contenido}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* PESTAÑA 3: RECLAMOS & POSTVENTA */}
-            {activeTab === 'reclamos' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between border-b border-line-subtle pb-2">
-                  <span className="font-semibold text-danger flex items-center gap-1.5 text-xs">
-                    <AlertTriangle size={15} aria-hidden />
-                    <span>Incidencias y reclamos registrados</span>
-                  </span>
-                  <StatusBadge tone="danger">
-                    {reclamosList.length} {reclamosList.length === 1 ? 'reclamo' : 'reclamos'}
-                  </StatusBadge>
-                </div>
-
-                {reclamosList.length === 0 ? (
-                  <EmptyState
-                    icon={AlertTriangle}
-                    title="Sin reclamos abiertos"
-                    description="No se registran incidencias ni casos de postventa para este cliente."
-                  />
-                ) : (
-                  reclamosList.map((rec) => (
-                    <div key={rec.id} className="p-3.5 bg-danger-soft/40 rounded-panel border border-danger-line space-y-1.5 text-xs">
-                      <div className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <CodeStamp>{rec.oportunidad_codigo}</CodeStamp>
-                          <span className="text-ink-muted">· Por {rec.usuario_nombre || 'Ejecutivo'}</span>
-                        </div>
-                        <span className="font-mono t-num text-ink-muted">
-                          {new Date(rec.created_at).toLocaleDateString('es-CL')}
-                        </span>
-                      </div>
-                      <p className="text-ink font-medium leading-relaxed">{rec.contenido}</p>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-
-            {/* PESTAÑA 4: RESUMEN & MÉTRICAS */}
-            {activeTab === 'metricas' && (
-              <div className="space-y-4">
-                <p className="t-caption text-ink-muted border-b border-line-subtle pb-2">
-                  Métricas consolidadas de rendimiento comercial y operativo
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  {/* 1. Ventas Acumuladas 100% */}
-                  <div className="p-4 bg-success-soft rounded-panel border border-success-line space-y-1">
-                    <span className="t-caption font-semibold text-success block">Ventas acumuladas (100% pagadas)</span>
-                    <span className="t-num text-lg font-bold text-success block">
-                      ${ventasAcumuladas100.toLocaleString('es-CL')} CLP
-                    </span>
-                    <span className="t-caption text-ink-muted block">
-                      {oportunidadesPagadas.length} {oportunidadesPagadas.length === 1 ? 'oportunidad pagada' : 'oportunidades pagadas'}
-                    </span>
-                  </div>
-
-                  {/* 2. Saldo Pendiente */}
-                  <div className="p-4 bg-warning-soft rounded-panel border border-warning-line space-y-1">
-                    <span className="t-caption font-semibold text-warning block">Saldo pendiente por cobrar</span>
-                    <span className="t-num text-lg font-bold text-warning block">
-                      ${saldoPendienteTotal.toLocaleString('es-CL')} CLP
-                    </span>
-                    <span className="t-caption text-ink-muted block">En oportunidades comerciales activas</span>
-                  </div>
-
-                  {/* 3. Obras & Logística Activas */}
-                  <div className="p-4 bg-info-soft rounded-panel border border-info-line space-y-1">
-                    <span className="t-caption font-semibold text-info block">Obras & logística activas</span>
-                    <span className="t-num text-lg font-bold text-info block">
-                      {eventosActivosCount} <span className="text-xs font-normal">eventos en curso</span>
-                    </span>
-                    <span className="t-caption text-ink-muted block">{eventosCompletadosCount} eventos completados</span>
-                  </div>
-
-                  {/* 4. Facturado en Obras */}
-                  <div className="p-4 bg-accent-soft rounded-panel border border-accent-line space-y-1">
-                    <span className="t-caption font-semibold text-accent-ink block">Facturado en obras / montaje</span>
-                    <span className="t-num text-lg font-bold text-accent-ink block">
-                      ${montoFacturadoObras.toLocaleString('es-CL')} CLP
-                    </span>
-                    <span className="t-caption text-ink-muted block">Instalación y montaje en terreno</span>
-                  </div>
-
-                  {/* 5. Días Promedio de Pago */}
-                  <div className="p-4 bg-surface-muted rounded-panel border border-line space-y-1">
-                    <span className="t-caption font-semibold text-ink block">Días promedio de pago</span>
-                    <span className="t-num text-lg font-bold text-ink block">
-                      {diasPromedioPago !== null ? `${diasPromedioPago} días` : '—'}
-                    </span>
-                    <span className="t-caption text-ink-muted block">Entre aprobación y primer abono</span>
-                  </div>
-
-                  {/* 6. Próxima Actividad */}
-                  <div className="p-4 bg-surface rounded-panel border border-line space-y-1">
-                    <div className="flex items-center justify-between gap-1.5">
-                      <span className="t-caption font-semibold text-ink block">Próxima actividad</span>
-                      {proximaActividad?.esVencida && (
-                        <StatusBadge tone="danger">Vencida</StatusBadge>
-                      )}
-                    </div>
-                    {proximaActividad ? (
-                      <>
-                        <span className="font-semibold text-ink block truncate">{proximaActividad.titulo}</span>
-                        <span className="t-caption font-mono text-ink-muted t-num block">{proximaActividad.fecha}</span>
-                      </>
-                    ) : (
-                      <span className="t-caption text-ink-muted italic">Sin actividades pendientes</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </Panel>
-      </RecordLayout>
+        </form>
+      </Dialog>
 
       {/* DIÁLOGO: EDICIÓN COMPLETA DEL CLIENTE */}
       <Dialog
         open={isEditing}
         onClose={() => setIsEditing(false)}
         title="Editar información del cliente"
-        description="Actualiza la razón social, RUT, contactos y ejecutivos asignados."
         size="lg"
       >
         <form onSubmit={handleSaveClient} className="space-y-4 text-xs">
@@ -1521,7 +1488,7 @@ export default function ClienteDetailPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label className="block t-caption font-semibold text-ink mb-1">Nicho</label>
-              <select
+              <Select
                 value={editNicho}
                 onChange={(e) => setEditNicho(e.target.value)}
                 className="hg-field font-semibold"
@@ -1529,25 +1496,12 @@ export default function ClienteDetailPage() {
                 {nichosOptions.map((n) => (
                   <option key={n} value={n}>{n}</option>
                 ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block t-caption font-semibold text-ink mb-1">Tipo de venta</label>
-              <select
-                value={editTipoVenta}
-                onChange={(e) => setEditTipoVenta(e.target.value)}
-                className="hg-field font-semibold"
-              >
-                <option value="Instalación">Instalación</option>
-                <option value="Suministro">Suministro</option>
-                <option value="Reventa de Material">Reventa de Material</option>
-              </select>
+              </Select>
             </div>
 
             <div>
               <label className="block t-caption font-semibold text-ink mb-1">Ejecutivo asignado</label>
-              <select
+              <Select
                 value={editAsignadoA}
                 onChange={(e) => setEditAsignadoA(e.target.value)}
                 className="hg-field font-semibold"
@@ -1556,7 +1510,7 @@ export default function ClienteDetailPage() {
                 {usuariosList.map((u) => (
                   <option key={u.id} value={u.id}>{u.nombre}</option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
 
@@ -1658,7 +1612,7 @@ export default function ClienteDetailPage() {
                 monto_estimado: opMonto,
                 fecha_inicio: now.toISOString().split('T')[0],
                 fecha_limite: opFechaLimite || null,
-                tipo_venta: cliente.tipo_venta || 'Instalación',
+                tipo_venta: opTipoVenta,
                 origen: opOrigen.trim() || null,
                 modalidad_requerimiento: opModalidadRequerimiento,
                 prioridad: 'normal',
@@ -1677,6 +1631,7 @@ export default function ClienteDetailPage() {
                 setShowCreateOpModal(false);
                 setOpTitulo('');
                 setOpOrigen('');
+                setOpTipoVenta('Instalación');
                 setOpModalidadRequerimiento('instalacion');
                 toast({ message: `Oportunidad ${newCode} creada`, tone: 'success' });
               }
@@ -1696,6 +1651,19 @@ export default function ClienteDetailPage() {
               onChange={(e) => setOpTitulo(e.target.value)}
               className="hg-field"
             />
+          </div>
+
+          <div>
+            <label className="block t-caption font-semibold text-ink mb-1">Tipo de venta</label>
+            <Select
+              value={opTipoVenta}
+              onChange={(e) => setOpTipoVenta(e.target.value)}
+              className="hg-field"
+            >
+              {tiposVenta.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </Select>
           </div>
 
           <div>
@@ -1723,21 +1691,20 @@ export default function ClienteDetailPage() {
 
             <div>
               <label className="block t-caption font-semibold text-ink mb-1">Modalidad</label>
-              <select
+              <Select
                 value={opModalidadRequerimiento}
                 onChange={(e) => setOpModalidadRequerimiento(e.target.value as 'solo_material' | 'instalacion')}
                 className="hg-field font-semibold"
               >
                 <option value="solo_material">Sólo material</option>
                 <option value="instalacion">Instalación</option>
-              </select>
+              </Select>
             </div>
           </div>
 
           <div>
             <label className="block t-caption font-semibold text-ink mb-1">Fecha límite de cierre</label>
-            <input
-              type="date"
+            <DateInput
               value={opFechaLimite}
               onChange={(e) => setOpFechaLimite(e.target.value)}
               className="hg-field"
