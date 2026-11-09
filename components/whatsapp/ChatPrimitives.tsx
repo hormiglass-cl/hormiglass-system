@@ -1,8 +1,9 @@
 'use client';
 
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
-import { MoreHorizontal } from 'lucide-react';
-import { ActionMenuItem, Button, IconButton, StatusBadge } from '../ui/crm';
+import clsx from 'clsx';
+import { CalendarDays, Clock3, FileText, MoreHorizontal, Receipt, SendHorizontal } from 'lucide-react';
+import { ActionMenuItem, Button, CodeStamp, IconButton, StatusBadge } from '../ui/crm';
 import type { ChatMessage, Conversation, ConversationState } from '../../lib/whatsapp/types';
 
 const states = {
@@ -44,6 +45,29 @@ function ChatActionsMenu({ label, children }: { label: string; children: ReactNo
   </div>;
 }
 
+const avatarTones = [
+  'border-accent-line bg-accent-soft text-accent-ink',
+  'border-info-line bg-info-soft text-info',
+  'border-success-line bg-success-soft text-success',
+  'border-warning-line bg-warning-soft text-warning',
+];
+
+/** Decorative initials avatar; the contact name is always rendered as text next to it. */
+export function ContactAvatar({ name, size = 'md' }: { name: string; size?: 'md' | 'lg' }) {
+  const hash = [...name].reduce((total, char) => total + char.charCodeAt(0), 0);
+  const initials = name.split(' ').filter(Boolean).map(part => part[0]).slice(0, 2).join('').toUpperCase();
+  return <span aria-hidden className={clsx('inline-flex shrink-0 items-center justify-center rounded-full border font-semibold select-none',
+    size === 'lg' ? 'h-11 w-11 text-sm' : 'h-9 w-9 text-xs', avatarTones[hash % avatarTones.length])}>{initials}</span>;
+}
+
+const timeFormat = new Intl.DateTimeFormat('es-CL', { timeZone: 'America/Santiago', hour: '2-digit', minute: '2-digit' });
+const fullFormat = new Intl.DateTimeFormat('es-CL', { timeZone: 'America/Santiago', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+/** Short list timestamp (time of day) for the inbox rows. */
+export function formatChatTime(at: number): string {
+  return timeFormat.format(new Date(at));
+}
+
 export function ChatHeader({ chat, now, onAction, onHistory }: {
   chat: Conversation; now: number; onAction: (action: ChatAction) => void; onHistory: () => void;
 }) {
@@ -51,20 +75,25 @@ export function ChatHeader({ chat, now, onAction, onHistory }: {
   const menu = useRef<HTMLDivElement>(null);
   const focusMenuTrigger = () => menu.current?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')?.focus();
   const captions = { assistant: 'Asistente', waiting: 'Esperando', seller: 'Atendiendo tú', closed: 'Cerrada' };
-  return <header className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-line bg-surface px-3 py-2 text-sm text-ink">
-    <div className="flex min-w-[220px] flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-      <h2 className="font-semibold leading-5">{chat.contact.name}</h2>
-      <p className="whitespace-nowrap text-[11px] leading-4 text-ink-muted">{chat.contact.phone}</p>
-      <span title={`${chat.opportunity.code} · ${chat.opportunity.title}`} className="inline-flex shrink-0 items-center rounded-control bg-accent-soft px-1.5 py-0.5 text-[11px] leading-4 text-accent-ink"><span className="sr-only">Oportunidad: </span><span>{chat.opportunity.code}</span><span className="sr-only"> · {chat.opportunity.title}</span></span>
+  return <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-subtle bg-surface px-3 py-2 text-sm text-ink">
+    <div className="flex min-w-[220px] flex-1 items-center gap-2.5">
+      <ContactAvatar name={chat.contact.name} />
+      <div className="min-w-0">
+        <h2 className="truncate text-[15px] font-semibold leading-[1.125rem]">{chat.contact.name}</h2>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <p className="t-caption t-num whitespace-nowrap">{chat.contact.phone}</p>
+          <span title={`${chat.opportunity.code} · ${chat.opportunity.title}`} className="inline-flex shrink-0"><span className="sr-only">Oportunidad: </span><CodeStamp>{chat.opportunity.code}</CodeStamp><span className="sr-only"> · {chat.opportunity.title}</span></span>
+        </div>
+      </div>
     </div>
-    <div className="ml-auto flex shrink-0 items-center gap-1.5 [&>button]:min-h-7 [&>button]:px-2 [&>button]:text-xs">
+    <div className="ml-auto flex shrink-0 items-center gap-2">
       <span title={states[chat.state].label}><StatusBadge tone={states[chat.state].tone}><span aria-hidden>{captions[chat.state]}</span><span className="sr-only">{states[chat.state].label}</span></StatusBadge></span>
       {chat.state !== 'seller' && chat.state !== 'closed' && <Button size="sm" variant="primary" aria-label="Tomar conversación" title="Al tomarla, el asistente se pausa por 60 min y respondes tú." onClick={() => onAction('claim')}>Tomar chat</Button>}
-      {chat.state === 'seller' ? <p title="Asistente en pausa · Si vence el plazo, el asistente retoma solo." className="whitespace-nowrap text-[11px] leading-4 text-success"><span className="sr-only">Asistente en pausa · </span><span className="font-mono">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</span><span className="sr-only">. Si vence el plazo, el asistente retoma solo.</span></p>
+      {chat.state === 'seller' ? <p title="Asistente en pausa · Si vence el plazo, el asistente retoma solo." className="t-micro inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-success-line bg-success-soft px-2 py-0.5 text-success"><Clock3 size={12} aria-hidden /><span className="sr-only">Asistente en pausa · </span><span className="t-num">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</span><span className="sr-only">. Si vence el plazo, el asistente retoma solo.</span></p>
         : chat.state === 'closed' ? <p className="sr-only">Si el cliente vuelve a escribir, la conversación se reabre con el asistente y queda en la misma ficha.</p>
         : <p className="sr-only">Al tomarla, el asistente se pausa por 60 min y respondes tú.</p>}
       <div ref={menu} onKeyDown={event => { if (event.key === 'Escape') focusMenuTrigger(); }} onClick={event => {
-        // Keep focus usable when the shared menu unmounts its active item.
+        // Keep focus usable when the menu unmounts its active item.
         if ((event.target as HTMLElement).closest('[role="menuitem"]')) focusMenuTrigger();
       }}>
         <ChatActionsMenu label="Acciones del chat">
@@ -84,19 +113,31 @@ const authors: Record<ChatMessage['kind'], string> = {
 export function ChatThread({ messages, unreadAt, unreadCount = 0 }: {
   messages: ChatMessage[]; unreadAt?: string; unreadCount?: number;
 }) {
-  return <ol aria-label="Mensajes de demostración" className="min-h-32 space-y-2.5 p-3 text-sm leading-relaxed">
-    {messages.map(message => <Fragment key={message.id}>
-      {message.id === unreadAt && <li className="border-y border-accent-line bg-accent-soft py-1 text-center text-xs font-semibold text-accent-ink">{unreadCount} {unreadCount === 1 ? 'MENSAJE NUEVO' : 'MENSAJES NUEVOS'}</li>}
-      <li className={message.kind === 'event' ? 'px-2 py-1 text-center text-xs text-ink-muted' : `grid w-fit max-w-[88%] text-ink ${message.kind === 'customer' ? 'mr-auto justify-items-start' : 'ml-auto justify-items-end'}`}>
-        <p className={message.kind === 'event' ? 'sr-only' : 'mb-0.5 text-[11px] font-semibold'}>{authors[message.kind]}</p>
-        <p className={message.kind === 'event' ? 'whitespace-pre-wrap break-words' : `w-fit max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] rounded-panel border border-line px-2.5 py-1.5 ${message.kind === 'customer' ? 'bg-surface' : 'bg-accent-soft'}`}>{message.kind === 'file' && <span aria-hidden>▤ </span>}{message.text}</p>
-        {message.kind === 'file' && <p className="mt-1 text-xs text-ink-muted">Vista de ejemplo · archivo no disponible para descargar</p>}
-        <p className="mt-1 flex justify-end gap-2 text-[11px] text-ink-muted">
-          <time dateTime={new Date(message.at).toISOString()}>{new Date(message.at).toLocaleString('es-CL', { timeZone: 'America/Santiago', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</time>
-          {message.delivery && <span aria-label={message.delivery === 'read' ? 'Leído' : 'Enviado'}>{message.delivery === 'read' ? '✓✓' : '✓'}</span>}
-        </p>
-      </li>
-    </Fragment>)}
+  return <ol aria-label="Mensajes de demostración" className="min-h-32 space-y-3 px-4 py-4 text-sm leading-relaxed">
+    {messages.map(message => {
+      const incoming = message.kind === 'customer';
+      return <Fragment key={message.id}>
+        {message.id === unreadAt && <li className="flex items-center gap-3 py-1"><span aria-hidden className="h-px flex-1 bg-accent-line" /><span className="t-micro rounded-full border border-accent-line bg-accent-soft px-2.5 py-0.5 text-accent-ink">{unreadCount} {unreadCount === 1 ? 'MENSAJE NUEVO' : 'MENSAJES NUEVOS'}</span><span aria-hidden className="h-px flex-1 bg-accent-line" /></li>}
+        {message.kind === 'event'
+          ? <li className="mx-auto grid w-fit max-w-[88%] justify-items-center text-center">
+            <p className="sr-only">{authors.event}</p>
+            <p className="t-caption whitespace-pre-wrap break-words rounded-full border border-line-subtle bg-surface px-3 py-1">{message.text}</p>
+            <p className="t-micro t-num mt-1 font-medium text-ink-muted"><time dateTime={new Date(message.at).toISOString()}>{fullFormat.format(new Date(message.at))}</time></p>
+          </li>
+          : <li className={clsx('grid w-fit max-w-[85%] text-ink', incoming ? 'mr-auto justify-items-start' : 'ml-auto justify-items-end')}>
+            <p className="t-micro mb-1 px-1 text-ink-muted">{authors[message.kind]}</p>
+            <p className={clsx('w-fit max-w-full whitespace-pre-wrap border px-3 py-2 shadow-xs [overflow-wrap:anywhere]',
+              incoming ? 'rounded-2xl rounded-tl-md border-line bg-surface' : 'rounded-2xl rounded-tr-md border-accent-line bg-accent-soft')}>
+              {message.kind === 'file' && <span aria-hidden>▤ </span>}{message.text}
+            </p>
+            {message.kind === 'file' && <p className="t-caption mt-1 px-1">Vista de ejemplo · archivo no disponible para descargar</p>}
+            <p className="t-micro t-num mt-1 flex justify-end gap-1.5 px-1 font-medium text-ink-muted">
+              <time dateTime={new Date(message.at).toISOString()}>{fullFormat.format(new Date(message.at))}</time>
+              {message.delivery && <span aria-label={message.delivery === 'read' ? 'Leído' : 'Enviado'} className={message.delivery === 'read' ? 'text-info' : undefined}>{message.delivery === 'read' ? '✓✓' : '✓'}</span>}
+            </p>
+          </li>}
+      </Fragment>;
+    })}
   </ol>;
 }
 
@@ -107,17 +148,17 @@ export function ChatComposer({ locked, onSend, onCreateQuote, onSelectDatasheet 
   onSelectDatasheet?: () => void;
 }) {
   const [draft, setDraft] = useState('');
-  return <form className="shrink-0 space-y-1 border-t border-line bg-surface p-2 text-sm" onSubmit={event => { event.preventDefault(); if (onSend(draft)) setDraft(''); }}>
-    <div className="flex gap-1.5 overflow-x-auto whitespace-nowrap [&>button]:shrink-0 [&>button]:text-xs" role="group" aria-label="Atajos comerciales">
-      <Button size="sm" disabled={!onCreateQuote} onClick={onCreateQuote}>Crear cotización</Button>
-      <Button size="sm" disabled={!onSelectDatasheet} onClick={onSelectDatasheet}>Enviar ficha técnica</Button>
-      <Button size="sm" disabled={locked} title="Prepara un mensaje para coordinar la visita; no agenda automáticamente." onClick={() => setDraft('Agendar visita a terreno')}>Agendar visita a terreno</Button>
+  return <form className="shrink-0 space-y-2 border-t border-line-subtle bg-surface px-3 py-2.5 text-sm" onSubmit={event => { event.preventDefault(); if (onSend(draft)) setDraft(''); }}>
+    <div className="flex gap-1.5 overflow-x-auto whitespace-nowrap [&>button]:shrink-0" role="group" aria-label="Atajos comerciales">
+      <Button size="sm" variant="subtle" icon={Receipt} disabled={!onCreateQuote} onClick={onCreateQuote}>Crear cotización</Button>
+      <Button size="sm" variant="subtle" icon={FileText} disabled={!onSelectDatasheet} onClick={onSelectDatasheet}>Enviar ficha técnica</Button>
+      <Button size="sm" variant="subtle" icon={CalendarDays} disabled={locked} title="Prepara un mensaje para coordinar la visita; no agenda automáticamente." onClick={() => setDraft('Agendar visita a terreno')}>Agendar visita a terreno</Button>
     </div>
     <div className="flex items-end gap-2"><label className="block min-w-0 flex-1 text-ink">
       <span className="sr-only">Mensaje de demostración</span>
       <textarea rows={2} className="hg-field block h-14 min-h-0 w-full resize-none text-sm" disabled={locked} value={draft} onChange={event => setDraft(event.target.value)} placeholder={locked ? 'Toma la conversación para responder al cliente.' : 'Escribe tu respuesta…'} />
-    </label><Button size="sm" type="submit" variant="primary" disabled={locked}>Enviar demo</Button></div>
+    </label><Button type="submit" variant="primary" icon={SendHorizontal} disabled={locked} className="h-14 shrink-0"><span className="sr-only sm:not-sr-only">Enviar demo</span></Button></div>
     {locked && <p className="sr-only">Toma la conversación para responder al cliente.</p>}
-    <details className="text-[11px] leading-4 text-ink-muted"><summary className="min-h-6 cursor-pointer py-1">Demo: no se envían mensajes reales.</summary><p>Se envía por WhatsApp desde el número de Hormiglass</p></details>
+    <details className="t-micro font-medium text-ink-muted"><summary className="min-h-6 cursor-pointer py-1">Demo: no se envían mensajes reales.</summary><p>Se envía por WhatsApp desde el número de Hormiglass</p></details>
   </form>;
 }
