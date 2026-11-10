@@ -156,3 +156,20 @@ test('notice banners hide assignments and offer Ver chat / Más tarde; demo noti
   assert.equal(html.match(/Más tarde/g).length, 2);
   assert.ok(render(DemoNotice, {}).includes(DEMO_NOTICE_TEXT));
 });
+
+test('every row carries a state indicator on the avatar: tone ring, icon and a spoken label', () => {
+  const html = list();
+  for (const [name, state, label, tone] of [
+    ['Camila Rojas', 'waiting', 'Esperando vendedor', 'warning'],
+    ['Valentina Soto', 'seller', 'Atendiendo tú', 'success'],
+    ['Diego Muñoz', 'assistant', 'Con el asistente', 'info'],
+    ['Pablo Torres', 'closed', 'Cerrada', 'ink-muted'],
+  ]) {
+    const markup = row(html, name);
+    const indicator = markup.match(/<span[^>]*data-chat-state="[^"]*"[^>]*>[\s\S]*?<\/svg><\/span>/)?.[0] ?? '';
+    assert.match(indicator, new RegExp(`data-chat-state="${state}"`), `${name} exposes its state`);
+    assert.match(markup, new RegExp(`ring-${tone}`), `${name} avatar ring uses the ${tone} tone`);
+    assert.match(indicator, /<svg/, `${name} shows a state icon, not color alone`);
+    assert.ok(text(markup).includes(`Estado: ${label}`), `${name} announces "Estado: ${label}"`);
+  }
+});

@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import clsx from 'clsx';
-import { BellRing, Info, Search, Sparkles, X } from 'lucide-react';
+import { BellRing, Clock3, Info, Lock, Search, Sparkles, UserRound, X, type LucideIcon } from 'lucide-react';
 import { Button, EmptyState } from '../ui/crm';
 import type { ChatNotice, Conversation, ConversationState, MessageKind } from '../../lib/whatsapp/types';
 import { ContactAvatar } from './ChatPrimitives';
@@ -37,16 +37,31 @@ function waitingSince(chat: Conversation, now: number) {
   return { at, minutes: Math.max(1, Math.floor((now - at) / MINUTE_MS)) };
 }
 
+/** State at a glance on the avatar: tone ring plus icon (never color alone), and a spoken label. */
+const stateIndicators: Record<ConversationState, { label: string; icon: LucideIcon; ring: string; badge: string }> = {
+  waiting: { label: 'Esperando vendedor', icon: Clock3, ring: 'ring-warning', badge: 'bg-warning' },
+  seller: { label: 'Atendiendo tú', icon: UserRound, ring: 'ring-success', badge: 'bg-success' },
+  assistant: { label: 'Con el asistente', icon: Sparkles, ring: 'ring-info', badge: 'bg-info' },
+  closed: { label: 'Cerrada', icon: Lock, ring: 'ring-ink-muted', badge: 'bg-ink-muted' },
+};
+
 function ConversationRow({ chat, selected, onSelect, now }: { chat: Conversation; selected: boolean; onSelect: (id: string) => void; now?: number }) {
   const last = chat.messages.at(-1);
   const reference = now ?? last?.at ?? 0;
   const waiting = chat.state === 'waiting' ? waitingSince(chat, reference) : undefined;
   const timeAt = waiting?.at ?? last?.at;
+  const indicator = stateIndicators[chat.state];
+  const StateIcon = indicator.icon;
   return <li><button type="button" aria-pressed={selected} onClick={() => onSelect(chat.id)}
     className={clsx('relative flex min-h-[72px] w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent',
       selected ? ['bg-accent-soft before:absolute before:inset-y-0 before:left-0 before:w-1', chat.state === 'seller' ? 'before:bg-success' : 'before:bg-accent'] : 'bg-surface hover:bg-surface-muted')}>
     {/* ContactAvatar only offers md/lg; the list row uses a 46px avatar. */}
-    <span className="inline-flex shrink-0 [&>span]:size-[46px] [&>span]:text-sm"><ContactAvatar name={chat.contact.name} /></span>
+    <span className={clsx('relative inline-flex shrink-0 rounded-full ring-2 ring-offset-2 ring-offset-transparent [&>span:first-child]:size-[46px] [&>span:first-child]:text-sm', indicator.ring)}>
+      <ContactAvatar name={chat.contact.name} />
+      <span aria-hidden data-chat-state={chat.state} title={indicator.label}
+        className={clsx('absolute -bottom-1 -right-1 grid size-5 place-items-center rounded-full border-2 border-surface text-surface', indicator.badge)}><StateIcon size={11} strokeWidth={2.5} /></span>
+      <span className="sr-only">Estado: {indicator.label}. </span>
+    </span>
     <span className="min-w-0 flex-1 space-y-0.5">
       <span className="flex items-baseline justify-between gap-2">
         <span className="truncate text-[15px] font-semibold text-ink">{chat.contact.name}</span>
