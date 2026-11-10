@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
 import { createClient } from '../../lib/supabase/client';
+import { listarTodosLosClientes } from '../../lib/clientes-paginados';
 import {
   Cliente,
   Cotizacion,
@@ -792,7 +793,7 @@ export default function PipelineVentasPage() {
             .from('oportunidades')
             .select('*, cliente:clientes(*)')
             .order('created_at', { ascending: false }),
-          supabase.from('clientes').select('*'),
+          listarTodosLosClientes(supabase),
           supabase.from('usuarios').select('*').eq('activo', true).order('nombre', { ascending: true }),
           supabase.from('cotizaciones').select('*, cliente:clientes(*), items:cotizacion_items(*)'),
           supabase.from('actividades_op').select('*').order('created_at', { ascending: true }),

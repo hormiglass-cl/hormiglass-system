@@ -47,17 +47,20 @@ export interface Cliente {
   id: string;
   nombre: string;
   apellido_razon_social?: string;
-  rut: string;
-  tipo_cliente?: TipoCliente;
+  rut: string | null;
+  tipo_cliente?: TipoCliente | null;
   nicho?: string;
   tipo_venta?: 'Instalación' | 'Suministro' | 'Reventa de Material' | string;
   telefono?: string;
   correo?: string;
   correos_secundarios?: string[];
+  telefonos_secundarios?: string[];
   direccion?: string;
   comuna?: string;
   region?: string;
   asignado_a?: string | null;
+  vendedor_historico_id?: string | null;
+  dolibarr_id?: string | null;
   usuario_id?: string | null;
   created_by?: string;
   created_at?: string;
@@ -76,6 +79,7 @@ export interface NotaActividad {
   hora_recordatorio?: string;
   fecha: string;
   usuario?: Usuario;
+  autor_historico?: string | null;
 }
 
 export type TipoNotaProveedor = TipoNotaActividad;
@@ -997,7 +1001,7 @@ export const AREAS_RRHH_DEFAULT = [
 export interface Trabajador {
   id: string;
   nombre: string;
-  rut: string;
+  rut: string | null;
   email?: string | null;
   telefono?: string | null;
   direccion?: string | null;

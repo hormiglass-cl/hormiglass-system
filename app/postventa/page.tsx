@@ -13,6 +13,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { createClient } from '../../lib/supabase/client';
+import { listarTodosLosClientes } from '../../lib/clientes-paginados';
 import type {
   CasoPostventa,
   CausaRaizPostventa,
@@ -140,7 +141,7 @@ export default function PostventaPage() {
         `)
         .order('created_at', { ascending: false }),
       supabase.from('oportunidades').select('id, codigo, titulo, cliente_id, asignado_a').order('codigo'),
-      supabase.from('clientes').select('id, nombre, apellido_razon_social, rut, telefono, correo').order('nombre'),
+      listarTodosLosClientes(supabase),
       supabase.from('trabajadores').select('*').order('nombre'),
       supabase.from('usuarios').select('id, nombre, email, rol').order('nombre'),
       supabase.from('catalogo_productos').select('id, codigo, nombre, unidad').order('nombre'),
@@ -700,7 +701,7 @@ export default function PostventaPage() {
                   options={clientes.map((cl) => ({
                     value: cl.id,
                     label: cl.apellido_razon_social || cl.nombre,
-                    hint: cl.rut,
+                    hint: cl.rut || undefined,
                   }))}
                 />
               </div>

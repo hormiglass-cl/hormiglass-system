@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '../../lib/supabase/client';
+import { listarTodosLosClientes } from '../../lib/clientes-paginados';
 import { useAjuste } from '../../lib/ajustes';
 import { Cliente, NICHOS_CLIENTE_DEFAULT, OportunidadVenta, Usuario } from '../../lib/types';
 import { logSistema } from '../../lib/logger';
@@ -126,7 +127,7 @@ export default function ClientesPage() {
     return `${body}-${dv}`;
   };
 
-  const formatRutClean = (rutStr?: string): string => {
+  const formatRutClean = (rutStr?: string | null): string => {
     if (!rutStr) return 'Sin RUT';
     return normalizeRut(rutStr);
   };
@@ -161,21 +162,19 @@ export default function ClientesPage() {
     let ignore = false;
     async function loadData() {
       try {
-        const [cliRes, opRes, usrRes] = await Promise.all([
-          supabase.from('clientes').select('*').order('created_at', { ascending: false }),
+        const [opRes, usrRes] = await Promise.all([
           supabase.from('oportunidades').select('*'),
           supabase.from('usuarios').select('*').eq('activo', true).order('nombre'),
         ]);
 
+        const { data: cliData } = await listarTodosLosClientes(supabase, 'created_at', false);
+
         if (!ignore) {
-          if (cliRes.data) {
-            const cliData = cliRes.data as Cliente[];
             setClientes(cliData);
             swrCache.set('clientes:list', cliData);
             const dbNichos = Array.from(new Set(cliData.map((c: Cliente) => c.nicho).filter(Boolean)));
             const allNichos = Array.from(new Set([...NICHOS_CLIENTE_DEFAULT, ...dbNichos]));
             setNichos(allNichos as string[]);
-          }
           if (opRes.data) {
             const opData = opRes.data as OportunidadVenta[];
             setOportunidades(opData);
@@ -322,20 +321,22 @@ export default function ClientesPage() {
     e.preventDefault();
     setDuplicateError('');
 
-    if (!nombre.trim() || !rutBody.trim() || !rutDv.trim()) {
+    if (!nombre.trim()) {
       setDuplicateError('Por favor completa todos los campos requeridos (*).');
       return;
     }
 
-    const { valido, mensaje } = validarRutChileno(rutBody, rutDv);
-    if (!valido) {
-      setDuplicateError(mensaje);
-      return;
+    if (rutBody.trim() || rutDv.trim()) {
+      const { valido, mensaje } = validarRutChileno(rutBody, rutDv);
+      if (!valido) {
+        setDuplicateError(mensaje);
+        return;
+      }
     }
 
-    const formattedRut = normalizeRut(`${rutBody}-${rutDv}`);
+    const formattedRut = rutBody.trim() ? normalizeRut(`${rutBody}-${rutDv}`) : null;
 
-    const duplicateByRut = clientes.find(
+    const duplicateByRut = formattedRut && clientes.find(
       (c) => normalizeRut(c.rut || '') === formattedRut
     );
 
@@ -361,7 +362,7 @@ export default function ClientesPage() {
 
     const finalRazonSocial = usarMismaRazonSocial ? nombre : (apellidoRazon.trim() || nombre);
     const rutNum = parseInt(rutBody.replace(/[^0-9]/g, ''), 10);
-    const tipoClienteCalculado = rutNum >= 50000000 ? 'juridica' : 'natural';
+    const tipoClienteCalculado = formattedRut ? (rutNum >= 50000000 ? 'juridica' : 'natural') : null;
 
     const newClientData: Partial<Cliente> = {
       nombre,
@@ -808,12 +809,11 @@ export default function ClientesPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-ink mb-1">RUT empresa / persona *</label>
+                  <label className="block font-semibold text-ink mb-1">RUT empresa / persona (opcional)</label>
                   <div className="flex items-center gap-1.5">
                     <div className="flex-1">
                       <input
                         type="text"
-                        required
                         maxLength={8}
                         placeholder="Ej. 12345678"
                         value={rutBody}
@@ -828,7 +828,6 @@ export default function ClientesPage() {
                     <div className="w-14">
                       <input
                         type="text"
-                        required
                         maxLength={1}
                         placeholder="K"
                         value={rutDv}

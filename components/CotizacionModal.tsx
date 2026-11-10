@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { createClient } from '../lib/supabase/client';
+import { listarTodosLosClientes } from '../lib/clientes-paginados';
 import { useAuth } from '../lib/context/AuthContext';
 import { Cliente, Cotizacion, CotizacionItem, OportunidadVenta, ProductoCatalogo, PRODUCTOS_HORMIGLASS } from '../lib/types';
 import { logSistema } from '../lib/logger';
@@ -131,7 +132,7 @@ export function CotizacionModal({
   useEffect(() => {
     async function loadAux() {
       const [{ data: cData }, { data: oData }, { data: pData }] = await Promise.all([
-        supabase.from('clientes').select('*').order('nombre'),
+        listarTodosLosClientes(supabase),
         supabase.from('oportunidades').select('*').order('created_at', { ascending: false }),
         supabase.from('catalogo_productos').select('*').eq('activo', true).order('nombre'),
       ]);
@@ -418,7 +419,7 @@ export function CotizacionModal({
                   setClienteId(v);
                   setOportunidadId('');
                 }}
-                options={clientes.map((c) => ({ value: c.id, label: c.nombre, hint: c.rut }))}
+                options={clientes.map((c) => ({ value: c.id, label: c.nombre, hint: c.rut || undefined }))}
                 placeholder="Seleccionar cliente"
                 searchPlaceholder="Buscar por nombre o RUT..."
                 searchable

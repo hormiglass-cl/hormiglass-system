@@ -4,6 +4,7 @@ import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useAuth } from '../lib/context/AuthContext';
 import { createClient } from '../lib/supabase/client';
+import { listarTodosLosClientes } from '../lib/clientes-paginados';
 import {
   Cliente,
   Cotizacion,
@@ -105,7 +106,7 @@ export default function Dashboard() {
       const [cotRes, opRes, cliRes, userRes, evRes, recRes, aboRes, postRes] = await Promise.all([
         supabase.from('cotizaciones').select('*, items:cotizacion_items(*), cliente:clientes(*)'),
         supabase.from('oportunidades').select('*, cliente:clientes(*), cotizaciones:cotizaciones!cotizaciones_oportunidad_id_fkey(*)'),
-        supabase.from('clientes').select('*'),
+        listarTodosLosClientes(supabase),
         supabase.from('usuarios').select('*').eq('activo', true),
         supabase.from('eventos_produccion_logistica').select('*, responsable:usuarios!responsable_id(*)'),
         recordatoriosQuery,

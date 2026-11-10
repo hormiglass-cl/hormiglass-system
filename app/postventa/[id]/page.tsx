@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { AlertTriangle, Check, CheckCircle2, Minus, ExternalLink, FileText, Link2, Pencil, Plus, Printer, Shield, Trash2, Upload } from 'lucide-react';
 import { createClient } from '../../../lib/supabase/client';
+import { listarTodosLosClientes } from '../../../lib/clientes-paginados';
 import type {
   CasoPostventa,
   CausaRaizPostventa,
@@ -156,7 +157,7 @@ export default function CasoPostventaPage() {
         .eq('id', casoId)
         .maybeSingle(),
       supabase.from('trabajadores').select('*').order('nombre'),
-      supabase.from('clientes').select('id, nombre, apellido_razon_social, rut, telefono, correo').order('nombre'),
+      listarTodosLosClientes(supabase),
       supabase.from('usuarios').select('id, nombre, email, rol').order('nombre'),
       supabase.from('catalogo_productos').select('id, codigo, nombre, unidad').order('nombre'),
     ]);
@@ -1107,7 +1108,7 @@ export default function CasoPostventaPage() {
                 searchPlaceholder="Buscar por nombre o RUT..."
                 searchable
                 menuMinWidth={320}
-                options={clientes.map((cl) => ({ value: cl.id, label: cl.apellido_razon_social || cl.nombre, hint: cl.rut }))}
+                options={clientes.map((cl) => ({ value: cl.id, label: cl.apellido_razon_social || cl.nombre, hint: cl.rut || undefined }))}
               />
             </Campo>
             <Campo label="Obra">

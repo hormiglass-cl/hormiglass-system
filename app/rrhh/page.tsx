@@ -329,8 +329,13 @@ export default function RecursosHumanosPage() {
     e.preventDefault();
     setFormError(null);
 
-    if (!newWorker.nombre.trim() || !newWorker.rut.trim() || !newWorker.cargo.trim()) {
-      setFormError('Nombre, RUT y cargo son obligatorios.');
+    if (!newWorker.nombre.trim() || !newWorker.cargo.trim()) {
+      setFormError('Nombre y cargo son obligatorios.');
+      return;
+    }
+
+    if (workerAccountMode === 'create' && !newWorker.rut.trim()) {
+      setFormError('El RUT es obligatorio para crear una cuenta de acceso al CRM.');
       return;
     }
 
@@ -398,7 +403,7 @@ export default function RecursosHumanosPage() {
 
       const workerPayload = {
         nombre: newWorker.nombre.trim(),
-        rut: newWorker.rut.trim(),
+        rut: newWorker.rut.trim() || null,
         email: newWorker.email.trim() || null,
         telefono: newWorker.telefono.trim() || null,
         direccion: newWorker.direccion.trim() || null,
@@ -1062,12 +1067,12 @@ export default function RecursosHumanosPage() {
                 )}
               </Field>
 
-              <Field label="RUT chileno" required>
+      <Field label="RUT chileno" required={workerAccountMode === 'create'}>
                 {({ id }) => (
                   <TextInput
                     id={id}
                     type="text"
-                    required
+                    required={workerAccountMode === 'create'}
                     placeholder="16.892.341-2"
                     value={newWorker.rut}
                     onChange={(e) => setNewWorker({ ...newWorker, rut: e.target.value })}

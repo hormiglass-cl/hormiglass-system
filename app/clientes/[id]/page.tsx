@@ -301,6 +301,7 @@ export default function ClienteDetailPage() {
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
   const [deliveryAccreditation, setDeliveryAccreditation] = useState<Record<string, boolean>>({});
   const [usuariosList, setUsuariosList] = useState<Usuario[]>([]);
+  const [vendedorHistorico, setVendedorHistorico] = useState<{ id: string; nombre: string; usuario_id: string | null } | null>(null);
   const [eventosList, setEventosList] = useState<EventoProduccionLogistica[]>([]);
   const [actividadesOpList, setActividadesOpList] = useState<
     {
@@ -372,6 +373,14 @@ export default function ClienteDetailPage() {
         if (ignore || !currentCli) {
           if (!ignore) setLoading(false);
           return;
+        }
+
+        if (currentCli.vendedor_historico_id) {
+          const { data: vendedor } = await supabase.from('trabajadores')
+            .select('id, nombre, usuario_id').eq('id', currentCli.vendedor_historico_id).maybeSingle();
+          if (!ignore) setVendedorHistorico(vendedor);
+        } else if (!ignore) {
+          setVendedorHistorico(null);
         }
 
         setCliente(currentCli);
@@ -528,15 +537,17 @@ export default function ClienteDetailPage() {
     setEditRutError('');
     if (!cliente) return;
 
-    const val = validarRutChileno(editRutBody, editRutDv);
-    if (!val.valido) {
-      setEditRutError(val.mensaje || 'RUT inválido.');
-      return;
+    if (editRutBody.trim() || editRutDv.trim()) {
+      const val = validarRutChileno(editRutBody, editRutDv);
+      if (!val.valido) {
+        setEditRutError(val.mensaje || 'RUT inválido.');
+        return;
+      }
     }
 
-    const formattedRut = `${editRutBody.replace(/[^0-9]/g, '')}-${editRutDv.trim().toUpperCase()}`;
+    const formattedRut = editRutBody.trim() ? `${editRutBody.replace(/[^0-9]/g, '')}-${editRutDv.trim().toUpperCase()}` : null;
     const rutNum = parseInt(editRutBody.replace(/[^0-9]/g, ''), 10);
-    const tipoClienteCalculado: 'natural' | 'juridica' = rutNum >= 50000000 ? 'juridica' : 'natural';
+    const tipoClienteCalculado: 'natural' | 'juridica' | null = formattedRut ? (rutNum >= 50000000 ? 'juridica' : 'natural') : null;
 
     const updatedData = {
       nombre: editNombre,
@@ -739,7 +750,7 @@ export default function ClienteDetailPage() {
       tipo: n.tipo_actividad || 'nota',
       contenido: n.contenido,
       fecha: n.fecha,
-      usuario_nombre: n.usuario?.nombre || 'Usuario CRM',
+      usuario_nombre: n.usuario?.nombre || n.autor_historico || 'Sistema',
       fecha_recordatorio: n.fecha_recordatorio,
       hora_recordatorio: n.hora_recordatorio,
       oportunidad_id: undefined as string | undefined,
@@ -769,7 +780,7 @@ export default function ClienteDetailPage() {
     if (filtroActividadTipo === 'oportunidades') return item.origen === 'oportunidad';
     return item.tipo === filtroActividadTipo;
   });
-  const notasFiltradas = notas.filter((n) => coincide(n.contenido, n.usuario?.nombre));
+  const notasFiltradas = notas.filter((n) => coincide(n.contenido, n.usuario?.nombre, n.autor_historico));
   const reclamosFiltrados = reclamosList.filter((r) => coincide(r.contenido, r.oportunidad_codigo, r.usuario_nombre));
 
   if (loading) {
@@ -840,7 +851,7 @@ export default function ClienteDetailPage() {
                   <h2 className="t-section text-ink truncate">{cliente.nombre}</h2>
                   <p className="t-caption text-ink-muted truncate">{cliente.apellido_razon_social || cliente.nombre}</p>
                   <div className="mt-1">
-                    <CodeStamp>{cliente.rut}</CodeStamp>
+                    <CodeStamp>{cliente.rut || 'Sin RUT'}</CodeStamp>
                   </div>
                 </div>
               </div>
@@ -915,6 +926,14 @@ export default function ClienteDetailPage() {
                       ))}
                     </Select>
                   </div>
+                  {vendedorHistorico && (
+                    <div className="space-y-1">
+                      <span className="t-caption text-ink-muted block">Vendedor de origen</span>
+                      <Link href={`/rrhh/${vendedorHistorico.id}`} className="font-semibold text-ink hover:text-accent-ink">
+                        {vendedorHistorico.nombre}{!vendedorHistorico.usuario_id && ' · Sin cuenta CRM'}
+                      </Link>
+                    </div>
+                  )}
                 <div className="border-t border-line-subtle pt-3 space-y-3">
                   <div>
                     <span className="t-caption text-ink-muted block">Teléfono de contacto</span>
@@ -923,6 +942,14 @@ export default function ClienteDetailPage() {
                       {cliente.telefono || 'No registrado'}
                     </span>
                   </div>
+                  {cliente.telefonos_secundarios && cliente.telefonos_secundarios.length > 0 && (
+                    <div>
+                      <span className="t-caption text-ink-muted block">Teléfonos adicionales</span>
+                      <span className="font-semibold text-ink block mt-0.5">
+                        {cliente.telefonos_secundarios.join(', ')}
+                      </span>
+                    </div>
+                  )}
                   <div>
                     <span className="t-caption text-ink-muted block">Correo electrónico</span>
                     <span className="font-semibold text-ink truncate block mt-0.5">
@@ -1255,7 +1282,7 @@ export default function ClienteDetailPage() {
                 notasFiltradas.map((n) => (
                   <article key={n.id} className="rounded-xl border border-line bg-surface p-3.5 space-y-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-ink">{n.usuario?.nombre || 'Usuario CRM'}</span>
+                      <span className="text-xs font-semibold text-ink">{n.usuario?.nombre || n.autor_historico || 'Sistema'}</span>
                       <span className="t-caption t-num">{new Date(n.fecha).toLocaleDateString('es-CL')}</span>
                     </div>
                     <p className="text-xs leading-relaxed text-ink-muted">{n.contenido}</p>
@@ -1460,11 +1487,10 @@ export default function ClienteDetailPage() {
             </div>
 
             <div>
-              <label className="block t-caption font-semibold text-ink mb-1">RUT *</label>
+              <label className="block t-caption font-semibold text-ink mb-1">RUT (opcional)</label>
               <div className="flex items-center gap-1.5">
                 <input
                   type="text"
-                  required
                   value={editRutBody}
                   onChange={(e) => setEditRutBody(e.target.value)}
                   placeholder="12345678"
@@ -1473,7 +1499,6 @@ export default function ClienteDetailPage() {
                 <span className="font-semibold text-ink-muted">-</span>
                 <input
                   type="text"
-                  required
                   maxLength={1}
                   value={editRutDv}
                   onChange={(e) => setEditRutDv(e.target.value.toUpperCase())}
