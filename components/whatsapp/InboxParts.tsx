@@ -39,10 +39,10 @@ function waitingSince(chat: Conversation, now: number) {
 
 /** State at a glance on the avatar: tone ring plus icon (never color alone), and a spoken label. */
 const stateIndicators: Record<ConversationState, { label: string; icon: LucideIcon; ring: string; badge: string }> = {
-  waiting: { label: 'Esperando vendedor', icon: Clock3, ring: 'ring-warning', badge: 'bg-warning' },
-  seller: { label: 'Atendiendo tú', icon: UserRound, ring: 'ring-success', badge: 'bg-success' },
-  assistant: { label: 'Con el asistente', icon: Sparkles, ring: 'ring-info', badge: 'bg-info' },
-  closed: { label: 'Cerrada', icon: Lock, ring: 'ring-ink-muted', badge: 'bg-ink-muted' },
+  waiting: { label: 'Esperando vendedor', icon: Clock3, ring: 'ring-warning-line', badge: 'bg-warning-soft text-warning' },
+  seller: { label: 'Atendiendo tú', icon: UserRound, ring: 'ring-success-line', badge: 'bg-success-soft text-success' },
+  assistant: { label: 'Con el asistente', icon: Sparkles, ring: 'ring-info-line', badge: 'bg-info-soft text-info' },
+  closed: { label: 'Cerrada', icon: Lock, ring: 'ring-line', badge: 'bg-surface-muted text-ink-muted' },
 };
 
 function ConversationRow({ chat, selected, onSelect, now }: { chat: Conversation; selected: boolean; onSelect: (id: string) => void; now?: number }) {
@@ -56,10 +56,10 @@ function ConversationRow({ chat, selected, onSelect, now }: { chat: Conversation
     className={clsx('relative flex min-h-[72px] w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent',
       selected ? ['bg-accent-soft before:absolute before:inset-y-0 before:left-0 before:w-1', chat.state === 'seller' ? 'before:bg-success' : 'before:bg-accent'] : 'bg-surface hover:bg-surface-muted')}>
     {/* ContactAvatar only offers md/lg; the list row uses a 46px avatar. */}
-    <span className={clsx('relative inline-flex shrink-0 rounded-full ring-2 ring-offset-2 ring-offset-transparent [&>span:first-child]:size-[46px] [&>span:first-child]:text-sm', indicator.ring)}>
+    <span className={clsx('relative inline-flex shrink-0 rounded-full ring-[1.5px] ring-offset-2 ring-offset-transparent [&>span:first-child]:size-[46px] [&>span:first-child]:text-sm', indicator.ring)}>
       <ContactAvatar name={chat.contact.name} />
       <span aria-hidden data-chat-state={chat.state} title={indicator.label}
-        className={clsx('absolute -bottom-1 -right-1 grid size-5 place-items-center rounded-full border-2 border-surface text-surface', indicator.badge)}><StateIcon size={11} strokeWidth={2.5} /></span>
+        className={clsx('absolute -bottom-1 -right-1 grid size-5 place-items-center rounded-full border-2 border-surface', indicator.badge)}><StateIcon size={11} strokeWidth={2.5} /></span>
       <span className="sr-only">Estado: {indicator.label}. </span>
     </span>
     <span className="min-w-0 flex-1 space-y-0.5">

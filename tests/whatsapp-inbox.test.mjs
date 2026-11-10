@@ -160,10 +160,11 @@ test('notice banners hide assignments and offer Ver chat / Más tarde; demo noti
 test('every row carries a state indicator on the avatar: tone ring, icon and a spoken label', () => {
   const html = list();
   for (const [name, state, label, tone] of [
-    ['Camila Rojas', 'waiting', 'Esperando vendedor', 'warning'],
-    ['Valentina Soto', 'seller', 'Atendiendo tú', 'success'],
-    ['Diego Muñoz', 'assistant', 'Con el asistente', 'info'],
-    ['Pablo Torres', 'closed', 'Cerrada', 'ink-muted'],
+    // Soft tones (L8): light ring and a soft badge with the state-colored icon.
+    ['Camila Rojas', 'waiting', 'Esperando vendedor', 'warning-line'],
+    ['Valentina Soto', 'seller', 'Atendiendo tú', 'success-line'],
+    ['Diego Muñoz', 'assistant', 'Con el asistente', 'info-line'],
+    ['Pablo Torres', 'closed', 'Cerrada', 'line'],
   ]) {
     const markup = row(html, name);
     const indicator = markup.match(/<span[^>]*data-chat-state="[^"]*"[^>]*>[\s\S]*?<\/svg><\/span>/)?.[0] ?? '';
