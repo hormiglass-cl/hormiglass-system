@@ -542,7 +542,8 @@ export default function CotizacionesPage() {
           )}
         </div>
 
-        <div className="hidden overflow-x-auto md:block">
+        {/* relative: keeps absolutely positioned sr-only labels inside the scroll area, not widening the page. */}
+        <div className="relative hidden overflow-x-auto md:block">
           <table className="w-full text-left min-w-[1000px] text-[13px]">
             <thead>
               <tr className="bg-surface-muted/60 text-ink-muted text-xs font-medium border-b border-line">

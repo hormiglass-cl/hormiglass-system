@@ -2415,7 +2415,7 @@ export default function PipelineVentasPage() {
 
       {!selectedOp ? (
       <>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-muted p-1">
           <button
             type="button"
@@ -2441,8 +2441,8 @@ export default function PipelineVentasPage() {
           </button>
         </div>
 
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="relative w-full min-w-[200px] max-w-sm">
+        <div className="flex w-full min-w-0 items-center gap-3 sm:w-auto">
+          <div className="relative min-w-0 flex-1 sm:w-72 sm:flex-none">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" aria-hidden />
             <input
               type="search"

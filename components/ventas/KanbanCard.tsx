@@ -74,7 +74,10 @@ export function KanbanCard({
             className="text-ink-muted opacity-40 group-hover:opacity-100 transition shrink-0 cursor-grab"
             aria-hidden
           />
-          <CodeStamp title={`Folio ${op.codigo}`}>{op.codigo}</CodeStamp>
+          {/* Long folios (e.g. WhatsApp UUIDs) truncate instead of running under the assignee avatar. */}
+          <span className="flex min-w-0 [&_.code-stamp]:block [&_.code-stamp]:truncate">
+            <CodeStamp title={`Folio ${op.codigo}`}>{op.codigo}</CodeStamp>
+          </span>
           {latestQuoteVersion && (
             <span className="t-micro rounded px-1.5 py-0.5 font-semibold bg-info-soft text-info border border-info-line shrink-0">
               Cot. v{latestQuoteVersion}
