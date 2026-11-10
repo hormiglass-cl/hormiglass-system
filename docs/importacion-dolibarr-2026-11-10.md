@@ -7,8 +7,8 @@ Proyecto Supabase: `jvenwcupdllcqbxixcuo` (`hormiglass-system`).
 | Concepto | Registros |
 | --- | ---: |
 | Filas de empresas/personas en el export original | 21.805 |
-| Clientes únicos importados | 20.303 |
-| Clientes importados sin RUT | 19.033 |
+| Clientes únicos importados | 20.278 |
+| Clientes importados sin RUT | 19.008 |
 | Proveedores exclusivos importados | 123 |
 | Notas históricas importadas | 213 |
 | Vendedores de origen referenciados | 23 |
@@ -16,6 +16,10 @@ Proyecto Supabase: `jvenwcupdllcqbxixcuo` (`hormiglass-system`).
 
 Los otros dos vendedores ya tenían ficha en RR. HH. Los nombres de clientes,
 proveedores y vendedores importados se normalizaron con mayúscula inicial.
+Una segunda limpieza de los nombres de clientes quitó signos, espacios dobles,
+etiquetas como «Razón Social:» y RUT escritos junto al nombre. Conservó letras,
+números, tildes y ñ. Esta limpieza permitió consolidar 25 fichas adicionales
+con el mismo nombre y contacto, sin perder sus teléfonos ni correos.
 No se creó ninguna cuenta de acceso al CRM.
 
 Los duplicados se agruparon por RUT válido o por nombre junto con correo o
