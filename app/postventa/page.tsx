@@ -13,11 +13,10 @@ import {
   Wallet,
 } from 'lucide-react';
 import { createClient } from '../../lib/supabase/client';
-import { listarTodosLosClientes } from '../../lib/clientes-paginados';
+import { useClienteOpciones } from '../../lib/clientes-opciones';
 import type {
   CasoPostventa,
   CausaRaizPostventa,
-  Cliente,
   OportunidadVenta,
   ProductoCatalogo,
   ResolucionPostventa,
@@ -66,7 +65,6 @@ export default function PostventaPage() {
   const [arrastrando, setArrastrando] = useState<string | null>(null);
   const [columnaDestino, setColumnaDestino] = useState<ColumnaPostventa | null>(null);
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [trabajadores, setTrabajadores] = useState<Trabajador[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [productos, setProductos] = useState<ProductoCatalogo[]>([]);
@@ -117,12 +115,13 @@ export default function PostventaPage() {
     fecha_compromiso: '',
   });
 
+  const clientesSel = useClienteOpciones(nuevoForm.cliente_id);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     const [
       { data: casosData, error: casosErr },
       { data: opsData },
-      { data: clientesData },
       { data: trabData },
       { data: usrsData },
       { data: prodsData },
@@ -141,7 +140,6 @@ export default function PostventaPage() {
         `)
         .order('created_at', { ascending: false }),
       supabase.from('oportunidades').select('id, codigo, titulo, cliente_id, asignado_a').order('codigo'),
-      listarTodosLosClientes(supabase),
       supabase.from('trabajadores').select('*').order('nombre'),
       supabase.from('usuarios').select('id, nombre, email, rol').order('nombre'),
       supabase.from('catalogo_productos').select('id, codigo, nombre, unidad').order('nombre'),
@@ -155,7 +153,6 @@ export default function PostventaPage() {
     }
 
     if (opsData) setOportunidades(opsData as OportunidadVenta[]);
-    if (clientesData) setClientes(clientesData as Cliente[]);
     if (trabData) setTrabajadores(trabData as Trabajador[]);
     if (usrsData) setUsuarios(usrsData as Usuario[]);
     if (prodsData) setProductos(prodsData as ProductoCatalogo[]);
@@ -698,11 +695,8 @@ export default function PostventaPage() {
                   searchPlaceholder="Buscar por nombre o RUT..."
                   searchable
                   menuMinWidth={320}
-                  options={clientes.map((cl) => ({
-                    value: cl.id,
-                    label: cl.apellido_razon_social || cl.nombre,
-                    hint: cl.rut || undefined,
-                  }))}
+                  options={clientesSel.opciones}
+                  onSearch={clientesSel.onSearch}
                 />
               </div>
               <div>

@@ -363,11 +363,10 @@ export default function ClienteDetailPage() {
         if (!clientErr && clientData) {
           currentCli = clientData as Cliente;
         } else {
-          const { data: allClis, error: clientsError } = await supabase.from('clientes').select('*');
+          // Respaldo: la URL puede traer el RUT en vez del id; se busca solo ese cliente.
+          const { data: porRut, error: clientsError } = await supabase.from('clientes').select('*').eq('rut', clienteId).limit(1);
           if (clientsError) throw clientsError;
-          if (allClis && allClis.length > 0) {
-            currentCli = (allClis as Cliente[]).find((c) => c.id === clienteId || c.rut === clienteId) || null;
-          }
+          currentCli = ((porRut || [])[0] as Cliente | undefined) || null;
         }
 
         if (ignore || !currentCli) {

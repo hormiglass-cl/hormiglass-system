@@ -30,6 +30,8 @@ export interface SearchSelectProps {
   menuMinWidth?: number;
   emptyText?: string;
   renderValue?: (option: SearchSelectOption) => React.ReactNode;
+  /** Búsqueda remota: si se entrega, las opciones vienen ya filtradas y no se filtran localmente. */
+  onSearch?: (query: string) => void;
 }
 
 function normalize(text: string): string {
@@ -59,6 +61,7 @@ export function SearchSelect({
   menuMinWidth = 220,
   emptyText = 'Sin resultados',
   renderValue,
+  onSearch,
 }: SearchSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -71,24 +74,25 @@ export function SearchSelect({
     () => (clearLabel ? [{ value: '', label: clearLabel }, ...options] : options),
     [clearLabel, options]
   );
-  const showSearch = searchable === 'auto' ? options.length > 6 : searchable;
+  const showSearch = onSearch ? true : searchable === 'auto' ? options.length > 6 : searchable;
 
   const visible = useMemo(() => {
     const q = normalize(query.trim());
-    if (!q) return allOptions;
+    if (!q || onSearch) return allOptions;
     const tokens = q.split(/\s+/);
     return allOptions.filter((o) => {
       if (o.value === '') return false;
       const haystack = normalize(`${o.label} ${o.hint ?? ''}`);
       return tokens.every((t) => haystack.includes(t));
     });
-  }, [allOptions, query]);
+  }, [allOptions, query, onSearch]);
 
   const selected = options.find((o) => o.value === value);
 
   const close = () => {
     setOpen(false);
     setQuery('');
+    onSearch?.('');
   };
 
   const openMenu = () => {
@@ -221,6 +225,7 @@ export function SearchSelect({
                   value={query}
                   onChange={(e) => {
                     setQuery(e.target.value);
+                    onSearch?.(e.target.value);
                     setActive(0);
                   }}
                   placeholder={searchPlaceholder}

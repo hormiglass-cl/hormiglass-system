@@ -4,7 +4,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '../../lib/supabase/client';
-import { listarTodosLosClientes } from '../../lib/clientes-paginados';
 import { useAjuste } from '../../lib/ajustes';
 import { Cliente, NICHOS_CLIENTE_DEFAULT, OportunidadVenta, Usuario } from '../../lib/types';
 import { logSistema } from '../../lib/logger';
@@ -25,7 +24,7 @@ import { useConfirm, useToast } from '../../components/ui/feedback';
 import { AvatarBadge } from '../../components/ui/AvatarBadge';
 import { ColumnMenu, useColumnPrefs } from '../../components/ui/ColumnMenu';
 import { FloatingActionBar } from '../../components/ui/FloatingActionBar';
-import { FilterMenu, FilterBar, useFilterUi, FilterDefinition, matchNumberFilter, matchMultiFilter } from '../../components/ui/FilterPills';
+import { FilterMenu, FilterBar, useFilterUi, FilterDefinition, matchNumberFilter, parseMulti } from '../../components/ui/FilterPills';
 import clsx from 'clsx';
 
 type ClienteCol = 'rut' | 'ejecutivo' | 'nicho' | 'cant_oportunidades' | 'correo' | 'telefono';
@@ -73,11 +72,14 @@ import { Select } from '../../components/ui/FormControls';
 
 export default function ClientesPage() {
   const tiposVenta = useAjuste('tipos_venta').valor.lista;
-  const [clientes, setClientes] = useState<Cliente[]>(() => swrCache.get('clientes:list') || []);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [totalItems, setTotalItems] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [searchDeb, setSearchDeb] = useState('');
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>(() => swrCache.get('clientes:oportunidades') || []);
   const [usuariosList, setUsuariosList] = useState<Usuario[]>([]);
   const [nichos, setNichos] = useState<string[]>(NICHOS_CLIENTE_DEFAULT);
-  const [loading, setLoading] = useState<boolean>(() => !swrCache.has('clientes:list'));
+  const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState('');
   const [nichoFiltro, setNichoFiltro] = useState<string>('todos');
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
@@ -158,42 +160,121 @@ export default function ClientesPage() {
     return { valido: true, mensaje: 'RUT Válido' };
   };
 
+  // Oportunidades y usuarios: conjuntos pequeños que se cargan una sola vez.
   useEffect(() => {
     let ignore = false;
-    async function loadData() {
+    async function loadAux() {
       try {
         const [opRes, usrRes] = await Promise.all([
-          supabase.from('oportunidades').select('*'),
+          supabase.from('oportunidades').select('id, cliente_id'),
           supabase.from('usuarios').select('*').eq('activo', true).order('nombre'),
         ]);
-
-        const { data: cliData } = await listarTodosLosClientes(supabase, 'created_at', false);
-
-        if (!ignore) {
-            setClientes(cliData);
-            swrCache.set('clientes:list', cliData);
-            const dbNichos = Array.from(new Set(cliData.map((c: Cliente) => c.nicho).filter(Boolean)));
-            const allNichos = Array.from(new Set([...NICHOS_CLIENTE_DEFAULT, ...dbNichos]));
-            setNichos(allNichos as string[]);
-          if (opRes.data) {
-            const opData = opRes.data as OportunidadVenta[];
-            setOportunidades(opData);
-            swrCache.set('clientes:oportunidades', opData);
-          }
-          if (usrRes.data) setUsuariosList(usrRes.data as Usuario[]);
-          setLoading(false);
+        if (ignore) return;
+        if (opRes.data) {
+          const opData = opRes.data as OportunidadVenta[];
+          setOportunidades(opData);
+          swrCache.set('clientes:oportunidades', opData);
         }
+        if (usrRes.data) setUsuariosList(usrRes.data as Usuario[]);
       } catch (err) {
-        console.error('Error cargando directorio de clientes:', err);
-        if (!ignore) setLoading(false);
+        console.error('Error cargando oportunidades y usuarios:', err);
       }
     }
-
-    loadData();
+    void loadAux();
     return () => {
       ignore = true;
     };
   }, [supabase]);
+
+  // La búsqueda espera a que termines de escribir antes de consultar.
+  useEffect(() => {
+    const t = window.setTimeout(() => setSearchDeb(search), 300);
+    return () => window.clearTimeout(t);
+  }, [search]);
+
+  const opCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const o of oportunidades) {
+      if (o.cliente_id) m.set(o.cliente_id, (m.get(o.cliente_id) ?? 0) + 1);
+    }
+    return m;
+  }, [oportunidades]);
+
+  // Vuelve a la página 1 cuando cambia la búsqueda o un filtro.
+  const firmaFiltros = `${searchDeb}|${nichoFiltro}|${JSON.stringify(activeFilters)}`;
+  const [firmaPrevia, setFirmaPrevia] = useState(firmaFiltros);
+  if (firmaPrevia !== firmaFiltros) {
+    setFirmaPrevia(firmaFiltros);
+    setCurrentPage(1);
+  }
+
+  // Una página de clientes a la vez: búsqueda, filtros y paginación se resuelven en el servidor.
+  useEffect(() => {
+    let ignore = false;
+    async function cargarPagina() {
+      setLoading(true);
+      try {
+        let q = supabase.from('clientes').select('*', { count: 'exact' });
+
+        const term = searchDeb.trim().replace(/[,()%*]/g, ' ').replace(/\s+/g, ' ').trim();
+        if (term) {
+          const rutTerm = term.replace(/\./g, '');
+          q = q.or([
+            `nombre.ilike.%${term}%`,
+            `apellido_razon_social.ilike.%${term}%`,
+            `correo.ilike.%${term}%`,
+            `telefono.ilike.%${term}%`,
+            `rut.ilike.%${rutTerm}%`,
+          ].join(','));
+        }
+
+        const nichos = parseMulti(activeFilters.nicho || (nichoFiltro !== 'todos' ? nichoFiltro : undefined));
+        if (nichos.length) q = q.in('nicho', nichos);
+
+        const ejec = parseMulti(activeFilters.ejecutivo);
+        if (ejec.length) {
+          const sinAsignar = ejec.includes('sin_asignar');
+          const ids = ejec.filter((v) => v !== 'sin_asignar');
+          if (sinAsignar && ids.length) q = q.or(`asignado_a.is.null,asignado_a.in.(${ids.join(',')})`);
+          else if (sinAsignar) q = q.is('asignado_a', null);
+          else q = q.in('asignado_a', ids);
+        }
+
+        const filtroOp = activeFilters.oportunidades;
+        if (filtroOp && filtroOp.includes(':')) {
+          const entradas = Array.from(opCounts.entries());
+          if (matchNumberFilter(filtroOp, 0)) {
+            const excluidos = entradas.filter(([, n]) => !matchNumberFilter(filtroOp, n)).map(([id]) => id);
+            if (excluidos.length) q = q.not('id', 'in', `(${excluidos.join(',')})`);
+          } else {
+            const incluidos = entradas.filter(([, n]) => matchNumberFilter(filtroOp, n)).map(([id]) => id);
+            q = q.in('id', incluidos.length ? incluidos : ['00000000-0000-0000-0000-000000000000']);
+          }
+        }
+
+        const desde = (currentPage - 1) * itemsPerPage;
+        const { data, count, error } = await q
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: true })
+          .range(desde, desde + itemsPerPage - 1);
+        if (error) throw error;
+        if (ignore) return;
+        const filas = (data || []) as Cliente[];
+        setClientes(filas);
+        setTotalItems(count ?? filas.length);
+        const nichosPagina = filas.map((c) => c.nicho).filter(Boolean) as string[];
+        if (nichosPagina.length) setNichos((prev) => Array.from(new Set([...prev, ...nichosPagina])));
+      } catch (err) {
+        console.error('Error cargando directorio de clientes:', err);
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    }
+    void cargarPagina();
+    return () => {
+      ignore = true;
+    };
+  }, [supabase, currentPage, itemsPerPage, searchDeb, activeFilters, nichoFiltro, opCounts, reloadKey]);
 
   const handleCreateNicho = () => {
     if (!nuevoNichoInput.trim()) return;
@@ -230,52 +311,18 @@ export default function ClientesPage() {
     },
   ], [nichos, usuariosList]);
 
-  const filteredClientes = useMemo(() => {
-    const opCounts = new Map<string, number>();
-    for (const o of oportunidades) {
-      if (o.cliente_id) opCounts.set(o.cliente_id, (opCounts.get(o.cliente_id) ?? 0) + 1);
-    }
-    return clientes.filter((c) => {
-      const q = search.toLowerCase();
-      const rutClean = (c.rut || '').replace(/[^0-9kK]/g, '').toLowerCase();
-      const searchClean = q.replace(/[^0-9kK]/g, '');
-
-      const matchSearch =
-        !q ||
-        c.nombre.toLowerCase().includes(q) ||
-        (c.apellido_razon_social && c.apellido_razon_social.toLowerCase().includes(q)) ||
-        (c.correo && c.correo.toLowerCase().includes(q)) ||
-        (c.telefono && c.telefono.includes(q)) ||
-        (searchClean && rutClean.includes(searchClean));
-
-      const nichoVal = activeFilters.nicho || (nichoFiltro !== 'todos' ? nichoFiltro : undefined);
-      const matchNicho = matchMultiFilter(nichoVal, (v) => c.nicho === v);
-
-      const ejecVal = activeFilters.ejecutivo;
-      const matchEjecutivo = matchMultiFilter(ejecVal, (v) => (v === 'sin_asignar' ? !c.asignado_a : c.asignado_a === v));
-
-      const matchOportunidades = matchNumberFilter(activeFilters.oportunidades, opCounts.get(c.id) ?? 0);
-
-      return matchSearch && matchNicho && matchEjecutivo && matchOportunidades;
-    });
-  }, [clientes, oportunidades, search, activeFilters, nichoFiltro]);
-
-  // Calculate pagination
-  const totalItems = filteredClientes.length;
-  const paginatedClientes = filteredClientes.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const filteredClientes = clientes;
+  const paginatedClientes = clientes;
 
   const getOportunidadesCount = (clienteId: string) => {
     return oportunidades.filter((o) => o.cliente_id === clienteId).length;
   };
 
   const handleSelectAll = () => {
-    if (selectedClientIds.length === filteredClientes.length) {
+    if (isAllSelected) {
       setSelectedClientIds([]);
     } else {
-      setSelectedClientIds(filteredClientes.map((c) => c.id));
+      setSelectedClientIds(Array.from(new Set([...selectedClientIds, ...filteredClientes.map((c) => c.id)])));
     }
   };
 
@@ -287,7 +334,7 @@ export default function ClientesPage() {
     }
   };
 
-  const isAllSelected = filteredClientes.length > 0 && selectedClientIds.length === filteredClientes.length;
+  const isAllSelected = filteredClientes.length > 0 && filteredClientes.every((c) => selectedClientIds.includes(c.id));
 
   const handleDeleteSelected = async () => {
     if (selectedClientIds.length === 0) return;
@@ -302,7 +349,7 @@ export default function ClientesPage() {
     try {
       const { error } = await supabase.from('clientes').delete().in('id', selectedClientIds);
       if (error) throw error;
-      setClientes((prev) => prev.filter((c) => !selectedClientIds.includes(c.id)));
+      setReloadKey((k) => k + 1);
       toast({
         message: `${selectedClientIds.length} cliente(s) eliminados correctamente.`,
         tone: 'success',
@@ -336,15 +383,24 @@ export default function ClientesPage() {
 
     const formattedRut = rutBody.trim() ? normalizeRut(`${rutBody}-${rutDv}`) : null;
 
-    const duplicateByRut = formattedRut && clientes.find(
-      (c) => normalizeRut(c.rut || '') === formattedRut
-    );
-
-    const duplicateByEmail = correo.trim()
-      ? clientes.find(
-          (c) => (c.correo || '').toLowerCase() === correo.trim().toLowerCase()
-        )
-      : null;
+    // Duplicados: se consulta al servidor (la lista en pantalla es solo una página).
+    let duplicateByRut: { nombre: string } | null = null;
+    let duplicateByEmail: { nombre: string } | null = null;
+    try {
+      if (formattedRut) {
+        const [cuerpo, dv] = formattedRut.split('-');
+        const conPuntos = `${cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}-${dv}`;
+        const { data } = await supabase.from('clientes').select('nombre').in('rut', [formattedRut, conPuntos]).limit(1);
+        duplicateByRut = data?.[0] ?? null;
+      }
+      if (correo.trim()) {
+        const exacto = correo.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
+        const { data } = await supabase.from('clientes').select('nombre').ilike('correo', exacto).limit(1);
+        duplicateByEmail = data?.[0] ?? null;
+      }
+    } catch (err) {
+      console.error('No se pudo verificar duplicados:', err);
+    }
 
     if (duplicateByRut) {
       setDuplicateError(`Ya existe un cliente registrado con el RUT ${formattedRut} (${duplicateByRut.nombre}).`);
@@ -392,7 +448,8 @@ export default function ClientesPage() {
         return;
       }
 
-      setClientes([data as Cliente, ...clientes]);
+      setCurrentPage(1);
+      setReloadKey((k) => k + 1);
       toast({
         message: `Cliente ${nombre} creado exitosamente.`,
         tone: 'success',

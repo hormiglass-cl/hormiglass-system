@@ -5,11 +5,10 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { AlertTriangle, Check, CheckCircle2, Minus, ExternalLink, FileText, Link2, Pencil, Plus, Printer, Shield, Trash2, Upload } from 'lucide-react';
 import { createClient } from '../../../lib/supabase/client';
-import { listarTodosLosClientes } from '../../../lib/clientes-paginados';
+import { useClienteOpciones } from '../../../lib/clientes-opciones';
 import type {
   CasoPostventa,
   CausaRaizPostventa,
-  Cliente,
   EstadoPostventa,
   ProductoCatalogo,
   ResolucionPostventa,
@@ -113,7 +112,6 @@ export default function CasoPostventaPage() {
   const [showEditar, setShowEditar] = useState(false);
   const [showConformidad, setShowConformidad] = useState(false);
   const [conformidadObs, setConformidadObs] = useState('');
-  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [productos, setProductos] = useState<ProductoCatalogo[]>([]);
   const [modoEvidencia, setModoEvidencia] = useState<'archivo' | 'enlace'>('archivo');
@@ -140,8 +138,10 @@ export default function CasoPostventaPage() {
     archivo_url: '',
   });
 
+  const clientesSel = useClienteOpciones(editForm.cliente_id);
+
   const load = useCallback(async () => {
-    const [{ data, error }, { data: trab }, { data: cls }, { data: usrs }, { data: prods }] = await Promise.all([
+    const [{ data, error }, { data: trab }, { data: usrs }, { data: prods }] = await Promise.all([
       supabase
         .from('postventa_casos')
         .select(`
@@ -157,7 +157,6 @@ export default function CasoPostventaPage() {
         .eq('id', casoId)
         .maybeSingle(),
       supabase.from('trabajadores').select('*').order('nombre'),
-      listarTodosLosClientes(supabase),
       supabase.from('usuarios').select('id, nombre, email, rol').order('nombre'),
       supabase.from('catalogo_productos').select('id, codigo, nombre, unidad').order('nombre'),
     ]);
@@ -170,7 +169,6 @@ export default function CasoPostventaPage() {
     setHistorial((hist || []) as unknown as HistorialItem[]);
     setCaso((data as unknown as CasoPostventa) || null);
     if (trab) setTrabajadores(trab as Trabajador[]);
-    if (cls) setClientes(cls as Cliente[]);
     if (usrs) setUsuarios(usrs as Usuario[]);
     if (prods) setProductos(prods as ProductoCatalogo[]);
     setLoading(false);
@@ -1108,7 +1106,8 @@ export default function CasoPostventaPage() {
                 searchPlaceholder="Buscar por nombre o RUT..."
                 searchable
                 menuMinWidth={320}
-                options={clientes.map((cl) => ({ value: cl.id, label: cl.apellido_razon_social || cl.nombre, hint: cl.rut || undefined }))}
+                options={clientesSel.opciones}
+                onSearch={clientesSel.onSearch}
               />
             </Campo>
             <Campo label="Obra">
