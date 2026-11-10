@@ -7,6 +7,7 @@ import { OpportunityActivity } from '../../components/whatsapp/OpportunityActivi
 function ShortcutsFixture() {
   const [id, setId] = useState('demo-1');
   const [opportunity, setOpportunity] = useState(false);
+  const [details, setDetails] = useState(false);
   const { chats } = useConversations();
   const chat = chats.find(item => item.id === id);
   return <main className="flex h-[700px] flex-col p-2">
@@ -15,8 +16,9 @@ function ShortcutsFixture() {
       <button type="button" onClick={() => setOpportunity(true)}>Ver oportunidad</button>
     </div>
     {opportunity ? <OpportunityActivity onClose={() => setOpportunity(false)}><button type="button">Actividad existente</button></OpportunityActivity>
-      : <ChatWorkspace conversationId={id} />}
+      : <ChatWorkspace conversationId={id} detailsOpen={details} onToggleDetails={() => setDetails(value => !value)} />}
     <output aria-label="Cantidad de mensajes">{chat?.messages.length ?? 0}</output>
+    <output aria-label="Ficha abierta">{details ? 'sí' : 'no'}</output>
     <output aria-label="Cantidad de archivos">{chat?.messages.filter(message => message.kind === 'file').length ?? 0}</output>
   </main>;
 }

@@ -82,7 +82,8 @@ test('public ChatThread fits short text, wraps exact content and preserves metad
   }
   assert.equal(await page.getByLabel('Leído', {exact:true}).textContent(), '✓✓');
   assert.equal(await page.getByLabel('Enviado', {exact:true}).textContent(), '✓');
-  for (const author of ['Cliente', 'Vendedor desde el CRM', 'Enviado desde el teléfono', 'Asistente', 'Archivo de demostración']) assert.equal(await page.getByText(author, {exact:true}).count(), 1);
+  for (const author of ['Cliente', 'Tú', 'Tú · desde el teléfono', 'Asistente', 'Archivo de demostración']) assert.equal(await page.getByText(author, {exact:true}).count(), 1, author);
+  for (const old of ['Vendedor desde el CRM', 'Enviado desde el teléfono']) assert.equal(await page.getByText(old, {exact:true}).count(), 0, old);
   assert.equal(await page.locator('time').count(), messages.length);
   assert.equal(await page.getByText('Vista de ejemplo · archivo no disponible para descargar', {exact:true}).count(), 1);
   assert.equal(await page.locator('a').count(), 0);

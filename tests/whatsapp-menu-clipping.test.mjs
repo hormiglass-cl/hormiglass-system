@@ -6,7 +6,8 @@ const now = Date.UTC(2026, 10, 3, 12);
 
 test('chat actions menu stays fully visible and clickable inside a short chat panel', { timeout: 25000 }, async t => {
   const { page, errors, external } = await openDialogFixture(t, 'tests/fixtures/whatsapp-short-chat.tsx', 640, { now });
-  const trigger = page.getByRole('button', { name: 'Acciones del chat', exact: true });
+  const trigger = page.getByRole('button', { name: 'Opciones del chat', exact: true });
+  assert.equal(await trigger.textContent(), 'Opciones');
   await trigger.click();
   const items = page.getByRole('menuitem');
   assert.ok(await items.count() >= 2, 'Seller chat offers several actions');

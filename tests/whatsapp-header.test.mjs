@@ -29,11 +29,11 @@ registerHooks({
     return next(url, context);
   },
 });
-const { ChatHeader } = await import('../components/whatsapp/ChatPrimitives.tsx');
+const { ChatHeader, ChatStatusBanner } = await import('../components/whatsapp/ChatPrimitives.tsx');
 const { createMockRepository } = await import('../lib/whatsapp/repository.ts');
 const require = createRequire(import.meta.url);
 
-test('ChatHeader stays compact without losing contact, state, timer or actions at desktop and narrow widths', { timeout: 20000 }, async t => {
+test('ChatHeader accent bar and status banner stay compact and complete at desktop and narrow widths', { timeout: 20000 }, async t => {
   const globals = path.resolve(import.meta.dirname, '../app/globals.css');
   const css = (await require('postcss')([require('@tailwindcss/postcss')()]).process(
     readFileSync(globals, 'utf8'), { from: globals },
@@ -43,7 +43,7 @@ test('ChatHeader stays compact without losing contact, state, timer or actions a
   const chats = ['assistant', 'waiting', 'closed'].map(state => repo.list().find(chat => chat.state === state));
   repo.claim('demo-1', now);
   chats.push(repo.get('demo-1'));
-  const labels = { assistant: '1 · Con asistente', waiting: '2 · Esperando vendedor', seller: '3 · Atendiendo tú', closed: '4 · Cerrada' };
+  const banners = { assistant: 'Tomar chat', waiting: 'Tomar chat', seller: 'Devolver al asistente', closed: null };
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
@@ -53,30 +53,36 @@ test('ChatHeader stays compact without losing contact, state, timer or actions a
   for (const width of [600, 480, 320]) {
     await page.setViewportSize({ width, height: 500 });
     for (const chat of chats) {
-      const html = renderToStaticMarkup(React.createElement(ChatHeader, { chat, now: now + 14000, onAction: () => {}, onHistory: () => {} }));
+      const html = renderToStaticMarkup(React.createElement(React.Fragment, null,
+        React.createElement(ChatHeader, { chat, onAction: () => {}, onHistory: () => {}, detailsOpen: false, onToggleDetails: () => {} }),
+        React.createElement(ChatStatusBanner, { chat, now: now + 14000, onAction: () => {} })));
       await page.setContent(`<!doctype html><html lang="es"><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style></head><body>${html}</body></html>`);
-      assert.equal(await page.getByRole('heading', { name: chat.contact.name, exact: true }).count(), 1);
-      assert.equal(await page.getByText(chat.contact.phone, { exact: true }).count(), 1);
-      assert.equal(await page.getByText(chat.opportunity.code, { exact: true }).count(), 1, 'Header must identify the current opportunity');
+      const header = page.getByRole('banner');
+      assert.equal(await header.getByRole('heading', { name: chat.contact.name, exact: true }).count(), 1);
+      assert.equal(await header.getByText(chat.contact.phone, { exact: true }).count(), 1);
+      assert.equal(await header.getByText(chat.opportunity.code, { exact: true }).count(), 1, 'Header must identify the current opportunity');
       assert.equal(await page.getByTitle(`${chat.opportunity.code} · ${chat.opportunity.title}`, { exact: true }).count(), 1, 'Opportunity title must remain available without taking over the header');
       assert.equal(await page.locator('[href]').count(), 0, 'Mock opportunity must not link to a real CRM record');
-      assert.equal(await page.getByText(labels[chat.state], { exact: true }).count(), 1);
-      const actions = ['Acciones del chat', ...(['assistant', 'waiting'].includes(chat.state) ? ['Tomar conversación'] : [])];
-      for (const label of ['Cerrar', 'Ver historial', 'Devolver al asistente']) assert.equal(await page.getByRole('button', { name: label, exact: true }).count(), 0, 'Secondary actions belong in the closed menu');
-      assert.equal(await page.getByRole('button').count(), actions.length);
-      for (const action of actions) assert.equal(await page.getByRole('button', { name: action, exact: true }).count(), 1);
-      if (chat.state === 'seller') assert.equal(await page.getByText('59:46', { exact: true }).count(), 1);
-      if (chat.state === 'closed') assert.equal(await page.getByText('Si el cliente vuelve a escribir, la conversación se reabre con el asistente y queda en la misma ficha.', { exact: true }).count(), 1);
-      const geometry = await page.getByRole('banner').evaluate(node => {
+      for (const label of ['Cerrar', 'Historial', 'Devolver al asistente', 'Tomar chat']) assert.equal(await header.getByRole('button', { name: label, exact: true }).count(), 0, 'Secondary actions live in the menu; claiming lives in the banner');
+      assert.deepEqual(await header.getByRole('button').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label') || node.textContent.trim())), ['Ficha del cliente', 'Opciones del chat']);
+      assert.equal(await header.getByRole('button', { name: 'Opciones del chat', exact: true }).textContent(), 'Opciones');
+      const status = page.getByRole('status');
+      const action = banners[chat.state];
+      assert.equal(await status.getByRole('button').count(), action ? 1 : 0);
+      if (action) assert.equal(await status.getByRole('button', { name: action, exact: true }).count(), 1);
+      if (chat.state === 'seller') assert.equal(await status.getByText('59:46', { exact: true }).count(), 1);
+      if (chat.state === 'closed') assert.equal(await status.textContent(), 'Conversación cerrada. Si el cliente vuelve a escribir, se reabre con el asistente.');
+      const geometry = await header.evaluate(node => {
         const header = node.getBoundingClientRect();
-        const buttons = [...node.querySelectorAll('button')].map(button => {
+        const banner = document.querySelector('[role="status"]');
+        const buttons = [...document.querySelectorAll('button')].map(button => {
           const rect = button.getBoundingClientRect();
           return { label: button.getAttribute('aria-label') || button.textContent.trim(), height: rect.height, left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
         });
-        const visible = [...node.querySelectorAll('h2,p,button,span')].filter(child => getComputedStyle(child).position !== 'absolute');
-        const identity = node.querySelector('h2').parentElement.getBoundingClientRect();
+        const visible = [...document.body.querySelectorAll('h2,p,button,span,strong')].filter(child => getComputedStyle(child).position !== 'absolute');
         return { height: header.height, bottom: header.bottom, width: header.width, buttons,
-          identityLeft: identity.left, identityTop: identity.top, identityBottom: identity.bottom,
+          background: getComputedStyle(node).backgroundColor, accent: getComputedStyle(document.documentElement).getPropertyValue('--hg-accent').trim(),
+          bannerBottom: banner.getBoundingClientRect().bottom,
           minFont: Math.min(...visible.map(child => parseFloat(getComputedStyle(child).fontSize))),
           overflow: document.documentElement.scrollWidth > innerWidth,
           clipped: visible.filter(child => child.scrollWidth > child.clientWidth + 1).map(child => child.textContent) };
@@ -87,19 +93,19 @@ test('ChatHeader stays compact without losing contact, state, timer or actions a
   }
   console.log(JSON.stringify({ measurements, errors, external }));
   for (const m of measurements) {
-    const maxHeight = m.width === 600 ? 64 : 96;
+    const maxHeight = m.width === 600 ? 64 : 112;
     assert.ok(m.height <= maxHeight, `${m.state} header at ${m.width}px must be at most ${maxHeight}px, got ${m.height}px`);
+    assert.equal(m.background, 'rgb(247, 147, 31)', 'Header is the accent bar');
     assert.equal(m.overflow, false);
     assert.deepEqual(m.clipped, []);
     assert.ok(m.minFont >= 11);
-    const claim = m.buttons.find(button => button.label === 'Tomar conversación');
-    if (m.state === 'assistant' || m.state === 'waiting') {
-      assert.ok(claim, 'Primary claim stays visible');
-      if (m.width === 600) assert.ok(claim.top < m.identityBottom && claim.bottom > m.identityTop, 'Wide header must have a single toolbar row');
-    } else assert.equal(claim, undefined, 'Tomar chat must disappear after claiming or closing');
-    const menu = m.buttons.find(button => button.label === 'Acciones del chat');
+    const menu = m.buttons.find(button => button.label === 'Opciones del chat');
     assert.ok(Math.abs(menu.right - (m.width - 12)) <= 1, 'Menu must remain at the right edge');
-    for (const button of m.buttons) assert.ok(button.height >= 28 && button.left >= 0 && button.right <= m.width && button.bottom <= m.bottom, 'Actions must remain usable and fully inside the header');
+    for (const button of m.buttons) {
+      assert.ok(button.height >= 40, `${button.label} touch target is at least 40px, got ${button.height}`);
+      assert.ok(button.left >= 0 && button.right <= m.width, `${button.label} stays inside the viewport`);
+    }
+    for (const button of m.buttons.filter(button => ['Ficha del cliente', 'Opciones del chat'].includes(button.label))) assert.ok(button.bottom <= m.bottom, 'Header actions stay inside the header');
   }
   assert.deepEqual(errors, []);
   assert.deepEqual(external, []);

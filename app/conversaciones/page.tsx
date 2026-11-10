@@ -1,54 +1,79 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import clsx from 'clsx';
 import styles from '../../components/whatsapp/Scrollbars.module.css';
 import { useConversations } from '../../lib/whatsapp/store';
-import { ArrowLeft, UserRound } from 'lucide-react';
-import { Button, EmptyState, StatusBadge } from '../../components/ui/crm';
+import { ArrowLeft } from 'lucide-react';
+import { Button, EmptyState } from '../../components/ui/crm';
 import { ChatWorkspace } from '../../components/whatsapp/ChatWorkspace';
-import { ConversationDetails, ConversationList, DEMO_NOTICE_TEXT, DemoNotice, NoticeBanners } from '../../components/whatsapp/InboxParts';
+import { ConversationDetails, ConversationList, DemoNotice, NoticeBanners } from '../../components/whatsapp/InboxParts';
+
+/** Page width (not viewport) from which list, chat and customer card fit side by side. */
+const THREE_PANES_MIN_WIDTH = 1120;
+
+/** Tracks whether the page itself is wide enough for three panes, so collapsing the sidebar also counts. */
+function useWideLayout() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => setWide(entry.contentRect.width >= THREE_PANES_MIN_WIDTH));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return { ref, wide };
+}
 
 export default function ConversacionesPage() {
   const { chats, now, notices, selection, openChat, act, threadRequested, setThreadRequested } = useConversations();
+  const { ref, wide } = useWideLayout();
   const [mobileChat, setMobileChat] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
+  // null = follow the layout default: card open when three panes fit, closed otherwise.
+  const [detailsChoice, setDetailsChoice] = useState<boolean | null>(null);
   const chat = chats.find(item => item.id === selection?.id);
   const viewingChat = (mobileChat || threadRequested) && !!chat;
+  const detailsOpen = !!chat && (detailsChoice ?? wide);
+  const listBesideChat = wide || !detailsOpen;
+  const visibleNotices = notices.some(notice => notice.kind !== 'assigned');
 
   function selectChat(id: string) {
     openChat(id);
     setMobileChat(true);
-    setShowDetails(false);
+    if (!wide) setDetailsChoice(null);
   }
 
-  const detailsToggle = <Button size="sm" icon={UserRound} aria-expanded={showDetails} aria-controls="chat-customer-details" onClick={() => setShowDetails(value => !value)}>{showDetails ? 'Ocultar datos del cliente' : 'Datos del cliente'}</Button>;
+  const toggleDetails = () => setDetailsChoice(!detailsOpen);
+  const columns = wide
+    ? (detailsOpen ? 'lg:grid-cols-[320px_minmax(0,1fr)_320px]' : 'lg:grid-cols-[320px_minmax(0,1fr)]')
+    : (detailsOpen ? 'lg:grid-cols-[minmax(0,1fr)_320px]' : 'lg:grid-cols-[300px_minmax(0,1fr)]');
 
-  return <div className={`${styles.scope} @container flex h-[calc(100dvh-96px)] min-h-0 flex-col gap-3 xl:-mt-2 xl:h-[calc(100dvh-88px)]`}>
-    <div className={viewingChat && !showDetails ? 'hidden shrink-0 space-y-2 lg:block' : 'shrink-0 space-y-2'}>
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-1"><h1 className="t-page">Conversaciones</h1><span title={DEMO_NOTICE_TEXT} className="inline-flex"><StatusBadge tone="info">WhatsApp · demo</StatusBadge></span>
-        {chat && <span className="ml-auto hidden lg:inline-flex @min-[1120px]:hidden">{detailsToggle}</span>}
-      </header>
-      {/* Short laptop screens (13"): give the height to the chat; the notice stays for screen readers and as the badge tooltip. */}
-      <div className="[@media(max-height:900px)]:sr-only"><DemoNotice /></div>
+  // Edge-to-edge: cancel the shell padding and fill the height under the navbar, like a messaging app.
+  return <div ref={ref} className={`${styles.scope} -mx-4 -my-5 flex h-[calc(100dvh-56px)] min-h-0 flex-col overflow-hidden border-t border-line bg-surface sm:-mx-6 lg:-mx-8`}>
+    <h1 className="sr-only">Conversaciones</h1>
+    <div className="sr-only"><DemoNotice /></div>
+    {visibleNotices && <div className="shrink-0 border-b border-line bg-surface-muted px-4 py-2">
       <NoticeBanners notices={notices} onOpen={selectChat} onDismiss={id => act(repo => repo.dismissNotice(id))} />
-    </div>
-    {/* Phones: one pane at a time. Laptops: list or customer card beside the chat. All three when the page itself is ≥1120px wide (container query), so collapsing the sidebar also reveals the card. */}
-    {viewingChat && <div className="flex shrink-0 items-center justify-between gap-2 lg:hidden">
-      <Button size="sm" icon={ArrowLeft} onClick={() => { setMobileChat(false); setThreadRequested(false); setShowDetails(false); }}>Volver a la lista</Button>
-      {detailsToggle}
     </div>}
-    <div className={`grid min-h-0 ${showDetails ? 'flex-none lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)]' : 'flex-1 lg:grid-cols-[minmax(240px,300px)_minmax(0,1fr)]'} items-stretch gap-4 @min-[1120px]:grid-cols-[288px_minmax(0,1fr)_300px]`}>
-      <div className={`${viewingChat ? 'hidden' : 'block overflow-y-auto'} ${showDetails ? 'lg:hidden' : 'lg:block'} min-h-0 min-w-0 @min-[1120px]:block`}>
+    {viewingChat && <div className="flex shrink-0 items-center border-b border-line px-3 py-2 lg:hidden">
+      <Button size="sm" icon={ArrowLeft} onClick={() => { setMobileChat(false); setThreadRequested(false); setDetailsChoice(null); }}>Volver a la lista</Button>
+    </div>}
+    <div className={clsx('grid min-h-0 flex-1', columns)}>
+      <div className={clsx('min-h-0 min-w-0', viewingChat ? 'hidden' : 'block', listBesideChat ? 'lg:block' : 'lg:hidden')}>
         <ConversationList chats={chats} now={now} selectedId={chat?.id} onSelect={selectChat} />
       </div>
       {chat ? <>
-        <div className={`${viewingChat ? 'flex' : 'hidden'} ${showDetails ? 'h-[calc(100dvh-136px)] lg:h-auto' : ''} min-h-0 min-w-0 lg:flex`}>
-          <ChatWorkspace key={chat.id} conversationId={chat.id} />
+        {/* The workspace keeps its card frame for the Ventas tab; here it sits flush between the panes. */}
+        <div className={clsx('min-h-0 min-w-0 lg:flex [&>section]:rounded-none [&>section]:border-0 [&>section]:shadow-none', viewingChat && !detailsOpen ? 'flex' : 'hidden')}>
+          <ChatWorkspace key={chat.id} conversationId={chat.id} detailsOpen={detailsOpen} onToggleDetails={toggleDetails} />
         </div>
-        <div id="chat-customer-details" className={`${viewingChat && showDetails ? 'block' : 'hidden'} ${showDetails ? 'lg:block' : 'lg:hidden'} min-w-0 lg:overflow-y-auto @min-[1120px]:block`}>
-          <ConversationDetails key={chat.id} chat={chat} />
-        </div>
-      </> : <EmptyState title="Selecciona un chat de demostración" description="Explora estados y respuestas sin enviar mensajes ni modificar el CRM." action={<Button onClick={() => selectChat('demo-1')} disabled={!chats.length}>Ver chat demo</Button>} />}
+        {detailsOpen && <div id="chat-customer-details" className={clsx('min-h-0 min-w-0 border-l border-line', viewingChat ? 'block' : 'hidden lg:block')}>
+          <ConversationDetails key={chat.id} chat={chat} onClose={() => setDetailsChoice(false)} />
+        </div>}
+      </> : <div className="hidden place-items-center bg-accent-soft p-6 lg:grid">
+        <EmptyState title="Selecciona un chat de demostración" description="Explora estados y respuestas sin enviar mensajes ni modificar el CRM." action={<Button onClick={() => selectChat('demo-1')} disabled={!chats.length}>Ver chat demo</Button>} />
+      </div>}
     </div>
   </div>;
 }

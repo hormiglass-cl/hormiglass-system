@@ -87,6 +87,11 @@ const MIGRATED = [
   'app/login/page.tsx',
   'app/auth/recuperar/page.tsx',
   'app/auth/actualizar-password/page.tsx',
+  // Conversaciones (rediseño H): solo colores del CRM.
+  'app/conversaciones/page.tsx',
+  'components/whatsapp/ChatPrimitives.tsx',
+  'components/whatsapp/ChatWorkspace.tsx',
+  'components/whatsapp/InboxParts.tsx',
 ];
 
 // Fuera de alcance: documentos que genera el sistema (PDF, impresión).
