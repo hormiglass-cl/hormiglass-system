@@ -38,9 +38,10 @@ const list = props => render(ConversationList, { chats: createMockRepository(NOW
 const text = html => html.replace(/<[^>]+>/g, '');
 /** Markup of the row button that holds the given contact name. */
 const row = (html, name) => html.match(new RegExp(`<button[^>]*aria-pressed[^>]*>(?:(?!</button>)[\\s\\S])*?${name}[\\s\\S]*?</button>`))?.[0] ?? '';
-const h3s = html => [...html.matchAll(/<h3[^>]*>([\s\S]*?)<\/h3>/g)].map(match => text(match[1]));
+const tabs = html => [...html.matchAll(/<button[^>]*role="tab"[^>]*>([\s\S]*?)<\/button>/g)].map(match => ({ label: text(match[1]).replace(/\s+/g, ' ').trim(), markup: match[0] }));
+const order = html => [...html.matchAll(/<button[^>]*aria-pressed[^>]*>([\s\S]*?)<\/button>/g)].map(match => ['Camila Rojas', 'Diego Muñoz', 'Valentina Soto', 'Pablo Torres'].find(name => match[1].includes(name)));
 
-test('chat list shows the Chats header, demo pill and pill search', () => {
+test('chat list shows the Chats header, demo pill, pill search and the filter tablist', () => {
   const html = list();
   assert.match(html, /<h2[^>]*>Chats<\/h2>/);
   assert.match(html, />Demo</);
@@ -48,39 +49,43 @@ test('chat list shows the Chats header, demo pill and pill search', () => {
   assert.match(search, /aria-label="Buscar conversaciones"/);
   assert.match(search, /placeholder="Buscar nombre, teléfono o empresa"/);
   assert.match(search, /rounded-full/);
-  assert.ok(!html.includes('role="tablist"'), 'Filter tabs are replaced by sections');
-});
-
-test('chat list groups chats by who must act, in order, with solid count badges', () => {
-  const html = list();
-  assert.deepEqual(h3s(html), ['Te esperan 1', 'Atendiendo tú 1', 'Con el asistente 1']);
-  for (const [title, tone] of [['Te esperan', 'warning'], ['Atendiendo tú', 'success'], ['Con el asistente', 'info']]) {
-    const heading = html.match(new RegExp(`<h3[^>]*>(?:(?!</h3>)[\\s\\S])*${title}[\\s\\S]*?</h3>`))[0];
-    assert.ok(heading.includes(`bg-${tone}-soft`) && heading.includes(`text-${tone}`), `${title} pill uses the ${tone} tone`);
-    assert.ok(heading.includes(`bg-${tone} `) || heading.includes(`bg-${tone}"`), `${title} badge is solid ${tone}`);
+  assert.match(html, /<div[^>]*role="tablist"[^>]*aria-label="Filtrar chats"|<div[^>]*aria-label="Filtrar chats"[^>]*role="tablist"/);
+  assert.deepEqual(tabs(html).map(tab => tab.label), ['Todos', 'No leídos', 'Esperando 1', 'Míos']);
+  const [all, ...others] = tabs(html);
+  assert.match(all.markup, /aria-selected="true"/);
+  assert.ok(all.markup.includes('bg-accent-soft') && all.markup.includes('text-accent-ink'), 'Selected tab uses the soft accent');
+  for (const tab of others) {
+    assert.match(tab.markup, /aria-selected="false"/);
+    assert.ok(tab.markup.includes('border-line') && !tab.markup.includes('bg-accent-soft'), `${tab.label} is outlined`);
   }
-  const order = ['Camila Rojas', 'Valentina Soto', 'Diego Muñoz'].map(name => html.indexOf(name));
-  assert.deepEqual([...order].sort((a, b) => a - b), order);
 });
 
-test('empty sections are omitted', () => {
-  const chats = createMockRepository(NOW).list().filter(chat => chat.state === 'assistant');
-  assert.deepEqual(h3s(list({ chats })), ['Con el asistente 1']);
-  assert.ok(!list({ chats }).includes('Ver chats cerrados'));
+test('the waiting tab omits its count when no chat is waiting', () => {
+  const chats = createMockRepository(NOW).list().filter(chat => chat.state !== 'waiting');
+  assert.deepEqual(tabs(list({ chats })).map(tab => tab.label), ['Todos', 'No leídos', 'Esperando', 'Míos']);
 });
 
-test('closed chats stay behind a collapsed "Ver chats cerrados (n)" toggle', () => {
+test('chat list is one flat list ordered waiting, seller, assistant, closed without sections or toggle', () => {
   const html = list();
-  const toggle = html.match(/<button[^>]*aria-expanded="false"[^>]*>(?:(?!<\/button>)[\s\S])*?Ver chats cerrados \(1\)/)?.[0];
-  assert.ok(toggle, 'Collapsed toggle with closed count');
-  const controls = toggle.match(/aria-controls="([^"]+)"/)[1];
-  assert.match(html, new RegExp(`<ul[^>]*id="${controls}"[^>]*hidden=""`), 'Closed rows are hidden until expanded');
+  assert.deepEqual(order(html), ['Camila Rojas', 'Valentina Soto', 'Diego Muñoz', 'Pablo Torres']);
+  assert.ok(!/<h3/.test(html), 'No group headings');
+  assert.ok(!html.includes('Ver chats cerrados'));
+  assert.ok(!html.includes('hidden=""'), 'Closed chats are not hidden');
+  assert.equal(html.match(/<ul/g).length, 1, 'One flat list');
+  // Stable within a state: input order is kept.
+  const chats = createMockRepository(NOW).list();
+  const second = { ...chats[1], id: 'demo-9', contact: { ...chats[1].contact, name: 'Ana Pérez' } };
+  const names = [...list({ chats: [second, ...chats] }).matchAll(/<button[^>]*aria-pressed[^>]*>[\s\S]*?(Ana Pérez|Diego Muñoz)/g)].map(match => match[1]);
+  assert.deepEqual(names, ['Ana Pérez', 'Diego Muñoz']);
 });
 
-test('a selected closed chat opens the closed group so the selection stays visible', () => {
-  const html = list({ selectedId: 'demo-4' });
-  assert.match(html, /<button[^>]*aria-expanded="true"[^>]*>(?:(?!<\/button>)[\s\S])*?Ver chats cerrados \(1\)/);
-  assert.ok(!/<ul[^>]*hidden=""/.test(html));
+test('waiting and closed previews carry their state prefix', () => {
+  const html = list();
+  const camila = row(html, 'Camila Rojas');
+  assert.match(camila, /<span[^>]*text-warning[^>]*>Esperando vendedor · <\/span>/);
+  const camilaLast = createMockRepository(NOW).get('demo-1').messages.at(-1).text;
+  assert.ok(text(camila).includes(`Esperando vendedor · ${camilaLast}`));
+  assert.match(text(row(html, 'Pablo Torres')), /Cerrada · Conversación cerrada/);
 });
 
 test('rows show waiting time, previews with author prefix and unread badge', () => {

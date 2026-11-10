@@ -165,11 +165,12 @@ createRoot(document.getElementById('root')!).render(<Harness />);`);
   const rows = chatList.locator('[data-conversation-list]');
   const camila = rows.getByRole('button', { name: /Camila Rojas/ });
   const contacts = ['Camila Rojas', 'Diego Muñoz', 'Valentina Soto', 'Pablo Torres'];
-  // Visible list groups in order, with the contacts each one holds.
-  const groups = () => rows.evaluate((node, contacts) => [...node.querySelectorAll('section')].map(section => [
-    section.querySelector('h3').textContent.replace(/\s*\d+$/, ''),
-    [...section.querySelectorAll('li button')].map(button => contacts.find(name => button.textContent.includes(name))),
-  ]), contacts);
+  // Visible flat list rows in order, as contact names.
+  const listed = () => rows.evaluate((node, contacts) => [...node.querySelectorAll('li button')].map(button => contacts.find(name => button.textContent.includes(name))), contacts);
+  const filters = chatList.getByRole('tablist', { name: 'Filtrar chats' });
+  const filter = name => filters.getByRole('tab', { name, exact: true });
+  /** Rows shown by the given filter tab; returns to "Todos" afterwards. */
+  const filtered = async name => { await filter(name).click(); const shown = await listed(); await filter('Todos').click(); return shown; };
   // The Navbar no longer carries a notifications link (it lives in the Sidebar); the harness routes directly.
   const openNotificationCenter = () => page.evaluate(() => window.dispatchEvent(new CustomEvent('navigate', { detail: '/notificaciones' })));
   await expect(page.getByRole('navigation', { name: 'Ubicación' })).toBeVisible();
@@ -177,11 +178,13 @@ createRoot(document.getElementById('root')!).render(<Harness />);`);
   await expect(chatList.getByRole('heading', { name: 'Chats', level: 2 })).toBeVisible();
   await expect(chatList.getByText('Demo', { exact: true })).toBeVisible();
   await expect(camila).toContainText('1 sin leer · demo');
-  assert.deepEqual(await groups(), [['Te esperan', ['Camila Rojas']], ['Atendiendo tú', ['Valentina Soto']], ['Con el asistente', ['Diego Muñoz']]]);
-  for (const heading of [/^Te esperan 1$/, /^Atendiendo tú 1$/, /^Con el asistente 1$/]) await expect(chatList.getByRole('heading', { name: heading, level: 3 })).toBeVisible();
-  const closedToggle = chatList.getByRole('button', { name: 'Ver chats cerrados (1)', exact: true });
-  await expect(closedToggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(rows.getByRole('button', { name: /Pablo Torres/ })).toBeHidden();
+  assert.deepEqual(await listed(), ['Camila Rojas', 'Valentina Soto', 'Diego Muñoz', 'Pablo Torres'], 'Flat list ordered waiting, seller, assistant, closed');
+  assert.deepEqual((await filters.getByRole('tab').allTextContents()).map(label => label.replace(/\s+/g, ' ').trim()), ['Todos', 'No leídos', 'Esperando 1', 'Míos']);
+  await expect(filter('Todos')).toHaveAttribute('aria-selected', 'true');
+  await expect(chatList.getByRole('heading', { level: 3 })).toHaveCount(0);
+  await expect(chatList.getByRole('button', { name: /Ver chats cerrados/ })).toHaveCount(0);
+  await expect(rows.getByRole('button', { name: /Pablo Torres/ })).toContainText('Cerrada · ');
+  await expect(camila).toContainText('Esperando vendedor · ');
   await expect(camila).toContainText('hace 8 min');
   await expect(rows.getByRole('button', { name: /Valentina Soto/ })).toContainText('Tú: Quedo atento a tus comentarios.');
   await expect(rows.getByRole('button', { name: /Diego Muñoz/ })).toContainText('Asistente: Sí, cuéntame');
@@ -264,7 +267,10 @@ createRoot(document.getElementById('root')!).render(<Harness />);`);
   await expect(banner()).toContainText(/Si no respondes en 60:00, el asistente vuelve a tomar el chat\./);
   await expect(banner().getByRole('button', { name: 'Tomar chat' })).toHaveCount(0);
   await expect(chat.getByText(/MENSAJE[S]? NUEVO[S]?/)).toHaveCount(0);
-  assert.deepEqual(await groups(), [['Atendiendo tú', ['Camila Rojas', 'Valentina Soto']], ['Con el asistente', ['Diego Muñoz']]], 'Claimed chat moves to "Atendiendo tú"');
+  assert.deepEqual(await listed(), ['Camila Rojas', 'Valentina Soto', 'Diego Muñoz', 'Pablo Torres']);
+  assert.deepEqual(await filtered('Míos'), ['Camila Rojas', 'Valentina Soto'], 'Claimed chat moves to "Míos"');
+  await expect(filter('Esperando')).toBeVisible();
+  assert.deepEqual(await filtered('Esperando'), []);
   const quick = chat.getByRole('group', { name: 'Acciones rápidas' });
   assert.deepEqual(await quick.getByRole('button').allTextContents(), ['Cotizar', 'Enviar ficha técnica', 'Agendar visita']);
   await quick.getByRole('button', { name: 'Cotizar', exact: true }).click();
@@ -313,20 +319,21 @@ createRoot(document.getElementById('root')!).render(<Harness />);`);
   await expect(chat).toBeVisible();
   assert.equal(await inbox.locator('a[href]').count(), 0, 'Demo has no real CRM links');
   await expect(inbox.getByText('Nuevo cliente asignado a ti', { exact: true })).toHaveCount(0);
-  // List groups after release, closed toggle and search across groups.
-  assert.deepEqual(await groups(), [['Atendiendo tú', ['Valentina Soto']], ['Con el asistente', ['Camila Rojas', 'Diego Muñoz']]]);
-  await closedToggle.click();
-  await expect(closedToggle).toHaveAttribute('aria-expanded', 'true');
+  // Flat list after release, filters and search combined with a filter.
+  assert.deepEqual(await listed(), ['Valentina Soto', 'Camila Rojas', 'Diego Muñoz', 'Pablo Torres']);
+  assert.deepEqual(await filtered('Míos'), ['Valentina Soto']);
+  assert.deepEqual(await filtered('No leídos'), []);
   await expect(rows.getByRole('button', { name: /Pablo Torres/ })).toBeVisible();
-  await closedToggle.click();
-  await expect(rows.getByRole('button', { name: /Pablo Torres/ })).toBeHidden();
   const search = inbox.getByRole('searchbox', { name: 'Buscar conversaciones' });
   await search.fill('Obras del Valle');
-  assert.deepEqual(await groups(), [['Con el asistente', ['Diego Muñoz']]]);
-  await expect(chatList.getByRole('button', { name: /Ver chats cerrados/ })).toHaveCount(0);
+  assert.deepEqual(await listed(), ['Diego Muñoz']);
+  await filter('Míos').click();
+  assert.deepEqual(await listed(), []);
+  await expect(inbox.getByText('Sin conversaciones', { exact: true })).toBeVisible();
+  await filter('Todos').click();
   await search.fill('Torres');
-  assert.deepEqual(await groups(), []);
-  await expect(chatList.getByRole('button', { name: 'Ver chats cerrados (1)', exact: true })).toBeVisible();
+  assert.deepEqual(await listed(), ['Pablo Torres']);
+  await expect(rows.getByRole('button', { name: /Pablo Torres/ })).toContainText('Cerrada · ');
   await search.fill('no matching demo');
   await expect(inbox.getByText('Sin conversaciones', { exact: true })).toBeVisible();
   await search.fill('');
@@ -355,7 +362,8 @@ createRoot(document.getElementById('root')!).render(<Harness />);`);
   await expect(banner()).toHaveText('Conversación cerrada. Si el cliente vuelve a escribir, se reabre con el asistente.');
   await expect(chat.getByRole('button', { name: 'Tomar chat', exact: true })).toHaveCount(0);
   await expect(composer()).toBeDisabled();
-  await expect(chatList.getByRole('button', { name: 'Ver chats cerrados (2)', exact: true })).toBeVisible();
+  assert.deepEqual(await listed(), ['Camila Rojas', 'Diego Muñoz', 'Valentina Soto', 'Pablo Torres'], 'Closed chat moves below open chats, keeping input order among closed');
+  await expect(rows.getByRole('button', { name: /Valentina Soto/ })).toContainText('Cerrada · ');
   await chat.getByRole('button', { name: 'Opciones del chat', exact: true }).click();
   assert.deepEqual(await chat.getByRole('menuitem').allTextContents(), ['Historial']);
   await page.keyboard.press('Escape');

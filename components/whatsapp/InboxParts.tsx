@@ -1,8 +1,8 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import clsx from 'clsx';
-import { BellRing, ChevronDown, Info, Search, Sparkles, X } from 'lucide-react';
+import { BellRing, Info, Search, Sparkles, X } from 'lucide-react';
 import { Button, EmptyState } from '../ui/crm';
 import type { ChatNotice, Conversation, ConversationState, MessageKind } from '../../lib/whatsapp/types';
 import { ContactAvatar } from './ChatPrimitives';
@@ -16,20 +16,17 @@ export function DemoNotice() {
 
 const MINUTE_MS = 60_000;
 
-type Tone = 'warning' | 'success' | 'info';
+/** Flat list order: who must act first. Closed chats sink to the end. */
+const stateOrder: Record<ConversationState, number> = { waiting: 0, seller: 1, assistant: 2, closed: 3 };
 
-/** List groups in the order the seller must act, each with its own status color. */
-const sections: { state: Exclude<ConversationState, 'closed'>; title: string; tone: Tone }[] = [
-  { state: 'waiting', title: 'Te esperan', tone: 'warning' },
-  { state: 'seller', title: 'Atendiendo tú', tone: 'success' },
-  { state: 'assistant', title: 'Con el asistente', tone: 'info' },
+type Filter = 'all' | 'unread' | 'waiting' | 'mine';
+
+const filters: { id: Filter; label: string; matches: (chat: Conversation) => boolean }[] = [
+  { id: 'all', label: 'Todos', matches: () => true },
+  { id: 'unread', label: 'No leídos', matches: chat => chat.unread > 0 },
+  { id: 'waiting', label: 'Esperando', matches: chat => chat.state === 'waiting' },
+  { id: 'mine', label: 'Míos', matches: chat => chat.state === 'seller' },
 ];
-
-const toneClasses: Record<Tone, { pill: string; badge: string }> = {
-  warning: { pill: 'border-warning-line bg-warning-soft text-warning', badge: 'bg-warning' },
-  success: { pill: 'border-success-line bg-success-soft text-success', badge: 'bg-success' },
-  info: { pill: 'border-info-line bg-info-soft text-info', badge: 'bg-info' },
-};
 
 const previewPrefix: Partial<Record<MessageKind, string>> = { seller: 'Tú: ', phone: 'Tú: ', assistant: 'Asistente: ' };
 
@@ -58,7 +55,9 @@ function ConversationRow({ chat, selected, onSelect, now }: { chat: Conversation
         </time>}
       </span>
       <span className="flex items-center justify-between gap-2">
-        <span className="t-caption block truncate">{last && previewPrefix[last.kind]}{last?.text}</span>
+        <span className="t-caption block truncate">
+          {chat.state === 'waiting' ? <span className="font-semibold text-warning">Esperando vendedor · </span> : chat.state === 'closed' ? 'Cerrada · ' : last && previewPrefix[last.kind]}{last?.text}
+        </span>
         {chat.unread > 0 && <span className="t-micro t-num min-w-5 shrink-0 rounded-full bg-accent px-1.5 py-px text-center text-on-accent">{chat.unread}<span className="sr-only"> sin leer · demo</span></span>}
       </span>
     </span>
@@ -67,47 +66,51 @@ function ConversationRow({ chat, selected, onSelect, now }: { chat: Conversation
 
 export function ConversationList({ chats, selectedId, onSelect, now }: { chats: Conversation[]; selectedId?: string; onSelect: (id: string) => void; now?: number }) {
   const [search, setSearch] = useState('');
-  // A selected closed chat opens its group so the selection stays visible.
-  const [showClosed, setShowClosed] = useState(() => chats.some(chat => chat.id === selectedId && chat.state === 'closed'));
+  const [filter, setFilter] = useState<Filter>('all');
+  const tabs = useRef<HTMLDivElement>(null);
   const id = useId();
   const query = search.trim().toLocaleLowerCase('es');
-  const filtered = chats.filter(chat => `${chat.contact.name} ${chat.contact.phone} ${chat.contact.company} ${chat.opportunity.code}`.toLocaleLowerCase('es').includes(query));
-  const closed = filtered.filter(chat => chat.state === 'closed');
-  const row = (chat: Conversation) => <ConversationRow key={chat.id} chat={chat} selected={chat.id === selectedId} onSelect={onSelect} now={now} />;
+  const active = filters.find(item => item.id === filter) ?? filters[0];
+  const waitingCount = chats.filter(chat => chat.state === 'waiting').length;
+  // Array.prototype.sort is stable, so chats keep their order within a state.
+  const shown = chats
+    .filter(chat => active.matches(chat) && `${chat.contact.name} ${chat.contact.phone} ${chat.contact.company} ${chat.opportunity.code}`.toLocaleLowerCase('es').includes(query))
+    .sort((a, b) => stateOrder[a.state] - stateOrder[b.state]);
+  // Arrow keys move the selection between filter tabs (roving tabindex).
+  const onTabKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    const index = filters.findIndex(item => item.id === filter);
+    const next = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: filters.length - 1 }[event.key];
+    if (next === undefined) return;
+    event.preventDefault();
+    const target = (next + filters.length) % filters.length;
+    setFilter(filters[target].id);
+    tabs.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[target]?.focus();
+  };
   return <section aria-labelledby={`${id}-title`} className="flex h-full min-h-0 min-w-0 flex-col border-r border-line bg-surface">
     <div className="flex h-15 shrink-0 items-center gap-2 border-b border-line-subtle px-4">
       <h2 id={`${id}-title`} className="text-lg font-semibold text-ink">Chats</h2>
       <span className="t-micro rounded-full border border-info-line bg-info-soft px-2 py-0.5 text-info">Demo</span>
     </div>
-    <div className="relative shrink-0 border-b border-line-subtle px-3 py-2.5">
-      <Search size={16} aria-hidden className="pointer-events-none absolute left-6 top-1/2 -translate-y-1/2 text-ink-muted" />
-      <input type="search" aria-label="Buscar conversaciones" placeholder="Buscar nombre, teléfono o empresa" value={search} onChange={event => setSearch(event.target.value)}
-        className="h-10 w-full rounded-full border border-line bg-surface-muted pl-9 pr-4 text-sm text-ink placeholder:text-ink-muted focus-visible:border-accent focus-visible:bg-surface focus-visible:outline-2 focus-visible:outline-accent-line" />
+    <div className="shrink-0 space-y-2 border-b border-line-subtle py-2.5">
+      <div className="relative px-3">
+        <Search size={16} aria-hidden className="pointer-events-none absolute left-6 top-1/2 -translate-y-1/2 text-ink-muted" />
+        <input type="search" aria-label="Buscar conversaciones" placeholder="Buscar nombre, teléfono o empresa" value={search} onChange={event => setSearch(event.target.value)}
+          className="h-10 w-full rounded-full border border-line bg-surface-muted pl-9 pr-4 text-sm text-ink placeholder:text-ink-muted focus-visible:border-accent focus-visible:bg-surface focus-visible:outline-2 focus-visible:outline-accent-line" />
+      </div>
+      <div ref={tabs} role="tablist" aria-label="Filtrar chats" onKeyDown={onTabKey} className="flex gap-1.5 overflow-x-auto overflow-y-hidden px-3 py-0.5 [scrollbar-width:none]">
+        {filters.map(item => {
+          const selected = item.id === filter;
+          return <button key={item.id} type="button" role="tab" aria-selected={selected} aria-controls={`${id}-list`} tabIndex={selected ? 0 : -1} onClick={() => setFilter(item.id)}
+            className={clsx('inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border px-3 text-[13px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent',
+              selected ? 'border-accent-line bg-accent-soft text-accent-ink' : 'border-line bg-surface text-ink-muted hover:bg-surface-muted hover:text-ink')}>
+            {item.label}{item.id === 'waiting' && waitingCount > 0 && <>{' '}<span className="t-num">{waitingCount}</span></>}
+          </button>;
+        })}
+      </div>
     </div>
-    <div data-conversation-list className="min-h-0 flex-1 overflow-y-auto pb-2">
-      {sections.map(section => {
-        const items = filtered.filter(chat => chat.state === section.state);
-        if (!items.length) return null;
-        const tone = toneClasses[section.tone];
-        return <section key={section.state} aria-labelledby={`${id}-${section.state}`} className="pt-3">
-          <h3 id={`${id}-${section.state}`} className="px-4 pb-1.5">
-            <span className={clsx('t-micro inline-flex items-center gap-1.5 rounded-full border py-0.5 pl-2.5 pr-1', tone.pill)}>
-              {section.title}{' '}<span className={clsx('t-num min-w-5 rounded-full px-1.5 text-center text-surface', tone.badge)}>{items.length}</span>
-            </span>
-          </h3>
-          <ul>{items.map(row)}</ul>
-        </section>;
-      })}
-      {closed.length > 0 && <div className="pt-3">
-        <div className="px-4">
-          <button type="button" aria-expanded={showClosed} aria-controls={`${id}-closed`} onClick={() => setShowClosed(value => !value)}
-            className="flex h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-full border border-line px-4 text-sm font-semibold text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-accent">
-            Ver chats cerrados ({closed.length})<ChevronDown size={16} aria-hidden className={clsx('shrink-0 transition-transform', showClosed && 'rotate-180')} />
-          </button>
-        </div>
-        <ul id={`${id}-closed`} hidden={!showClosed} className="pt-1.5">{closed.map(row)}</ul>
-      </div>}
-      {!filtered.length && <EmptyState title="Sin conversaciones" description="Prueba otra búsqueda. Los chats de demo aparecerán al cargar." />}
+    <div id={`${id}-list`} data-conversation-list className="min-h-0 flex-1 overflow-y-auto pb-2">
+      {shown.length > 0 && <ul>{shown.map(chat => <ConversationRow key={chat.id} chat={chat} selected={chat.id === selectedId} onSelect={onSelect} now={now} />)}</ul>}
+      {!shown.length && <EmptyState title="Sin conversaciones" description="Prueba otra búsqueda u otro filtro. Los chats de demo aparecerán al cargar." />}
     </div>
   </section>;
 }

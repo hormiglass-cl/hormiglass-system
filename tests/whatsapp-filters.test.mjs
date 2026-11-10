@@ -60,7 +60,7 @@ async function bundleFixture() {
   } finally { await new Promise(resolve => compiler.close(resolve)); }
 }
 
-test('hydrated chat list groups chats, searches across sections, toggles closed chats and keeps a themed scrolling list', { timeout: 40000 }, async t => {
+test('hydrated chat list filters with pill tabs, combines search and keeps a themed scrolling list', { timeout: 40000 }, async t => {
   const script = await bundleFixture();
   const globals = path.resolve(import.meta.dirname, '../app/globals.css');
   const css = (await require('postcss')([require('@tailwindcss/postcss')()]).process(readFileSync(globals, 'utf8'), { from: globals })).css.replace(/@font-face\s*\{[^}]*\}/g, '');
@@ -81,34 +81,55 @@ test('hydrated chat list groups chats, searches across sections, toggles closed 
     await page.addScriptTag({ content: script });
     await page.locator('output[aria-label="Demo lista"][data-ready="true"]').waitFor();
     const pane = page.locator('[data-pane="list"]');
-    const sections = () => pane.getByRole('heading', { level: 3 }).allTextContents();
+    const names = () => pane.locator('[data-conversation-list] button[aria-pressed]').evaluateAll(buttons => buttons.map(button => ['Camila Rojas', 'Diego Muñoz', 'Valentina Soto', 'Pablo Torres'].find(name => button.textContent.includes(name))));
+    const tablist = pane.getByRole('tablist', { name: 'Filtrar chats' });
+    const tab = name => tablist.getByRole('tab', { name, exact: true });
     assert.equal(await pane.getByRole('heading', { level: 2, name: 'Chats', exact: true }).count(), 1);
-    assert.deepEqual((await sections()).map(s => s.replace(/\s+/g, ' ').trim()), ['Te esperan 1', 'Atendiendo tú 1', 'Con el asistente 1']);
+    assert.deepEqual((await tablist.getByRole('tab').allTextContents()).map(s => s.replace(/\s+/g, ' ').trim()), ['Todos', 'No leídos', 'Esperando 1', 'Míos']);
+    assert.equal(await pane.getByRole('heading', { level: 3 }).count(), 0, 'No grouped sections');
+    assert.equal(await pane.getByRole('button', { name: /Ver chats cerrados/ }).count(), 0);
+    assert.deepEqual(await names(), ['Camila Rojas', 'Valentina Soto', 'Diego Muñoz', 'Pablo Torres']);
 
-    // Closed chats stay behind the toggle.
-    const toggle = pane.getByRole('button', { name: 'Ver chats cerrados (1)' });
-    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
-    assert.equal(await pane.getByRole('button', { name: /Pablo Torres/ }).count(), 0);
-    await toggle.click();
-    assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
-    assert.equal(await pane.getByRole('button', { name: /Pablo Torres/ }).count(), 1);
-    await toggle.click();
-    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
-    assert.equal(await pane.getByRole('button', { name: /Pablo Torres/ }).count(), 0);
+    // Each filter shows exactly its chats; the selected tab uses the soft accent.
+    for (const [name, expected] of [['No leídos', ['Camila Rojas']], ['Esperando 1', ['Camila Rojas']], ['Míos', ['Valentina Soto']], ['Todos', ['Camila Rojas', 'Valentina Soto', 'Diego Muñoz', 'Pablo Torres']]]) {
+      await tab(name).click();
+      assert.equal(await tab(name).getAttribute('aria-selected'), 'true', name);
+      assert.deepEqual(await names(), expected, name);
+    }
+    const tabColors = await tablist.evaluate(node => [...node.querySelectorAll('[role="tab"]')].map(button => {
+      const style = getComputedStyle(button), rect = button.getBoundingClientRect();
+      return { selected: button.getAttribute('aria-selected'), background: style.backgroundColor, color: style.color, border: style.borderTopWidth, height: rect.height, font: parseFloat(style.fontSize) };
+    }));
+    // Keyboard: arrows move the selection between tabs.
+    await tab('Todos').focus();
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await tab('No leídos').getAttribute('aria-selected'), 'true', 'ArrowRight selects the next tab');
+    assert.equal(await tab('No leídos').evaluate(node => node === document.activeElement), true);
+    await page.keyboard.press('ArrowLeft');
+    assert.equal(await tab('Todos').getAttribute('aria-selected'), 'true');
+    // The rail is one row that scrolls sideways without vertical overflow.
+    const rail = await tablist.evaluate(node => {
+      const style = getComputedStyle(node), tops = [...node.children].map(child => child.getBoundingClientRect().top);
+      return { overflowX: style.overflowX, overflowY: style.overflowY, oneRow: new Set(tops).size === 1, vertical: node.scrollHeight > node.clientHeight };
+    });
 
-    // Search filters across every section and the closed group.
+    // Search combines with the selected filter.
     const search = pane.getByRole('searchbox', { name: 'Buscar conversaciones' });
     assert.equal(await search.getAttribute('placeholder'), 'Buscar nombre, teléfono o empresa');
     await search.fill('arquitectura');
-    assert.deepEqual((await sections()).map(s => s.replace(/\s+/g, ' ').trim()), ['Atendiendo tú 1']);
-    assert.equal(await pane.getByRole('button', { name: 'Ver chats cerrados (1)' }).count(), 0);
+    assert.deepEqual(await names(), ['Valentina Soto']);
+    await tab('Míos').click();
+    assert.deepEqual(await names(), ['Valentina Soto']);
+    await tab('Esperando 1').click();
+    assert.deepEqual(await names(), []);
+    assert.equal(await pane.getByText('Sin conversaciones', { exact: true }).count(), 1, 'Empty filter result keeps the empty state');
+    await tab('Todos').click();
     await search.fill('0104');
-    assert.deepEqual(await sections(), []);
-    assert.equal(await pane.getByRole('button', { name: 'Ver chats cerrados (1)' }).count(), 1);
+    assert.deepEqual(await names(), ['Pablo Torres']);
     await search.fill('sin coincidencias');
     assert.equal(await pane.getByText('Sin conversaciones', { exact: true }).count(), 1);
     await search.fill('');
-    assert.equal((await sections()).length, 3);
+    assert.equal((await names()).length, 4);
 
     // Selecting a row: soft accent fill and inset bar (success while attending).
     const valentina = pane.getByRole('button', { name: /Valentina Soto/ });
@@ -136,7 +157,6 @@ test('hydrated chat list groups chats, searches across sections, toggles closed 
         background: style.backgroundColor, headerHeight: header.getBoundingClientRect().height,
         sectionHeight: section.getBoundingClientRect().height, paneHeight: node.getBoundingClientRect().height,
         searchRadius: parseFloat(getComputedStyle(input).borderTopLeftRadius), searchHeight: input.getBoundingClientRect().height,
-        toggleHeight: [...node.querySelectorAll('button[aria-expanded]')][0].getBoundingClientRect().height,
         minFont: Math.min(...textNodes.map(n => parseFloat(getComputedStyle(n).fontSize))),
         overflow: section.scrollWidth > section.clientWidth };
     });
@@ -165,7 +185,7 @@ test('hydrated chat list groups chats, searches across sections, toggles closed 
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     list.dragScroll = await listNode.evaluate(node => node.scrollTop);
     await pane.screenshot({ path: review(`chat-list-${width}.png`) });
-    measurements.push({ width, rows, accentBar, layout, list });
+    measurements.push({ width, rows, accentBar, layout, list, tabColors, rail });
   }
   console.log(JSON.stringify({ measurements, errors, external }));
   for (const m of measurements) {
@@ -183,7 +203,21 @@ test('hydrated chat list groups chats, searches across sections, toggles closed 
     assert.equal(m.layout.headerHeight, 60);
     assert.equal(m.layout.sectionHeight, m.layout.paneHeight, 'List fills its container height');
     assert.ok(m.layout.searchRadius >= 20 && m.layout.searchHeight >= 40, 'Pill search with a 40px target');
-    assert.ok(m.layout.toggleHeight >= 40);
+    for (const tab of m.tabColors) {
+      assert.ok(tab.height >= 32 && tab.height <= 40, 'Filter pills are 32–40px tall');
+      assert.ok(tab.font >= 11);
+      if (tab.selected === 'true') {
+        assert.equal(tab.background, 'rgb(255, 243, 230)', 'Selected filter uses the soft accent fill');
+        assert.equal(tab.color, 'rgb(161, 74, 6)', 'Selected filter uses the accent ink');
+      } else {
+        assert.equal(tab.background, 'rgb(255, 255, 255)', 'Other filters are outlined');
+        assert.equal(tab.border, '1px');
+      }
+    }
+    assert.equal(m.rail.overflowX, 'auto');
+    assert.equal(m.rail.overflowY, 'hidden');
+    assert.equal(m.rail.oneRow, true, 'Filters stay on a single row');
+    assert.equal(m.rail.vertical, false);
     assert.ok(m.layout.minFont >= 11);
     assert.equal(m.layout.overflow, false);
     assert.equal(m.list.overflowY, 'auto');
