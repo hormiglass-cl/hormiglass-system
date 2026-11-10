@@ -20,7 +20,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const [shortcut, setShortcut] = useState<'quote' | 'datasheet' | null>(null);
   const chat = chats.find(item => item.id === conversationId);
   if (!chat) return <p className="p-4 text-sm text-ink-muted">Cargando conversación demo…</p>;
-  return <section aria-label={`Chat demo con ${chat.contact.name}`} className={`${styles.scope} hg-panel flex min-h-0 flex-1 flex-col`}>
+  return <section aria-label={`Chat demo con ${chat.contact.name}`} className={`${styles.scope} hg-panel flex min-h-0 min-w-0 flex-1 flex-col`}>
     {/* No overflow-hidden here: the chat actions menu must be able to extend past the panel. */}
     <ChatHeader chat={chat} now={now} onAction={action => act((repo, time) => repo[action](chat.id, time))} onHistory={() => setHistory(value => !value)} />
     {error && <p role="alert" className="border-b border-danger-line bg-danger-soft px-4 py-2.5 text-sm text-danger">{error}</p>}

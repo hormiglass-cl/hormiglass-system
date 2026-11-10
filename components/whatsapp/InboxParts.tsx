@@ -8,8 +8,10 @@ import type { ChatNotice, Conversation } from '../../lib/whatsapp/types';
 import { ChatStateBadge, ContactAvatar } from './ChatPrimitives';
 import { formatListTimestamp } from '../../lib/whatsapp/format';
 
+export const DEMO_NOTICE_TEXT = 'Datos ficticios · sin conexión a WhatsApp ni a oportunidades reales. No se envían mensajes reales. Los cambios se pierden al recargar.';
+
 export function DemoNotice() {
-  return <p className="t-caption flex items-start gap-1.5"><Info size={14} aria-hidden className="mt-px shrink-0 text-info" />Datos ficticios · sin conexión a WhatsApp ni a oportunidades reales. No se envían mensajes reales. Los cambios se pierden al recargar.</p>;
+  return <p className="t-caption flex items-start gap-1.5"><Info size={14} aria-hidden className="mt-px shrink-0 text-info" />{DEMO_NOTICE_TEXT}</p>;
 }
 
 const filters = [

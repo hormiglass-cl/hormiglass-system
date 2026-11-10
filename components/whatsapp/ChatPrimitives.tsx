@@ -70,7 +70,7 @@ export function ChatHeader({ chat, now, onAction, onHistory }: {
   const focusMenuTrigger = () => menu.current?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')?.focus();
   const captions = { assistant: 'Asistente', waiting: 'Esperando', seller: 'Atendiendo tú', closed: 'Cerrada' };
   return <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-t-[inherit] border-b border-line-subtle bg-surface px-3 py-2 text-sm text-ink">
-    <div className="flex min-w-[220px] flex-1 items-center gap-2.5">
+    <div className="flex min-w-[min(220px,100%)] flex-1 items-center gap-2.5">
       <ContactAvatar name={chat.contact.name} />
       <div className="min-w-0">
         <h2 className="truncate text-[15px] font-semibold leading-[1.125rem]">{chat.contact.name}</h2>
