@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useAuth } from '../lib/context/AuthContext';
 import { createClient } from '../lib/supabase/client';
 import {
-  Cliente,
   Cotizacion,
   OportunidadVenta,
   Usuario,
@@ -67,7 +66,9 @@ export default function Dashboard() {
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>(() => swrCache.get('dashboard:cotizaciones') || []);
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>(() => swrCache.get('dashboard:oportunidades') || []);
   const [deliveryAccreditation, setDeliveryAccreditation] = useState<Record<string, boolean>>(() => swrCache.get('dashboard:deliveryAccreditation') || {});
-  const [clientes, setClientes] = useState<Cliente[]>(() => swrCache.get('dashboard:clientes') || []);
+  const [clientesResumen, setClientesResumen] = useState<{ total: number; juridicas: number }>(
+    () => swrCache.get('dashboard:clientesResumen') || { total: 0, juridicas: 0 },
+  );
   const [usuarios, setUsuarios] = useState<Usuario[]>(() => swrCache.get('dashboard:usuarios') || []);
   const [eventos, setEventos] = useState<EventoProduccionLogistica[]>(() => swrCache.get('dashboard:eventos') || []);
   const [recordatorios, setRecordatorios] = useState<Recordatorio[]>(() => swrCache.get('dashboard:recordatorios') || []);
@@ -102,10 +103,11 @@ export default function Dashboard() {
             .order('fecha_vencimiento', { ascending: true })
         : Promise.resolve({ data: [], error: null });
 
-      const [cotRes, opRes, cliRes, userRes, evRes, recRes, aboRes, postRes] = await Promise.all([
+      const [cotRes, opRes, cliTotalRes, cliJurRes, userRes, evRes, recRes, aboRes, postRes] = await Promise.all([
         supabase.from('cotizaciones').select('*, items:cotizacion_items(*), cliente:clientes(*)'),
         supabase.from('oportunidades').select('*, cliente:clientes(*), cotizaciones:cotizaciones!cotizaciones_oportunidad_id_fkey(*)'),
-        supabase.from('clientes').select('*'),
+        supabase.from('clientes').select('id', { count: 'exact', head: true }),
+        supabase.from('clientes').select('id', { count: 'exact', head: true }).or('tipo_cliente.eq.juridica,apellido_razon_social.not.is.null'),
         supabase.from('usuarios').select('*').eq('activo', true),
         supabase.from('eventos_produccion_logistica').select('*, responsable:usuarios!responsable_id(*)'),
         recordatoriosQuery,
@@ -113,7 +115,7 @@ export default function Dashboard() {
         supabase.from('postventa_casos').select('*').in('estado', ['abierto', 'programado', 'en_curso']),
       ]);
 
-      const queryError = [cotRes, opRes, cliRes, userRes, evRes, recRes, aboRes, postRes].find((result) => result.error)?.error;
+      const queryError = [cotRes, opRes, cliTotalRes, cliJurRes, userRes, evRes, recRes, aboRes, postRes].find((result) => result.error)?.error;
       if (queryError) throw queryError;
 
       const closedIds = ((opRes.data || []) as OportunidadVenta[])
@@ -137,7 +139,7 @@ export default function Dashboard() {
 
       const cotData = (cotRes.data || []) as Cotizacion[];
       const opData = (opRes.data || []) as OportunidadVenta[];
-      const cliData = (cliRes.data || []) as Cliente[];
+      const cliResumen = { total: cliTotalRes.count ?? 0, juridicas: cliJurRes.count ?? 0 };
       const usrData = (userRes.data || []) as Usuario[];
       const evData = (evRes.data || []) as EventoProduccionLogistica[];
       const recData = (recRes.data || []) as Recordatorio[];
@@ -146,7 +148,7 @@ export default function Dashboard() {
 
       setCotizaciones(cotData);
       setOportunidades(opData);
-      setClientes(cliData);
+      setClientesResumen(cliResumen);
       setUsuarios(usrData);
       setEventos(evData);
       setRecordatorios(recData);
@@ -157,7 +159,7 @@ export default function Dashboard() {
       swrCache.set('dashboard:cotizaciones', cotData);
       swrCache.set('dashboard:oportunidades', opData);
       swrCache.set('dashboard:deliveryAccreditation', accreditationMap);
-      swrCache.set('dashboard:clientes', cliData);
+      swrCache.set('dashboard:clientesResumen', cliResumen);
       swrCache.set('dashboard:usuarios', usrData);
       swrCache.set('dashboard:eventos', evData);
       swrCache.set('dashboard:recordatorios', recData);
@@ -374,16 +376,8 @@ export default function Dashboard() {
 
   // Segmentación de Clientes
   const segmentacionClientes = useMemo((): DonutSegment[] => {
-    let naturalCount = 0;
-    let juridicaCount = 0;
-
-    clientes.forEach((c) => {
-      if (c.tipo_cliente === 'juridica' || c.apellido_razon_social) {
-        juridicaCount += 1;
-      } else {
-        naturalCount += 1;
-      }
-    });
+    const juridicaCount = clientesResumen.juridicas;
+    const naturalCount = Math.max(0, clientesResumen.total - juridicaCount);
 
     return [
       {
@@ -401,7 +395,7 @@ export default function Dashboard() {
         sublabel: 'personas',
       },
     ];
-  }, [clientes]);
+  }, [clientesResumen]);
 
   // Métodos de Pago
   const metodosPagoSegmentos = useMemo((): DonutSegment[] => {
@@ -444,14 +438,10 @@ export default function Dashboard() {
   // Ranking Comunas
   const rankingComunas = useMemo((): RankingItem[] => {
     const comunaMap: Record<string, { count: number; monto: number }> = {};
-    const cliComunaMap = new Map<string, string>();
-    clientes.forEach((c) => {
-      if (c.comuna) cliComunaMap.set(c.id, c.comuna.trim());
-    });
 
     filteredOportunidades.forEach((op) => {
       let rawComuna = op.comuna;
-      if (!rawComuna && op.cliente_id) rawComuna = cliComunaMap.get(op.cliente_id);
+      if (!rawComuna) rawComuna = op.cliente?.comuna?.trim();
       const cleanComuna = (rawComuna || 'Sin comuna especificada').trim();
       const val = getOportunidadTrueValue(op);
 
@@ -469,7 +459,7 @@ export default function Dashboard() {
         monto: data.monto,
       }))
       .sort((a, b) => b.monto - a.monto);
-  }, [filteredOportunidades, clientes]);
+  }, [filteredOportunidades]);
 
   // Ranking Productos
   const rankingProductos = useMemo((): RankingItem[] => {
@@ -778,7 +768,7 @@ export default function Dashboard() {
               tone="warning"
               change={{ value: `${pctCobrado}% cobrado`, trend: 'neutral', label: `$${totalAbonado.toLocaleString('es-CL')} recaudados` }}
             />
-            <MetricCard title="Clientes" value={clientes.length} icon={Building2} tone="success" />
+            <MetricCard title="Clientes" value={clientesResumen.total} icon={Building2} tone="success" />
             <MetricCard title="Obras en ejecución" value={obrasEnRielCount} icon={Factory} tone="info" />
             <MetricCard
               title="Requieren atención"
@@ -869,7 +859,7 @@ export default function Dashboard() {
                   icon={Building2}
                   segments={segmentacionClientes}
                   centerLabel="Clientes"
-                  centerValue={clientes.length.toString()}
+                  centerValue={clientesResumen.total.toString()}
                 />
               </div>
             </div>

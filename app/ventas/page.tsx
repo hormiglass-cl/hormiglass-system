@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
 import { createClient } from '../../lib/supabase/client';
+import { useClienteOpciones } from '../../lib/clientes-opciones';
+import { SearchSelect } from '../../components/ui/SearchSelect';
 import {
   Cliente,
   Cotizacion,
@@ -721,9 +723,9 @@ export default function PipelineVentasPage() {
   const [previewCotizacion, setPreviewCotizacion] = useState<Cotizacion | null>(null);
 
   // Form para Nueva Oportunidad
-  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [nuevoTitulo, setNuevoTitulo] = useState('');
   const [nuevoClienteId, setNuevoClienteId] = useState('');
+  const clientesSel = useClienteOpciones(nuevoClienteId, (c) => c.nombre);
   const [nuevaFechaLimite, setNuevaFechaLimite] = useState('');
   const [nuevoTipoVenta, setNuevoTipoVenta] = useState('Instalación');
   const [nuevoOrigen, setNuevoOrigen] = useState('');
@@ -788,24 +790,17 @@ export default function PipelineVentasPage() {
     let ignore = false;
     async function fetchPipelineData() {
       try {
-        const [opRes, cliRes, usrRes, cotRes, actRes] = await Promise.all([
+        const [opRes, usrRes, cotRes, actRes] = await Promise.all([
           supabase
             .from('oportunidades')
             .select('*, cliente:clientes(*)')
             .order('created_at', { ascending: false }),
-          supabase.from('clientes').select('*'),
           supabase.from('usuarios').select('*').eq('activo', true).order('nombre', { ascending: true }),
           supabase.from('cotizaciones').select('*, cliente:clientes(*), items:cotizacion_items(*)'),
           supabase.from('actividades_op').select('*').order('created_at', { ascending: true }),
         ]);
 
         if (!ignore) {
-          if (cliRes.data) {
-            setClientes(cliRes.data as Cliente[]);
-          } else {
-            setClientes([]);
-          }
-
           const loadedUsers = (usrRes.data || usersList || []) as Usuario[];
           setUsuariosApp(loadedUsers);
           setPersonalTerrenoList(loadedUsers);
@@ -884,7 +879,6 @@ export default function PipelineVentasPage() {
         if (!ignore) {
           setOportunidades([]);
           setDeliveryAccreditation({});
-          setClientes([]);
           setUsuariosApp([]);
           setAllCotizaciones([]);
           setLoading(false);
@@ -1000,18 +994,8 @@ export default function PipelineVentasPage() {
           table: 'clientes',
         },
         (payload: RealtimeChange<Cliente>) => {
-          if (payload.new) {
-            const updatedClient = payload.new as Cliente;
-            setClientes((prev) => {
-              const exists = prev.some((c) => c.id === updatedClient.id);
-              if (exists) {
-                return prev.map((c) => (c.id === updatedClient.id ? { ...c, ...updatedClient } : c));
-              }
-              return [updatedClient, ...prev];
-            });
-          } else {
-            fetchPipelineData();
-          }
+          // Solo se recarga si se elimina un cliente; altas y ediciones no afectan al pipeline.
+          if (!payload.new) fetchPipelineData();
         }
       )
       .on(
@@ -4276,7 +4260,7 @@ export default function PipelineVentasPage() {
                         }}
                         className={`px-2.5 py-1 rounded-md transition flex items-center gap-1 text-xs font-semibold ${
                           isReclamoMode
-                            ? 'bg-danger-soft text-white shadow-xs'
+                            ? 'bg-danger text-white shadow-xs'
                             : 'text-ink-muted hover:text-danger hover:bg-danger-soft'
                         }`}
                         title="Marcar este mensaje como Reclamo / Postventa"
@@ -4375,7 +4359,7 @@ export default function PipelineVentasPage() {
 
       {/* Modal Crear Nueva Oportunidad */}
       {showNewOpModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-surface border border-line rounded-lg max-w-lg w-full p-6 space-y-5 shadow-sm text-ink">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
@@ -4402,19 +4386,16 @@ export default function PipelineVentasPage() {
 
               <div>
                 <label className="block font-bold text-ink mb-1">Cliente Asociado *</label>
-                <Select
-                  required
+                <SearchSelect
                   value={nuevoClienteId}
-                  onChange={(e) => setNuevoClienteId(e.target.value)}
-                  className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent"
-                >
-                  <option value="">-- Seleccionar Cliente --</option>
-                  {clientes.map((cli) => (
-                    <option key={cli.id} value={cli.id}>
-                      {cli.nombre} — RUT: {cli.rut}
-                    </option>
-                  ))}
-                </Select>
+                  onChange={setNuevoClienteId}
+                  options={clientesSel.opciones}
+                  onSearch={clientesSel.onSearch}
+                  placeholder="-- Seleccionar Cliente --"
+                  searchPlaceholder="Buscar por nombre o RUT..."
+                  menuMinWidth={320}
+                  ariaLabel="Cliente asociado"
+                />
               </div>
 
               <div>
@@ -4488,7 +4469,7 @@ export default function PipelineVentasPage() {
       )}
       {/* Modal Confirmación Eliminación de Oportunidad */}
       {opToDelete && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 ">
           <div className="bg-surface border border-line rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-ink">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="text-base font-semibold text-danger flex items-center gap-2">
@@ -4522,7 +4503,7 @@ export default function PipelineVentasPage() {
                 type="button"
                 onClick={handleDeleteOportunidad}
                 disabled={deletingOp}
-                className="px-5 py-2 bg-danger-soft hover:bg-danger-soft disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-md transition shadow-sm flex items-center gap-1.5"
+                className="px-5 py-2 bg-danger hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-md transition shadow-sm flex items-center gap-1.5"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>{deletingOp ? 'Eliminando...' : 'Eliminar Oportunidad'}</span>
@@ -4534,7 +4515,7 @@ export default function PipelineVentasPage() {
 
       {/* Modal Confirmación Eliminación de Cotización desde Modal */}
       {cotToDeleteInModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 ">
           <div className="bg-surface border border-line rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-ink">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="text-base font-semibold text-danger flex items-center gap-2">
@@ -4566,7 +4547,7 @@ export default function PipelineVentasPage() {
               <button
                 type="button"
                 onClick={handleDeleteCotizacionInModal}
-                className="px-5 py-2 bg-danger-soft hover:bg-danger-soft text-white font-semibold rounded-md transition shadow-sm flex items-center gap-1.5"
+                className="px-5 py-2 bg-danger hover:opacity-90 text-white font-semibold rounded-md transition shadow-sm flex items-center gap-1.5"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Eliminar Cotización</span>
@@ -4579,7 +4560,7 @@ export default function PipelineVentasPage() {
       {/* Modal de Advertencia por Abono Mínimo Requerido (50% o 100%) */}
       {abonoWarningModal && (
         <div
-          className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50 "
+          className="fixed inset-0 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 "
           onClick={() => setAbonoWarningModal(null)}
         >
           <div

@@ -219,7 +219,7 @@ export default function CotizacionesPage() {
         c.numero_cotizacion.toLowerCase().includes(q) ||
         (c.referencia_cliente && c.referencia_cliente.toLowerCase().includes(q)) ||
         (c.cliente && c.cliente.nombre.toLowerCase().includes(q)) ||
-        (c.cliente && c.cliente.rut.toLowerCase().includes(q));
+        (c.cliente && (c.cliente.rut || '').toLowerCase().includes(q));
 
       const matchEstado = matchMultiFilter(
         estadoFiltro,

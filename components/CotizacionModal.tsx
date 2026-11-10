@@ -4,8 +4,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { createClient } from '../lib/supabase/client';
+import { useClienteOpciones } from '../lib/clientes-opciones';
 import { useAuth } from '../lib/context/AuthContext';
-import { Cliente, Cotizacion, CotizacionItem, OportunidadVenta, ProductoCatalogo, PRODUCTOS_HORMIGLASS } from '../lib/types';
+import { Cotizacion, CotizacionItem, OportunidadVenta, ProductoCatalogo, PRODUCTOS_HORMIGLASS } from '../lib/types';
 import { logSistema } from '../lib/logger';
 import {
   Plus,
@@ -48,10 +49,10 @@ export function CotizacionModal({
     .filter(Boolean)
     .join('\n');
 
-  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>([]);
   const [catalogo, setCatalogo] = useState<ProductoCatalogo[]>([]);
   const [clienteId, setClienteId] = useState<string>(clienteIdInicial || '');
+  const clientesSel = useClienteOpciones(clienteId, (c) => c.nombre);
   const [oportunidadId, setOportunidadId] = useState<string>(oportunidadIdInicial || '');
 
   // Meta fields
@@ -130,19 +131,12 @@ export function CotizacionModal({
 
   useEffect(() => {
     async function loadAux() {
-      const [{ data: cData }, { data: oData }, { data: pData }] = await Promise.all([
-        supabase.from('clientes').select('*').order('nombre'),
+      const [{ data: oData }, { data: pData }] = await Promise.all([
         supabase.from('oportunidades').select('*').order('created_at', { ascending: false }),
         supabase.from('catalogo_productos').select('*').eq('activo', true).order('nombre'),
       ]);
-      const loadedClientes = (cData || []) as Cliente[];
-      setClientes(loadedClientes);
       setOportunidades((oData || []) as OportunidadVenta[]);
       setCatalogo((pData || []) as ProductoCatalogo[]);
-
-      if (!initialCotizacion && !clienteIdInicial && loadedClientes.length > 0) {
-        setClienteId((prev) => prev || loadedClientes[0].id);
-      }
 
       if (editCotizacionIdInicial && !initialCotizacion) {
         const { data: baseCot } = await supabase
@@ -418,7 +412,8 @@ export function CotizacionModal({
                   setClienteId(v);
                   setOportunidadId('');
                 }}
-                options={clientes.map((c) => ({ value: c.id, label: c.nombre, hint: c.rut }))}
+                options={clientesSel.opciones}
+                onSearch={clientesSel.onSearch}
                 placeholder="Seleccionar cliente"
                 searchPlaceholder="Buscar por nombre o RUT..."
                 searchable

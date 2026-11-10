@@ -622,6 +622,10 @@ export default function TrabajadorDetailPage() {
 
   const handleCreateUser = async () => {
     if (!trabajador) return;
+    if (!trabajador.rut) {
+      setCreateUserError('Agrega el RUT del colaborador antes de crear su cuenta CRM.');
+      return;
+    }
     const email = newUserForm.email.trim();
     if (!email || !email.includes('@')) {
       setCreateUserError('Ingresa un correo válido: ahí llegará el código para crear la contraseña.');
