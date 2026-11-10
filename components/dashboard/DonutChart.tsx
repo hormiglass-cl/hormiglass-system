@@ -22,6 +22,8 @@ interface DonutChartProps {
   showAmountInLegend?: boolean;
   /** Versión baja, para apilar con otras tarjetas. */
   compact?: boolean;
+  /** Con total 0 dibuja el anillo vacío y la leyenda en cero, en vez de un mensaje. */
+  showEmpty?: boolean;
 }
 
 export function DonutChart({
@@ -32,6 +34,7 @@ export function DonutChart({
   centerValue,
   showAmountInLegend = true,
   compact = false,
+  showEmpty = false,
 }: DonutChartProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
@@ -78,7 +81,7 @@ export function DonutChart({
         </div>
       </div>
 
-      {totalValue === 0 ? (
+      {totalValue === 0 && !showEmpty ? (
         <div className="flex h-44 items-center justify-center text-xs italic text-ink-muted">
           No hay datos registrados en este período.
         </div>

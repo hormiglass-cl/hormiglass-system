@@ -24,6 +24,8 @@
   --hg-warning: #8a5300;  --hg-warning-soft: #fff4dc;  --hg-warning-border: #f1d79c;
   --hg-danger: #a8261f;   --hg-danger-soft: #fdecea;   --hg-danger-border: #f3c1bc;
   --hg-info: #2c5a94;     --hg-info-soft: #eaf1fa;     --hg-info-border: #bfd3ec;
+  /* Violeta: solo para distinguir las órdenes de producción en los calendarios */
+  --hg-violet: #5b3a9a;   --hg-violet-soft: #f0ebf9;   --hg-violet-border: #d3c5ec;
   /* Escena nocturna (barra lateral y pantallas de acceso): carbón de marca con acento naranja */
   --hg-night-top: #2d2b29;
   --hg-night: #1d1c1b;
@@ -72,6 +74,9 @@
   --color-info: var(--hg-info);
   --color-info-soft: var(--hg-info-soft);
   --color-info-line: var(--hg-info-border);
+  --color-violet: var(--hg-violet);
+  --color-violet-soft: var(--hg-violet-soft);
+  --color-violet-line: var(--hg-violet-border);
   --color-night-top: var(--hg-night-top);
   --color-night: var(--hg-night);
   --color-night-deep: var(--hg-night-deep);
@@ -142,6 +147,28 @@ body {
   }
   .hg-field:focus { border-color: var(--hg-accent); outline: 2px solid var(--hg-accent-soft); }
   .hg-field::placeholder { color: var(--hg-text-muted); }
+  .hg-field-compact {
+    min-height: 2rem;
+    width: auto;
+    border: 1px solid var(--hg-border);
+    border-radius: var(--hg-radius);
+    padding: .25rem .625rem;
+    background-color: white;
+    color: var(--hg-text);
+    font-size: .75rem;
+    line-height: 1rem;
+    font-weight: 500;
+  }
+  .hg-field-compact:focus { border-color: var(--hg-accent); outline: 2px solid var(--hg-accent-soft); }
+  .hg-field-compact::placeholder { color: var(--hg-text-muted); }
+  select.hg-field-compact {
+    appearance: none;
+    padding-right: 1.75rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right .5rem center;
+    cursor: pointer;
+  }
   .hg-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .82rem; }
   .hg-table th {
     background: var(--hg-surface-muted);
@@ -221,7 +248,7 @@ body {
 
 /* Transiciones fluidas en la navegación y vistas del CRM */
 .hg-page-transition {
-  animation: hgFadeSlide 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: hgFadeSlide 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes hgFadeSlide {
@@ -237,7 +264,7 @@ body {
 
 /* Transición suave para listas desplegables del menú lateral */
 .hg-accordion-enter {
-  animation: hgAccordion 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: hgAccordion 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes hgAccordion {

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { createClient } from '../../lib/supabase/client';
 import { useAuth } from '../../lib/context/AuthContext';
 import {
@@ -12,28 +13,33 @@ import {
   Usuario,
   UserRole,
   ROL_NOMBRE,
+  ROLES_ASIGNABLES,
 } from '../../lib/types';
 import {
-  Plus,
-  Eye,
   UserX,
   LayoutGrid,
   List,
   Lock,
   UserRound,
+  Mail,
+  Users,
+  UserCheck,
+  MapPin,
+  CalendarOff,
+  Phone,
+  IdCard,
+  Briefcase,
+  CalendarDays,
+  ShieldCheck,
+  ChevronRight,
 } from 'lucide-react';
 import { TODAS_COMUNAS_CHILE } from '../../lib/chile-data';
 import { mensajeError } from '../../lib/errores';
 import {
-  PageHeader,
-  SummaryLine,
-  FilterBar,
   SearchField,
-  FilterSelect,
   Panel,
   Button,
   StatusBadge,
-  CodeStamp,
   Dialog,
   Field,
   TextInput,
@@ -41,6 +47,11 @@ import {
   Tone,
 } from '../../components/ui/crm';
 import { useToast } from '../../components/ui/feedback';
+import { DateInput } from '../../components/ui/FormControls';
+import { FilterMenu, FilterBar, useFilterUi, matchMultiFilter, type FilterDefinition } from '../../components/ui/FilterPills';
+import { ColumnMenu, useColumnPrefs } from '../../components/ui/ColumnMenu';
+import { Fab } from '../../components/ui/Fab';
+import { MetricCard } from '../../components/ui/MetricCard';
 
 const DISPONIBILIDAD_LABELS: Record<EstadoDisponibilidad, string> = {
   disponible: 'Disponible',
@@ -67,11 +78,43 @@ const USER_ROLE_TONE: Record<UserRole, Tone> = {
   finanzas: 'success',
 };
 
+type TrabajadorCol = 'rut' | 'correo' | 'telefono' | 'cargo' | 'area' | 'acceso' | 'estado_cuenta' | 'calendarios' | 'disponibilidad';
+
+const COL_ORDER: TrabajadorCol[] = ['rut', 'correo', 'telefono', 'cargo', 'area', 'acceso', 'estado_cuenta', 'calendarios', 'disponibilidad'];
+
+const COL_VISIBLE: Record<TrabajadorCol, boolean> = {
+  rut: true,
+  correo: true,
+  telefono: true,
+  cargo: true,
+  area: true,
+  acceso: true,
+  estado_cuenta: true,
+  calendarios: true,
+  disponibilidad: true,
+};
+
+const COL_LABELS: Record<TrabajadorCol, string> = {
+  rut: 'RUT',
+  correo: 'Correo',
+  telefono: 'Teléfono',
+  cargo: 'Cargo',
+  area: 'Área',
+  acceso: 'Acceso al CRM',
+  estado_cuenta: 'Estado de cuenta',
+  calendarios: 'Calendarios',
+  disponibilidad: 'Disponibilidad',
+};
+
 export default function RecursosHumanosPage() {
   const { addUser, currentUser, updateUserRole, refreshUsers } = useAuth();
   const toast = useToast();
   const supabase = useMemo(() => createClient(), []);
   const isAdmin = currentUser?.rol === 'admin';
+  const router = useRouter();
+  const colPrefs = useColumnPrefs<TrabajadorCol>('hormiglass_rrhh_cols_v2', COL_ORDER, COL_VISIBLE);
+  const filterUi = useFilterUi();
+  const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
 
   const [loading, setLoading] = useState(true);
   const [trabajadores, setTrabajadores] = useState<Trabajador[]>([]);
@@ -79,8 +122,6 @@ export default function RecursosHumanosPage() {
 
   // Filtros de búsqueda
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterDisponibilidad, setFilterDisponibilidad] = useState<string>('todos');
-  const [filterArea, setFilterArea] = useState<string>('todas');
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
 
   // Modal Nuevo Trabajador
@@ -91,7 +132,7 @@ export default function RecursosHumanosPage() {
   // Modo de cuenta de usuario al crear trabajador
   const [workerAccountMode, setWorkerAccountMode] = useState<'create' | 'link' | 'none'>('create');
   const [selectedUserId, setSelectedUserId] = useState<string>('');
-  const [newUserRole, setNewUserRole] = useState<UserRole>('mano_obra');
+  const [newUserRole, setNewUserRole] = useState<UserRole>('user');
   const [newUserPassword, setNewUserPassword] = useState<string>('');
   const [newUserCalVisitas, setNewUserCalVisitas] = useState<boolean>(true);
   const [newUserCalProduccion, setNewUserCalProduccion] = useState<boolean>(true);
@@ -288,8 +329,13 @@ export default function RecursosHumanosPage() {
     e.preventDefault();
     setFormError(null);
 
-    if (!newWorker.nombre.trim() || !newWorker.rut.trim() || !newWorker.cargo.trim()) {
-      setFormError('Nombre, RUT y cargo son obligatorios.');
+    if (!newWorker.nombre.trim() || !newWorker.cargo.trim()) {
+      setFormError('Nombre y cargo son obligatorios.');
+      return;
+    }
+
+    if (workerAccountMode === 'create' && !newWorker.rut.trim()) {
+      setFormError('El RUT es obligatorio para crear una cuenta de acceso al CRM.');
       return;
     }
 
@@ -357,7 +403,7 @@ export default function RecursosHumanosPage() {
 
       const workerPayload = {
         nombre: newWorker.nombre.trim(),
-        rut: newWorker.rut.trim(),
+        rut: newWorker.rut.trim() || null,
         email: newWorker.email.trim() || null,
         telefono: newWorker.telefono.trim() || null,
         direccion: newWorker.direccion.trim() || null,
@@ -424,6 +470,39 @@ export default function RecursosHumanosPage() {
     }
   };
 
+  const usuarioDe = useCallback(
+    (t: Trabajador) =>
+      usuarios.find((u) => u.id === t.usuario_id || (t.email && u.email?.toLowerCase() === t.email?.toLowerCase())),
+    [usuarios]
+  );
+
+  const filterDefinitions: FilterDefinition[] = useMemo(
+    () => [
+      {
+        id: 'disponibilidad',
+        label: 'Disponibilidad',
+        allLabel: 'Todos los estados',
+        options: Object.entries(DISPONIBILIDAD_LABELS).map(([value, label]) => ({ value, label })),
+      },
+      {
+        id: 'area',
+        label: 'Área',
+        allLabel: 'Todas las áreas',
+        options: AREAS_RRHH_DEFAULT.map((area) => ({ value: area, label: area })),
+      },
+      {
+        id: 'acceso',
+        label: 'Acceso al CRM',
+        allLabel: 'Todos los accesos',
+        options: [
+          ...ROLES_ASIGNABLES.map((value) => ({ value, label: ROL_NOMBRE[value] })),
+          { value: 'sin_cuenta', label: 'Sin cuenta' },
+        ],
+      },
+    ],
+    []
+  );
+
   // Filtrado reactivo de trabajadores
   const filteredTrabajadores = useMemo(() => {
     return trabajadores.filter((t) => {
@@ -435,18 +514,12 @@ export default function RecursosHumanosPage() {
         const matchEmail = (t.email || '').toLowerCase().includes(q);
         if (!matchName && !matchRut && !matchCargo && !matchEmail) return false;
       }
-
-      if (filterDisponibilidad !== 'todos') {
-        if (t.estado_disponibilidad !== filterDisponibilidad) return false;
-      }
-
-      if (filterArea !== 'todas') {
-        if (t.area !== filterArea) return false;
-      }
-
+      if (!matchMultiFilter(activeFilters.disponibilidad, (v) => t.estado_disponibilidad === v)) return false;
+      if (!matchMultiFilter(activeFilters.area, (v) => t.area === v)) return false;
+      if (!matchMultiFilter(activeFilters.acceso, (v) => (usuarioDe(t)?.rol ?? 'sin_cuenta') === v)) return false;
       return true;
     });
-  }, [trabajadores, searchQuery, filterDisponibilidad, filterArea]);
+  }, [trabajadores, searchQuery, activeFilters, usuarioDe]);
 
   // Cálculos de KPIs
   const totalColaboradores = trabajadores.length;
@@ -455,307 +528,237 @@ export default function RecursosHumanosPage() {
   const totalAusentes = trabajadores.filter((t) =>
     ['permiso', 'licencia', 'vacaciones', 'falta'].includes(t.estado_disponibilidad)
   ).length;
-  const totalNominaSueldos = trabajadores.reduce((sum, t) => sum + Number(t.sueldo_base || 0), 0);
+
+  const toggleKpi = (valor: string) =>
+    setActiveFilters((prev) => {
+      const next = { ...prev };
+      if (prev.disponibilidad === valor) delete next.disponibilidad;
+      else next.disponibilidad = valor;
+      return next;
+    });
+
+  const abrirFicha = (id: string) => router.push(`/rrhh/${id}`);
+
+  const celdaCalendarios = (linkedUser: Usuario | undefined) =>
+    linkedUser ? (
+      <div className="flex items-center gap-1">
+        {(
+          [
+            { field: 'calendario_visitas', label: 'Visitas' },
+            { field: 'calendario_produccion', label: 'Producción' },
+            { field: 'calendario_reventa', label: 'Reventa' },
+          ] as const
+        ).map(({ field, label }) => {
+          const active = linkedUser[field] ?? true;
+          return (
+            <button
+              key={field}
+              type="button"
+              disabled={!isAdmin}
+              onClick={() => void handleToggleUserCalendar(linkedUser, field)}
+              title={
+                isAdmin
+                  ? `Alternar presencia en Calendario de ${label}`
+                  : `Calendario de ${label}: ${active ? 'Activo' : 'Oculto'}`
+              }
+              className={`px-2 py-0.5 rounded-full t-micro font-medium border transition-colors ${
+                active ? 'bg-success-soft text-success border-success-line' : 'bg-surface-muted text-ink-muted border-line opacity-65'
+              } ${isAdmin ? 'cursor-pointer hover:opacity-100' : 'cursor-default'}`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    ) : (
+      <span className="t-caption text-ink-subtle">—</span>
+    );
+
+  const celdaAcceso = (linkedUser: Usuario | undefined) =>
+    linkedUser && isAdmin ? (
+      <div className="w-[170px]">
+        <Select
+          value={linkedUser.rol === 'admin' ? 'admin' : 'user'}
+          onChange={(e) => void handleUpdateTipoUsuario(linkedUser, e.target.value as UserRole)}
+          className="text-xs"
+        >
+          {ROLES_ASIGNABLES.map((role) => (
+            <option key={role} value={role}>
+              {ROL_NOMBRE[role]}
+            </option>
+          ))}
+        </Select>
+      </div>
+    ) : linkedUser ? (
+      <StatusBadge tone={USER_ROLE_TONE[linkedUser.rol]}>{ROL_NOMBRE[linkedUser.rol] ?? linkedUser.rol}</StatusBadge>
+    ) : (
+      <span className="t-caption text-ink-muted">Sin cuenta CRM</span>
+    );
+
+  const celdaEstadoCuenta = (linkedUser: Usuario | undefined) =>
+    !linkedUser ? (
+      <span className="t-caption text-ink-subtle">—</span>
+    ) : isAdmin ? (
+      <button
+        type="button"
+        onClick={() => void handleToggleUserActivo(linkedUser)}
+        title={linkedUser.activo ? 'Cuenta activa; clic para suspender el acceso' : 'Cuenta suspendida; clic para activar el acceso'}
+      >
+        <StatusBadge tone={linkedUser.activo ? 'success' : 'neutral'}>{linkedUser.activo ? 'Activo' : 'Inactivo'}</StatusBadge>
+      </button>
+    ) : (
+      <StatusBadge tone={linkedUser.activo ? 'success' : 'neutral'}>{linkedUser.activo ? 'Activo' : 'Inactivo'}</StatusBadge>
+    );
 
   return (
-    <div className="space-y-6">
-      {/* 1. CABECERA & ACCIÓN PRINCIPAL */}
-      <PageHeader
-        title="Recursos Humanos"
-        description="Directorio de colaboradores vinculados a cuentas de usuario, asistencia y carpetas laborales."
-        actions={
-          <Button
-            variant="primary"
-            icon={Plus}
-            onClick={() => {
-              setFormError(null);
-              setShowNewWorkerModal(true);
-            }}
-          >
-            Nuevo colaborador
-          </Button>
-        }
-      />
-
-      {/* 2. KPIS EJECUTIVOS (SummaryLine accionable) */}
-      <Panel className="p-3">
-        <SummaryLine
-          items={[
-            {
-              label: 'Colaboradores',
-              value: totalColaboradores,
-              active: filterDisponibilidad === 'todos',
-              onClick: () => setFilterDisponibilidad('todos'),
-            },
-            {
-              label: 'Disponibles',
-              value: totalDisponibles,
-              tone: 'success',
-              active: filterDisponibilidad === 'disponible',
-              onClick: () =>
-                setFilterDisponibilidad(
-                  filterDisponibilidad === 'disponible' ? 'todos' : 'disponible'
-                ),
-            },
-            {
-              label: 'En terreno',
-              value: totalEnTerreno,
-              tone: 'info',
-              active: filterDisponibilidad === 'en_terreno',
-              onClick: () =>
-                setFilterDisponibilidad(
-                  filterDisponibilidad === 'en_terreno' ? 'todos' : 'en_terreno'
-                ),
-            },
-            {
-              label: 'Ausencias / Permisos',
-              value: totalAusentes,
-              tone: 'warning',
-            },
-            {
-              label: 'Nómina mensual',
-              value: `$${totalNominaSueldos.toLocaleString('es-CL')}`,
-            },
-          ]}
+    <div className="space-y-6 pb-24">
+      {/* KPIs: mismas tarjetas del panel operativo */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          title="Colaboradores"
+          value={totalColaboradores}
+          icon={Users}
+          tone="info"
+          subtitle="Equipo registrado"
+          active={!activeFilters.disponibilidad}
+          onClick={() =>
+            setActiveFilters((prev) => {
+              const next = { ...prev };
+              delete next.disponibilidad;
+              return next;
+            })
+          }
         />
-      </Panel>
-
-      {/* 3. BARRA DE FILTROS & BÚSQUEDA */}
-      <FilterBar>
-        <SearchField
-          placeholder="Buscar por nombre, RUT, cargo o correo..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+        <MetricCard
+          title="Disponibles"
+          value={totalDisponibles}
+          icon={UserCheck}
+          tone="success"
+          subtitle="Listos para asignar"
+          active={activeFilters.disponibilidad === 'disponible'}
+          onClick={() => toggleKpi('disponible')}
         />
+        <MetricCard
+          title="En terreno"
+          value={totalEnTerreno}
+          icon={MapPin}
+          tone="info"
+          subtitle="Trabajando en obra"
+          active={activeFilters.disponibilidad === 'en_terreno'}
+          onClick={() => toggleKpi('en_terreno')}
+        />
+        <MetricCard
+          title="Ausencias / Permisos"
+          value={totalAusentes}
+          icon={CalendarOff}
+          tone="warning"
+          subtitle="Permisos, licencias y vacaciones"
+        />
+      </div>
 
+      {/* Búsqueda, filtros, columnas y vista */}
+      <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          <FilterSelect
-            label="Estado"
-            value={filterDisponibilidad}
-            onChange={(e) => setFilterDisponibilidad(e.target.value)}
-          >
-            <option value="todos">Todos los estados</option>
-            <option value="disponible">Disponible</option>
-            <option value="en_terreno">En terreno / obra</option>
-            <option value="permiso">En permiso</option>
-            <option value="licencia">Licencia médica</option>
-            <option value="vacaciones">Vacaciones</option>
-            <option value="falta">Falta / ausente</option>
-          </FilterSelect>
+          <SearchField
+            className="w-full max-w-sm"
+            placeholder="Buscar por nombre, RUT, cargo o correo"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
 
-          <FilterSelect
-            label="Área"
-            value={filterArea}
-            onChange={(e) => setFilterArea(e.target.value)}
-          >
-            <option value="todas">Todas las áreas</option>
-            {AREAS_RRHH_DEFAULT.map((area) => (
-              <option key={area} value={area}>
-                {area}
-              </option>
-            ))}
-          </FilterSelect>
-
-          {/* Selector de Vista (Tabla vs Cuadrícula) */}
-          <div className="flex items-center rounded-control border border-line bg-surface p-0.5" role="group" aria-label="Modo de vista">
-            <button
-              type="button"
-              onClick={() => setViewMode('table')}
-              aria-label="Vista tabla"
-              aria-pressed={viewMode === 'table'}
-              className={`p-1.5 rounded-control transition-colors ${
-                viewMode === 'table' ? 'bg-surface-muted text-ink font-semibold' : 'text-ink-muted hover:text-ink'
-              }`}
-            >
-              <List size={16} aria-hidden />
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('grid')}
-              aria-label="Vista cuadrícula"
-              aria-pressed={viewMode === 'grid'}
-              className={`p-1.5 rounded-control transition-colors ${
-                viewMode === 'grid' ? 'bg-surface-muted text-ink font-semibold' : 'text-ink-muted hover:text-ink'
-              }`}
-            >
-              <LayoutGrid size={16} aria-hidden />
-            </button>
+          <div className="ml-auto flex items-center gap-2">
+            {viewMode === 'table' && <ColumnMenu labels={COL_LABELS} prefs={colPrefs} align="right" />}
+            <FilterMenu
+              iconOnly
+              align="right"
+              triggerClassName="min-h-9 justify-center rounded-lg px-2.5 text-[13px]"
+              filters={filterDefinitions}
+              activeFilters={activeFilters}
+              ui={filterUi}
+            />
+            <div className="flex items-center rounded-control border border-line bg-surface p-0.5" role="group" aria-label="Modo de vista">
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                aria-label="Vista de listado"
+                aria-pressed={viewMode === 'table'}
+                className={`p-1.5 rounded-control transition-colors ${
+                  viewMode === 'table' ? 'bg-surface-muted text-ink font-semibold' : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                <List size={16} aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                aria-label="Vista de tarjetas"
+                aria-pressed={viewMode === 'grid'}
+                className={`p-1.5 rounded-control transition-colors ${
+                  viewMode === 'grid' ? 'bg-surface-muted text-ink font-semibold' : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                <LayoutGrid size={16} aria-hidden />
+              </button>
+            </div>
           </div>
         </div>
-      </FilterBar>
+        <FilterBar
+          filters={filterDefinitions}
+          activeFilters={activeFilters}
+          onFilterChange={(id, val) => setActiveFilters((prev) => ({ ...prev, [id]: val }))}
+          onClearAll={() => setActiveFilters({})}
+          ui={filterUi}
+        />
+      </div>
 
-      {/* 4. LISTADO PRINCIPAL DE TRABAJADORES */}
+      {/* Listado */}
       {loading ? (
-        <Panel className="p-12 text-center text-ink-muted">
-          Cargando colaboradores de Hormiglass...
-        </Panel>
-      ) : filteredTrabajadores.length === 0 ? (
+        <Panel className="p-12 text-center text-ink-muted">Cargando colaboradores…</Panel>
+      ) : filteredTrabajadores.length === 0 && viewMode === 'grid' ? (
         <Panel className="p-12 text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-surface-muted text-ink-muted">
             <UserX size={24} aria-hidden />
           </div>
           <h3 className="t-section mt-3">No se encontraron colaboradores</h3>
-          <p className="t-caption mt-1 max-w-md mx-auto">
-            No hay trabajadores que coincidan con los filtros seleccionados. Todos los colaboradores deben tener cuenta de usuario activa.
-          </p>
         </Panel>
       ) : viewMode === 'table' ? (
-        /* VISTA DE TABLA UNIFICADA (RR.HH. + ACCESO CRM + CALENDARIOS) */
         <Panel className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="hg-table">
+            <table className="hg-table min-w-max whitespace-nowrap">
               <thead>
                 <tr>
-                  <th>Colaborador</th>
-                  <th>Rol & Acceso CRM</th>
-                  <th>Calendarios operativos</th>
-                  <th>Cargo & Área</th>
-                  <th>Disponibilidad</th>
-                  <th className="text-right">Acción</th>
+                  <th>Nombre</th>
+                  {colPrefs.visibleOrder.map((k) => (
+                    <th key={k}>{COL_LABELS[k]}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
+                {filteredTrabajadores.length === 0 && (
+                  <tr>
+                    <td colSpan={1 + colPrefs.visibleOrder.length} className="p-10 text-center text-ink-muted">
+                      <UserX className="mx-auto mb-2 h-8 w-8 opacity-50" aria-hidden />
+                      <p className="text-sm font-semibold text-ink">No se encontraron colaboradores.</p>
+                    </td>
+                  </tr>
+                )}
                 {filteredTrabajadores.map((t) => {
-                  const linkedUser = usuarios.find(
-                    (u) =>
-                      u.id === t.usuario_id ||
-                      (t.email && u.email?.toLowerCase() === t.email?.toLowerCase())
-                  );
-
-                  return (
-                    <tr key={t.id}>
-                      {/* 1. Colaborador */}
-                      <td>
-                        <Link
-                          href={`/rrhh/${t.id}`}
-                          className="flex items-center gap-3 transition-colors hover:text-accent-ink"
-                        >
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-accent-soft text-accent-ink font-semibold">
-                            <UserRound size={18} aria-hidden />
-                          </div>
-                          <div className="min-w-0">
-                            <span className="block font-semibold text-ink hover:underline">
-                              {t.nombre}
-                            </span>
-                            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                              <CodeStamp title={`RUT: ${t.rut}`}>{t.rut || 'Sin RUT'}</CodeStamp>
-                              {t.email && (
-                                <span className="t-micro text-ink-muted truncate max-w-[160px]">
-                                  {t.email}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </Link>
-                      </td>
-
-                      {/* 2. Rol & Estado de Cuenta CRM */}
-                      <td>
-                        {linkedUser && isAdmin ? (
-                          <div className="flex items-center gap-1.5 max-w-[230px]">
-                            <Select
-                              value={linkedUser.rol}
-                              onChange={(e) =>
-                                void handleUpdateTipoUsuario(linkedUser, e.target.value as UserRole)
-                              }
-                              className="text-xs flex-1 min-w-[140px]"
-                            >
-                              {Object.entries(ROL_NOMBRE).map(([role, label]) => (
-                                <option key={role} value={role}>
-                                  {label}
-                                </option>
-                              ))}
-                            </Select>
-                            <button
-                              type="button"
-                              onClick={() => void handleToggleUserActivo(linkedUser)}
-                              title={
-                                linkedUser.activo
-                                  ? 'Cuenta activa (clic para suspender acceso)'
-                                  : 'Cuenta suspendida (clic para activar acceso)'
-                              }
-                              className="shrink-0"
-                            >
-                              <StatusBadge tone={linkedUser.activo ? 'success' : 'neutral'}>
-                                {linkedUser.activo ? 'Activo' : 'Inactivo'}
-                              </StatusBadge>
-                            </button>
-                          </div>
-                        ) : linkedUser ? (
-                          <div className="flex items-center gap-1.5">
-                            <StatusBadge tone={USER_ROLE_TONE[linkedUser.rol]}>
-                              {ROL_NOMBRE[linkedUser.rol] ?? linkedUser.rol}
-                            </StatusBadge>
-                            <StatusBadge tone={linkedUser.activo ? 'success' : 'neutral'}>
-                              {linkedUser.activo ? 'Activo' : 'Inactivo'}
-                            </StatusBadge>
-                          </div>
-                        ) : (
-                          <Link
-                            href={`/rrhh/${t.id}`}
-                            className="inline-flex items-center gap-1 t-caption text-ink-muted hover:text-accent-ink"
-                          >
-                            <span>Sin cuenta CRM</span>
-                          </Link>
-                        )}
-                      </td>
-
-                      {/* 3. Calendarios Operativos */}
-                      <td>
-                        {linkedUser ? (
-                          <div className="flex flex-wrap items-center gap-1">
-                            {(
-                              [
-                                { field: 'calendario_visitas', label: 'Visitas' },
-                                { field: 'calendario_produccion', label: 'Producción' },
-                                { field: 'calendario_reventa', label: 'Reventa' },
-                              ] as const
-                            ).map(({ field, label }) => {
-                              const active = linkedUser[field] ?? true;
-                              return (
-                                <button
-                                  key={field}
-                                  type="button"
-                                  disabled={!isAdmin}
-                                  onClick={() => void handleToggleUserCalendar(linkedUser, field)}
-                                  title={
-                                    isAdmin
-                                      ? `Alternar presencia en Calendario de ${label}`
-                                      : `Calendario de ${label}: ${active ? 'Activo' : 'Oculto'}`
-                                  }
-                                  className={`px-2 py-0.5 rounded-full t-micro font-medium border transition-colors ${
-                                    active
-                                      ? 'bg-success-soft text-success border-success-line'
-                                      : 'bg-surface-muted text-ink-muted border-line opacity-65'
-                                  } ${isAdmin ? 'cursor-pointer hover:opacity-100' : 'cursor-default'}`}
-                                >
-                                  {label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <span className="t-caption text-ink-subtle">—</span>
-                        )}
-                      </td>
-
-                      {/* 4. Cargo & Área */}
-                      <td>
-                        <span className="block font-semibold text-ink">{t.cargo}</span>
-                        <span className="t-caption text-ink-muted">{t.area}</span>
-                      </td>
-
-                      {/* 5. Disponibilidad */}
-                      <td>
+                  const linkedUser = usuarioDe(t);
+                  const celdas: Record<TrabajadorCol, React.ReactNode> = {
+                    rut: <td className="font-mono text-ink-muted">{t.rut || '—'}</td>,
+                    correo: <td className="text-ink-muted">{t.email || '—'}</td>,
+                    telefono: <td className="whitespace-nowrap text-ink-muted">{t.telefono || '—'}</td>,
+                    cargo: <td className="font-medium text-ink">{t.cargo || '—'}</td>,
+                    area: <td className="text-ink-muted">{t.area || '—'}</td>,
+                    acceso: <td onClick={(e) => e.stopPropagation()}>{celdaAcceso(linkedUser)}</td>,
+                    estado_cuenta: <td onClick={(e) => e.stopPropagation()}>{celdaEstadoCuenta(linkedUser)}</td>,
+                    calendarios: <td onClick={(e) => e.stopPropagation()}>{celdaCalendarios(linkedUser)}</td>,
+                    disponibilidad: (
+                      <td onClick={(e) => e.stopPropagation()}>
                         <div className="max-w-[170px]">
                           <Select
                             value={t.estado_disponibilidad}
-                            onChange={(e) =>
-                              void handleUpdateDisponibilidad(
-                                t.id,
-                                e.target.value as EstadoDisponibilidad
-                              )
-                            }
+                            onChange={(e) => void handleUpdateDisponibilidad(t.id, e.target.value as EstadoDisponibilidad)}
                             className="text-xs"
                           >
                             {Object.entries(DISPONIBILIDAD_LABELS).map(([estado, label]) => (
@@ -766,15 +769,24 @@ export default function RecursosHumanosPage() {
                           </Select>
                         </div>
                       </td>
+                    ),
+                  };
 
-                      {/* 6. Acción */}
-                      <td className="text-right">
-                        <Link href={`/rrhh/${t.id}`}>
-                          <Button variant="secondary" size="sm" icon={Eye}>
-                            Ver ficha
-                          </Button>
+                  return (
+                    <tr key={t.id} onClick={() => abrirFicha(t.id)} className="cursor-pointer transition-colors hover:bg-surface-muted">
+                      <td>
+                        <Link
+                          href={`/rrhh/${t.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-3 transition-colors hover:text-accent-ink"
+                        >
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-accent-soft text-accent-ink font-semibold">
+                            <UserRound size={18} aria-hidden />
+                          </div>
+                          <span className="font-semibold text-ink hover:underline">{t.nombre}</span>
                         </Link>
                       </td>
+                      {colPrefs.visibleOrder.map((k) => React.cloneElement(celdas[k] as React.ReactElement, { key: k }))}
                     </tr>
                   );
                 })}
@@ -783,76 +795,79 @@ export default function RecursosHumanosPage() {
           </div>
         </Panel>
       ) : (
-        /* VISTA DE TARJETAS (GRID) */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {filteredTrabajadores.map((t) => {
-            const linkedUser = usuarios.find(
-              (u) =>
-                u.id === t.usuario_id ||
-                (t.email && u.email?.toLowerCase() === t.email?.toLowerCase())
-            );
+            const linkedUser = usuarioDe(t);
+            const datos: { icon: typeof Mail; label: string; value: React.ReactNode }[] = [
+              { icon: IdCard, label: 'RUT', value: t.rut || '—' },
+              { icon: Mail, label: 'Correo', value: t.email || '—' },
+              { icon: Phone, label: 'Teléfono', value: t.telefono || '—' },
+              { icon: Briefcase, label: 'Cargo', value: t.cargo || '—' },
+              { icon: Briefcase, label: 'Área', value: t.area || '—' },
+              { icon: CalendarDays, label: 'Ingreso', value: t.fecha_ingreso || 'Sin fecha' },
+              {
+                icon: ShieldCheck,
+                label: 'Acceso al CRM',
+                value: linkedUser ? (
+                  <StatusBadge tone={USER_ROLE_TONE[linkedUser.rol]} icon={false}>
+                    {ROL_NOMBRE[linkedUser.rol]}
+                  </StatusBadge>
+                ) : (
+                  'Sin cuenta'
+                ),
+              },
+            ];
 
             return (
-              <Panel key={t.id} className="p-4 flex flex-col justify-between space-y-4">
-                <div className="space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-control bg-accent-soft text-accent-ink font-semibold">
-                      <UserRound size={22} aria-hidden />
-                    </div>
-                    <StatusBadge tone={DISPONIBILIDAD_TONE[t.estado_disponibilidad]}>
-                      {DISPONIBILIDAD_LABELS[t.estado_disponibilidad]}
-                    </StatusBadge>
+              <Panel
+                key={t.id}
+                className="group relative flex flex-col gap-4 p-5 transition-all duration-200 hover:-translate-y-1 hover:border-accent hover:shadow-[var(--hg-shadow-popover)] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent-soft text-accent-ink transition-transform duration-200 group-hover:scale-110 motion-reduce:transition-none">
+                    <UserRound size={24} aria-hidden />
                   </div>
-
-                  <div>
-                    <Link href={`/rrhh/${t.id}`} className="block group">
-                      <h3 className="font-semibold text-ink group-hover:underline">
-                        {t.nombre}
-                      </h3>
-                    </Link>
-                    <div className="mt-1 flex items-center gap-2">
-                      <CodeStamp title={`RUT: ${t.rut}`}>{t.rut || 'Sin RUT'}</CodeStamp>
-                      {linkedUser && (
-                        <StatusBadge tone={USER_ROLE_TONE[linkedUser.rol]} icon={false}>
-                          {ROL_NOMBRE[linkedUser.rol]}
-                        </StatusBadge>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="border-t border-line-subtle pt-3 space-y-1.5 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-ink-muted">Cargo</span>
-                      <span className="font-medium text-ink truncate max-w-[180px]">{t.cargo}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-ink-muted">Área</span>
-                      <span className="font-medium text-ink truncate max-w-[180px]">{t.area}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-ink-muted">Sueldo base</span>
-                      <span className="t-num font-semibold text-ink">
-                        ${Number(t.sueldo_base || 0).toLocaleString('es-CL')}
-                      </span>
-                    </div>
-                  </div>
+                  <StatusBadge tone={DISPONIBILIDAD_TONE[t.estado_disponibilidad]}>
+                    {DISPONIBILIDAD_LABELS[t.estado_disponibilidad]}
+                  </StatusBadge>
                 </div>
 
-                <div className="border-t border-line-subtle pt-3 flex items-center justify-between">
-                  <span className="t-caption text-ink-muted">
-                    {t.fecha_ingreso ? `Ingreso: ${t.fecha_ingreso}` : 'Sin fecha'}
-                  </span>
-                  <Link href={`/rrhh/${t.id}`}>
-                    <Button variant="subtle" size="sm" icon={Eye}>
-                      Ficha laboral
-                    </Button>
-                  </Link>
+                <Link
+                  href={`/rrhh/${t.id}`}
+                  className="block text-lg font-semibold leading-snug text-ink transition-colors after:absolute after:inset-0 after:content-[''] group-hover:text-accent-ink"
+                >
+                  {t.nombre}
+                </Link>
+
+                <dl className="space-y-2 border-t border-line-subtle pt-4 text-xs">
+                  {datos.map(({ icon: Icono, label, value }) => (
+                    <div key={label} className="flex items-center justify-between gap-3">
+                      <dt className="flex shrink-0 items-center gap-1.5 text-ink-muted">
+                        <Icono className="h-3.5 w-3.5" aria-hidden />
+                        {label}
+                      </dt>
+                      <dd className="m-0 min-w-0 truncate text-right font-medium text-ink">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+
+                <div className="mt-auto flex items-center justify-between border-t border-line-subtle pt-3 text-xs font-semibold text-ink-muted transition-colors group-hover:text-accent-ink">
+                  <span>Ver ficha</span>
+                  <ChevronRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1 motion-reduce:transition-none" aria-hidden />
                 </div>
               </Panel>
             );
           })}
         </div>
       )}
+
+      <Fab
+        label="Nuevo colaborador"
+        onClick={() => {
+          setFormError(null);
+          setShowNewWorkerModal(true);
+        }}
+      />
 
       {/* 5. DIALOG CREAR NUEVO TRABAJADOR */}
       <Dialog
@@ -970,10 +985,8 @@ export default function RecursosHumanosPage() {
                         value={newUserRole}
                         onChange={(e) => setNewUserRole(e.target.value as UserRole)}
                       >
-                        <option value="mano_obra">Mano de Obra</option>
-                        <option value="user">Ejecutivo Comercial</option>
-                        <option value="finanzas">Finanzas y Caja</option>
                         <option value="admin">Administrador</option>
+                        <option value="user">Colaborador</option>
                       </Select>
                     )}
                   </Field>
@@ -1054,12 +1067,12 @@ export default function RecursosHumanosPage() {
                 )}
               </Field>
 
-              <Field label="RUT chileno" required>
+      <Field label="RUT chileno" required={workerAccountMode === 'create'}>
                 {({ id }) => (
                   <TextInput
                     id={id}
                     type="text"
-                    required
+                    required={workerAccountMode === 'create'}
                     placeholder="16.892.341-2"
                     value={newWorker.rut}
                     onChange={(e) => setNewWorker({ ...newWorker, rut: e.target.value })}
@@ -1197,9 +1210,8 @@ export default function RecursosHumanosPage() {
 
               <Field label="Fecha de ingreso">
                 {({ id }) => (
-                  <TextInput
+                  <DateInput
                     id={id}
-                    type="date"
                     value={newWorker.fecha_ingreso}
                     onChange={(e) => setNewWorker({ ...newWorker, fecha_ingreso: e.target.value })}
                   />

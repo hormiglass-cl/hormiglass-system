@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
 import { createClient } from '../../lib/supabase/client';
+import { useClienteOpciones } from '../../lib/clientes-opciones';
+import { SearchSelect } from '../../components/ui/SearchSelect';
 import {
   Cliente,
   Cotizacion,
@@ -78,7 +80,9 @@ import { CodeStamp, StatusBadge, Button, Dialog, Field, TextInput, Select } from
 import { KanbanCard } from '../../components/ventas/KanbanCard';
 import { useConfirm, useToast } from '../../components/ui/feedback';
 import { useBreadcrumb } from '../../lib/context/BreadcrumbContext';
+import { useAjuste } from '../../lib/ajustes';
 import { swrCache } from '../../lib/cache/swr-cache';
+import { DateInput, DateTimeInput } from '../../components/ui/FormControls';
 
 // Convierte el texto de un recordatorio en pares [etiqueta, valor].
 // Soporta el formato actual (una línea por campo) y el anterior ("⏰ ... · fecha · Resp: ...").
@@ -130,6 +134,9 @@ export default function PipelineVentasPage() {
   const [opEventosProdLog, setOpEventosProdLog] = useState<EventoProduccionLogistica[]>([]);
   const [opVisitasList, setOpVisitasList] = useState<VisitaTerreno[]>([]);
   const { setCustomTitle, setOnBack } = useBreadcrumb();
+  const origenes = useAjuste('origenes').valor.lista;
+  const etapasNombres = useAjuste('pipeline_etapas').valor.nombres;
+  const tiposVenta = useAjuste('tipos_venta').valor.lista;
   const [oportunidades, setOportunidades] = useState<OportunidadVenta[]>(() => swrCache.get('ventas:oportunidades') || []);
   const [deliveryAccreditation, setDeliveryAccreditation] = useState<Record<string, boolean>>(() => swrCache.get('ventas:accreditation') || {});
   const [allCotizaciones, setAllCotizaciones] = useState<Cotizacion[]>(() => swrCache.get('ventas:allCotizaciones') || []);
@@ -715,9 +722,9 @@ export default function PipelineVentasPage() {
   const [previewCotizacion, setPreviewCotizacion] = useState<Cotizacion | null>(null);
 
   // Form para Nueva Oportunidad
-  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [nuevoTitulo, setNuevoTitulo] = useState('');
   const [nuevoClienteId, setNuevoClienteId] = useState('');
+  const clientesSel = useClienteOpciones(nuevoClienteId, (c) => c.nombre);
   const [nuevaFechaLimite, setNuevaFechaLimite] = useState('');
   const [nuevoTipoVenta, setNuevoTipoVenta] = useState('Instalación');
   const [nuevoOrigen, setNuevoOrigen] = useState('');
@@ -782,24 +789,17 @@ export default function PipelineVentasPage() {
     let ignore = false;
     async function fetchPipelineData() {
       try {
-        const [opRes, cliRes, usrRes, cotRes, actRes] = await Promise.all([
+        const [opRes, usrRes, cotRes, actRes] = await Promise.all([
           supabase
             .from('oportunidades')
             .select('*, cliente:clientes(*)')
             .order('created_at', { ascending: false }),
-          supabase.from('clientes').select('*'),
           supabase.from('usuarios').select('*').eq('activo', true).order('nombre', { ascending: true }),
           supabase.from('cotizaciones').select('*, cliente:clientes(*), items:cotizacion_items(*)'),
           supabase.from('actividades_op').select('*').order('created_at', { ascending: true }),
         ]);
 
         if (!ignore) {
-          if (cliRes.data) {
-            setClientes(cliRes.data as Cliente[]);
-          } else {
-            setClientes([]);
-          }
-
           const loadedUsers = (usrRes.data || usersList || []) as Usuario[];
           setUsuariosApp(loadedUsers);
           setPersonalTerrenoList(loadedUsers);
@@ -878,7 +878,6 @@ export default function PipelineVentasPage() {
         if (!ignore) {
           setOportunidades([]);
           setDeliveryAccreditation({});
-          setClientes([]);
           setUsuariosApp([]);
           setAllCotizaciones([]);
           setLoading(false);
@@ -994,18 +993,8 @@ export default function PipelineVentasPage() {
           table: 'clientes',
         },
         (payload: RealtimeChange<Cliente>) => {
-          if (payload.new) {
-            const updatedClient = payload.new as Cliente;
-            setClientes((prev) => {
-              const exists = prev.some((c) => c.id === updatedClient.id);
-              if (exists) {
-                return prev.map((c) => (c.id === updatedClient.id ? { ...c, ...updatedClient } : c));
-              }
-              return [updatedClient, ...prev];
-            });
-          } else {
-            fetchPipelineData();
-          }
+          // Solo se recarga si se elimina un cliente; altas y ediciones no afectan al pipeline.
+          if (!payload.new) fetchPipelineData();
         }
       )
       .on(
@@ -1104,7 +1093,7 @@ export default function PipelineVentasPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- recarga solo al cambiar la oportunidad seleccionada
   }, [selectedOp?.id, selectedOp?.cotizacion_actual_id, allCotizaciones.length]);
 
-  const SECCIONES_PIPELINE = [
+  const SECCIONES_BASE = [
     {
       id: 'ventas',
       nombre: 'Comercial y Ventas',
@@ -1152,6 +1141,10 @@ export default function PipelineVentasPage() {
       ],
     },
   ];
+  const SECCIONES_PIPELINE = SECCIONES_BASE.map((sec) => ({
+    ...sec,
+    etapas: sec.etapas.map((e) => ({ ...e, label: etapasNombres[e.id]?.trim() || e.label })),
+  }));
   const getProdLogTipoLabel = (tipo: string) => {
     if (tipo === 'obra') return 'Obra';
     if (tipo === 'produccion') return 'Producción';
@@ -2752,8 +2745,8 @@ export default function PipelineVentasPage() {
                             <Disc className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
                             <span>Estado</span>
                           </div>
-                          <div className="relative min-w-0 flex-1 h-8">
-                            <select
+                          <div className="relative h-8 w-[408px] max-w-full">
+                            <Select
                               value={selectedOp.estado_pipeline}
                               onChange={async (e) => {
                                 const newStage = e.target.value as EstadoPipeline;
@@ -2764,7 +2757,7 @@ export default function PipelineVentasPage() {
                               {pipelineStates.map((etapa) => (
                                 <option key={etapa.id} value={etapa.id}>{etapa.label}</option>
                               ))}
-                            </select>
+                            </Select>
                             <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                           </div>
                         </div>
@@ -2775,8 +2768,8 @@ export default function PipelineVentasPage() {
                             <User className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
                             <span>Vendedor</span>
                           </div>
-                          <div className="relative min-w-0 flex-1 h-8">
-                            <select
+                          <div className="relative h-8 w-[408px] max-w-full">
+                            <Select
                               value={selectedOp.asignado_a || ''}
                               onChange={async (e) => {
                                 const newUserId = e.target.value || null;
@@ -2794,7 +2787,7 @@ export default function PipelineVentasPage() {
                                   {u.nombre}
                                 </option>
                               ))}
-                            </select>
+                            </Select>
                             <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                           </div>
                         </div>
@@ -2805,28 +2798,28 @@ export default function PipelineVentasPage() {
                             <Calendar className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
                             <span>Fechas</span>
                           </div>
-                          <div className="w-full sm:w-auto min-w-0 flex-1 h-8 bg-surface border border-transparent hover:border-line rounded-md px-2.5 flex items-center justify-between text-xs text-ink">
-                            <input
-                              type="date"
+                          <div className="flex w-[408px] max-w-full min-w-0 items-center gap-1.5">
+                            <DateInput
                               value={selectedOp.fecha_inicio || ''}
                               onChange={async (e) => {
                                 const newDate = e.target.value;
                                 updateOportunidadField(selectedOp.id, 'fecha_inicio', newDate);
                                 await addOportunidadActividad(selectedOp.id, `Fecha de inicio actualizada a ${newDate} desde el detalle.`);
                               }}
-                              className="bg-transparent text-ink t-num font-medium text-xs w-[95px] min-w-0 focus:outline-none cursor-pointer [color-scheme:light]"
+                              className="w-[190px]"
+                              placeholder="Elegir fecha de inicio"
                               title="Fecha de inicio"
                             />
-                            <span className="text-ink-subtle font-semibold">→</span>
-                            <input
-                              type="date"
+                            <span className="text-ink-subtle">→</span>
+                            <DateInput
                               value={selectedOp.fecha_limite || ''}
                               onChange={async (e) => {
                                 const newDate = e.target.value;
                                 updateOportunidadField(selectedOp.id, 'fecha_limite', newDate);
                                 await addOportunidadActividad(selectedOp.id, `Fecha límite actualizada a ${newDate} desde el detalle.`);
                               }}
-                              className="bg-transparent text-warning-ink t-num font-semibold text-xs w-[95px] min-w-0 focus:outline-none cursor-pointer [color-scheme:light]"
+                              className="w-[190px]"
+                              placeholder="Elegir fecha de finalización"
                               title="Fecha límite"
                             />
                           </div>
@@ -2838,13 +2831,13 @@ export default function PipelineVentasPage() {
                             <Flag className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
                             <span>Prioridad</span>
                           </div>
-                          <div className="relative min-w-0 flex-1 h-8">
+                          <div className="relative h-8 w-[408px] max-w-full">
                             <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center">
                               <Flag className={`w-3.5 h-3.5 ${
                                 selectedOp.prioridad === 'urgente' ? 'text-danger' : selectedOp.prioridad === 'alta' ? 'text-warning-ink' : selectedOp.prioridad === 'normal' ? 'text-info' : 'text-ink-subtle'
                               }`} />
                             </div>
-                            <select
+                            <Select
                               value={selectedOp.prioridad || ''}
                               onChange={async (e) => {
                                 const newPrio = e.target.value as 'normal' | 'alta' | 'urgente';
@@ -2859,7 +2852,7 @@ export default function PipelineVentasPage() {
                               <option value="normal">Normal</option>
                               <option value="alta">Alta</option>
                               <option value="urgente">Urgente</option>
-                            </select>
+                            </Select>
                             <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                           </div>
                         </div>
@@ -2870,8 +2863,8 @@ export default function PipelineVentasPage() {
                             <Compass className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
                             <span>Origen</span>
                           </div>
-                          <div className="relative min-w-0 flex-1 h-8">
-                            <select
+                          <div className="relative h-8 w-[408px] max-w-full">
+                            <Select
                               value={selectedOp.origen || ''}
                               onChange={async (e) => {
                                 const origen = e.target.value;
@@ -2886,17 +2879,13 @@ export default function PipelineVentasPage() {
                               }`}
                             >
                               <option value="">Sin origen</option>
-                              <option value="WhatsApp">WhatsApp</option>
-                              <option value="Webmail">Webmail</option>
-                              <option value="Llamado">Llamado</option>
-                              <option value="Visita presencial">Visita presencial</option>
-                              <option value="Referido">Referido</option>
-                              <option value="Cliente recurrente">Cliente recurrente</option>
-                              <option value="Manual">Manual</option>
-                              {selectedOp.origen && !['WhatsApp', 'Webmail', 'Llamado', 'Visita presencial', 'Referido', 'Cliente recurrente', 'Manual'].includes(selectedOp.origen) && (
+                              {origenes.map((o) => (
+                                <option key={o} value={o}>{o}</option>
+                              ))}
+                              {selectedOp.origen && !origenes.includes(selectedOp.origen) && (
                                 <option value={selectedOp.origen}>{selectedOp.origen}</option>
                               )}
-                            </select>
+                            </Select>
                             <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                           </div>
                         </div>
@@ -2907,8 +2896,8 @@ export default function PipelineVentasPage() {
                             <Tag className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
                             <span>Tipo de venta</span>
                           </div>
-                          <div className="relative min-w-0 flex-1 h-8">
-                            <select
+                          <div className="relative h-8 w-[408px] max-w-full">
+                            <Select
                               value={selectedOp.tipo_venta || 'Instalación'}
                               onChange={async (e) => {
                                 const newTipo = e.target.value;
@@ -2917,10 +2906,13 @@ export default function PipelineVentasPage() {
                               }}
                               className="w-full h-full appearance-none bg-transparent hover:bg-surface-muted border border-transparent hover:border-line rounded-md pl-3 pr-8 text-xs font-semibold text-ink focus:outline-none focus:border-accent transition cursor-pointer"
                             >
-                              <option value="Instalación">Instalación</option>
-                              <option value="Suministro">Suministro</option>
-                              <option value="Reventa de Material">Reventa de Material</option>
-                            </select>
+                              {tiposVenta.map((t) => (
+                                <option key={t} value={t}>{t}</option>
+                              ))}
+                              {selectedOp.tipo_venta && !tiposVenta.includes(selectedOp.tipo_venta) && (
+                                <option value={selectedOp.tipo_venta}>{selectedOp.tipo_venta}</option>
+                              )}
+                            </Select>
                             <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                           </div>
                         </div>
@@ -2931,8 +2923,8 @@ export default function PipelineVentasPage() {
                             <Layers className="w-3.5 h-3.5 text-ink-subtle shrink-0" />
                             <span>Requerimiento</span>
                           </div>
-                          <div className="relative min-w-0 flex-1 h-8">
-                            <select
+                          <div className="relative h-8 w-[408px] max-w-full">
+                            <Select
                               value={selectedOp.modalidad_requerimiento || 'instalacion'}
                               onChange={async (e) => {
                                 const value = e.target.value as 'solo_material' | 'instalacion';
@@ -2946,7 +2938,7 @@ export default function PipelineVentasPage() {
                             >
                               <option value="instalacion">Instalación</option>
                               <option value="solo_material">Sólo material</option>
-                            </select>
+                            </Select>
                             <ChevronDown className="w-3.5 h-3.5 text-ink-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                           </div>
                         </div>
@@ -2994,7 +2986,7 @@ export default function PipelineVentasPage() {
                         </Field>
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                           <Field label="Fecha" required>
-                            {(f) => <TextInput {...f} type="date" className="t-num" value={newVisitaFecha} onChange={(e) => setNewVisitaFecha(e.target.value)} />}
+                            {(f) => <DateInput {...f} className="t-num" value={newVisitaFecha} onChange={(e) => setNewVisitaFecha(e.target.value)} />}
                           </Field>
                           <Field label="Hora">
                             {(f) => <TextInput {...f} type="time" className="t-num" value={newVisitaHora} onChange={(e) => setNewVisitaHora(e.target.value)} />}
@@ -3326,7 +3318,7 @@ export default function PipelineVentasPage() {
                                 </div>
 
                                 <div className="flex items-center gap-2">
-                                  <select
+                                  <Select
                                     value={cot.estado}
                                     onChange={async (e) => {
                                       try {
@@ -3341,7 +3333,7 @@ export default function PipelineVentasPage() {
                                     <option value="enviada">Enviada</option>
                                     <option value="aprobada">Aprobada</option>
                                     <option value="rechazada">Rechazada</option>
-                                  </select>
+                                  </Select>
                                   <button
                                     type="button"
                                     onClick={() => setPreviewCotizacion(cot)}
@@ -3606,7 +3598,7 @@ export default function PipelineVentasPage() {
                                 )}
                               </Field>
                               <Field label="Fecha de producción" required>
-                                {(f) => <TextInput {...f} type="date" className="t-num" value={newProdFecha} onChange={(e) => setNewProdFecha(e.target.value)} />}
+                                {(f) => <DateInput {...f} className="t-num" value={newProdFecha} onChange={(e) => setNewProdFecha(e.target.value)} />}
                               </Field>
                             </div>
                             <Field label="Responsable">
@@ -3726,7 +3718,7 @@ export default function PipelineVentasPage() {
                             </Field>
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                               <Field label="Fecha" required>
-                                {(f) => <TextInput {...f} type="date" className="t-num" value={newProdLogFecha} onChange={(e) => setNewProdLogFecha(e.target.value)} />}
+                                {(f) => <DateInput {...f} className="t-num" value={newProdLogFecha} onChange={(e) => setNewProdLogFecha(e.target.value)} />}
                               </Field>
                               <Field label="Hora">
                                 {(f) => <TextInput {...f} type="time" className="t-num" value={newProdLogHora} onChange={(e) => setNewProdLogHora(e.target.value)} />}
@@ -4087,8 +4079,8 @@ export default function PipelineVentasPage() {
                       </label>
                       <label className="t-caption">
                         Fecha y hora
-                        <input
-                          type="datetime-local"
+                        <DateTimeInput
+                         
                           value={seguimientoDraft.fecha}
                           onChange={(e) => setSeguimientoDraft((d) => ({ ...d, fecha: e.target.value }))}
                           className="mt-0.5 block w-full bg-surface border border-line rounded-md px-3 py-2 text-xs text-ink t-num focus:outline-none focus:border-warning/30 [color-scheme:light]"
@@ -4096,14 +4088,14 @@ export default function PipelineVentasPage() {
                       </label>
                       <label className="t-caption">
                         Responsable
-                        <select
+                        <Select
                           value={seguimientoDraft.responsable}
                           onChange={(e) => setSeguimientoDraft((d) => ({ ...d, responsable: e.target.value }))}
                           className="mt-0.5 block w-full bg-surface border border-line rounded-md px-3 py-2 text-xs text-ink focus:outline-none focus:border-warning/30"
                         >
                           <option value="">Sin responsable</option>
                           {usuariosApp.map((user) => <option key={user.id} value={user.id}>{user.nombre}</option>)}
-                        </select>
+                        </Select>
                       </label>
                       <label className="sm:col-span-2 t-caption">
                         Resultado del último contacto (opcional)
@@ -4264,7 +4256,7 @@ export default function PipelineVentasPage() {
                         }}
                         className={`px-2.5 py-1 rounded-md transition flex items-center gap-1 text-xs font-semibold ${
                           isReclamoMode
-                            ? 'bg-danger-soft text-white shadow-xs'
+                            ? 'bg-danger text-white shadow-xs'
                             : 'text-ink-muted hover:text-danger hover:bg-danger-soft'
                         }`}
                         title="Marcar este mensaje como Reclamo / Postventa"
@@ -4363,7 +4355,7 @@ export default function PipelineVentasPage() {
 
       {/* Modal Crear Nueva Oportunidad */}
       {showNewOpModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-surface border border-line rounded-lg max-w-lg w-full p-6 space-y-5 shadow-sm text-ink">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
@@ -4390,70 +4382,62 @@ export default function PipelineVentasPage() {
 
               <div>
                 <label className="block font-bold text-ink mb-1">Cliente Asociado *</label>
-                <select
-                  required
+                <SearchSelect
                   value={nuevoClienteId}
-                  onChange={(e) => setNuevoClienteId(e.target.value)}
-                  className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent"
-                >
-                  <option value="">-- Seleccionar Cliente --</option>
-                  {clientes.map((cli) => (
-                    <option key={cli.id} value={cli.id}>
-                      {cli.nombre} — RUT: {cli.rut}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setNuevoClienteId}
+                  options={clientesSel.opciones}
+                  onSearch={clientesSel.onSearch}
+                  placeholder="-- Seleccionar Cliente --"
+                  searchPlaceholder="Buscar por nombre o RUT..."
+                  menuMinWidth={320}
+                  ariaLabel="Cliente asociado"
+                />
               </div>
 
               <div>
                 <label className="block font-bold text-ink mb-1">Tipo de Venta *</label>
-                <select
+                <Select
                   value={nuevoTipoVenta}
                   onChange={(e) => setNuevoTipoVenta(e.target.value)}
                   className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink font-bold focus:outline-none focus:border-accent"
                 >
-                  <option value="Instalación">Instalación (Montaje y Trabajo en Obra)</option>
-                  <option value="Suministro">Suministro (Producción Directa)</option>
-                  <option value="Reventa de Material">Reventa de Material (Distribución)</option>
-                </select>
+                  {tiposVenta.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </Select>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-ink mb-1">Origen *</label>
-                  <select
+                  <Select
                     value={nuevoOrigen}
                     onChange={(e) => setNuevoOrigen(e.target.value)}
                     className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink font-bold focus:outline-none focus:border-accent cursor-pointer"
                   >
                     <option value="">-- Seleccionar Origen --</option>
-                    <option value="WhatsApp">WhatsApp</option>
-                    <option value="Webmail">Webmail</option>
-                    <option value="Llamado">Llamado</option>
-                    <option value="Visita presencial">Visita presencial</option>
-                    <option value="Referido">Referido</option>
-                    <option value="Cliente recurrente">Cliente recurrente</option>
-                    <option value="Manual">Manual</option>
-                  </select>
+                    {origenes.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </Select>
                 </div>
 
                 <div>
                   <label className="block font-bold text-ink mb-1">Sólo material o instalación</label>
-                  <select
+                  <Select
                     value={nuevaModalidadRequerimiento}
                     onChange={(e) => setNuevaModalidadRequerimiento(e.target.value as 'solo_material' | 'instalacion')}
                     className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink font-bold focus:outline-none focus:border-accent"
                   >
                     <option value="solo_material">Sólo material</option>
                     <option value="instalacion">Instalación</option>
-                  </select>
+                  </Select>
                 </div>
               </div>
 
               <div>
                 <label className="block font-bold text-ink mb-1">Fecha Límite de Término del Trabajo</label>
-                <input
-                  type="date"
+                <DateInput
                   value={nuevaFechaLimite}
                   onChange={(e) => setNuevaFechaLimite(e.target.value)}
                   className="w-full bg-surface border border-line rounded-md px-3 py-2 text-ink focus:outline-none focus:border-accent"
@@ -4481,7 +4465,7 @@ export default function PipelineVentasPage() {
       )}
       {/* Modal Confirmación Eliminación de Oportunidad */}
       {opToDelete && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 ">
           <div className="bg-surface border border-line rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-ink">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="text-base font-semibold text-danger flex items-center gap-2">
@@ -4515,7 +4499,7 @@ export default function PipelineVentasPage() {
                 type="button"
                 onClick={handleDeleteOportunidad}
                 disabled={deletingOp}
-                className="px-5 py-2 bg-danger-soft hover:bg-danger-soft disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-md transition shadow-sm flex items-center gap-1.5"
+                className="px-5 py-2 bg-danger hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-md transition shadow-sm flex items-center gap-1.5"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>{deletingOp ? 'Eliminando...' : 'Eliminar Oportunidad'}</span>
@@ -4527,7 +4511,7 @@ export default function PipelineVentasPage() {
 
       {/* Modal Confirmación Eliminación de Cotización desde Modal */}
       {cotToDeleteInModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 ">
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 ">
           <div className="bg-surface border border-line rounded-lg max-w-md w-full p-6 space-y-4 shadow-sm text-ink">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="text-base font-semibold text-danger flex items-center gap-2">
@@ -4559,7 +4543,7 @@ export default function PipelineVentasPage() {
               <button
                 type="button"
                 onClick={handleDeleteCotizacionInModal}
-                className="px-5 py-2 bg-danger-soft hover:bg-danger-soft text-white font-semibold rounded-md transition shadow-sm flex items-center gap-1.5"
+                className="px-5 py-2 bg-danger hover:opacity-90 text-white font-semibold rounded-md transition shadow-sm flex items-center gap-1.5"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Eliminar Cotización</span>
@@ -4572,7 +4556,7 @@ export default function PipelineVentasPage() {
       {/* Modal de Advertencia por Abono Mínimo Requerido (50% o 100%) */}
       {abonoWarningModal && (
         <div
-          className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50 "
+          className="fixed inset-0 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 "
           onClick={() => setAbonoWarningModal(null)}
         >
           <div

@@ -25,12 +25,12 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
 
   if (pathname === '/login' || pathname.startsWith('/auth')) return null;
 
-  const active = findActiveItem(pathname, searchParams.get('empresa'), currentUser?.rol);
+  const active = findActiveItem(pathname, currentUser?.rol);
   const crumbs: { label: string; href?: string; onAction?: () => void }[] = [];
   const desdeOp = pathname.startsWith('/clientes/') ? searchParams.get('desde') : null;
   if (desdeOp) {
     // Se llegó a la tarjeta del cliente desde una oportunidad: el menú permite volver al pipeline o a la oportunidad.
-    const ventas = findActiveItem('/ventas', null, currentUser?.rol);
+    const ventas = findActiveItem('/ventas', currentUser?.rol);
     if (ventas) crumbs.push({ label: ventas.group.label });
     crumbs.push({ label: 'Pipeline de ventas', href: '/ventas' });
     crumbs.push({ label: searchParams.get('desdeTitulo') || 'Oportunidad', href: `/ventas?oportunidad=${encodeURIComponent(desdeOp)}` });

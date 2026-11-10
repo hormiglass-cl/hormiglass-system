@@ -22,6 +22,10 @@ export interface MetricCardProps {
     label?: string;
   };
   onClick?: () => void;
+  /** Resalta la tarjeta (por ejemplo, cuando actúa como filtro activo). */
+  active?: boolean;
+  /** Versión reducida para filas de KPIs. */
+  compact?: boolean;
   className?: string;
 }
 
@@ -34,6 +38,8 @@ export function MetricCard({
   tone,
   progress,
   onClick,
+  active,
+  compact,
   className,
 }: MetricCardProps) {
   const isClickable = !!onClick;
@@ -51,25 +57,28 @@ export function MetricCard({
       onClick={onClick}
       role={isClickable ? 'button' : undefined}
       tabIndex={isClickable ? 0 : undefined}
+      aria-pressed={isClickable ? !!active : undefined}
+      onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } } : undefined}
       className={clsx(
-        'rounded-[20px] p-5 transition',
+        compact ? 'rounded-2xl p-3 transition' : 'rounded-[20px] p-5 transition',
         tint,
         isClickable && 'cursor-pointer hover:shadow-sm',
+        active && 'ring-2 ring-accent',
         className
       )}
     >
       {Icon && (
-        <span className="grid h-10 w-10 place-items-center rounded-xl bg-ink text-surface">
-          <Icon size={18} aria-hidden />
+        <span className={clsx('grid place-items-center bg-ink text-surface', compact ? 'h-7 w-7 rounded-lg' : 'h-10 w-10 rounded-xl')}>
+          <Icon size={compact ? 14 : 18} aria-hidden />
         </span>
       )}
 
-      <div className="mt-4 flex items-end justify-between gap-3">
+      <div className={clsx(compact ? 'mt-2.5' : 'mt-4', 'flex items-end justify-between gap-3')}>
         <div className="min-w-0">
-          <div className="truncate text-[28px] font-bold leading-none tracking-tight text-ink t-num">
+          <div className={clsx('truncate font-bold leading-none tracking-tight text-ink t-num', compact ? 'text-2xl' : 'text-[28px]')}>
             {value}
           </div>
-          <span className="mt-2 block truncate text-xs font-semibold uppercase tracking-wide text-ink-muted">{title}</span>
+          <span className={clsx(compact ? 'mt-1.5' : 'mt-2', 'block truncate text-xs font-semibold uppercase tracking-wide text-ink-muted')}>{title}</span>
         </div>
 
         {change && (
