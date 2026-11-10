@@ -248,7 +248,7 @@ body {
 
 /* Transiciones fluidas en la navegación y vistas del CRM */
 .hg-page-transition {
-  animation: hgFadeSlide 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: hgFadeSlide 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes hgFadeSlide {
@@ -264,7 +264,7 @@ body {
 
 /* Transición suave para listas desplegables del menú lateral */
 .hg-accordion-enter {
-  animation: hgAccordion 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: hgAccordion 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes hgAccordion {
