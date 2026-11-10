@@ -47,7 +47,7 @@ test('thread labels every author and keeps the file placeholder and delivery wit
   assert.ok(!html.includes('<a '));
   const assistant = render(ChatThread, { messages: repository.get('demo-2').messages });
   assert.ok(assistant.includes('>Asistente<'));
-  assert.match(assistant, /bg-accent-line[^"]*"[^>]*>Sí, cuéntame/, 'Assistant bubble uses the accent line tone');
+  assert.match(assistant, /bg-accent-soft[^"]*"[^>]*>Sí, cuéntame/, 'Assistant bubble uses the soft accent tone');
   const events = render(ChatThread, { messages: repository.get('demo-1').messages });
   assert.match(events, /rounded-full[^"]*bg-info-soft[^"]*text-info[^"]*">Derivado a Ventas/, 'Handoff events are info pills');
 });
@@ -104,7 +104,7 @@ test('opportunity integration preserves Activity by default and never invents ca
 test('header is an accent bar with identity, optional customer card toggle and the Opciones menu', () => {
   const chat = repository.get('demo-1');
   const html = render(ChatHeader, { chat, onAction: () => {}, onHistory: () => {} });
-  assert.match(attrsOf(html, /<header[^>]*>/), /bg-accent[^"]*text-on-accent/);
+  assert.match(attrsOf(html, /<header[^>]*>/), /bg-accent-soft[^"]*text-ink/);
   for (const label of ['<h2', 'Camila Rojas', '+56 9 5555 0101', 'DEMO-6056', '>Opciones<', 'aria-label="Opciones del chat"']) assert.ok(html.includes(label), label);
   for (const absent of ['Tomar chat', 'Tomar conversación', 'Ficha del cliente', 'Esperando vendedor']) assert.ok(!html.includes(absent), absent);
   for (const detailsOpen of [false, true]) {
@@ -135,12 +135,12 @@ test('status banner states the next step for every conversation state', () => {
   assert.ok(text(render(ChatStatusBanner, { chat: fresh, now, onAction: () => {} })).includes('Camila te espera hace 1 min.'), 'At least one minute');
 });
 
-test('avatars use strong token backgrounds with white initials chosen by name', () => {
+test('avatars use soft pastel token backgrounds with matching initials chosen by name', () => {
   const tones = new Set();
   for (const name of ['Camila Rojas', 'Diego Muñoz', 'Valentina Soto', 'Pablo Torres', 'Ana', 'Bo', 'Cy', 'Di']) {
     const html = render(ContactAvatar, { name });
-    assert.ok(html.includes('text-surface'), name);
-    tones.add(html.match(/bg-(success|info|violet|accent-ink|warning)\b/)?.[1]);
+    assert.match(html, /bg-(success|info|violet|accent|warning)-soft text-(success|info|violet|accent-ink|warning)\b/, name);
+    tones.add(html.match(/bg-(success|info|violet|accent|warning)-soft/)?.[1]);
     assert.equal(html, render(ContactAvatar, { name }), 'Stable per name');
   }
   assert.ok(!tones.has(undefined));

@@ -62,7 +62,7 @@ async function bundleFixture() {
 
 const { createMockRepository } = await import('../lib/whatsapp/repository.ts');
 
-test('hydrated customer card shows night header, identity, rows, captured chips, summary toggle and close action', { timeout: 40000 }, async t => {
+test('hydrated customer card shows soft header, identity, rows, captured chips, summary toggle and close action', { timeout: 40000 }, async t => {
   const script = await bundleFixture();
   const globals = path.resolve(import.meta.dirname, '../app/globals.css');
   const css = (await require('postcss')([require('@tailwindcss/postcss')()]).process(readFileSync(globals, 'utf8'), { from: globals })).css.replace(/@font-face\s*\{[^}]*\}/g, '');
@@ -126,8 +126,8 @@ test('hydrated customer card shows night header, identity, rows, captured chips,
   }
   console.log(JSON.stringify({ measurements, errors, external }));
   for (const m of measurements) {
-    assert.equal(m.header.background, 'rgb(29, 28, 27)', 'Night header bar');
-    assert.equal(m.header.color, 'rgb(255, 255, 255)');
+    assert.equal(m.header.background, 'rgb(238, 237, 232)', 'Soft muted header bar');
+    assert.equal(m.header.color, 'rgb(54, 54, 54)');
     assert.equal(m.header.height, m.listHeader, 'Card and list header bars share their height');
     assert.equal(m.closeLabel, 'Cerrar ficha del cliente');
     assert.ok(m.close.width >= 40 && m.close.height >= 40, 'Close button is a 40px target');
@@ -142,7 +142,7 @@ test('hydrated customer card shows night header, identity, rows, captured chips,
     assert.equal(m.chip.background, 'rgb(234, 241, 250)');
     assert.equal(m.chip.color, 'rgb(44, 90, 148)');
     assert.ok(m.chip.radius >= 10, 'Captured values are pill chips');
-    assert.equal(m.open.background, 'rgb(247, 147, 31)', 'Accent pill action');
+    assert.equal(m.open.background, 'rgb(255, 243, 230)', 'Soft accent pill action');
     assert.ok(m.open.radius >= 20 && m.open.height >= 40);
     assert.equal(m.bodyOverflow, 'auto');
     if (m.height === 300) assert.ok(m.scrollHeight > m.clientHeight, 'Short cards keep scrollable content');

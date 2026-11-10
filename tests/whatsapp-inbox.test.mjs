@@ -123,11 +123,11 @@ test('empty list keeps the "Sin conversaciones" empty state', () => {
   assert.ok(list({ chats: [] }).includes('Sin conversaciones'));
 });
 
-test('customer card renders the night header, identity, rows, captured chips and summary toggle', () => {
+test('customer card renders the soft header, identity, rows, captured chips and summary toggle', () => {
   const chat = createMockRepository(NOW).get('demo-1');
   const html = render(ConversationDetails, { chat });
   assert.match(html, /<h2[^>]*>Ficha del cliente<\/h2>/);
-  assert.match(html, /bg-night[^"]*text-night-ink|text-night-ink[^"]*bg-night/);
+  assert.match(html, /bg-surface-muted[^"]*text-ink|text-ink[^"]*bg-surface-muted/);
   assert.ok(!html.includes('Cerrar ficha del cliente'), 'No close button without onClose');
   assert.ok(html.includes('bg-success-soft'));
   for (const value of [chat.contact.name, chat.contact.company, 'Teléfono', chat.contact.phone, 'Oportunidad', chat.opportunity.code, 'Demo · ficha sin vínculo real']) assert.ok(text(html).includes(value), value);

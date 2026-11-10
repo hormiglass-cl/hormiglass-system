@@ -134,10 +134,10 @@ export function ConversationDetails({ chat, onClose }: { chat: Conversation; onC
   const [showSummary, setShowSummary] = useState(false);
   const id = useId();
   return <section aria-labelledby={`${id}-title`} className="flex h-full min-h-0 min-w-0 flex-col bg-surface">
-    <div className="flex h-15 shrink-0 items-center justify-between gap-2 bg-night pl-4 pr-2 text-night-ink">
+    <div className="flex h-15 shrink-0 items-center justify-between gap-2 border-b border-line-subtle bg-surface-muted pl-4 pr-2 text-ink">
       <h2 id={`${id}-title`} className="truncate text-base font-semibold">Ficha del cliente</h2>
       {onClose && <button type="button" aria-label="Cerrar ficha del cliente" onClick={onClose}
-        className="grid size-10 shrink-0 cursor-pointer place-items-center rounded-full text-night-ink transition-colors hover:bg-night-top focus-visible:outline-2 focus-visible:outline-night-link">
+        className="grid size-10 shrink-0 cursor-pointer place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline-2 focus-visible:outline-accent">
         <X size={18} aria-hidden />
       </button>}
     </div>
@@ -158,7 +158,7 @@ export function ConversationDetails({ chat, onClose }: { chat: Conversation; onC
           <ul className="flex flex-wrap gap-1.5">{chat.opportunity.captured.map(value => <li key={value} className="rounded-full border border-info-line bg-info-soft px-2.5 py-1 text-[13px] leading-[1.125rem] text-info">{value}</li>)}</ul>
         </section>
         <button type="button" aria-expanded={showSummary} onClick={() => setShowSummary(value => !value)}
-          className="h-10 w-full cursor-pointer rounded-full bg-accent px-4 font-semibold text-on-accent transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">Abrir oportunidad</button>
+          className="h-10 w-full cursor-pointer rounded-full border border-accent-line bg-accent-soft px-4 font-semibold text-accent-ink transition-colors hover:bg-accent-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">Abrir oportunidad</button>
         {showSummary && <section className="hg-panel-muted space-y-2 p-3" aria-label="Resumen de oportunidad demo"><h3 className="t-section">Demo · {chat.opportunity.code}</h3><p>{chat.opportunity.title}</p><p className="t-caption">Origen: WhatsApp</p><h4 className="hg-overline pt-1">Datos capturados por el asistente</h4><ul className="list-disc space-y-1 pl-4">{chat.opportunity.captured.map(value => <li key={value}>{value}</li>)}</ul><p className="t-caption">Resumen en memoria. No corresponde a una venta del CRM.</p></section>}
         <p className="t-micro text-center text-ink-muted">Demo · ficha sin vínculo real</p>
       </div>

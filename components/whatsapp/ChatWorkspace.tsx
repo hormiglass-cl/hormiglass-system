@@ -35,7 +35,7 @@ function ConversationWorkspace({ conversationId, detailsOpen, onToggleDetails }:
     <ChatStatusBanner chat={chat} now={now} onAction={onAction} />
     {error && <p role="alert" className="border-b border-danger-line bg-danger-soft px-4 py-2.5 text-sm text-danger">{error}</p>}
     {history ? <section className="min-h-0 flex-1 overflow-y-auto bg-surface-muted" aria-label="Historial del sistema"><div className="flex items-center justify-between gap-2 border-b border-line-subtle bg-surface px-4 py-2.5"><h3 className="t-section">Historial de eventos</h3><Button size="sm" icon={ArrowLeft} onClick={() => setHistory(false)}>Volver al chat</Button></div>{chat.messages.some(message => message.kind === 'event') ? <ChatThread messages={chat.messages.filter(message => message.kind === 'event')} /> : <p className="t-caption p-4">Aún no hay eventos en esta conversación.</p>}</section>
-      : <div className={`${styles.thread} min-h-0 flex-1 overflow-y-auto bg-accent-soft`}><ChatThread messages={chat.messages} unreadAt={selection?.id === chat.id ? selection.unreadAt : undefined} unreadCount={selection?.id === chat.id ? selection.unreadCount : 0} /></div>}
+      : <div className={`${styles.thread} min-h-0 flex-1 overflow-y-auto bg-app`}><ChatThread messages={chat.messages} unreadAt={selection?.id === chat.id ? selection.unreadAt : undefined} unreadCount={selection?.id === chat.id ? selection.unreadCount : 0} /></div>}
     <ChatComposer locked={chat.state !== 'seller' || (chat.pausedUntil ?? 0) <= now}
       onSend={text => act((repo, time) => repo.send(chat.id, text, time))}
       onCreateQuote={() => setShortcut('quote')} onSelectDatasheet={() => setShortcut('datasheet')} />

@@ -95,7 +95,7 @@ test('ChatHeader accent bar and status banner stay compact and complete at deskt
   for (const m of measurements) {
     const maxHeight = m.width === 600 ? 64 : 112;
     assert.ok(m.height <= maxHeight, `${m.state} header at ${m.width}px must be at most ${maxHeight}px, got ${m.height}px`);
-    assert.equal(m.background, 'rgb(247, 147, 31)', 'Header is the accent bar');
+    assert.equal(m.background, 'rgb(255, 243, 230)', 'Header is the soft accent bar');
     assert.equal(m.overflow, false);
     assert.deepEqual(m.clipped, []);
     assert.ok(m.minFont >= 11);

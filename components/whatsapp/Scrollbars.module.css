@@ -75,7 +75,7 @@
 
 /* Warm chat wallpaper: a subtle dotted pattern built from the accent token. */
 .thread {
-  background-image: radial-gradient(color-mix(in srgb, var(--hg-accent) 18%, transparent) 1.5px, transparent 1.5px);
+  background-image: radial-gradient(color-mix(in srgb, var(--hg-text) 7%, transparent) 1.5px, transparent 1.5px);
   background-size: 20px 20px;
 }
 

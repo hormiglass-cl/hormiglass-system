@@ -48,20 +48,21 @@ function ChatActionsMenu({ label, children }: { label: string; children: ReactNo
 }
 
 /** Translucent pill on the accent bar; the dark on-accent text keeps contrast. */
-const headerButton = 'inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-on-accent/25 px-2.5 text-[13px] font-semibold text-on-accent transition-colors hover:bg-surface/30 aria-pressed:bg-on-accent aria-pressed:text-accent';
+const headerButton = 'inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-accent-line bg-surface px-2.5 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-muted aria-pressed:border-accent aria-pressed:bg-accent-line aria-pressed:text-ink';
 /** Narrow chats (container query on the workspace) keep header buttons icon-only so the bar stays one row; the name stays for screen readers. */
 const headerLabel = 'sr-only @min-[560px]:not-sr-only';
 /** Narrow chats show only the key sentence of the status banner; the explanation stays for screen readers. */
 const bannerDetail = 'sr-only @min-[520px]:not-sr-only';
 
-const avatarTones = ['bg-success', 'bg-info', 'bg-violet', 'bg-accent-ink', 'bg-warning'];
+/** Soft pastel avatars (L9): tinted background with the initials in the matching ink. */
+const avatarTones = ['bg-success-soft text-success', 'bg-info-soft text-info', 'bg-violet-soft text-violet', 'bg-accent-soft text-accent-ink', 'bg-warning-soft text-warning'];
 const avatarSizes = { md: 'h-10 w-10 text-sm', lg: 'h-[46px] w-[46px] text-[15px]', xl: 'h-20 w-20 text-2xl' };
 
 /** Decorative initials avatar; the contact name is always rendered as text next to it. */
 export function ContactAvatar({ name, size = 'md' }: { name: string; size?: 'md' | 'lg' | 'xl' }) {
   const hash = [...name].reduce((total, char) => total + char.charCodeAt(0), 0);
   const initials = name.split(' ').filter(Boolean).map(part => part[0]).slice(0, 2).join('').toUpperCase();
-  return <span aria-hidden className={clsx('inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-surface select-none',
+  return <span aria-hidden className={clsx('inline-flex shrink-0 items-center justify-center rounded-full font-semibold select-none',
     avatarSizes[size], avatarTones[hash % avatarTones.length])}>{initials}</span>;
 }
 
@@ -77,7 +78,7 @@ export function ChatHeader({ chat, onAction, onHistory, detailsOpen = false, onT
 }) {
   const menu = useRef<HTMLDivElement>(null);
   const focusMenuTrigger = () => menu.current?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')?.focus();
-  return <header className="flex min-h-[60px] shrink-0 items-center gap-x-3 rounded-t-[inherit] bg-accent px-3 py-2 text-sm text-on-accent">
+  return <header className="flex min-h-[60px] shrink-0 items-center gap-x-3 rounded-t-[inherit] border-b border-accent-line bg-accent-soft px-3 py-2 text-sm text-ink">
     <div className="flex min-w-0 flex-1 items-center gap-2.5">
       <ContactAvatar name={chat.contact.name} />
       <div className="min-w-0">
@@ -144,7 +145,7 @@ const authorTones: Record<ChatMessage['kind'], string> = {
 };
 const bubbleTones: Record<ChatMessage['kind'], string> = {
   customer: 'rounded-tl-md border border-line bg-surface',
-  assistant: 'rounded-tr-md border border-accent-line bg-accent-line',
+  assistant: 'rounded-tr-md border border-accent-line bg-accent-soft',
   seller: 'rounded-tr-md border-2 border-success bg-surface',
   phone: 'rounded-tr-md border-2 border-success bg-surface',
   file: 'rounded-tr-md border-2 border-success bg-surface',
