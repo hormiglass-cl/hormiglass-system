@@ -1,6 +1,6 @@
--- Database rules for lost opportunities (migration 20261111120000_oportunidad_perdida).
+-- Database rules for lost opportunities (migrations 20261111120000 and 20261111130000).
 -- Run against a DEV database only. Every change is rolled back: success ends with
--- the error "ROLLBACK_OK 12345678"; any other error names the failing rule.
+-- the error "ROLLBACK_OK 123456789"; any other error names the failing rule.
 -- Requires at least one opportunity in stage 'nueva'.
 DO $$
 DECLARE v_id uuid; r record; ok text := '';
@@ -42,6 +42,13 @@ BEGIN
   -- 8. Setting perdida_at without a reason does not mark it lost.
   UPDATE public.oportunidades SET estado_pipeline = 'nueva', perdida_at = now() WHERE id = v_id;
   IF (SELECT perdida_at FROM public.oportunidades WHERE id = v_id) IS NOT NULL THEN RAISE EXCEPTION 'FAIL8'; END IF; ok := ok || '8';
+
+  -- 9. An insert cannot choose the lost date (migration 20261111130000).
+  INSERT INTO public.oportunidades (cliente_id, codigo, titulo, estado_pipeline, fecha_inicio, perdida_motivo, perdida_at)
+  SELECT cliente_id, codigo || '-probe', titulo, 'nueva', fecha_inicio, 'precio', '2000-01-01'
+  FROM public.oportunidades WHERE id = v_id
+  RETURNING perdida_at INTO r;
+  IF r.perdida_at < now() - interval '1 minute' THEN RAISE EXCEPTION 'FAIL9 backdated insert kept'; END IF; ok := ok || '9';
 
   RAISE EXCEPTION 'ROLLBACK_OK %', ok;
 END $$;

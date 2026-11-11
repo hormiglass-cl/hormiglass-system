@@ -10,6 +10,7 @@ import { MetricCard } from '../../components/ui/MetricCard';
 import { SearchSelect } from '../../components/ui/SearchSelect';
 import { AvatarBadge } from '../../components/ui/AvatarBadge';
 import { useConfirm, useToast } from '../../components/ui/feedback';
+import { esOportunidadPerdida } from '../../lib/oportunidad-perdida';
 import {
   FilterMenu,
   FilterBar,
@@ -107,7 +108,7 @@ export default function AsignacionesPage() {
         .neq('estado', 'cancelada')
         .order('created_at', { ascending: false }),
       supabase.from('orden_compra_asignaciones').select('*'),
-      supabase.from('oportunidades').select('id, codigo, titulo').order('created_at', { ascending: false }),
+      supabase.from('oportunidades').select('id, codigo, titulo, perdida_at').order('created_at', { ascending: false }),
     ]);
     if (ocRes.error || asRes.error || opRes.error) {
       console.error('Error loading asignaciones:', ocRes.error || asRes.error || opRes.error);
@@ -683,7 +684,9 @@ export default function AsignacionesPage() {
                     <SearchSelect
                       value={opId}
                       onChange={setOpId}
-                      options={oportunidades.map((op) => ({ value: op.id, label: op.codigo, hint: op.titulo }))}
+                      options={oportunidades
+                        .filter((op) => !esOportunidadPerdida(op))
+                        .map((op) => ({ value: op.id, label: op.codigo, hint: op.titulo }))}
                       placeholder="Seleccionar venta"
                       searchPlaceholder="Buscar venta..."
                       searchable
