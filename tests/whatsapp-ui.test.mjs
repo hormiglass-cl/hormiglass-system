@@ -146,3 +146,32 @@ test('avatars use soft pastel token backgrounds with matching initials chosen by
   assert.ok(!tones.has(undefined));
   assert.ok(tones.size >= 3, 'Several strong tones are used');
 });
+
+test('S9 Ficha WhatsApp shows the stored bot record and corrections as before -> after', async () => {
+  const { LeadRecordPanel } = await import('../components/whatsapp/LeadRecordPanel.tsx');
+  const panel = {
+    lead_id: 'lead-1', revision: 3, can_resolve: true,
+    record: { requirement: 'Pavers for the patio', tax_document: 'factura', purchase_order: 'OC-77', desired_date: '2028-02-29', source_number: '+56911111111', service: 'Pavimentos', use_case: 'Patio', site: { truck_access: false, terrain: 'Tierra' }, ai_summary: { executive_summary: 'Ready to quote' } },
+    corrections: [
+      { entity: 'opportunity', field: 'titulo', before: 'Patio (human)', after: 'Patio grande', revision: 3, updated_at: '2026-11-11T12:00:00Z' },
+      { entity: 'opportunity', field: 'forma_entrega', before: 'retiro_cliente', after: null, revision: 3, updated_at: '2026-11-11T12:00:00Z' },
+      { entity: 'customer', field: 'tipo_cliente', before: 'natural', after: 'juridica', revision: 3, updated_at: '2026-11-11T12:00:00Z' },
+    ],
+  };
+  const html = render(LeadRecordPanel, { panel, onResolve: () => {} });
+  const plain = text(html);
+  assert.ok(plain.includes('Ficha WhatsApp'));
+  assert.ok(plain.includes('Revisión 3'));
+  for (const fragment of ['Requerimiento', 'Pavers for the patio', 'Documento tributario', 'Factura', 'OC-77', '2028-02-29', '+56911111111', 'Pavimentos', 'Acceso de camión', 'No', 'Tierra', 'Resumen ejecutivo', 'Ready to quote']) assert.ok(plain.includes(fragment), fragment);
+  assert.ok(plain.includes('Título') && plain.includes('Patio (human)') && plain.includes('Patio grande'));
+  assert.ok(plain.includes('Forma de entrega') && plain.includes('—'));
+  assert.ok(plain.includes('Tipo de cliente (cliente)'));
+  assert.equal((html.match(/>Aceptar</g) ?? []).length, 3);
+  assert.equal((html.match(/>Descartar</g) ?? []).length, 3);
+  assert.ok(!plain.includes('Integración pendiente'));
+  const readOnly = text(render(LeadRecordPanel, { panel: { ...panel, can_resolve: false }, onResolve: () => {} }));
+  assert.ok(!readOnly.includes('Aceptar') && !readOnly.includes('Descartar'));
+  assert.ok(readOnly.includes('Patio grande'));
+  const clean = text(render(LeadRecordPanel, { panel: { ...panel, corrections: [] }, onResolve: () => {} }));
+  assert.ok(clean.includes('Sin correcciones pendientes'));
+});

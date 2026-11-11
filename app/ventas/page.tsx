@@ -88,6 +88,7 @@ import {
 import { CodeStamp, StatusBadge, Button, Dialog, Field, TextInput, Select } from '../../components/ui/crm';
 import { KanbanCard } from '../../components/ventas/KanbanCard';
 import { CapturedDataPending, OpportunityActivity } from '../../components/whatsapp/OpportunityActivity';
+import { LeadRecordSection } from '../../components/whatsapp/LeadRecordPanel';
 import { useConfirm, useToast } from '../../components/ui/feedback';
 import { useBreadcrumb } from '../../lib/context/BreadcrumbContext';
 import { useAjuste } from '../../lib/ajustes';
@@ -402,6 +403,17 @@ export default function PipelineVentasPage() {
         })}
       </div>
     );
+  };
+
+  // Re-read only the fields a WhatsApp correction can write: chat_interno in state is a merged
+  // timeline, so spreading the raw row would drop activity entries.
+  const refreshOportunidad = async (opId: string) => {
+    const { data } = await supabase.from('oportunidades')
+      .select('titulo, direccion_obra, tipo_venta, modalidad_requerimiento, forma_entrega, prioridad, productos')
+      .eq('id', opId).maybeSingle();
+    if (!data) return;
+    setOportunidades((prev) => prev.map((o) => (o.id === opId ? { ...o, ...data } : o)));
+    setSelectedOp((prev) => (prev && prev.id === opId ? { ...prev, ...data } : prev));
   };
 
   // Helper to load latest activities directly from Supabase for an opportunity
@@ -2916,7 +2928,13 @@ export default function PipelineVentasPage() {
               {opDetailTab === 'resumen' && (
                 <>
                   {/* Resumen visible: campos de decisión y seguimiento rápido */}
-                  {selectedOp.origen?.trim().toLowerCase() === 'whatsapp' && <CapturedDataPending />}
+                  <LeadRecordSection
+                    key={selectedOp.id}
+                    supabase={supabase}
+                    opportunityId={selectedOp.id}
+                    fallback={selectedOp.origen?.trim().toLowerCase() === 'whatsapp' ? <CapturedDataPending /> : null}
+                    onApplied={() => void refreshOportunidad(selectedOp.id)}
+                  />
                   <section aria-label="Propiedades de la oportunidad" className="space-y-1 pb-2">
                     <div className="grid grid-cols-1 gap-y-0.5 pt-2 text-xs">
                       <div className="min-w-0">

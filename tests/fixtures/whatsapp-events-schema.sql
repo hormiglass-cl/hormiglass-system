@@ -19,3 +19,11 @@ CREATE FUNCTION fixture_folio() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF 
 CREATE TRIGGER postventa_folio BEFORE INSERT ON postventa_casos FOR EACH ROW EXECUTE FUNCTION fixture_folio();
 GRANT SELECT, INSERT, UPDATE ON clientes, oportunidades, usuarios, notificaciones, postventa_casos TO service_role;
 INSERT INTO usuarios (id,nombre,email,rol) VALUES ('10000000-0000-4000-8000-000000000001','Seller','test@example.invalid','user'), ('10000000-0000-4000-8000-000000000002','Worker','worker@example.invalid','mano_obra');
+-- Auth stub and role helpers: same bodies as 0003_rls_helpers.sql; tests set request.jwt.claim.sub.
+CREATE SCHEMA auth;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
+ALTER TABLE usuarios ADD COLUMN auth_id uuid UNIQUE;
+CREATE FUNCTION current_rol() RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$ SELECT rol FROM public.usuarios WHERE auth_id = auth.uid() AND activo = true LIMIT 1 $$;
+CREATE FUNCTION is_active_user() RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$ SELECT COALESCE((SELECT true FROM public.usuarios WHERE auth_id = auth.uid() AND activo = true LIMIT 1), false) $$;
+CREATE FUNCTION has_role(VARIADIC roles text[]) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$ SELECT public.current_rol() = ANY(roles) OR public.current_rol() = 'admin' $$;
