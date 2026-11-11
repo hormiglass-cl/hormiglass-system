@@ -441,6 +441,8 @@ export default function TrabajadorDetailPage() {
           supabase
             .from('oportunidades')
             .select('*, cliente:clientes(nombre, apellido_razon_social, rut)')
+            // A lost opportunity earns no commission.
+            .is('perdida_at', null)
             .order('created_at', { ascending: false }),
         ]);
 

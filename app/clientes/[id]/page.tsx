@@ -22,6 +22,7 @@ import { SearchableSelect } from '../../../components/SearchableSelect';
 import { REGIONES_CHILE, TODAS_COMUNAS_CHILE } from '../../../lib/chile-data';
 import { cotizacionVigente, totalAbonado, totalComercial } from '../../../lib/oportunidad-finanzas';
 import { mensajeError } from '../../../lib/errores';
+import { esOportunidadPerdida, motivoPerdidaLabel } from '../../../lib/oportunidad-perdida';
 import {
   Button,
   CodeStamp,
@@ -643,7 +644,9 @@ export default function ClienteDetailPage() {
     setTipoActividad('nota');
   };
 
-  // Metrics
+  // Metrics. The client is never deleted when a deal is lost; lost deals only leave the active totals.
+  const oportunidadesActivas = oportunidades.filter((op) => !esOportunidadPerdida(op));
+
   const oportunidadesPagadas = oportunidades.filter((op) => {
     const totalVal = totalComercial(op, op.cotizaciones || []);
     const abonadoVal = totalAbonado(op);
@@ -655,7 +658,7 @@ export default function ClienteDetailPage() {
     return sum + Number(totalVal);
   }, 0);
 
-  const saldoPendienteTotal = oportunidades.reduce((sum, op) => {
+  const saldoPendienteTotal = oportunidadesActivas.reduce((sum, op) => {
     const totalVal = totalComercial(op, op.cotizaciones || []);
     const abonadoVal = totalAbonado(op);
     const pend = Math.max(0, totalVal - abonadoVal);
@@ -667,7 +670,7 @@ export default function ClienteDetailPage() {
   ).length;
   const eventosCompletadosCount = eventosList.filter((e) => e.estado === 'completado').length;
 
-  const montoFacturadoObras = oportunidades
+  const montoFacturadoObras = oportunidadesActivas
     .filter((op) => op.tipo_venta === 'Instalación' || op.tipo_venta === 'Obra')
     .reduce((sum, op) => {
       return sum + totalComercial(op, op.cotizaciones || []);
@@ -1008,6 +1011,7 @@ export default function ClienteDetailPage() {
                     const closeWithoutEvidence =
                       ['prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline) &&
                       deliveryAccreditation[op.id] !== true;
+                    const perdida = esOportunidadPerdida(op);
 
                     return (
                       <div
@@ -1023,9 +1027,15 @@ export default function ClienteDetailPage() {
                               <CodeStamp>{op.codigo}</CodeStamp>
                             </div>
                           </div>
-                          <StatusBadge tone={closeWithoutEvidence ? 'warning' : stageInfo.tone}>
-                            {closeWithoutEvidence ? 'Sin acreditación' : stageInfo.label}
-                          </StatusBadge>
+                          {perdida ? (
+                            <span title={motivoPerdidaLabel(op.perdida_motivo) || undefined}>
+                              <StatusBadge tone="danger">Perdida</StatusBadge>
+                            </span>
+                          ) : (
+                            <StatusBadge tone={closeWithoutEvidence ? 'warning' : stageInfo.tone}>
+                              {closeWithoutEvidence ? 'Sin acreditación' : stageInfo.label}
+                            </StatusBadge>
+                          )}
                         </div>
 
                         {/* Riel de Obra Mini */}
@@ -1760,7 +1770,7 @@ export default function ClienteDetailPage() {
           isOpen={showCreateQuoteModal}
           onClose={() => setShowCreateQuoteModal(false)}
           clienteIdInicial={cliente.id}
-          oportunidadIdInicial={oportunidades[0]?.id}
+          oportunidadIdInicial={oportunidadesActivas[0]?.id}
           onSuccess={() => {
             setShowCreateQuoteModal(false);
           }}

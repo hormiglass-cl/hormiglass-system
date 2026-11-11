@@ -15,6 +15,7 @@ import {
 } from '../lib/types';
 import { completeRecordatorio } from '../lib/recordatorios';
 import { totalAbonado as calcularAbonado, totalComercial } from '../lib/oportunidad-finanzas';
+import { esOportunidadPerdida } from '../lib/oportunidad-perdida';
 import {
   ChevronRight,
   Factory,
@@ -233,6 +234,12 @@ export default function Dashboard() {
     });
   }, [oportunidades, fechaDesde, fechaHasta]);
 
+  // Lost opportunities stay in the period list (prospects, conversion) but are excluded from active-pipeline metrics.
+  const oportunidadesActivas = useMemo(
+    () => filteredOportunidades.filter((op) => !esOportunidadPerdida(op)),
+    [filteredOportunidades],
+  );
+
   // Cotizaciones filtradas por rango temporal
   const filteredCotizaciones = useMemo(() => {
     return cotizaciones.filter((cot) => {
@@ -257,12 +264,12 @@ export default function Dashboard() {
 
   // Métricas Financieras
   const totalFacturado = useMemo(() => {
-    return filteredOportunidades.reduce((sum, op) => sum + getOportunidadTrueValue(op), 0);
-  }, [filteredOportunidades]);
+    return oportunidadesActivas.reduce((sum, op) => sum + getOportunidadTrueValue(op), 0);
+  }, [oportunidadesActivas]);
 
   const totalAbonado = useMemo(() => {
-    return filteredOportunidades.reduce((sum, op) => sum + calcularAbonado(op), 0);
-  }, [filteredOportunidades]);
+    return oportunidadesActivas.reduce((sum, op) => sum + calcularAbonado(op), 0);
+  }, [oportunidadesActivas]);
 
   const totalPendientePorPagar = useMemo(() => {
     return Math.max(0, totalFacturado - totalAbonado);
@@ -297,7 +304,7 @@ export default function Dashboard() {
     ];
 
     return etapas.map((e) => {
-      const ops = filteredOportunidades.filter((o) => e.stages.includes(o.estado_pipeline));
+      const ops = oportunidadesActivas.filter((o) => e.stages.includes(o.estado_pipeline));
       const monto = ops.reduce((acc, o) => acc + getOportunidadTrueValue(o), 0);
       return {
         id: e.id,
@@ -306,7 +313,7 @@ export default function Dashboard() {
         monto,
       };
     });
-  }, [filteredOportunidades]);
+  }, [oportunidadesActivas]);
 
   // Gráfico de Evolución de Ventas
   const { dailySeries, monthlySeries, totalPeriodTimelineSales } = useMemo(() => {
@@ -344,6 +351,7 @@ export default function Dashboard() {
     let accumulatedSales = 0;
 
     oportunidades.forEach((op) => {
+      if (esOportunidadPerdida(op)) return;
       const dateStr = op.fecha_inicio || op.created_at;
       if (!dateStr) return;
 
@@ -406,7 +414,7 @@ export default function Dashboard() {
       tarjeta: { count: 0, monto: 0, label: 'Tarjetas / Webpay', color: 'var(--hg-warning)' },
     };
 
-    filteredOportunidades.forEach((op) => {
+    oportunidadesActivas.forEach((op) => {
       const val = getOportunidadTrueValue(op);
       const rawCond = ((op as unknown as { condicion_pago?: string }).condicion_pago || '').toLowerCase();
 
@@ -433,13 +441,13 @@ export default function Dashboard() {
       color: data.color,
       sublabel: 'contratos',
     }));
-  }, [filteredOportunidades]);
+  }, [oportunidadesActivas]);
 
   // Ranking Comunas
   const rankingComunas = useMemo((): RankingItem[] => {
     const comunaMap: Record<string, { count: number; monto: number }> = {};
 
-    filteredOportunidades.forEach((op) => {
+    oportunidadesActivas.forEach((op) => {
       let rawComuna = op.comuna;
       if (!rawComuna) rawComuna = op.cliente?.comuna?.trim();
       const cleanComuna = (rawComuna || 'Sin comuna especificada').trim();
@@ -459,7 +467,7 @@ export default function Dashboard() {
         monto: data.monto,
       }))
       .sort((a, b) => b.monto - a.monto);
-  }, [filteredOportunidades]);
+  }, [oportunidadesActivas]);
 
   // Ranking Productos
   const rankingProductos = useMemo((): RankingItem[] => {
@@ -477,7 +485,7 @@ export default function Dashboard() {
     });
 
     if (Object.keys(prodMap).length === 0) {
-      filteredOportunidades.forEach((op) => {
+      oportunidadesActivas.forEach((op) => {
         if (op.productos && Array.isArray(op.productos)) {
           op.productos.forEach((p) => {
             const producto = p as ProductoDashboard;
@@ -501,7 +509,7 @@ export default function Dashboard() {
         monto: data.monto,
       }))
       .sort((a, b) => b.monto - a.monto);
-  }, [filteredCotizaciones, filteredOportunidades]);
+  }, [filteredCotizaciones, oportunidadesActivas]);
 
   // Ranking Vendedores
   const rankingVendedores = useMemo((): RankingItem[] => {
@@ -510,7 +518,7 @@ export default function Dashboard() {
       userMap[u.id] = { nombre: u.nombre, count: 0, monto: 0 };
     });
 
-    filteredOportunidades.forEach((op) => {
+    oportunidadesActivas.forEach((op) => {
       const uid = op.asignado_a;
       const val = getOportunidadTrueValue(op);
 
@@ -542,7 +550,7 @@ export default function Dashboard() {
         };
       })
       .sort((a, b) => b.monto - a.monto);
-  }, [usuarios, filteredOportunidades]);
+  }, [usuarios, oportunidadesActivas]);
 
   // Proyecciones de Venta en Pipeline
   const funnel = useMemo(() => {
@@ -596,8 +604,8 @@ export default function Dashboard() {
     return { stages, totalNominal, totalWeighted };
     };
 
-    return build(filteredOportunidades);
-  }, [filteredOportunidades, deliveryAccreditation]);
+    return build(oportunidadesActivas);
+  }, [oportunidadesActivas, deliveryAccreditation]);
   const totalPipelineNominal = funnel.totalNominal;
 
   const recordatoriosStats = useMemo(() => {
@@ -630,18 +638,18 @@ export default function Dashboard() {
     { id: 'finanzas' as const, label: 'Finanzas', icon: Wallet },
   ];
 
-  const totalDealsClosed = filteredOportunidades.filter((o) =>
+  const totalDealsClosed = oportunidadesActivas.filter((o) =>
     ['entregada', 'prod_finalizado', 'rev_entregado'].includes(o.estado_pipeline)
   ).length;
 
   const averageDealSize =
     totalDealsClosed > 0
       ? Math.round(totalFacturado / totalDealsClosed)
-      : filteredOportunidades.length > 0
-      ? Math.round(totalFacturado / filteredOportunidades.length)
+      : oportunidadesActivas.length > 0
+      ? Math.round(totalFacturado / oportunidadesActivas.length)
       : 0;
 
-  const obrasEnRielCount = filteredOportunidades.filter((o) =>
+  const obrasEnRielCount = oportunidadesActivas.filter((o) =>
     ['entregada', 'programada', 'prod_fabricacion', 'prod_instalacion'].includes(o.estado_pipeline)
   ).length;
 
@@ -697,6 +705,8 @@ export default function Dashboard() {
       const mes = meses.find((m) => m.key === `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
       if (!mes) return;
       mes.nuevas += 1;
+      // A lost opportunity still counts as created, but adds no billed or collected amount.
+      if (esOportunidadPerdida(op)) return;
       if (['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline)) mes.cerradas += 1;
       mes.facturado += getOportunidadTrueValue(op);
       mes.cobrado += calcularAbonado(op);
@@ -704,7 +714,7 @@ export default function Dashboard() {
     return meses;
   })();
 
-  const saldosPorCobrar = filteredOportunidades
+  const saldosPorCobrar = oportunidadesActivas
     .map((op) => ({ op, total: getOportunidadTrueValue(op), done: calcularAbonado(op) }))
     .filter((r) => r.total - r.done > 0)
     .sort((a, b) => (b.total - b.done) - (a.total - a.done))
@@ -810,7 +820,7 @@ export default function Dashboard() {
           </div>
 
           <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
-            <RecentLeadsCard oportunidades={filteredOportunidades} />
+            <RecentLeadsCard oportunidades={oportunidadesActivas} />
             <TasksActivityCard recordatorios={recordatorios} eventos={eventos} onToggleComplete={handleCompleteRecordatorio} />
           </div>
         </div>
@@ -823,7 +833,7 @@ export default function Dashboard() {
             <MetricCard title="Prospectos" value={oportunidades.length} icon={Users} tone="info" subtitle={`${filteredOportunidades.length} en el período`} />
             <MetricCard
               title="En pipeline"
-              value={filteredOportunidades.filter((op) => !['prod_finalizado', 'rev_entregado', 'perdida'].includes(op.estado_pipeline)).length}
+              value={oportunidadesActivas.filter((op) => !['prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline)).length}
               icon={FolderKanban}
               tone="accent"
               subtitle={`$${Math.round(totalPipelineNominal / 1000).toLocaleString('es-CL')}k en negociación`}
@@ -889,7 +899,7 @@ export default function Dashboard() {
             <MetricCard title="Obras en riel" value={obrasEnRielCount} icon={Factory} tone="info" />
             <MetricCard
               title="En fabricación"
-              value={filteredOportunidades.filter((o) => o.estado_pipeline === 'prod_fabricacion').length}
+              value={oportunidadesActivas.filter((o) => o.estado_pipeline === 'prod_fabricacion').length}
               icon={Package}
               tone="warning"
             />
@@ -934,7 +944,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard title="Facturado" value={`$${totalFacturado.toLocaleString('es-CL')}`} icon={TrendingUp} tone="warning" />
             <MetricCard title="Recaudado" value={`$${totalAbonado.toLocaleString('es-CL')}`} icon={Wallet} tone="success" />
-            <MetricCard title="Por cobrar" value={`$${totalPendientePorPagar.toLocaleString('es-CL')}`} icon={CreditCard} tone="danger" subtitle={`${filteredOportunidades.length} contratos`} />
+            <MetricCard title="Por cobrar" value={`$${totalPendientePorPagar.toLocaleString('es-CL')}`} icon={CreditCard} tone="danger" subtitle={`${oportunidadesActivas.length} contratos`} />
             <MetricCard
               title="Por conciliar"
               value={`$${totalMontoAbonosPorValidar.toLocaleString('es-CL')}`}
@@ -998,7 +1008,7 @@ export default function Dashboard() {
               icon={CreditCard}
               segments={metodosPagoSegmentos}
               centerLabel="Operaciones"
-              centerValue={filteredOportunidades.length.toString()}
+              centerValue={oportunidadesActivas.length.toString()}
             />
           </div>
         </div>

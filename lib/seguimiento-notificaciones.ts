@@ -1,8 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { OportunidadVenta } from './types';
+import { esOportunidadPerdida } from './oportunidad-perdida';
 
 export function seguimientosParaUsuario(
-  oportunidades: Pick<OportunidadVenta, 'id' | 'titulo' | 'asignado_a' | 'seguimiento_responsable_id' | 'proxima_accion' | 'proxima_accion_fecha' | 'estado_pipeline'>[],
+  oportunidades: Pick<OportunidadVenta, 'id' | 'titulo' | 'asignado_a' | 'seguimiento_responsable_id' | 'proxima_accion' | 'proxima_accion_fecha' | 'estado_pipeline' | 'perdida_at'>[],
   userId: string,
   now = new Date(),
   anticipacionHoras = 24,
@@ -11,6 +12,7 @@ export function seguimientosParaUsuario(
   return oportunidades.filter((op) => {
     const due = op.proxima_accion_fecha ? new Date(op.proxima_accion_fecha).getTime() : NaN;
     return (op.seguimiento_responsable_id || op.asignado_a) === userId &&
+      !esOportunidadPerdida(op) &&
       !['entregada', 'prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline) &&
       Number.isFinite(due) && due <= horizon;
   });
@@ -33,7 +35,7 @@ export async function syncSeguimientoNotificaciones(
     const anticipacion = Number.isFinite(horas) && horas >= 0 ? horas : 24;
     const [opsResult, noticesResult] = await Promise.all([
       supabase.from('oportunidades')
-        .select('id, titulo, estado_pipeline, asignado_a, seguimiento_responsable_id, proxima_accion, proxima_accion_fecha')
+        .select('id, titulo, estado_pipeline, asignado_a, seguimiento_responsable_id, proxima_accion, proxima_accion_fecha, perdida_at')
         .not('proxima_accion_fecha', 'is', null),
       supabase.from('notificaciones')
         .select('id, mensaje, entidad_relacionada')
