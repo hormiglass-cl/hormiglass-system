@@ -39,7 +39,7 @@ There is no silent upgrade. A 1.2 field inside a 1.1 envelope stays a `400`.
 |---|---|---|
 | 1.2a | A1, A2, A3 `sender` + `crm_seller_id` | Inbound only. Validates the real bot → receiver → dev path, including the same event resent (must return `duplicate`, no new rows). |
 | 1.2b | B outbox + `chat.take`, `chat.release` | First CRM → bot events. |
-| 1.2c | B `opportunity.quote_sent`, `opportunity.closed` | Depends on the decisions in sections 5 and 6. |
+| 1.2c | B `opportunity.quote_sent`, `opportunity.closed`, `opportunity.reopened` | Depends on section 5; section 6 is agreed except the open question. |
 | 1.2d | A4 recipients + B `handoff.acknowledged`, `handoff.resolved` | Depends on the area recipients (section 8). |
 | Later | `message.send` | Phase 3, as you proposed. |
 
@@ -95,14 +95,21 @@ Rule we propose:
 ## 6. `opportunity.closed` (F4)
 
 - `won`: the opportunity reaches `entregada` ("Venta Aprobada"), the commercial close.
-- `lost`: the CRM has no lost stage today. Proposed (pending agreement with the pipeline
-  owner): an explicit **"Mark as lost"** action on the opportunity with a required reason.
-  Only that action sends `lost`. A rejected quote **never** sends it by itself, because an
-  opportunity can have a rejected version and a newer active one. When the current quote is
-  rejected, the CRM only suggests the action to the seller. Until this ships, the CRM sends
-  only `won`.
-- A lost opportunity can be reopened in the CRM. Please tell us what the bot expects then:
-  a new lead, or the same `crm_opportunity_id` back in follow-up.
+- `lost` (**agreed 2026-11-11**): sent only by the explicit **"Mark as lost"** action, which
+  requires a reason. A rejected quote **never** sends it by itself; when the current quote is
+  rejected, the CRM only suggests the action to the seller. Built on the CRM side (branch
+  `feat/oportunidad-perdida`, dev only); only opportunities in stage `nueva` can be lost.
+- **`opportunity.reopened`** (**agreed 2026-11-11**, phase 1.2c): new CRM → bot event sent when
+  a seller reopens a lost opportunity. `data`: `crm_opportunity_id`, `crm_seller_id` (the
+  opportunity's assigned seller, `asignado_a`). The same `crm_opportunity_id` is open again,
+  and a later customer correction updates that opportunity, like reopening a ClickUp task.
+  While it is closed, a new customer message makes the bot create a new lead.
+- **Open question:** if the customer wrote while the opportunity was lost (so the bot already
+  created a newer lead and opportunity for the same conversation) and the seller then reopens
+  the old one, two open opportunities exist for one conversation. Which one do corrections and
+  ownership apply to? Our proposal: the bot answers `409` to `opportunity.reopened` when a newer
+  open lead exists for that conversation, and the CRM shows the seller which opportunity is
+  active instead of reopening.
 
 ## 7. CRM → bot delivery (part B)
 
@@ -122,7 +129,7 @@ never in this document.
 
 1. **Area recipients**, including post-sale for `claims`. The business owner must confirm them.
 2. ~~Dev seller UUIDs~~ **Sent below** (verified on dev 2026-11-11). The receiver accepts active users with role `user` or `admin`; the old `ventas` role no longer exists.
-3. **The "Mark as lost" action** (section 6), pending agreement with the pipeline owner.
+3. ~~The "Mark as lost" action~~ **Built and agreed** (section 6).
 4. **RUT nullability on dev** for leads without RUT, re-tested after the schema sync.
 
 ### Dev seller UUIDs (`crm_seller_id`)
@@ -146,5 +153,6 @@ These are dev ids only. Production ids differ and will be sent separately.
 2. Confirmation that `chat.take` and `chat.release` can carry and check `ownership_version` (section 4).
 3. Confirmation that ClickUp actions share the same ownership version sequence (section 4).
 4. Agreement with the quote rule and `crm_quote_id` (section 5).
-5. What the bot expects when a lost opportunity is reopened (section 6).
+5. ~~What the bot expects when a lost opportunity is reopened~~ Agreed: `opportunity.reopened`.
+   Still open: a reopen when a newer lead exists for the same conversation (section 6).
 6. The dev URL for `/webhook/crm-events`.
