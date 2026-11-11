@@ -49,17 +49,25 @@ export async function persistEvent(config: NonNullable<ReturnType<typeof receive
     switch (event.type) {
       case 'lead.qualified':
         keys = ['event_id', 'crm_customer_id', 'crm_opportunity_id'];
-        valid = uuid(result.crm_customer_id) && uuid(result.crm_opportunity_id); break;
+        valid = uuid(result.crm_customer_id) && uuid(result.crm_opportunity_id);
+        // 1.2 results carry the processing status (S5); 1.1/legacy results stay unchanged.
+        if (event.protocol_revision === '1.2') { keys.push('status'); valid = valid && ['created', 'updated', 'ignored_stale', 'duplicate'].includes(result.status); }
+        break;
       case 'message.new':
-        keys = ['event_id', 'crm_message_id']; valid = uuid(result.crm_message_id); break;
+        keys = ['event_id', 'crm_message_id']; valid = uuid(result.crm_message_id);
+        if (event.protocol_revision === '1.2') { keys.push('status'); valid = valid && ['created', 'duplicate'].includes(result.status); }
+        break;
       case 'ownership.taken':
       case 'ownership.released': {
         keys = ['event_id', 'ownership_version', 'owner'];
         valid = Number.isInteger(result.ownership_version) && result.ownership_version >= Number(event.data.version) && result.ownership_version <= 2147483647;
-        if (event.protocol_revision === '1.1') {
+        if (event.protocol_revision === '1.1' || event.protocol_revision === '1.2') {
           keys.push('crm_seller_id', 'source');
+          // A stale 1.1 request may observe newer 1.2 CRM-originated state.
+          // Input gating and the equal-version check below still enforce the requested source.
+          const humanSources = ['clickup', 'crm'];
           valid = valid && ((result.owner === 'bot' && result.crm_seller_id === null && result.source === null)
-            || (result.owner === 'human' && (result.crm_seller_id === null || uuid(result.crm_seller_id)) && result.source === 'clickup'));
+            || (result.owner === 'human' && (result.crm_seller_id === null || uuid(result.crm_seller_id)) && humanSources.includes(result.source)));
           if (result.ownership_version === event.data.version) {
             valid = valid && (event.type === 'ownership.released' ? result.owner === 'bot'
               : result.owner === 'human' && (result.crm_seller_id === event.data.crm_seller_id
@@ -70,7 +78,7 @@ export async function persistEvent(config: NonNullable<ReturnType<typeof receive
       }
       case 'handoff.created':
         keys = ['event_id', 'external_handoff_id', 'crm_case_id', 'crm_opportunity_id', 'status'];
-        if (event.protocol_revision === '1.1') {
+        if (event.protocol_revision === '1.1' || event.protocol_revision === '1.2') {
           keys.push('routing_status');
           valid = result.external_handoff_id === event.data.handoff_id
             && ['pending_routing', 'routed'].includes(result.routing_status)

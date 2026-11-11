@@ -2,6 +2,34 @@
 
 **Local implementation, disabled by default; not a live integration.** This is a technical proposal for the bot agent to agree and implement. It accepts the four legacy inbound event types atomically, with a proposed opt-in revision 1.1 for richer handoffs and `ownership.taken`. **Revision 1.1 is applied in the development project only (see Development status below); it is not deployed to production.** See [the bot-facing response](whatsapp-events-crm-response.md) for the amendment and remaining blockers. It does **not** establish ClickUp parity or replace the bot's existing workflows.
 
+## Revision 1.2a wire contract (local; not live on dev yet)
+
+The local validator accepts `protocol_revision: "1.2"` alongside legacy and `"1.1"`. **Do not switch the bot to 1.2 until its SQL migration is applied and development is explicitly confirmed ready.** The sections below describe legacy/1.1 unless overridden here; their request fields and response keys remain unchanged. Unknown fields and unsupported revisions return 400 `invalid_event`.
+
+### Structured `lead.qualified`
+
+All existing required fields remain required. The following additions are optional **only under 1.2**. Text is nonblank, contains no NUL, and is bounded in characters; absent values mean no information, never a request to clear stored values.
+
+| Fields | Accepted values |
+|---|---|
+| `customer_type`, `tax_document`, `fulfillment`, `urgency` | `natural\|company`; `boleta\|factura`; `delivery\|install\|pickup`; `urgente\|alta\|media\|baja` respectively |
+| `company`, `use_case` | Text ≤200 |
+| `purchase_order`, `service`, `city`, `commune` | Text ≤100 |
+| `address`, `desired_date`, `source_number` | Text ≤300; real calendar date `YYYY-MM-DD`; canonical international phone, respectively |
+| `site` | Object with optional `terrain` (text ≤100), `truck_access`/`debris_removal` (booleans), `access_restrictions` (text ≤500) |
+| `items` | Array of at most 50 objects; required `product` (text ≤200); optional nullable `variant`/`measurements` (text ≤200), `unit` (text ≤20), `quantity` (finite number >0) |
+| `ai_summary` | Object with optional `lead_class`, `next_best_action`, `executive_summary`, `pain`, `scope`, `timing`, `obstacle`, each text ≤4000 |
+
+Nested unknown keys are rejected. Optional top-level additions cannot be null; only the listed optional item properties allow null.
+
+### Authors, ownership and results
+
+- `message.new` requires `sender`: `customer|bot|seller|system`. Only `customer` is inbound; all other senders are outbound. `crm_seller_id` is required exactly for `seller`, and must identify an active `user`/`admin` (otherwise 422 `invalid_seller`).
+- `ownership.taken` additionally accepts `source: "crm"`. Input under 1.1 still accepts only `clickup`; a stale 1.1 request can truthfully receive a newer authoritative state whose source is `crm`. Equal-version result checks remain exact.
+- `ownership.released` requires `reason`: `seller_released|sla_expired|customer_new_quote|opportunity_closed`. The reason is stored, not added to response keys. Legacy/1.1 requests must not include it.
+- `handoff.created` retains the 1.1 rules and response shape.
+- A 1.2 lead result adds `status: created|updated|ignored_stale|duplicate`; a 1.2 message result adds `status: created|duplicate`. Identical event replay returns the stored identifiers with `status: "duplicate"`, unlike the exact legacy/1.1 stored-result replay. Equal lead revision with a different raw record remains 409 `revision_conflict`.
+
 ## Development status (2026-11-06)
 
 - Both migrations are applied to development project `whbqrracrxmeuyerrbdg` only; deployed function bodies match the repository files.

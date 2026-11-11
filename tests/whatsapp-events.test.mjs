@@ -121,7 +121,7 @@ test('S9: revision-gated commercial/operational/claims handoffs and exact routin
     globalThis.fetch = async () => Response.json(result);
     const response = await POST(req(event)); assert.equal(response.status, 200); assert.deepEqual(await response.json(), result);
   }
-  for (const mutate of [e => { delete e.protocol_revision; }, e => { e.protocol_revision = '1.2'; }, e => { delete e.data.area; }, e => { delete e.data.reason; }, e => { delete e.data.priority; }, e => { e.data.area = 'claims'; }, e => { e.data.reason = 'Bad-Code'; }, e => { e.data.reason = '_leading'; }, e => { e.data.reason = 'trailing_'; }, e => { e.data.reason = 'double__underscore'; }, e => { e.data.reason = null; }, e => { e.data.reason = 'a'.repeat(65); }, e => { e.data.priority = 'high'; }, e => { e.data.priority = ['alta']; }, e => { e.data.area = ['sales']; }, e => { e.data.postventa_type = 'otro'; }, e => { e.data.extra = 1; }]) {
+  for (const mutate of [e => { delete e.protocol_revision; }, e => { e.protocol_revision = '1.3'; }, e => { delete e.data.area; }, e => { delete e.data.reason; }, e => { delete e.data.priority; }, e => { e.data.area = 'claims'; }, e => { e.data.reason = 'Bad-Code'; }, e => { e.data.reason = '_leading'; }, e => { e.data.reason = 'trailing_'; }, e => { e.data.reason = 'double__underscore'; }, e => { e.data.reason = null; }, e => { e.data.reason = 'a'.repeat(65); }, e => { e.data.priority = 'high'; }, e => { e.data.priority = ['alta']; }, e => { e.data.area = ['sales']; }, e => { e.data.postventa_type = 'otro'; }, e => { e.data.extra = 1; }]) {
     const event = handoff('commercial', 'sales'); mutate(event); calls = []; await expectError(req(event), 400, 'invalid_event');
   }
   for (const [kind, area, extra] of [['complaint', 'claims', { postventa_type: ['otro'] }], ['operational', 'sales', {}], ['operational', 'finance', { crm_opportunity_id: seller }], ['complaint', 'sales', {}]]) {
@@ -183,4 +183,144 @@ test('S4: transaction conflicts, RUT compatibility and failures are sanitized, n
   }
   globalThis.fetch = async () => { throw Error('SECRET'); };
   const response = await POST(req(lead())); assert.equal(response.status, 503); assert.deepEqual(await response.json(), { error: 'persistence_unavailable' });
+});
+
+// Revision 1.2a (odd/tasks/whatsapp-1-2a.md S1, S2, S5-S8).
+const lead12 = (extra = {}) => { const e = lead(); e.protocol_revision = '1.2'; Object.assign(e.data, extra); return e; };
+const full12 = {
+  customer_type: 'company', company: 'Constructora Sur', tax_document: 'factura', purchase_order: 'OC-1', service: 'Pavimentos',
+  fulfillment: 'install', city: 'Santiago', commune: 'Maipú', address: 'Av. Siempre Viva 123', use_case: 'Patio', urgency: 'media',
+  desired_date: '2026-12-31', source_number: '+56987654321',
+  site: { terrain: 'Tierra', truck_access: true, debris_removal: false, access_restrictions: 'Portón angosto' },
+  items: [{ product: 'Adoquín Piedra', variant: null, quantity: 40, unit: 'm2', measurements: '20x10' }, { product: 'Solerilla' }],
+  ai_summary: { lead_class: 'A', next_best_action: 'Llamar', executive_summary: 'Resumen', pain: 'Barro', scope: 'Patio', timing: 'Enero', obstacle: 'Precio' },
+};
+const ok12 = (e) => ({ event_id: e.event_id, crm_customer_id: seller, crm_opportunity_id: seller, status: 'created' });
+test('1.2 S1/S2: lead.qualified with every 1.2 field is accepted and the 1.2 result is returned', async () => {
+  const e = lead12(full12); const result = ok12(e);
+  for (const status of ['created', 'updated', 'ignored_stale', 'duplicate']) {
+    globalThis.fetch = async (...args) => { calls.push(args); return Response.json({ ...result, status }); };
+    const response = await POST(req(e)); assert.equal(response.status, 200); assert.deepEqual(await response.json(), { ...result, status });
+  }
+  assert.deepEqual(JSON.parse(calls[0][1].body).p_event, e);
+});
+test('1.2 S2: every invalid 1.2 lead field is rejected before storage', async () => {
+  const bad = [
+    { customer_type: 'person' }, { company: '' }, { company: 'x'.repeat(201) }, { tax_document: 'invoice' }, { purchase_order: 'x'.repeat(101) },
+    { service: 1 }, { fulfillment: 'ship' }, { city: 'x'.repeat(101) }, { commune: '' }, { address: 'x'.repeat(301) }, { use_case: 'a\u0000b' },
+    { urgency: 'normal' }, { desired_date: '2026-02-30' }, { desired_date: '2026-1-01' }, { desired_date: '2026-12-31T00:00:00Z' }, { source_number: '56912345678' },
+    { company: null }, { site: null }, { site: [] }, { site: { unknown: 1 } }, { site: { truck_access: 'yes' } }, { site: { terrain: '' } }, { site: { access_restrictions: 'x'.repeat(501) } },
+    { items: {} }, { items: [{}] }, { items: [{ variant: 'x' }] }, { items: [{ product: 'P', quantity: 0 }] }, { items: [{ product: 'P', quantity: -1 }] },
+    { items: [{ product: 'P', quantity: '3' }] }, { items: [{ product: 'P', unit: 'x'.repeat(21) }] }, { items: [{ product: 'P', extra: 1 }] }, { items: ['P'] },
+    { items: Array.from({ length: 51 }, () => ({ product: 'P' })) },
+    { ai_summary: { unknown: 'x' } }, { ai_summary: { pain: 'x'.repeat(4001) } }, { ai_summary: 'x' }, { ai_summary: { pain: null } },
+  ];
+  for (const extra of bad) { calls = []; await expectError(req(lead12(extra)), 400, 'invalid_event'); }
+  // Inclusive limits and nullable item fields stay valid.
+  globalThis.fetch = async () => Response.json({ ...ok12(lead12()), status: 'created' });
+  for (const extra of [{ items: Array.from({ length: 50 }, () => ({ product: 'P', variant: null, quantity: null, unit: null, measurements: null })) }, { items: [] }, { desired_date: '2024-02-29' }, { site: {} }, { ai_summary: {} }, { items: [{ product: 'P', quantity: 0.5 }] }]) {
+    assert.equal((await POST(req(lead12(extra)))).status, 200, JSON.stringify(extra).slice(0, 80));
+  }
+});
+test('1.2 S1: 1.2-only fields in 1.1 or legacy envelopes and unknown revisions are rejected', async () => {
+  for (const [key, value] of Object.entries(full12)) {
+    const e11 = lead(); e11.protocol_revision = '1.1'; e11.data[key] = value; calls = []; await expectError(req(e11), 400, 'invalid_event');
+    const legacy = lead(); legacy.data[key] = value; calls = []; await expectError(req(legacy), 400, 'invalid_event');
+  }
+  for (const revision of ['1.3', '1.0', 1.2, null, '']) { const e = lead(); e.protocol_revision = revision; calls = []; await expectError(req(e), 400, 'invalid_event'); }
+  calls = []; await expectError(req(lead12({ unknown: 1 })), 400, 'invalid_event');
+});
+test('1.2 previous behavior: 1.1 lead.qualified still validates and returns the 1.1 result exactly', async () => {
+  const e = lead(); e.protocol_revision = '1.1';
+  const response = await POST(req(e)); assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { event_id: 'evt-1', crm_customer_id: seller, crm_opportunity_id: seller });
+  globalThis.fetch = async () => Response.json({ event_id: 'evt-1', crm_customer_id: seller, crm_opportunity_id: seller, status: 'created' });
+  for (const body of [e, lead()]) { const r = await POST(req(body)); assert.equal(r.status, 503); assert.deepEqual(await r.json(), { error: 'persistence_unavailable' }); }
+});
+test('1.2 S5: lead.qualified 1.2 results require exactly the 1.2 keys and a known status', async () => {
+  const e = lead12();
+  for (const result of [{ ...ok12(e), status: undefined }, { ...ok12(e), status: 'stale' }, { ...ok12(e), extra: 1 }, { ...ok12(e), crm_customer_id: 'bad' }]) {
+    const body = { ...result }; if (body.status === undefined) delete body.status;
+    globalThis.fetch = async () => Response.json(body);
+    const r = await POST(req(e)); assert.equal(r.status, 503); assert.deepEqual(await r.json(), { error: 'persistence_unavailable' });
+  }
+});
+const message12 = (data) => ({ ...lead(), protocol_revision: '1.2', type: 'message.new', data: { message_id: 'm', text: 'Hola', sent_at: '2026-11-04T12:00:00Z', ...data } });
+test('1.2 S6: message.new sender, seller and direction pairing; 1.2 result status', async () => {
+  for (const data of [{ direction: 'inbound', sender: 'customer' }, { direction: 'outbound', sender: 'bot' }, { direction: 'outbound', sender: 'system' }, { direction: 'outbound', sender: 'seller', crm_seller_id: seller }]) {
+    for (const status of ['created', 'duplicate']) {
+      const result = { event_id: 'evt-1', crm_message_id: seller, status };
+      globalThis.fetch = async () => Response.json(result);
+      const r = await POST(req(message12(data))); assert.equal(r.status, 200); assert.deepEqual(await r.json(), result);
+    }
+  }
+  for (const data of [{ direction: 'inbound' }, { direction: 'inbound', sender: 'agent' }, { direction: 'outbound', sender: 'seller' }, { direction: 'outbound', sender: 'seller', crm_seller_id: 'bad' },
+    { direction: 'outbound', sender: 'bot', crm_seller_id: seller }, { direction: 'inbound', sender: 'customer', crm_seller_id: null }, { direction: 'inbound', sender: 'bot' }, { direction: 'outbound', sender: 'customer' }, { direction: 'inbound', sender: 'seller', crm_seller_id: seller }]) {
+    calls = []; await expectError(req(message12(data)), 400, 'invalid_event');
+  }
+  for (const extra of [{ sender: 'customer' }, { crm_seller_id: seller }]) {
+    const e11 = { ...lead(), protocol_revision: '1.1', type: 'message.new', data: { message_id: 'm', direction: 'inbound', text: 'x', sent_at: '2026-11-04T12:00:00Z', ...extra } };
+    calls = []; await expectError(req(e11), 400, 'invalid_event');
+    const legacy = { ...e11 }; delete legacy.protocol_revision; calls = []; await expectError(req(legacy), 400, 'invalid_event');
+  }
+  const e = message12({ direction: 'inbound', sender: 'customer' });
+  for (const result of [{ event_id: 'evt-1', crm_message_id: seller }, { event_id: 'evt-1', crm_message_id: seller, status: 'updated' }]) {
+    globalThis.fetch = async () => Response.json(result);
+    const r = await POST(req(e)); assert.equal(r.status, 503); assert.deepEqual(await r.json(), { error: 'persistence_unavailable' });
+  }
+  // 1.1 message results stay without status.
+  globalThis.fetch = async () => Response.json({ event_id: 'evt-1', crm_message_id: seller, status: 'created' });
+  const e11 = { ...lead(), protocol_revision: '1.1', type: 'message.new', data: { message_id: 'm', direction: 'inbound', text: 'x', sent_at: '2026-11-04T12:00:00Z' } };
+  assert.equal((await POST(req(e11))).status, 503);
+});
+test('1.2 S7: ownership.taken accepts crm source under 1.2 only; released requires reason under 1.2 only', async () => {
+  const taken = (rev, source) => ({ ...lead(), protocol_revision: rev, type: 'ownership.taken', data: { version: 4, crm_seller_id: seller, source } });
+  for (const source of ['clickup', 'crm']) {
+    const result = { event_id: 'evt-1', ownership_version: 4, owner: 'human', crm_seller_id: seller, source };
+    globalThis.fetch = async () => Response.json(result);
+    const r = await POST(req(taken('1.2', source))); assert.equal(r.status, 200); assert.deepEqual(await r.json(), result);
+    // Equal version must echo the requested source.
+    globalThis.fetch = async () => Response.json({ ...result, source: source === 'crm' ? 'clickup' : 'crm' });
+    assert.equal((await POST(req(taken('1.2', source)))).status, 503);
+    // A later version may report the other human source.
+    const later = { ...result, ownership_version: 5, source: source === 'crm' ? 'clickup' : 'crm' };
+    globalThis.fetch = async () => Response.json(later);
+    assert.deepEqual(await (await POST(req(taken('1.2', source)))).json(), later);
+  }
+  calls = []; await expectError(req(taken('1.1', 'crm')), 400, 'invalid_event');
+  calls = []; await expectError(req(taken('1.2', 'bot')), 400, 'invalid_event');
+  const newerCrm = { event_id: 'evt-1', ownership_version: 5, owner: 'human', crm_seller_id: seller, source: 'crm' };
+  globalThis.fetch = async () => Response.json(newerCrm);
+  const stale11 = await POST(req(taken('1.1', 'clickup')));
+  assert.equal(stale11.status, 200, '1.1 accepts newer authoritative CRM-originated state');
+  assert.deepEqual(await stale11.json(), newerCrm);
+  globalThis.fetch = async () => Response.json({ ...newerCrm, ownership_version: 4 });
+  const equal11 = await POST(req(taken('1.1', 'clickup')));
+  assert.equal(equal11.status, 503, 'equal-version 1.1 take must still echo the requested ClickUp source');
+  assert.deepEqual(await equal11.json(), { error: 'persistence_unavailable' });
+  globalThis.fetch = async () => Response.json({ event_id: 'evt-1', ownership_version: 5, owner: 'human', crm_seller_id: seller, source: 'whatsapp' });
+  assert.equal((await POST(req(taken('1.2', 'crm')))).status, 503);
+
+  const released = (rev, data) => ({ ...lead(), protocol_revision: rev, type: 'ownership.released', data: { version: 4, ...data } });
+  for (const reason of ['seller_released', 'sla_expired', 'customer_new_quote', 'opportunity_closed']) {
+    const result = { event_id: 'evt-1', ownership_version: 4, owner: 'bot', crm_seller_id: null, source: null };
+    globalThis.fetch = async () => Response.json(result);
+    const r = await POST(req(released('1.2', { reason }))); assert.equal(r.status, 200); assert.deepEqual(await r.json(), result);
+    globalThis.fetch = async () => Response.json({ ...result, reason });
+    assert.equal((await POST(req(released('1.2', { reason })))).status, 503, 'no reason in the result');
+  }
+  for (const data of [{}, { reason: 'timeout' }, { reason: null }]) { calls = []; await expectError(req(released('1.2', data)), 400, 'invalid_event'); }
+  calls = []; await expectError(req(released('1.1', { reason: 'sla_expired' })), 400, 'invalid_event');
+  const legacy = released('1.1', { reason: 'sla_expired' }); delete legacy.protocol_revision; calls = []; await expectError(req(legacy), 400, 'invalid_event');
+});
+test('1.2 S8: handoff.created under 1.2 follows the 1.1 rules and result', async () => {
+  const e = { ...lead(), protocol_revision: '1.2', type: 'handoff.created', data: { handoff_id: 'h', kind: 'commercial', area: 'sales', reason: 'human_requested', priority: 'alta', description: 'Help' } };
+  const result = { event_id: 'evt-1', external_handoff_id: 'h', crm_case_id: null, crm_opportunity_id: null, status: 'pending_association', routing_status: 'pending_routing' };
+  globalThis.fetch = async () => Response.json(result);
+  const r = await POST(req(e)); assert.equal(r.status, 200); assert.deepEqual(await r.json(), result);
+  const { routing_status: _, ...withoutRouting } = result;
+  globalThis.fetch = async () => Response.json(withoutRouting);
+  assert.equal((await POST(req(e))).status, 503);
+  const legacyShape = { ...e, data: { handoff_id: 'h', kind: 'complaint', description: 'x' } };
+  calls = []; await expectError(req(legacyShape), 400, 'invalid_event');
 });
