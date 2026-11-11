@@ -18,6 +18,27 @@ def title_name(value):
     return " ".join(legal.get(word, word) for word in words)
 
 
+def clean_client_name(value):
+    """Conserva letras, cifras y espacios, sin perder tildes ni la ñ."""
+    name = value.strip()
+    name = re.sub(
+        r"^(?:(?:raz[oó]n\s+social|r\.?\s*social|empresa|nombre|social|"
+        r"cotizaci[oó]n\s+a\s+nombre\s+de)\s*:\s*)+",
+        "", name, flags=re.IGNORECASE,
+    )
+    rut = r"\d{1,2}\.\d{3}\.\d{3}-[0-9kK]"
+    name = re.sub(r"^" + rut + r"\s+", "", name)
+    name = re.sub(r"\s*[/,.-]?\s*" + rut + r"\s*$", "", name)
+    name = re.sub(r"\bS\s*\.\s*A\s*\.?\b", "SA", name, flags=re.IGNORECASE)
+    name = "".join(char if char.isalnum() or char.isspace() else " " for char in name)
+    words = re.sub(r"\s+", " ", name).strip().title().split()
+    legal = {"Spa": "SpA", "Ltda": "Ltda", "Sa": "SA", "Eirl": "EIRL"}
+    cleaned = " ".join(legal.get(word, word) for word in words)
+    if not cleaned:
+        raise ValueError("Un nombre quedó vacío después de limpiarlo")
+    return cleaned
+
+
 def sql_literal(value):
     return "'" + value.replace("'", "''") + "'"
 
@@ -60,7 +81,7 @@ def make_clients(rows):
         rut = primary["rut"] if primary["rut_estado"] == "ok" else None
         clients.append({
             "dolibarr_id": primary["dolibarr_id"],
-            "nombre": title_name(primary["nombre"]),
+            "nombre": clean_client_name(primary["nombre"]),
             "rut": rut,
             "tipo_cliente": nullable(primary["tipo_cliente"]),
             "telefono": phones[0] if phones else None,
@@ -181,6 +202,22 @@ def client_sql(batch):
   ON CONFLICT DO NOTHING RETURNING id
 )
 SELECT count(*)::int AS inserted FROM ins;"""
+
+
+def name_updates_sql(batch):
+    return f"""WITH source AS (
+  SELECT * FROM jsonb_to_recordset({sql_json(batch)}) AS x(
+    dolibarr_id text, old_name text, new_name text)
+), changed AS (
+  UPDATE public.clientes c SET
+    apellido_razon_social=CASE WHEN c.apellido_razon_social=c.nombre
+      THEN s.new_name ELSE c.apellido_razon_social END,
+    nombre=s.new_name
+  FROM source s
+  WHERE c.dolibarr_id=s.dolibarr_id AND c.nombre=s.old_name
+  RETURNING c.id
+)
+SELECT count(*)::int AS updated FROM changed;"""
 
 
 def seller_sql(names):
@@ -361,13 +398,25 @@ def main():
     parser.add_argument("--batch-size", type=int, default=400)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True, mode=0o700)
-    clients, notes = make_clients(read_csv(args.input))
+    source_rows = read_csv(args.input)
+    primary_rows = {row["dup_key"]: row for row in reversed(source_rows)}
+    name_updates = []
+    for row in primary_rows.values():
+        old_name = title_name(row["nombre"])
+        new_name = clean_client_name(old_name)
+        if old_name != new_name:
+            name_updates.append({"dolibarr_id": row["dolibarr_id"],
+                                 "old_name": old_name, "new_name": new_name})
+    clients, notes = make_clients(source_rows)
     clients, notes, cross_key_maps = merge_cross_key_duplicates(clients, notes)
     names = sorted({c["vendedor_origen"] for c in clients if c["vendedor_origen"]})
     (args.output / "sellers.sql").write_text(seller_sql(names), encoding="utf-8")
     for i in range(0, len(clients), args.batch_size):
         (args.output / f"clients-{i // args.batch_size:03d}.sql").write_text(
             client_sql(clients[i:i + args.batch_size]), encoding="utf-8")
+    for i in range(0, len(name_updates), args.batch_size):
+        (args.output / f"names-{i // args.batch_size:03d}.sql").write_text(
+            name_updates_sql(name_updates[i:i + args.batch_size]), encoding="utf-8")
     (args.output / "notes.sql").write_text(notes_sql(notes), encoding="utf-8")
     (args.output / "duplicate-contacts.sql").write_text(cross_group_contacts_sql(clients), encoding="utf-8")
     (args.output / "cross-key-groups.json").write_text(
@@ -376,7 +425,9 @@ def main():
         (args.output / f"reconcile-{operation}.sql").write_text(
             reconciliation_sql(cross_key_maps, operation), encoding="utf-8")
     (args.output / "suppliers.sql").write_text(supplier_sql(read_csv(args.suppliers)), encoding="utf-8")
-    print(json.dumps({"clientes_unicos": len(clients), "duplicados_adicionales":
+    print(json.dumps({"clientes_unicos": len(clients), "nombres_a_limpiar": len(name_updates),
+                      "lotes_nombres": (len(name_updates) + args.batch_size - 1) // args.batch_size,
+                      "duplicados_adicionales":
                       sum(len(group["source_ids"]) - 1 for group in cross_key_maps), "notas": len(notes),
                       "vendedores": len(names), "lotes_clientes": (len(clients) + args.batch_size - 1) // args.batch_size},
                      ensure_ascii=False))
