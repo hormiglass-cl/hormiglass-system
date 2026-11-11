@@ -71,11 +71,20 @@ import {
   Compass,
   Disc,
   AlarmClock,
+  Ban,
+  RotateCcw,
 } from 'lucide-react';
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { CotizacionModal } from '../../components/CotizacionModal';
 import { mensajeError } from '../../lib/errores';
+import {
+  MOTIVOS_PERDIDA,
+  esOportunidadPerdida,
+  puedeMarcarsePerdida,
+  sugerirPerdidaPorRechazo,
+  motivoPerdidaLabel,
+} from '../../lib/oportunidad-perdida';
 import { CodeStamp, StatusBadge, Button, Dialog, Field, TextInput, Select } from '../../components/ui/crm';
 import { KanbanCard } from '../../components/ventas/KanbanCard';
 import { CapturedDataPending, OpportunityActivity } from '../../components/whatsapp/OpportunityActivity';
@@ -162,6 +171,12 @@ export default function PipelineVentasPage() {
 
   // Advanced Filters for List & Board View
   const [viewType, setViewType] = useState<'lista' | 'tablero'>('tablero');
+  // Lost opportunities live outside the active pipeline, under their own view.
+  const [vistaPerdidas, setVistaPerdidas] = useState<'activas' | 'perdidas'>('activas');
+  const [opToMarkLost, setOpToMarkLost] = useState<OportunidadVenta | null>(null);
+  const [perdidaMotivo, setPerdidaMotivo] = useState('');
+  const [perdidaDetalle, setPerdidaDetalle] = useState('');
+  const [savingPerdida, setSavingPerdida] = useState(false);
   const [filterSearch, setFilterSearch] = useState('');
   const [filterEstado] = useState<string>('todos');
   const [filterRama] = useState<string>(() => searchParams.get('rama') || 'todos');
@@ -1469,6 +1484,7 @@ export default function PipelineVentasPage() {
     setOportunidades((prev) => prev.map((op) => op.id === selectedOp!.id
       ? { ...op, cotizacion_actual_id: oportunidad.cotizacion_actual_id } : op));
     setCotizacionErrorMsg('');
+    return oportunidad.cotizacion_actual_id as string | null;
   };
 
   // Candidate quote dropdown selection state
@@ -1659,10 +1675,79 @@ export default function PipelineVentasPage() {
     await applyMoveWithRama(opId, targetState, rama);
   };
 
+  // Lost opportunity: the database owns perdida_at/perdida_por; the client only sends the reason.
+  type CamposPerdida = Pick<OportunidadVenta, 'perdida_at' | 'perdida_motivo' | 'perdida_detalle' | 'perdida_por'>;
+  const CAMPOS_PERDIDA = 'perdida_at, perdida_motivo, perdida_detalle, perdida_por';
+  const perdidaDetalleLimpio = perdidaDetalle.trim();
+  const perdidaValida = Boolean(perdidaMotivo) && (perdidaMotivo !== 'otro' || perdidaDetalleLimpio.length > 0);
+
+  const aplicarCamposPerdida = (opId: string, campos: CamposPerdida) => {
+    setOportunidades((prev) => prev.map((o) => (o.id === opId ? { ...o, ...campos } : o)));
+    setSelectedOp((prev) => (prev && prev.id === opId ? { ...prev, ...campos } : prev));
+  };
+
+  const abrirMarcarPerdida = (op: OportunidadVenta) => {
+    setPerdidaMotivo('');
+    setPerdidaDetalle('');
+    setOpToMarkLost(op);
+  };
+
+  const confirmarMarcarPerdida = async () => {
+    const op = opToMarkLost;
+    if (!op || !perdidaValida || savingPerdida) return;
+    setSavingPerdida(true);
+    try {
+      const detalle = perdidaDetalleLimpio || null;
+      const { data, error } = await supabase
+        .from('oportunidades')
+        .update({ perdida_motivo: perdidaMotivo, perdida_detalle: detalle })
+        .eq('id', op.id)
+        .select(CAMPOS_PERDIDA)
+        .single();
+      if (error || !data) throw new Error(mensajeError(error, 'No se pudo marcar la oportunidad como perdida.'));
+      aplicarCamposPerdida(op.id, data as CamposPerdida);
+      setOpToMarkLost(null);
+      toast({ message: `Oportunidad ${op.codigo} marcada como perdida.`, tone: 'success' });
+      await addOportunidadActividad(op.id, `Marcada como perdida: ${motivoPerdidaLabel(perdidaMotivo)}${detalle ? ` — ${detalle}` : ''}`);
+    } catch (err) {
+      toast({ message: mensajeError(err, 'No se pudo marcar la oportunidad como perdida.'), tone: 'danger' });
+    } finally {
+      setSavingPerdida(false);
+    }
+  };
+
+  const reabrirOportunidad = async (op: OportunidadVenta) => {
+    const etapa = pipelineStates.find((s) => s.id === op.estado_pipeline)?.label || op.estado_pipeline;
+    const ok = await confirmDialog({
+      title: 'Reabrir oportunidad',
+      message: `La oportunidad ${op.codigo} volverá al pipeline activo en la etapa "${etapa}".`,
+      confirmLabel: 'Reabrir',
+    });
+    if (!ok) return;
+    try {
+      const { data, error } = await supabase
+        .from('oportunidades')
+        .update({ perdida_motivo: null, perdida_detalle: null })
+        .eq('id', op.id)
+        .select(CAMPOS_PERDIDA)
+        .single();
+      if (error || !data) throw new Error(mensajeError(error, 'No se pudo reabrir la oportunidad.'));
+      aplicarCamposPerdida(op.id, data as CamposPerdida);
+      toast({ message: `Oportunidad ${op.codigo} reabierta.`, tone: 'success' });
+      await addOportunidadActividad(op.id, 'Oportunidad reabierta');
+    } catch (err) {
+      toast({ message: mensajeError(err, 'No se pudo reabrir la oportunidad.'), tone: 'danger' });
+    }
+  };
+
   // Mover Oportunidad en el Pipeline (Sin gates bloqueantes de abono)
   const moveOportunidadToState = async (opId: string, targetState: EstadoPipeline) => {
     const targetOp = oportunidades.find((o) => o.id === opId);
     if (!targetOp || targetOp.estado_pipeline === targetState) return;
+    if (esOportunidadPerdida(targetOp)) {
+      toast({ message: 'La oportunidad está perdida. Reábrela para cambiar su etapa.', tone: 'warning' });
+      return;
+    }
 
     if (['prod_finalizado', 'rev_entregado'].includes(targetState)) {
       const { data: accredited, error: deliveryError } = await supabase.rpc('entrega_acreditada', { p_venta: opId });
@@ -2328,7 +2413,13 @@ export default function PipelineVentasPage() {
 
   const isUnaccreditedClose = (op: OportunidadVenta) =>
     ['prod_finalizado', 'rev_entregado'].includes(op.estado_pipeline) && deliveryAccreditation[op.id] !== true;
+  const perdidasCount = oportunidades.filter(esOportunidadPerdida).length;
   const filteredOportunidades = oportunidades.filter((op) => {
+    // 0. Active pipeline vs lost opportunities
+    if ((vistaPerdidas === 'perdidas') !== esOportunidadPerdida(op)) {
+      return false;
+    }
+
     // 1. Text Search (código, título, cliente nombre, cliente rut)
     if (filterSearch.trim()) {
       const q = filterSearch.toLowerCase().trim();
@@ -2400,6 +2491,27 @@ export default function PipelineVentasPage() {
       {!selectedOp ? (
       <>
       <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-muted p-1">
+          {([
+            { id: 'activas' as const, label: 'Activas', count: oportunidades.length - perdidasCount },
+            { id: 'perdidas' as const, label: 'Perdidas', count: perdidasCount },
+          ]).map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => setVistaPerdidas(v.id)}
+              aria-pressed={vistaPerdidas === v.id}
+              className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+                vistaPerdidas === v.id ? 'bg-accent text-on-accent shadow-xs' : 'text-ink-muted hover:text-ink'
+              }`}
+            >
+              <span>{v.label}</span>
+              <span className="t-num text-[11px] opacity-80">{v.count}</span>
+            </button>
+          ))}
+        </div>
+        {vistaPerdidas === 'activas' && (
         <div className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-muted p-1">
           <button
             type="button"
@@ -2423,6 +2535,8 @@ export default function PipelineVentasPage() {
             <Kanban className="h-3.5 w-3.5" />
             <span>Tablero</span>
           </button>
+        </div>
+        )}
         </div>
 
         <div className="flex w-full min-w-0 items-center gap-3 sm:w-auto">
@@ -2451,6 +2565,41 @@ export default function PipelineVentasPage() {
         <div className="py-12 text-center text-ink-muted font-medium text-xs">
           Cargando oportunidades de venta...
         </div>
+      ) : vistaPerdidas === 'perdidas' ? (
+        <section className="overflow-hidden rounded-panel border border-line bg-surface">
+          {filteredOportunidades.length === 0 ? (
+            <p className="px-4 py-4 text-xs font-medium text-ink-muted">No hay oportunidades perdidas.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-left text-xs">
+                <thead className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                  <tr>
+                    <th className="px-4 py-2">Código</th>
+                    <th className="px-4 py-2">Oportunidad</th>
+                    <th className="px-4 py-2">Cliente</th>
+                    <th className="px-4 py-2">Motivo</th>
+                    <th className="px-4 py-2">Detalle</th>
+                    <th className="px-4 py-2">Fecha perdida</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line-subtle">
+                  {[...filteredOportunidades]
+                    .sort((a, b) => (b.perdida_at || '').localeCompare(a.perdida_at || ''))
+                    .map((op) => (
+                      <tr key={op.id} onClick={() => handleOpenOportunidad(op)} className="cursor-pointer transition hover:bg-surface-muted">
+                        <td className="t-num px-4 py-2.5 font-semibold text-ink">{op.codigo}</td>
+                        <td className="max-w-[260px] truncate px-4 py-2.5 text-ink-muted">{op.titulo}</td>
+                        <td className="px-4 py-2.5 text-ink">{op.cliente?.nombre || '—'}</td>
+                        <td className="px-4 py-2.5 text-ink">{motivoPerdidaLabel(op.perdida_motivo)}</td>
+                        <td className="max-w-[260px] truncate px-4 py-2.5 text-ink-muted">{op.perdida_detalle || '—'}</td>
+                        <td className="t-num px-4 py-2.5 text-ink-muted">{op.perdida_at ? new Date(op.perdida_at).toLocaleDateString('es-CL') : '—'}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       ) : viewType === 'lista' ? (
         <div className="space-y-4">
           {pipelineStates.map((stage) => {
@@ -2600,6 +2749,27 @@ export default function PipelineVentasPage() {
                 <>
                   <button type="button" aria-label="Cerrar menú" tabIndex={-1} onClick={() => setOpMenuOpen(false)} className="fixed inset-0 z-40 cursor-default" />
                   <div role="menu" className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-line bg-surface p-1 shadow-[var(--hg-shadow-popover)]">
+                    {esOportunidadPerdida(selectedOp) ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => { setOpMenuOpen(false); void reabrirOportunidad(selectedOp); }}
+                        className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-ink transition hover:bg-surface-muted"
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        <span>Reabrir oportunidad</span>
+                      </button>
+                    ) : puedeMarcarsePerdida(selectedOp) && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => { setOpMenuOpen(false); abrirMarcarPerdida(selectedOp); }}
+                        className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold text-ink transition hover:bg-surface-muted"
+                      >
+                        <Ban className="h-4 w-4" />
+                        <span>Marcar como perdida</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       role="menuitem"
@@ -2710,6 +2880,14 @@ export default function PipelineVentasPage() {
             </div>
 
             <div className="shrink-0 space-y-0.5 pb-5 text-xs text-ink-muted">
+              {esOportunidadPerdida(selectedOp) && (
+                <div className="flex flex-wrap items-center gap-2 pb-1.5">
+                  <StatusBadge tone="danger">Perdida</StatusBadge>
+                  <span className="font-semibold text-ink">{motivoPerdidaLabel(selectedOp.perdida_motivo)}</span>
+                  {selectedOp.perdida_detalle && <span>— {selectedOp.perdida_detalle}</span>}
+                  {selectedOp.perdida_at && <span className="t-num">· {new Date(selectedOp.perdida_at).toLocaleDateString('es-CL')}</span>}
+                </div>
+              )}
               <p>
                 ID: <span className="t-num font-semibold text-ink">{selectedOp.codigo}</span>
               </p>
@@ -2750,6 +2928,7 @@ export default function PipelineVentasPage() {
                           <div className="relative h-8 w-[408px] max-w-full">
                             <Select
                               value={selectedOp.estado_pipeline}
+                              disabled={esOportunidadPerdida(selectedOp)}
                               onChange={async (e) => {
                                 const newStage = e.target.value as EstadoPipeline;
                                 await moveOportunidadToState(selectedOp.id, newStage);
@@ -3324,7 +3503,17 @@ export default function PipelineVentasPage() {
                                     value={cot.estado}
                                     onChange={async (e) => {
                                       try {
-                                        await guardarCambioCotizacion(cot, { estado: e.target.value as EstadoCotizacion });
+                                        const nuevoEstado = e.target.value as EstadoCotizacion;
+                                        const cotizacionActualId = await guardarCambioCotizacion(cot, { estado: nuevoEstado });
+                                        const op = selectedOp;
+                                        // A rejected current quote only suggests closing as lost; never automatic.
+                                        if (sugerirPerdidaPorRechazo({ ...op, cotizacion_actual_id: cotizacionActualId ?? undefined }, { id: cot.id, estado: nuevoEstado })) {
+                                          toast({
+                                            message: 'Cotización rechazada. ¿Quieres marcar la oportunidad como perdida?',
+                                            tone: 'info',
+                                            action: { label: 'Marcar como perdida', onClick: () => abrirMarcarPerdida(op) },
+                                          });
+                                        }
                                       } catch (err) {
                                         setCotizacionErrorMsg(mensajeError(err));
                                       }
@@ -4467,6 +4656,43 @@ export default function PipelineVentasPage() {
           </div>
         </div>
       )}
+      {/* Marcar oportunidad como perdida: motivo obligatorio */}
+      <Dialog
+        open={opToMarkLost !== null}
+        onClose={() => { if (!savingPerdida) setOpToMarkLost(null); }}
+        title="Marcar como perdida"
+        description={opToMarkLost ? `${opToMarkLost.codigo} · ${opToMarkLost.titulo}. Saldrá del pipeline activo y podrás reabrirla desde "Perdidas".` : undefined}
+        footer={
+          <>
+            <Button onClick={() => setOpToMarkLost(null)} disabled={savingPerdida}>Cancelar</Button>
+            <Button variant="destructive" disabled={!perdidaValida || savingPerdida} onClick={confirmarMarcarPerdida}>
+              {savingPerdida ? 'Guardando...' : 'Marcar como perdida'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Field label="Motivo" required>
+            {(f) => (
+              <Select {...f} value={perdidaMotivo} onChange={(e) => setPerdidaMotivo(e.target.value)}>
+                <option value="">Selecciona un motivo</option>
+                {MOTIVOS_PERDIDA.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </Select>
+            )}
+          </Field>
+          <Field label="Detalle" required={perdidaMotivo === 'otro'}>
+            {(f) => (
+              <TextInput
+                {...f}
+                value={perdidaDetalle}
+                onChange={(e) => setPerdidaDetalle(e.target.value)}
+                placeholder={perdidaMotivo === 'otro' ? 'Describe el motivo' : 'Opcional'}
+              />
+            )}
+          </Field>
+        </div>
+      </Dialog>
+
       {/* Modal Confirmación Eliminación de Oportunidad */}
       {opToDelete && (
         <div className="fixed inset-0 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 ">

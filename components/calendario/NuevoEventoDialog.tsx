@@ -98,6 +98,8 @@ export function NuevoEventoDialog({
         supabase
           .from('oportunidades')
           .select('id, codigo, titulo, cliente:clientes(nombre)')
+          // New events cannot be scheduled for a lost opportunity.
+          .is('perdida_at', null)
           .order('created_at', { ascending: false }),
         supabase.from('usuarios').select('*').eq('activo', true).order('nombre', { ascending: true }),
         supabase.from('guias_despacho').select('id, oportunidad_id, numero_guia').neq('estado', 'cancelada'),

@@ -89,6 +89,8 @@ export default function ComisionesPage() {
       .from('oportunidades')
       .select('*, cliente:clientes(nombre, apellido_razon_social, rut)')
       .not('asignado_a', 'is', null)
+      // A lost opportunity earns no commission.
+      .is('perdida_at', null)
       .order('created_at', { ascending: false });
     // Un colaborador solo ve las comisiones de sus propias ventas.
     if (!isAdmin) consulta = consulta.eq('asignado_a', currentUser.id);

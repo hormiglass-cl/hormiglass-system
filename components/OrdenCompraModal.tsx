@@ -9,6 +9,7 @@ import { EstadoOrdenCompra, OrdenCompra, OrdenCompraItem, Proveedor, Oportunidad
 import { logSistema } from '../lib/logger';
 import { AlertTriangle, Plus, Save, Trash2, TrendingUp, X } from 'lucide-react';
 import { mensajeError } from '../lib/errores';
+import { esOportunidadPerdida } from '../lib/oportunidad-perdida';
 import { etiquetaProducto } from '../lib/productos';
 import { Button, IconButton, CodeStamp } from './ui/crm';
 import { DateInput } from './ui/FormControls';
@@ -486,7 +487,10 @@ export function OrdenCompraModal({
               <SearchSelect
                 value={oportunidadId}
                 onChange={setOportunidadId}
-                options={oportunidades.map((op) => ({ value: op.id, label: op.codigo, hint: op.titulo }))}
+                options={oportunidades
+                  // Lost opportunities are not offered, except the one already linked so editing keeps working.
+                  .filter((op) => !esOportunidadPerdida(op) || op.id === oportunidadId)
+                  .map((op) => ({ value: op.id, label: op.codigo, hint: op.titulo }))}
                 clearLabel="Sin oportunidad"
                 placeholder="Sin oportunidad"
                 searchPlaceholder="Buscar oportunidad..."

@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { mensajeError } from '../lib/errores';
+import { esOportunidadPerdida } from '../lib/oportunidad-perdida';
 import { useAjuste } from '../lib/ajustes';
 import { etiquetaProducto } from '../lib/productos';
 import { Button, CodeStamp, IconButton } from './ui/crm';
@@ -173,7 +174,10 @@ export function CotizacionModal({
     }
   }, [isOpen, supabase, initialCotizacion, clienteIdInicial, editCotizacionIdInicial]);
 
-  const clientOportunidades = oportunidades.filter((o) => o.cliente_id === clienteId);
+  // Lost opportunities are not offered, except the one already linked so editing keeps working.
+  const clientOportunidades = oportunidades.filter(
+    (o) => o.cliente_id === clienteId && (!esOportunidadPerdida(o) || o.id === oportunidadId),
+  );
   const selectCatalogItem = (index: number, productoCatalogoId: string) => {
     const prod = catalogo.find((p) => p.id === productoCatalogoId);
     if (!prod) return;
