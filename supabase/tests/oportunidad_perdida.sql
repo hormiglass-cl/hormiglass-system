@@ -1,9 +1,9 @@
--- Database rules for lost opportunities (migrations 20261111120000 and 20261111130000).
+-- Database rules for lost opportunities (migrations 20261111120000, 20261111130000, 20261111140000).
 -- Run against a DEV database only. Every change is rolled back: success ends with
--- the error "ROLLBACK_OK 123456789"; any other error names the failing rule.
+-- the error "ROLLBACK_OK 1234567890" (the last digit is rule 10); any other error names the failing rule.
 -- Requires at least one opportunity in stage 'nueva'.
 DO $$
-DECLARE v_id uuid; r record; ok text := '';
+DECLARE v_id uuid; v_user uuid; v_auth uuid; r record; ok text := '';
 BEGIN
   SELECT id INTO v_id FROM public.oportunidades WHERE estado_pipeline = 'nueva' AND perdida_at IS NULL LIMIT 1;
   IF v_id IS NULL THEN RAISE EXCEPTION 'SETUP: no open opportunity in stage nueva'; END IF;
@@ -49,6 +49,19 @@ BEGIN
   FROM public.oportunidades WHERE id = v_id
   RETURNING perdida_at INTO r;
   IF r.perdida_at < now() - interval '1 minute' THEN RAISE EXCEPTION 'FAIL9 backdated insert kept'; END IF; ok := ok || '9';
+
+  -- 10. The author is set from the session user and may become NULL (user deleted, ON DELETE
+  --     SET NULL), but cannot be replaced (migration 20261111140000).
+  SELECT u.id, u.auth_id INTO v_user, v_auth FROM public.usuarios u WHERE u.auth_id IS NOT NULL LIMIT 1;
+  PERFORM set_config('request.jwt.claim.sub', v_auth::text, true);
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_auth)::text, true);
+  UPDATE public.oportunidades SET perdida_motivo = 'precio' WHERE id = v_id;
+  IF (SELECT perdida_por FROM public.oportunidades WHERE id = v_id) IS DISTINCT FROM v_user THEN RAISE EXCEPTION 'FAIL10 author not set'; END IF;
+  UPDATE public.oportunidades SET perdida_por = gen_random_uuid() WHERE id = v_id;
+  IF (SELECT perdida_por FROM public.oportunidades WHERE id = v_id) IS DISTINCT FROM v_user THEN RAISE EXCEPTION 'FAIL10 author replaced'; END IF;
+  UPDATE public.oportunidades SET perdida_por = NULL WHERE id = v_id;
+  IF (SELECT perdida_por FROM public.oportunidades WHERE id = v_id) IS NOT NULL THEN RAISE EXCEPTION 'FAIL10 author restored after SET NULL'; END IF;
+  ok := ok || '0';
 
   RAISE EXCEPTION 'ROLLBACK_OK %', ok;
 END $$;

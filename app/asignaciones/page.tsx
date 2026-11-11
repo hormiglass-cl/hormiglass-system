@@ -685,7 +685,7 @@ export default function AsignacionesPage() {
                       value={opId}
                       onChange={setOpId}
                       options={oportunidades
-                        .filter((op) => !esOportunidadPerdida(op))
+                        .filter((op) => !esOportunidadPerdida(op) || op.id === opId)
                         .map((op) => ({ value: op.id, label: op.codigo, hint: op.titulo }))}
                       placeholder="Seleccionar venta"
                       searchPlaceholder="Buscar venta..."
