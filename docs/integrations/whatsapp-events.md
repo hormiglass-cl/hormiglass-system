@@ -16,6 +16,8 @@
   The `PRUEBA` sellers are development-only test accounts (`@example.invalid`, no password; they cannot sign in).
 - No area recipients are mapped yet, so `management`, `finance`, `scheduling` and `claims` handoffs return `routing_status: "pending_routing"`.
 - The development endpoint is a temporary tunnel URL shared out of band; it changes whenever the tunnel restarts.
+- **2026-11-11 update:** after the dev schema sync, `clientes.rut` is **nullable**, so a `lead.qualified` without `rut` for a new phone creates the customer with an empty RUT (the receiver only requires `rut` while the column is NOT NULL). Roles are now `admin`/`user`; the seller check accepts both.
+- **2026-11-11 first real bot test (1.1):** `lead.qualified` without `rut` → 200 (customer and opportunity created, assigned to PRUEBA Vendedor 1); identical resend with a fresh signature → 200 with the same response and no new rows; correction as revision 2 → 200 on the same opportunity (stored in the lead link; the opportunity itself is not updated until 1.2a). The bot will prefix its ids per environment before production.
 
 ## Before connecting the bot
 
