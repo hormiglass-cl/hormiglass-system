@@ -506,6 +506,11 @@ export interface OportunidadVenta {
   cotizacion_actual?: Cotizacion;
   cotizacion_actual_id?: string;
   produccion_diaria?: ProduccionDiaria[];
+  /** Lost opportunity: set by the database when perdida_motivo is saved; null while open. */
+  perdida_at?: string | null;
+  perdida_motivo?: string | null;
+  perdida_detalle?: string | null;
+  perdida_por?: string | null;
 }
 
 export interface Venta {
