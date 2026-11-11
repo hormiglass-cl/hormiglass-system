@@ -96,7 +96,7 @@ SELECT pg_temp.assert_true(whatsapp_complete_handoff('sales')->>'routing_status'
 SELECT pg_temp.reject(pg_temp.ev('inactive-owner','ownership.taken','{"version":8,"crm_seller_id":"10000000-0000-4000-8000-000000000003","source":"clickup"}'),'invalid_seller');
 UPDATE usuarios SET activo=true WHERE id='10000000-0000-4000-8000-000000000003';
 SELECT pg_temp.reject(pg_temp.ev('null-revision','ownership.released','{"version":8}') || '{"protocol_revision":null}','invalid_event');
-SELECT pg_temp.reject(pg_temp.ev('bad-revision','ownership.released','{"version":8}') || '{"protocol_revision":"1.2"}','invalid_event');
+SELECT pg_temp.reject(pg_temp.ev('bad-revision','ownership.released','{"version":8}') || '{"protocol_revision":"1.3"}','invalid_event');
 SELECT pg_temp.reject(pg_temp.ev('missing-owner','ownership.taken','{"version":8,"source":"clickup"}'),'invalid_event');
 SELECT pg_temp.reject(pg_temp.ev('bad-source','ownership.taken','{"version":8,"crm_seller_id":null,"source":"crm"}'),'invalid_event');
 SELECT pg_temp.reject(pg_temp.ev('ownership-content-conflict','ownership.released','{"version":7}') || '{"event_id":"taken-null"}','event_conflict');

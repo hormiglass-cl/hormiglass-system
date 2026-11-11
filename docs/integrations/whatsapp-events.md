@@ -30,6 +30,19 @@ Nested unknown keys are rejected. Optional top-level additions cannot be null; o
 - `handoff.created` retains the 1.1 rules and response shape.
 - A 1.2 lead result adds `status: created|updated|ignored_stale|duplicate`; a 1.2 message result adds `status: created|duplicate`. Identical event replay returns the stored identifiers with `status: "duplicate"`, unlike the exact legacy/1.1 stored-result replay. Equal lead revision with a different raw record remains 409 `revision_conflict`.
 
+### SQL mapping and corrections (requires the 1.2a migration)
+
+Install `supabase/migrations/20261111160000_whatsapp_events_v1_2.sql` after both original receiver migrations. This forward migration fails closed if the prerequisite receiver/completion function bodies have drifted. It has been tested in disposable local Postgres, **not applied remotely**.
+
+- Creation maps `title` to `titulo`, address/commune/city to `direccion_obra` (city omitted when equal to commune), and items to product strings (`product variant quantity unit (measurements)`, absent/null optional parts omitted). `fulfillment` maps install to Instalación/instalacion/null, delivery to Suministro/solo_material/despacho_propio, pickup to Suministro/solo_material/retiro_cliente. Urgent/high priority is retained; media/baja becomes normal. Unsent fields retain database defaults.
+- Only a newly created customer receives `customer_type` (`company` → juridica, otherwise natural), `company` (otherwise name) and the supplied RUT. A phone-matched customer is never overwritten on creation.
+- Higher revisions, including legacy/1.1 corrections, compare mapped opportunity fields with `last_applied`. Apply only where the current value still matches that proven snapshot; otherwise replace the pending before/after proposal for that field. Customer changes always require review. Pipeline, assignment, amounts and notes remain untouched. The current assigned seller is notified with applied/pending counts.
+- `address_components` remembers the bot's separate address/commune/city inputs across partial revisions; omitted components are retained without parsing the human-visible address. It does not change the raw record used for revision identity. A human address edit remains protected and receives a pending proposal instead.
+- Existing lead links start with empty provenance; existing human values are not assumed bot-written. New links snapshot their mapped values and defaults. Corrections are bounded to seven opportunity and three customer fields. Tables/helpers remain service-role-only; the browser review panel and its authorized RPCs are a separate implementation step.
+- The stored release reason accompanies ownership state. A newly applied `sla_expired` release notifies the previous mapped seller; stale releases and replay do not repeat that notification. Message content retains `sender` and, for seller authors, `crm_seller_id`.
+
+These 1.2a rules override the legacy-only correction/replay descriptions below **once the migration is installed**. The rest of this document's operational status remains unchanged until development is explicitly verified.
+
 ## Development status (2026-11-06)
 
 - Both migrations are applied to development project `whbqrracrxmeuyerrbdg` only; deployed function bodies match the repository files.

@@ -50,7 +50,7 @@ test('B1/S4/S10: no alternate public ingress can poison signed ownership acknowl
   try {
     execFileSync('initdb', ['-D', data, '-U', 'postgres', '-A', 'trust', '--no-locale'], opts);
     execFileSync('pg_ctl', ['-D', data, '-l', join(scratch, 'postgres.log'), '-o', `-k ${scratch} -p 5432 -c listen_addresses=''`, '-w', 'start'], opts); started = true;
-    for (const path of ['tests/fixtures/whatsapp-events-schema.sql', 'supabase/migrations/20261104120000_whatsapp_events_receiver.sql', 'supabase/migrations/20261104130000_whatsapp_events_v1_1.sql']) execFileSync('psql', [...args, '-f', resolve(path)], opts);
+    for (const path of ['tests/fixtures/whatsapp-events-schema.sql', 'supabase/migrations/20261104120000_whatsapp_events_receiver.sql', 'supabase/migrations/20261104130000_whatsapp_events_v1_1.sql', 'supabase/migrations/20261111160000_whatsapp_events_v1_2.sql']) execFileSync('psql', [...args, '-f', resolve(path)], opts);
     Object.assign(process.env, { WHATSAPP_EVENTS_ENABLED: 'true', WHATSAPP_EVENTS_SUPABASE_URL: 'https://whbqrracrxmeuyerrbdg.supabase.co', WHATSAPP_EVENTS_SERVICE_ROLE_KEY: 'isolated-synthetic-service-key', WHATSAPP_EVENTS_HMAC_SECRET: secret });
     // Mock only the transport: every handler RPC executes the installed SQL as service_role.
     globalThis.fetch = async (url, options) => {
@@ -114,8 +114,44 @@ test('B1/S4/S10: no alternate public ingress can poison signed ownership acknowl
         assert.deepEqual(await signedPost(raw), reply, 'legitimate legacy replay remains exact');
       }
     });
+    await t.test('S1/S7: stale 1.1 signed POST reports authoritative 1.2 CRM ownership without loosening input', async () => {
+      const conversation = 'cross-revision-crm';
+      const take = { ...event('cross-take12', conversation, 'ownership.taken', { version: 10, crm_seller_id: seller, source: 'crm' }), protocol_revision: '1.2' };
+      const authoritative = { event_id: take.event_id, ownership_version: 10, owner: 'human', crm_seller_id: seller, source: 'crm' };
+      assert.deepEqual(await signedPost(JSON.stringify(take)), { status: 200, body: authoritative });
+      const notificationCount = sql('SELECT count(*) FROM public.notificaciones');
+      for (const type of ['ownership.taken', 'ownership.released']) {
+        const stale = event(`cross-stale-${type}`, conversation, type, type === 'ownership.taken' ? { version: 9, crm_seller_id: null, source: 'clickup' } : { version: 9 });
+        const expected = { status: 200, body: { ...authoritative, event_id: stale.event_id } };
+        assert.deepEqual(await signedPost(JSON.stringify(stale)), expected, 'newer CRM state must not become persistence_unavailable');
+        const afterFirst = snapshot();
+        assert.deepEqual(await signedPost(JSON.stringify(stale)), expected, '1.1 replay keeps the exact authoritative keys and values');
+        assert.equal(snapshot(), afterFirst, 'replay changes no rows or counters');
+      }
+      assert.equal(sql('SELECT count(*) FROM public.notificaciones'), notificationCount, 'stale requests do not notify');
+      for (const type of ['ownership.taken', 'ownership.released']) {
+        const equal = event(`cross-equal-${type}`, conversation, type, type === 'ownership.taken' ? { version: 10, crm_seller_id: seller, source: 'clickup' } : { version: 10 });
+        const before = snapshot();
+        assert.deepEqual(await signedPost(JSON.stringify(equal)), { status: 409, body: { error: 'ownership_conflict' } });
+        assert.equal(snapshot(), before, 'equal-version conflicts leave every row and counter unchanged');
+      }
+      const forbidden = event('cross-forbidden-source', conversation, 'ownership.taken', { version: 11, crm_seller_id: seller, source: 'crm' });
+      const before = snapshot();
+      const transport = globalThis.fetch;
+      let calls = 0;
+      globalThis.fetch = async (...args) => { calls++; return transport(...args); };
+      try {
+        assert.deepEqual(await signedPost(JSON.stringify(forbidden)), { status: 400, body: { error: 'invalid_event' } });
+        assert.equal(calls, 0, '1.1 CRM input is rejected before SQL');
+      } finally { globalThis.fetch = transport; }
+      assert.equal(snapshot(), before, 'invalid source leaves stored data and counters unchanged');
+      const direct = rpc('whatsapp_receive_event', forbidden);
+      assert.equal(direct.status, 1); assert.equal(direct.stdout, '');
+      assert.match(direct.stderr, /P0001: invalid_event/);
+      assert.equal(snapshot(), before, 'SQL independently rejects 1.1 CRM input without writes');
+    });
     await t.test('unknown revision/fields cannot reach removed ingress; no public aliases; canonical service grants remain', () => {
-      for (const extra of [{ protocol_revision: '1.2' }, { data: { version: 1, ignored: true } }]) {
+      for (const extra of [{ protocol_revision: '1.3' }, { data: { version: 1, ignored: true } }]) {
         const e = { ...event('invalid-direct', 'invalid-direct', 'ownership.released', { version: 1 }, false), ...extra };
         const before = snapshot(); const attempt = rpc('whatsapp_receive_event_v1', e);
         assert.notEqual(attempt.status, 0); assert.match(attempt.stderr, /42883:/);
