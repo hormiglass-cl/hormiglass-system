@@ -25,5 +25,6 @@ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(
 GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
 ALTER TABLE usuarios ADD COLUMN auth_id uuid UNIQUE;
 CREATE FUNCTION current_rol() RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$ SELECT rol FROM public.usuarios WHERE auth_id = auth.uid() AND activo = true LIMIT 1 $$;
+CREATE FUNCTION current_usuario_id() RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$ SELECT id FROM public.usuarios WHERE auth_id = auth.uid() AND activo = true LIMIT 1 $$;
 CREATE FUNCTION is_active_user() RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$ SELECT COALESCE((SELECT true FROM public.usuarios WHERE auth_id = auth.uid() AND activo = true LIMIT 1), false) $$;
 CREATE FUNCTION has_role(VARIADIC roles text[]) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$ SELECT public.current_rol() = ANY(roles) OR public.current_rol() = 'admin' $$;

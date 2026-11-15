@@ -1,5 +1,6 @@
 import 'server-only';
 import type { WhatsAppEvent } from './events';
+import { parseCrmEventsConfig, readBoundedJson, type SendResult } from './crm-sender';
 
 const DEV_URL = 'https://whbqrracrxmeuyerrbdg.supabase.co';
 export function receiverConfig() {
@@ -99,5 +100,37 @@ export async function persistEvent(config: NonNullable<ReturnType<typeof receive
     if (error instanceof PersistenceError) throw error;
     // Never propagate database details, transport errors, headers or PII.
     throw new PersistenceError(503, 'persistence_unavailable');
+  }
+}
+
+// Revision 1.2b CRM -> bot commands. Off unless the receiver is configured, the user-session
+// client points at the same dev project, and the outbound URL/secret are valid.
+export function crmCommandsConfig() {
+  const receiver = receiverConfig();
+  if (!receiver || process.env.NEXT_PUBLIC_SUPABASE_URL !== receiver.url) return null;
+  const bot = parseCrmEventsConfig(process.env);
+  return bot ? { ...receiver, bot } : null;
+}
+export type CommandOutcome = {
+  event_id: string; type: 'chat.take' | 'chat.release';
+  status: 'applied' | 'ignored_stale' | 'rejected' | 'retryable';
+  http_status: number | null; error_code: string | null; holder_crm_seller_id: string | null;
+  ownership_version: number; owner: 'bot' | 'human';
+};
+// Records the bot's outcome with the service key. Returns null when it cannot be stored.
+export async function recordCommandResult(config: NonNullable<ReturnType<typeof crmCommandsConfig>>, eventId: string, sent: SendResult): Promise<CommandOutcome | null> {
+  try {
+    const response = await fetch(`${config.url}/rest/v1/rpc/whatsapp_chat_command_result`, {
+      method: 'POST', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(10000),
+      headers: { 'Content-Type': 'application/json', apikey: config.key, Authorization: `Bearer ${config.key}` },
+      body: JSON.stringify({ p_event_id: eventId, p_http_status: sent.httpStatus, p_response: sent.response, p_attempts: sent.attempts }),
+    });
+    const result = await readBoundedJson(response);
+    if (!response.ok || !result || result.event_id !== eventId) return null;
+    const keys = ['event_id', 'type', 'status', 'http_status', 'error_code', 'holder_crm_seller_id', 'ownership_version', 'owner'];
+    if (Object.keys(result).length !== keys.length || !keys.every(key => Object.hasOwn(result, key))) return null;
+    return result as CommandOutcome;
+  } catch {
+    return null;
   }
 }
