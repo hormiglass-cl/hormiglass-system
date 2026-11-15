@@ -3994,7 +3994,7 @@ export default function PipelineVentasPage() {
               style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${100 - modalLeftColRatio}%` : '100%' }}
               className="flex-1 border-t border-line lg:border-l lg:border-t-0 flex flex-col justify-between h-[45vh] lg:h-full overflow-hidden shrink-0"
             >
-              <OpportunityActivity key={selectedOp.id} onClose={handleCloseOportunidad}>
+              <OpportunityActivity key={selectedOp.id} onClose={handleCloseOportunidad} supabase={supabase} opportunityId={selectedOp.id}>
               <div className="flex-1 flex flex-col gap-3 overflow-hidden">
                 {/* Header de Actividad con tipografía estandarizada */}
                 <div className="flex items-center justify-between border-b border-line px-5 py-3">

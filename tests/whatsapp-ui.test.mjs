@@ -175,3 +175,74 @@ test('S9 Ficha WhatsApp shows the stored bot record and corrections as before ->
   const clean = text(render(LeadRecordPanel, { panel: { ...panel, corrections: [] }, onResolve: () => {} }));
   assert.ok(clean.includes('Sin correcciones pendientes'));
 });
+
+test('S3 S5 S9 chat ownership control shows who attends and only the allowed confirmed actions', async () => {
+  const { ChatOwnershipControl } = await import('../components/whatsapp/ChatOwnershipControl.tsx');
+  const base = { ownership_version: 4, owner: 'bot', source: null, holder_crm_seller_id: null, holder_name: null, can_take: true, can_release: false, last_command: null };
+  const view = (props) => render(ChatOwnershipControl, { onAction: () => {}, ...props });
+  const button = (html, label) => attrsOf(html, new RegExp(`<button[^>]*>${label}</button>`));
+
+  const bot = view({ state: base });
+  assert.ok(text(bot).includes('Atención del chat'));
+  assert.ok(text(bot).includes('Asistente (bot)'));
+  assert.ok(button(bot, 'Tomar chat') && !button(bot, 'Tomar chat').includes('disabled=""'));
+  assert.ok(!bot.includes('Liberar chat'));
+
+  const human = { ...base, ownership_version: 5, owner: 'human', source: 'crm', holder_crm_seller_id: 'u-1', holder_name: 'Paula Pérez', can_take: false, can_release: true };
+  const held = view({ state: human });
+  assert.ok(text(held).includes('Atendido por Paula Pérez'));
+  assert.ok(button(held, 'Liberar chat'));
+  assert.ok(!held.includes('Tomar chat'));
+
+  assert.ok(text(view({ state: { ...human, holder_crm_seller_id: null, holder_name: null, can_release: false } })).includes('Atendido por un vendedor sin cuenta en el CRM'));
+  const none = view({ state: { ...human, can_release: false } });
+  assert.ok(!none.includes('<button'));
+
+  const sending = view({ state: base, sending: true });
+  assert.match(attrsOf(sending, /<[a-z]+[^>]*role="status"[^>]*>/), /role="status"/);
+  assert.ok(text(sending).includes('Enviando al asistente…'));
+  assert.match(button(sending, 'Tomar chat'), /disabled=""/);
+});
+
+test('S3 S4 chat ownership control explains every outcome from the response status, not the HTTP code', async () => {
+  const { ChatOwnershipControl } = await import('../components/whatsapp/ChatOwnershipControl.tsx');
+  const state = { ownership_version: 4, owner: 'bot', source: null, holder_crm_seller_id: null, holder_name: null, can_take: true, can_release: false, last_command: null };
+  const view = (feedback, extra = {}) => render(ChatOwnershipControl, { state: { ...state, ...extra }, feedback, onAction: () => {} });
+  const outcome = (status, error_code = null) => ({ kind: 'outcome', action: 'take', status, error_code });
+
+  assert.ok(text(view(outcome('applied'))).includes('El asistente confirmó el cambio.'));
+  const stale = view(outcome('ignored_stale'));
+  assert.ok(text(stale).includes('El estado cambió en el asistente. Se actualizó la vista.'));
+  assert.ok(stale.includes('role="status"'));
+
+  const conflictCommand = { type: 'chat.take', status: 'rejected', http_status: 409, error_code: 'ownership_conflict', holder_crm_seller_id: 'u-2', holder_name: 'Marco Díaz', updated_at: '2026-11-15T12:00:00Z' };
+  const conflict = view(outcome('rejected', 'ownership_conflict'), { last_command: conflictCommand });
+  assert.ok(text(conflict).includes('Otro vendedor atiende este chat: Marco Díaz'));
+  assert.ok(conflict.includes('role="alert"'));
+  assert.ok(text(view(outcome('rejected', 'ownership_conflict'), { last_command: { ...conflictCommand, holder_crm_seller_id: null, holder_name: null } })).includes('Otro vendedor atiende este chat: sin cuenta en el CRM'));
+
+  const generic = view(outcome('rejected', 'invalid_seller'));
+  assert.ok(text(generic).includes('El asistente rechazó la solicitud'));
+  assert.ok(text(generic).includes('invalid_seller'));
+
+  const retry = view(outcome('retryable'));
+  assert.ok(text(retry).includes('El asistente no respondió. Puedes reintentar.'));
+  assert.ok(attrsOf(retry, /<button[^>]*>Reintentar<\/button>/));
+
+  const unavailable = view({ kind: 'refusal', action: 'take', error: 'chat_commands_unavailable' });
+  assert.ok(text(unavailable).includes('La conexión con el asistente aún no está activa.'));
+  assert.ok(text(unavailable).includes('Asistente (bot)'));
+  assert.ok(!unavailable.includes('<button'));
+
+  assert.ok(text(view({ kind: 'refusal', action: 'take', error: 'result_unrecorded' })).includes('No se pudo confirmar el resultado; revisa el estado en unos segundos.'));
+  for (const error of ['forbidden', 'not_holder', 'chat_not_taken', 'already_holder', 'command_in_progress', 'chat_not_linked']) {
+    const html = view({ kind: 'refusal', action: 'take', error });
+    assert.ok(html.includes('role="alert"'), error);
+    assert.ok(!text(html).includes(error), `${error} has a Spanish message`);
+  }
+
+  const reloadRetry = render(ChatOwnershipControl, { state: { ...state, last_command: { ...conflictCommand, status: 'retryable', http_status: 503, error_code: null } }, onAction: () => {} });
+  assert.ok(text(reloadRetry).includes('El asistente no respondió. Puedes reintentar.'));
+  assert.ok(attrsOf(reloadRetry, /<button[^>]*>Reintentar<\/button>/));
+  assert.ok(text(render(ChatOwnershipControl, { state: { ...state, last_command: conflictCommand }, onAction: () => {} })).includes('Otro vendedor atiende este chat: Marco Díaz'));
+});
