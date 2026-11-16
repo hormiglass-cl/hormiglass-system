@@ -43,7 +43,9 @@ Yes, live on dev since revision 1.2a:
 
 ## 3. Reopening a lost opportunity
 
-PENDING: the CRM owner has not decided yet. We will answer before 1.2c.
+Agreed. When the CRM reopens a lost opportunity it sends `opportunity.reopened` with the **same**
+`crm_opportunity_id`, and the bot treats it as the same lead back in follow-up. A brand-new
+customer request after the close still starts a new lead. We build it with 1.2c.
 
 ## What we need from you
 
