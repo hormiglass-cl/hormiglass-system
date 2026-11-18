@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { createClient } from '../../lib/supabase/client';
+import { watchChatState } from '../../lib/whatsapp/chat-refresh';
 import { Button } from '../ui/crm';
 
 export type ChatAction = 'take' | 'release';
@@ -123,13 +124,19 @@ export function ChatOwnershipSection({ supabase, opportunityId, fallback = null 
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState<ChatFeedback | undefined>(undefined);
   const [reloadKey, setReloadKey] = useState(0);
+  // Set when a command finished; only the re-read after it ends the sending state, so a
+  // background refresh during a send never re-enables the buttons early.
+  const commandDone = useRef(false);
+
+  // Ownership also changes outside this view (bot, ClickUp, 2-hour window): keep re-reading.
+  useEffect(() => watchChatState(() => setReloadKey((key) => key + 1)), []);
 
   useEffect(() => {
     let active = true;
     void (async () => {
       const { data, error } = await supabase.rpc('whatsapp_chat_state', { p_opportunity_id: opportunityId });
       if (!active) return;
-      setSending(false);
+      if (commandDone.current) { commandDone.current = false; setSending(false); }
       if (error) {
         // Keep the last confirmed state on a failed refresh; the first load falls back.
         setLoadError('No se pudo cargar el estado del chat.');
@@ -162,6 +169,7 @@ export function ChatOwnershipSection({ supabase, opportunityId, fallback = null 
       next = { kind: 'refusal', action, error: 'network' };
     }
     setFeedback(next);
+    commandDone.current = true;
     setReloadKey((key) => key + 1);
   };
 
