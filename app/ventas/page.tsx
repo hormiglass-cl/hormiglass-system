@@ -2970,7 +2970,11 @@ export default function PipelineVentasPage() {
                           <div className="relative h-8 w-[408px] max-w-full">
                             <Select
                               value={selectedOp.asignado_a || ''}
+                              // Only an admin may reassign; the database enforces it too (proteger_vendedor_asignado).
+                              disabled={currentUser?.rol !== 'admin'}
+                              aria-label="Vendedor asignado"
                               onChange={async (e) => {
+                                if (currentUser?.rol !== 'admin') return;
                                 const newUserId = e.target.value || null;
                                 updateOportunidadField(selectedOp.id, 'asignado_a', newUserId);
                                 const userObj = usuariosApp.find((u) => u.id === newUserId);
