@@ -1,8 +1,9 @@
 -- Only an admin may change an opportunity's assigned seller (asignado_a).
 -- The UPDATE policy lets every active user edit opportunities, so the rule lives in a trigger.
 -- It stops direct table writes from signed-in non-admins (PostgREST runs them as the
--- "authenticated" role). Trusted server paths keep assigning sellers: the service role and
--- SECURITY DEFINER functions such as the WhatsApp receiver and lead intake run as another role.
+-- "authenticated" role). Trusted server paths keep assigning sellers: the service role (the
+-- WhatsApp receiver runs as it) and SECURITY DEFINER functions run as another role, and lead
+-- intake only inserts, which this UPDATE trigger does not cover.
 BEGIN;
 CREATE FUNCTION public.proteger_vendedor_asignado() RETURNS trigger
 LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
