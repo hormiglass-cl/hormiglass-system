@@ -18,6 +18,7 @@ interface LogSistemaParams {
     | 'trabajadores'
     | 'cuentas_bancarias'
     | 'empresas'
+    | 'caja_movimientos'
     | 'sistema';
   entidad_id?: string;
   descripcion: string;

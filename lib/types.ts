@@ -780,6 +780,43 @@ export interface CajaSubcategoria {
   categoria?: CajaCategoria;
 }
 
+export type GrupoInsumoCaja = 'materia_prima' | 'combustible' | 'otro';
+
+export interface CajaCentroCosto {
+  id: string;
+  codigo: string;
+  nombre: string;
+  descripcion?: string | null;
+  activo: boolean;
+  orden: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CajaInsumo {
+  id: string;
+  codigo: string;
+  nombre: string;
+  grupo: GrupoInsumoCaja;
+  unidad?: string | null;
+  descripcion?: string | null;
+  activo: boolean;
+  orden: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CajaVehiculo {
+  id: string;
+  nombre: string;
+  patente?: string | null;
+  descripcion?: string | null;
+  activo: boolean;
+  orden: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface MargenPorNV {
   oportunidad_id: string;
   codigo: string;
@@ -806,6 +843,28 @@ export interface MargenPorNV {
   porcentaje_margen_real: number;
 }
 
+export interface CostoPorCliente {
+  cliente_id: string;
+  cliente_nombre: string;
+  cliente_rut?: string | null;
+  cantidad_oportunidades: number;
+  valor_cotizado_total: number;
+  ingresos_abonos: number;
+  ingresos_caja_directos: number;
+  total_ingresos: number;
+  costo_compras_asignadas: number;
+  costo_fletes_despacho: number;
+  costo_postventa: number;
+  costo_caja_directo: number;
+  costo_total: number;
+  cantidad_movimientos_caja: number;
+  margen_real: number;
+  margen_proyectado: number;
+  sobrecosto: number;
+  tiene_sobrecosto: boolean;
+  porcentaje_margen_real: number;
+}
+
 export interface MovimientoCaja {
   id: string;
   tipo: TipoMovimientoCaja;
@@ -822,6 +881,13 @@ export interface MovimientoCaja {
   subcategoria_id?: string | null;
   orden_compra_id?: string | null;
   proveedor_id?: string | null;
+  cliente_id?: string | null;
+  trabajador_id?: string | null;
+  centro_costo_id?: string | null;
+  insumo_id?: string | null;
+  vehiculo_id?: string | null;
+  medio_pago?: string | null;
+  tipo_documento?: string | null;
   fecha: string;
   usuario?: Usuario;
   cuenta_bancaria?: CuentaBancaria;
@@ -831,6 +897,11 @@ export interface MovimientoCaja {
   orden_compra?: OrdenCompra;
   proveedor?: Proveedor;
   oportunidad?: OportunidadVenta;
+  cliente?: Cliente;
+  trabajador?: { id: string; nombre: string; cargo?: string | null };
+  centro_costo?: CajaCentroCosto;
+  insumo?: CajaInsumo;
+  vehiculo?: CajaVehiculo;
 }
 
 export interface Notificacion {

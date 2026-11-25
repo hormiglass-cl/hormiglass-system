@@ -7,7 +7,6 @@ import {
   Abono,
   CuentaBancaria,
   MovimientoCaja,
-  TipoMovimientoCaja,
 } from '../../lib/types';
 import {
   Clock,
@@ -30,7 +29,6 @@ import {
   CodeStamp,
   Dialog,
   Field,
-  TextInput,
   Select,
 } from '../../components/ui/crm';
 import { useToast } from '../../components/ui/feedback';
@@ -41,6 +39,11 @@ import { Fab } from '../../components/ui/Fab';
 import { PillTabs, PillTabsBar } from '../../components/ui/PillTabs';
 import { CajaResumen } from '../../components/caja/CajaResumen';
 import { CategoriasCostos } from '../../components/caja/CategoriasCostos';
+import {
+  MovimientoCajaDialog,
+  EMPTY_CAJA_LOOKUPS,
+  type CajaLookups,
+} from '../../components/caja/MovimientoCajaDialog';
 import { swrCache } from '../../lib/cache/swr-cache';
 
 type AbonoCol = 'nv' | 'cliente' | 'monto' | 'fecha' | 'comprobante' | 'banco' | 'estado' | 'acciones';
@@ -110,6 +113,7 @@ export default function CajaPage() {
   const [movimientos, setMovimientos] = useState<MovimientoCaja[]>(() => swrCache.get('caja:movimientos') || []);
   const [abonos, setAbonos] = useState<Abono[]>(() => swrCache.get('caja:abonos') || []);
   const [cuentas, setCuentas] = useState<CuentaBancaria[]>(() => swrCache.get('caja:cuentas') || []);
+  const [lookups, setLookups] = useState<CajaLookups>(() => swrCache.get('caja:lookups') || EMPTY_CAJA_LOOKUPS);
   const [, setLoading] = useState<boolean>(() => !swrCache.has('caja:cuentas'));
 
   // Mapeo de banco seleccionado por abono pendiente: { [abonoId]: cuentaBancariaId }
@@ -121,14 +125,9 @@ export default function CajaPage() {
   const [abonoToReject, setAbonoToReject] = useState<Abono | null>(null);
   const [rejectMotivo, setRejectMotivo] = useState('');
 
-  // Modal Registrar Movimiento Manual
+  // Modal Registrar / Editar Movimiento Manual
   const [showModal, setShowModal] = useState(false);
-  const [formError, setFormError] = useState('');
-  const [tipo, setTipo] = useState<TipoMovimientoCaja>('ingreso');
-  const [monto, setMonto] = useState<number>(100000);
-  const [categoria, setCategoria] = useState('Venta Directa');
-  const [descripcion, setDescripcion] = useState('');
-  const [modalCuentaId, setModalCuentaId] = useState<string>('');
+  const [editingMov, setEditingMov] = useState<MovimientoCaja | null>(null);
 
   // Filtros de validación
   const [searchTerm, setSearchTerm] = useState('');
@@ -141,7 +140,19 @@ export default function CajaPage() {
   // Cargar datos en paralelo con Promise.all
   const loadData = useCallback(async () => {
     try {
-      const [cuentasRes, movsRes, abonosRes] = await Promise.all([
+      const [
+        cuentasRes,
+        movsRes,
+        abonosRes,
+        catsRes,
+        centrosRes,
+        insumosRes,
+        vehiculosRes,
+        clientesRes,
+        opsRes,
+        provsRes,
+        trabsRes,
+      ] = await Promise.all([
         supabase
           .from('cuentas_bancarias')
           .select('*, empresa:empresas(*)')
@@ -149,7 +160,19 @@ export default function CajaPage() {
           .order('alias'),
         supabase
           .from('caja_movimientos')
-          .select('*, cuenta_bancaria:cuentas_bancarias(id, alias, banco, empresa:empresas(slug, razon_social))')
+          .select(`
+            *,
+            cuenta_bancaria:cuentas_bancarias(id, alias, banco, empresa:empresas(id, slug, razon_social)),
+            categoria_rel:caja_categorias(id, nombre, tipo, clasificacion),
+            subcategoria:caja_subcategorias(id, nombre),
+            centro_costo:caja_centros_costo(id, codigo, nombre),
+            insumo:caja_insumos(id, codigo, nombre, grupo, unidad),
+            vehiculo:caja_vehiculos(id, nombre, patente),
+            cliente:clientes(id, nombre, apellido_razon_social, rut),
+            oportunidad:oportunidades(id, codigo, titulo, cliente_id),
+            proveedor:proveedores(id, nombre),
+            trabajador:trabajadores(id, nombre, cargo)
+          `)
           .order('fecha', { ascending: false }),
         supabase
           .from('abonos')
@@ -164,6 +187,14 @@ export default function CajaPage() {
             )
           `)
           .order('fecha', { ascending: false }),
+        supabase.from('caja_categorias').select('*, subcategorias:caja_subcategorias(*)').order('orden'),
+        supabase.from('caja_centros_costo').select('*').order('orden').order('nombre'),
+        supabase.from('caja_insumos').select('*').order('orden').order('nombre'),
+        supabase.from('caja_vehiculos').select('*').order('orden').order('nombre'),
+        supabase.from('clientes').select('id, nombre, apellido_razon_social, rut').order('apellido_razon_social'),
+        supabase.from('oportunidades').select('id, codigo, titulo, cliente_id').order('created_at', { ascending: false }),
+        supabase.from('proveedores').select('id, nombre, rut').order('nombre'),
+        supabase.from('trabajadores').select('id, nombre, cargo, activo').order('nombre'),
       ]);
 
       if (cuentasRes.data) {
@@ -185,6 +216,19 @@ export default function CajaPage() {
         setAbonos(abonosData);
         swrCache.set('caja:abonos', abonosData);
       }
+
+      const nextLookups: CajaLookups = {
+        categorias: (catsRes.data || []) as CajaLookups['categorias'],
+        centrosCosto: (centrosRes.data || []) as CajaLookups['centrosCosto'],
+        insumos: (insumosRes.data || []) as CajaLookups['insumos'],
+        vehiculos: (vehiculosRes.data || []) as CajaLookups['vehiculos'],
+        clientes: (clientesRes.data || []) as CajaLookups['clientes'],
+        oportunidades: (opsRes.data || []) as CajaLookups['oportunidades'],
+        proveedores: (provsRes.data || []) as CajaLookups['proveedores'],
+        trabajadores: (trabsRes.data || []) as CajaLookups['trabajadores'],
+      };
+      setLookups(nextLookups);
+      swrCache.set('caja:lookups', nextLookups);
     } catch (err) {
       console.error('Error cargando datos de caja:', err);
       toast({ message: 'No se pudieron cargar los datos de caja.', tone: 'danger' });
@@ -255,6 +299,16 @@ export default function CajaPage() {
 
   const abonosRechazados = abonos.filter((a) => a.estado === 'rechazado');
   const totalMontoRechazado = abonosRechazados.reduce((acc, a) => acc + Number(a.monto || 0), 0);
+
+  const abonoMovIds = useMemo(
+    () =>
+      new Set(
+        abonos
+          .filter((a) => a.estado === 'validado' && a.caja_movimiento_id)
+          .map((a) => a.caja_movimiento_id as string),
+      ),
+    [abonos],
+  );
 
   // Apertura de comprobante seguro
   const handleVerComprobante = async (storedUrl?: string | null) => {
@@ -362,39 +416,15 @@ export default function CajaPage() {
     }
   };
 
-  // Registrar Movimiento Manual
-  const handleAddMovimiento = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!monto || !categoria) return;
+  // Abrir modal de movimiento (nuevo o edición)
+  const abrirNuevoMovimiento = () => {
+    setEditingMov(null);
+    setShowModal(true);
+  };
 
-    const newMovPayload = {
-      tipo,
-      monto: Number(monto),
-      categoria,
-      descripcion: descripcion || categoria,
-      usuario_id: currentUser?.id || null,
-      cuenta_bancaria_id: modalCuentaId || null,
-      fecha: new Date().toISOString(),
-    };
-
-    try {
-      const { error } = await supabase
-        .from('caja_movimientos')
-        .insert([newMovPayload]);
-
-      if (error) throw error;
-
-      toast({ message: 'Movimiento de caja registrado exitosamente.', tone: 'success' });
-      setShowModal(false);
-      setMonto(100000);
-      setDescripcion('');
-      setModalCuentaId('');
-      setFormError('');
-      await loadData();
-    } catch (err) {
-      console.error('Error adding movimiento to Supabase:', err);
-      setFormError('No se pudo guardar el movimiento. Verifica los datos y tus permisos.');
-    }
+  const abrirEditarMovimiento = (m: MovimientoCaja) => {
+    setEditingMov(m);
+    setShowModal(true);
   };
 
   // Filtrado de abonos
@@ -736,7 +766,11 @@ export default function CajaPage() {
           hasta={hasta}
           movimientos={movimientos}
           cuentas={cuentas}
+          lookups={lookups}
           canEdit={currentUser?.rol === 'admin'}
+          abonoMovIds={abonoMovIds}
+          onEditMovimiento={abrirEditarMovimiento}
+          onVerMovimientos={() => setActiveTab('movimientos')}
           onReload={loadData}
         />
       )}
@@ -802,107 +836,24 @@ export default function CajaPage() {
         )}
       </Dialog>
 
-      {/* MODAL: Registrar Movimiento Manual */}
-      <Dialog
+      {/* MODAL: Registrar / Editar Movimiento Manual */}
+      <MovimientoCajaDialog
         open={showModal}
-        title="Registrar movimiento de caja"
-        onClose={() => setShowModal(false)}
-        footer={
-          <>
-            <Button
-              variant="secondary"
-              onClick={() => setShowModal(false)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="primary"
-              onClick={(e) => void handleAddMovimiento(e)}
-            >
-              Guardar movimiento
-            </Button>
-          </>
-        }
-      >
-        <form onSubmit={handleAddMovimiento} className="space-y-3 text-xs">
-          {formError && (
-            <p role="alert" className="p-2.5 rounded-control bg-danger-soft border border-danger-line text-danger font-semibold flex items-center gap-1.5">
-              <XCircle className="w-4 h-4 shrink-0" />
-              <span>{formError}</span>
-            </p>
-          )}
+        onClose={() => {
+          setShowModal(false);
+          setEditingMov(null);
+        }}
+        movimiento={editingMov}
+        cuentas={cuentas}
+        lookups={lookups}
+        usuarioId={currentUser?.id || null}
+        vinculadoAbono={!!editingMov && abonoMovIds.has(editingMov.id)}
+        onSaved={loadData}
+      />
 
-          <Field label="Tipo de movimiento" required>
-            {({ id }) => (
-              <Select
-                id={id}
-                value={tipo}
-                onChange={(e) => setTipo(e.target.value as TipoMovimientoCaja)}
-              >
-                <option value="ingreso">Ingreso</option>
-                <option value="egreso">Egreso</option>
-              </Select>
-            )}
-          </Field>
-
-          <Field label="Monto" required>
-            {({ id }) => (
-              <TextInput
-                id={id}
-                type="number"
-                required
-                value={monto}
-                onChange={(e) => setMonto(Number(e.target.value))}
-              />
-            )}
-          </Field>
-
-          <Field label="Cuenta bancaria / Destino">
-            {({ id }) => (
-              <Select
-                id={id}
-                value={modalCuentaId}
-                onChange={(e) => setModalCuentaId(e.target.value)}
-              >
-                <option value="">Sin asignar</option>
-                {cuentas.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.alias} · {c.banco}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </Field>
-
-          <Field label="Categoría" required>
-            {({ id }) => (
-              <TextInput
-                id={id}
-                type="text"
-                required
-                placeholder="Ej. Abono 50% / Materia Prima / Flete"
-                value={categoria}
-                onChange={(e) => setCategoria(e.target.value)}
-              />
-            )}
-          </Field>
-
-          <Field label="Descripción / Glosa">
-            {({ id }) => (
-              <textarea
-                id={id}
-                rows={2}
-                placeholder="Detalle o respaldo del movimiento..."
-                value={descripcion}
-                onChange={(e) => setDescripcion(e.target.value)}
-                className="hg-field w-full p-2.5"
-              />
-            )}
-          </Field>
-        </form>
-      </Dialog>
-
-      {activeTab !== 'categorias' && <Fab label="Registrar movimiento" onClick={() => setShowModal(true)} />}
+      {activeTab !== 'categorias' && currentUser?.rol === 'admin' && (
+        <Fab label="Registrar movimiento" onClick={abrirNuevoMovimiento} />
+      )}
     </div>
   );
 }

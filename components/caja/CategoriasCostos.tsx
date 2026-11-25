@@ -8,6 +8,11 @@ import { Panel, Button, IconButton, StatusBadge, Dialog, Field, TextInput, Searc
 import { Select } from '../ui/FormControls';
 import { Fab } from '../ui/Fab';
 import { useToast } from '../ui/feedback';
+import {
+  CentrosCostoManager,
+  InsumosCajaManager,
+  VehiculosCajaManager,
+} from './CatalogosCajaExtra';
 
 const CLASIFICACIONES_INFO: Record<
   CajaClasificacion,
@@ -39,10 +44,11 @@ const CLASIFICACIONES_INFO: Record<
   },
 };
 
-/** Glosario de categorías y subcategorías de costos; se administra desde Caja. */
+/** Glosario de categorías, centros de costos, insumos y camiones; se administra desde Caja. */
 export function CategoriasCostos() {
   const toast = useToast();
   const supabase = useMemo(() => createClient(), []);
+  const [seccion, setSeccion] = useState<'categorias' | 'centros' | 'insumos' | 'camiones'>('categorias');
   const [categorias, setCategorias] = useState<CajaCategoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState('');
@@ -180,6 +186,36 @@ export function CategoriasCostos() {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" aria-label="Catálogos de costos" className="inline-flex flex-wrap items-center gap-1 rounded-xl bg-surface-muted p-1">
+          {([
+            ['categorias', 'Categorías'],
+            ['centros', 'Centros de costos'],
+            ['insumos', 'Insumos'],
+            ['camiones', 'Camiones'],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={seccion === id}
+              onClick={() => setSeccion(id)}
+              className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+                seccion === id ? 'bg-surface text-ink shadow-[var(--hg-shadow-card)]' : 'text-ink-muted hover:text-ink'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {seccion === 'centros' && <CentrosCostoManager />}
+      {seccion === 'insumos' && <InsumosCajaManager />}
+      {seccion === 'camiones' && <VehiculosCajaManager />}
+
+      {seccion === 'categorias' && (
+        <>
           <div className="flex flex-wrap items-center gap-3">
             <SearchField
               className="max-w-xs"
@@ -365,6 +401,8 @@ export function CategoriasCostos() {
           </div>
         </form>
       </Dialog>
+        </>
+      )}
     </div>
   );
 }

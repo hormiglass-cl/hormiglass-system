@@ -18,6 +18,7 @@ import {
 } from '../../../lib/types';
 import { PdfPreviewModal } from '../../../components/PdfPreviewModal';
 import { CotizacionModal } from '../../../components/CotizacionModal';
+import { ClienteCentroCostos } from '../../../components/clientes/ClienteCentroCostos';
 import { SearchableSelect } from '../../../components/SearchableSelect';
 import { REGIONES_CHILE, TODAS_COMUNAS_CHILE } from '../../../lib/chile-data';
 import { cotizacionVigente, totalAbonado, totalComercial } from '../../../lib/oportunidad-finanzas';
@@ -1319,6 +1320,7 @@ export default function ClienteDetailPage() {
 
           {/* PESTAÑA 4: RESUMEN */}
           {activeTab === 'metricas' && (
+            <div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="rounded-xl border border-line bg-surface p-4 space-y-1.5">
                     <span className="flex items-center gap-1.5 t-caption"><span aria-hidden className="h-2 w-2 rounded-full bg-success" />Ventas acumuladas (100% pagadas)</span>
@@ -1361,6 +1363,10 @@ export default function ClienteDetailPage() {
                       <span className="t-caption text-ink-muted italic">Sin actividades pendientes</span>
                     )}
                   </div>
+            </div>
+            {currentUser?.rol === 'admin' && (
+              <ClienteCentroCostos clienteId={cliente.id} oportunidades={oportunidades} />
+            )}
             </div>
           )}
         </div>

@@ -1,12 +1,25 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, Download, Eye, Landmark, Pencil, Upload, Wallet } from 'lucide-react';
+import Link from 'next/link';
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Building2, Download, Eye, Fuel, Landmark, Package, Pencil, Trash2, Truck, Upload, Wallet } from 'lucide-react';
 import { createClient } from '../../lib/supabase/client';
 import { mensajeError } from '../../lib/errores';
-import type { CuentaBancaria, MargenPorNV, MovimientoCaja } from '../../lib/types';
+import { logSistema } from '../../lib/logger';
+import {
+  labelMedioPago,
+  labelTipoDocumento,
+  MEDIOS_PAGO,
+  TIPOS_DOCUMENTO_CAJA,
+} from '../../lib/caja-catalogos';
+import {
+  EMPTY_CAJA_LOOKUPS,
+  nombreClienteCorto,
+  type CajaLookups,
+} from './MovimientoCajaDialog';
+import type { CostoPorCliente, CuentaBancaria, MargenPorNV, MovimientoCaja } from '../../lib/types';
 import { Pagination } from '../Pagination';
-import { Button, Dialog, IconButton, Panel, SearchField, StatusBadge, TextInput } from '../ui/crm';
+import { Button, CodeStamp, Dialog, IconButton, Panel, SearchField, StatusBadge, TextInput } from '../ui/crm';
 import { FilterBar, FilterMenu, matchMultiFilter, useFilterUi, type FilterDefinition } from '../ui/FilterPills';
 import { useAuth } from '../../lib/context/AuthContext';
 import { CardTitle, ColumnChart, formatShortMoney } from '../dashboard/visuals';
@@ -25,7 +38,23 @@ const neto = (list: MovimientoCaja[]) =>
 const suma = (list: MovimientoCaja[], tipo: 'ingreso' | 'egreso') =>
   list.filter((m) => m.tipo === tipo).reduce((acc, m) => acc + Number(m.monto || 0), 0);
 
-const CSV_HEADER = ['Fecha', 'Tipo', 'Categoría', 'Glosa', 'Cuenta', 'Empresa', 'Monto'];
+const CSV_HEADER = [
+  'Fecha',
+  'Tipo',
+  'Categoría',
+  'Glosa',
+  'Cuenta',
+  'Empresa',
+  'Monto',
+  'Medio de pago',
+  'Documento',
+  'Centro de costos',
+  'Código insumo',
+  'Camión',
+  'Trabajador',
+  'Cliente',
+  'Proveedor',
+];
 const fechaCsv = (iso: string) => {
   const d = new Date(iso);
   return `${dayKey(iso)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -39,6 +68,15 @@ interface ImportRow {
   descripcion: string;
   cuentaTexto: string;
   cuentaId: string | null;
+  empresaId: string | null;
+  medioPago: string | null;
+  tipoDocumento: string | null;
+  centroCostoId: string | null;
+  insumoId: string | null;
+  vehiculoId: string | null;
+  trabajadorId: string | null;
+  clienteId: string | null;
+  proveedorId: string | null;
   monto: number;
   error: string | null;
 }
@@ -96,7 +134,11 @@ export function CajaResumen({
   hasta,
   movimientos,
   cuentas,
+  lookups = EMPTY_CAJA_LOOKUPS,
   canEdit,
+  abonoMovIds,
+  onEditMovimiento,
+  onVerMovimientos,
   onReload,
 }: {
   vista: 'resumen' | 'movimientos';
@@ -104,7 +146,11 @@ export function CajaResumen({
   hasta: string;
   movimientos: MovimientoCaja[];
   cuentas: CuentaBancaria[];
+  lookups?: CajaLookups;
   canEdit: boolean;
+  abonoMovIds?: Set<string>;
+  onEditMovimiento?: (m: MovimientoCaja) => void;
+  onVerMovimientos?: () => void;
   onReload: () => Promise<void>;
 }) {
   const supabase = useMemo(() => createClient(), []);
@@ -114,13 +160,18 @@ export function CajaResumen({
 
   const [search, setSearch] = useState('');
   const [tipoTab, setTipoTab] = useState<'todos' | 'ingreso' | 'egreso'>('todos');
+  const [grupoInsumoTab, setGrupoInsumoTab] = useState<'todos' | 'materia_prima' | 'combustible'>('todos');
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
   const [importOpen, setImportOpen] = useState(false);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importName, setImportName] = useState('');
   const [importing, setImporting] = useState(false);
   const [detalle, setDetalle] = useState<MovimientoCaja | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<MovimientoCaja | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [margenes, setMargenes] = useState<MargenPorNV[]>([]);
+  const [costosClientes, setCostosClientes] = useState<CostoPorCliente[]>([]);
+  const [margenVista, setMargenVista] = useState<'nv' | 'cliente'>('nv');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
 
@@ -132,8 +183,12 @@ export function CajaResumen({
     if (!canEdit) return;
     let alive = true;
     const timer = window.setTimeout(async () => {
-      const { data } = await supabase.from('v_margen_por_nv').select('*').order('fecha_creacion', { ascending: false });
-      if (alive && data) setMargenes(data as MargenPorNV[]);
+      const [resNV, resCli] = await Promise.all([
+        supabase.from('v_margen_por_nv').select('*').order('fecha_creacion', { ascending: false }),
+        supabase.from('v_costos_por_cliente').select('*').order('sobrecosto', { ascending: false }),
+      ]);
+      if (alive && resNV.data) setMargenes(resNV.data as MargenPorNV[]);
+      if (alive && resCli.data) setCostosClientes(resCli.data as CostoPorCliente[]);
     }, 0);
     return () => {
       alive = false;
@@ -222,6 +277,101 @@ export function CajaResumen({
     return top;
   }, [delPeriodo]);
 
+  /* ── Consumo de materias primas y combustibles del período ── */
+  const consumoInsumos = useMemo(() => {
+    const acum = new Map<string, { monto: number; count: number }>();
+    for (const m of delPeriodo) {
+      if (m.tipo === 'egreso' && m.insumo_id) {
+        const prev = acum.get(m.insumo_id) || { monto: 0, count: 0 };
+        prev.monto += Number(m.monto || 0);
+        prev.count += 1;
+        acum.set(m.insumo_id, prev);
+      }
+    }
+    const base = lookups.insumos
+      .filter((ins) => ins.activo || acum.has(ins.id))
+      .map((ins) => {
+        const stats = acum.get(ins.id) || { monto: 0, count: 0 };
+        return { insumo: ins, monto: stats.monto, count: stats.count };
+      });
+    const totalMateriaPrima = base
+      .filter((x) => x.insumo.grupo === 'materia_prima')
+      .reduce((s, x) => s + x.monto, 0);
+    const totalCombustibles = base
+      .filter((x) => x.insumo.grupo === 'combustible')
+      .reduce((s, x) => s + x.monto, 0);
+    const totalOtros = base
+      .filter((x) => x.insumo.grupo === 'otro')
+      .reduce((s, x) => s + x.monto, 0);
+    const totalGeneral = totalMateriaPrima + totalCombustibles + totalOtros;
+    return { items: base, totalMateriaPrima, totalCombustibles, totalGeneral };
+  }, [delPeriodo, lookups.insumos]);
+
+  const insumosVisibles = useMemo(() => {
+    const lista =
+      grupoInsumoTab === 'todos'
+        ? consumoInsumos.items
+        : consumoInsumos.items.filter((x) => x.insumo.grupo === grupoInsumoTab);
+    return [...lista].sort((a, b) => b.monto - a.monto || a.insumo.orden - b.insumo.orden);
+  }, [consumoInsumos.items, grupoInsumoTab]);
+
+  /* ── Gastos por centro de costos y flota (camiones) ── */
+  const gastosCentrosCosto = useMemo(() => {
+    const acum = new Map<string, { monto: number; count: number }>();
+    let sinCentroMonto = 0;
+    let sinCentroCount = 0;
+    for (const m of delPeriodo) {
+      if (m.tipo !== 'egreso') continue;
+      if (m.centro_costo_id) {
+        const prev = acum.get(m.centro_costo_id) || { monto: 0, count: 0 };
+        prev.monto += Number(m.monto || 0);
+        prev.count += 1;
+        acum.set(m.centro_costo_id, prev);
+      } else {
+        sinCentroMonto += Number(m.monto || 0);
+        sinCentroCount += 1;
+      }
+    }
+    const items = lookups.centrosCosto
+      .filter((cc) => cc.activo || acum.has(cc.id))
+      .map((cc) => {
+        const stats = acum.get(cc.id) || { monto: 0, count: 0 };
+        return { centro: cc, monto: stats.monto, count: stats.count };
+      })
+      .sort((a, b) => b.monto - a.monto || a.centro.orden - b.centro.orden);
+    const totalAsignado = items.reduce((s, x) => s + x.monto, 0);
+    return { items, totalAsignado, sinCentroMonto, sinCentroCount };
+  }, [delPeriodo, lookups.centrosCosto]);
+
+  const gastosVehiculos = useMemo(() => {
+    const acum = new Map<string, { monto: number; count: number }>();
+    for (const m of delPeriodo) {
+      if (m.tipo === 'egreso' && m.vehiculo_id) {
+        const prev = acum.get(m.vehiculo_id) || { monto: 0, count: 0 };
+        prev.monto += Number(m.monto || 0);
+        prev.count += 1;
+        acum.set(m.vehiculo_id, prev);
+      }
+    }
+    const items = lookups.vehiculos
+      .filter((v) => v.activo || acum.has(v.id))
+      .map((v) => {
+        const stats = acum.get(v.id) || { monto: 0, count: 0 };
+        return { vehiculo: v, monto: stats.monto, count: stats.count };
+      })
+      .sort((a, b) => b.monto - a.monto || a.vehiculo.orden - b.vehiculo.orden);
+    const total = items.reduce((s, x) => s + x.monto, 0);
+    return { items, total };
+  }, [delPeriodo, lookups.vehiculos]);
+
+  const abrirMovimientosFiltrados = (filtros: Record<string, string>) => {
+    setTipoTab('egreso');
+    setActiveFilters(filtros);
+    setSearch('');
+    setPage(1);
+    onVerMovimientos?.();
+  };
+
   /* ── Últimos movimientos agrupados por día ── */
   const ultimosPorDia = useMemo(() => {
     const grupos = new Map<string, MovimientoCaja[]>();
@@ -254,29 +404,88 @@ export function CajaResumen({
     const empresas = [...new Set(delPeriodo.map((m) => m.cuenta_bancaria?.empresa?.razon_social).filter(Boolean) as string[])].sort();
     const cuentasOpc = [...new Map(delPeriodo.filter((m) => m.cuenta_bancaria).map((m) => [m.cuenta_bancaria!.id, m.cuenta_bancaria!.alias])).entries()];
     const categorias = [...new Set(delPeriodo.map((m) => m.categoria).filter(Boolean))].sort();
-    return [
+    const centrosMap = new Map<string, string>(
+      lookups.centrosCosto.map((c) => [c.id, c.nombre]),
+    );
+    for (const m of delPeriodo) if (m.centro_costo) centrosMap.set(m.centro_costo.id, m.centro_costo.nombre);
+    const insumosMap = new Map<string, string>(
+      lookups.insumos.map((i) => [i.id, `${i.nombre} (${i.codigo})`]),
+    );
+    for (const m of delPeriodo) if (m.insumo) insumosMap.set(m.insumo.id, `${m.insumo.nombre} (${m.insumo.codigo})`);
+    const vehiculosMap = new Map<string, string>(
+      lookups.vehiculos.map((v) => [v.id, v.patente ? `${v.nombre} (${v.patente})` : v.nombre]),
+    );
+    for (const m of delPeriodo) if (m.vehiculo) vehiculosMap.set(m.vehiculo.id, m.vehiculo.patente ? `${m.vehiculo.nombre} (${m.vehiculo.patente})` : m.vehiculo.nombre);
+
+    const centros = [...centrosMap.entries()];
+    const insumos = [...insumosMap.entries()];
+    const vehiculos = [...vehiculosMap.entries()];
+    const medios = [...new Set(delPeriodo.map((m) => m.medio_pago).filter(Boolean) as string[])];
+    const docs = [...new Set(delPeriodo.map((m) => m.tipo_documento).filter(Boolean) as string[])];
+    const clientes = [...new Map(delPeriodo.filter((m) => m.cliente).map((m) => [m.cliente!.id, nombreClienteCorto(m.cliente)])).entries()].filter(([, n]) => !!n);
+    const trabajadores = [...new Map(delPeriodo.filter((m) => m.trabajador).map((m) => [m.trabajador!.id, m.trabajador!.nombre])).entries()];
+
+    const defs: FilterDefinition[] = [
       { id: 'empresa', label: 'Empresa', allLabel: 'Todas las empresas', options: empresas.map((e) => ({ value: e, label: e })) },
       { id: 'cuenta', label: 'Cuenta', allLabel: 'Todas las cuentas', options: cuentasOpc.map(([id, alias]) => ({ value: id, label: alias })) },
       { id: 'categoria', label: 'Categoría', allLabel: 'Todas las categorías', options: categorias.map((c) => ({ value: c, label: c })) },
+      { id: 'centro_costo', label: 'Centro de costos', allLabel: 'Todos los centros', options: centros.map(([id, label]) => ({ value: id, label })) },
+      { id: 'insumo', label: 'Insumo', allLabel: 'Todos los insumos', options: insumos.map(([id, label]) => ({ value: id, label })) },
+      { id: 'medio_pago', label: 'Medio de pago', allLabel: 'Todos los medios', options: medios.map((v) => ({ value: v, label: labelMedioPago(v) })) },
+      { id: 'tipo_documento', label: 'Documento', allLabel: 'Todos los documentos', options: docs.map((v) => ({ value: v, label: labelTipoDocumento(v) })) },
+      { id: 'cliente', label: 'Cliente', allLabel: 'Todos los clientes', options: clientes.map(([id, label]) => ({ value: id, label })) },
+      { id: 'trabajador', label: 'Trabajador', allLabel: 'Todos los trabajadores', options: trabajadores.map(([id, label]) => ({ value: id, label })) },
+      { id: 'vehiculo', label: 'Camión', allLabel: 'Todos los vehículos', options: vehiculos.map(([id, label]) => ({ value: id, label })) },
     ];
-  }, [delPeriodo]);
+    return defs;
+  }, [delPeriodo, lookups.centrosCosto, lookups.insumos, lookups.vehiculos]);
 
   const filtrados = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return delPeriodo.filter(
-      (m) =>
+    return delPeriodo.filter((m) => {
+      const textoBusqueda = [
+        m.categoria,
+        m.descripcion || '',
+        m.cuenta_bancaria?.alias || '',
+        m.cuenta_bancaria?.empresa?.razon_social || '',
+        m.centro_costo?.nombre || '',
+        m.centro_costo?.codigo || '',
+        m.insumo?.nombre || '',
+        m.insumo?.codigo || '',
+        m.vehiculo?.nombre || '',
+        m.vehiculo?.patente || '',
+        nombreClienteCorto(m.cliente),
+        m.oportunidad?.codigo || '',
+        m.oportunidad?.titulo || '',
+        m.proveedor?.nombre || '',
+        m.trabajador?.nombre || '',
+        m.medio_pago ? labelMedioPago(m.medio_pago) : '',
+        m.tipo_documento ? labelTipoDocumento(m.tipo_documento) : '',
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      return (
         (tipoTab === 'todos' || m.tipo === tipoTab) &&
         matchMultiFilter(activeFilters.empresa, (v) => v === m.cuenta_bancaria?.empresa?.razon_social) &&
         matchMultiFilter(activeFilters.cuenta, (v) => v === m.cuenta_bancaria_id) &&
         matchMultiFilter(activeFilters.categoria, (v) => v === m.categoria) &&
-        (!term || `${m.categoria} ${m.descripcion || ''} ${m.cuenta_bancaria?.alias || ''}`.toLowerCase().includes(term)),
-    );
+        matchMultiFilter(activeFilters.centro_costo, (v) => v === m.centro_costo_id) &&
+        matchMultiFilter(activeFilters.insumo, (v) => v === m.insumo_id) &&
+        matchMultiFilter(activeFilters.medio_pago, (v) => v === m.medio_pago) &&
+        matchMultiFilter(activeFilters.tipo_documento, (v) => v === m.tipo_documento) &&
+        matchMultiFilter(activeFilters.cliente, (v) => v === m.cliente_id) &&
+        matchMultiFilter(activeFilters.trabajador, (v) => v === m.trabajador_id) &&
+        matchMultiFilter(activeFilters.vehiculo, (v) => v === m.vehiculo_id) &&
+        (!term || textoBusqueda.includes(term))
+      );
+    });
   }, [delPeriodo, tipoTab, activeFilters, search]);
 
   const exportarCsv = () => {
     const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
     const filas = [
-      ['Fecha', 'Tipo', 'Categoría', 'Glosa', 'Cuenta', 'Empresa', 'Monto'].join(';'),
+      CSV_HEADER.join(';'),
       ...filtrados.map((m) =>
         [
           fechaCsv(m.fecha),
@@ -286,6 +495,14 @@ export function CajaResumen({
           esc(m.cuenta_bancaria?.alias || ''),
           esc(m.cuenta_bancaria?.empresa?.razon_social || ''),
           String(Number(m.monto || 0)),
+          esc(m.medio_pago ? labelMedioPago(m.medio_pago) : ''),
+          esc(m.tipo_documento ? labelTipoDocumento(m.tipo_documento) : ''),
+          esc(m.centro_costo?.nombre || ''),
+          esc(m.insumo?.codigo || ''),
+          esc(m.vehiculo?.nombre || ''),
+          esc(m.trabajador?.nombre || ''),
+          esc(nombreClienteCorto(m.cliente)),
+          esc(m.proveedor?.nombre || ''),
         ].join(';'),
       ),
     ];
@@ -299,6 +516,35 @@ export function CajaResumen({
   };
 
   const pagina = filtrados.slice((page - 1) * perPage, page * perPage);
+
+  const eliminarMovimiento = async () => {
+    if (!confirmDelete) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('caja_movimientos')
+        .delete()
+        .eq('id', confirmDelete.id);
+      if (error) throw error;
+
+      await logSistema({
+        tipo_accion: 'eliminacion',
+        entidad: 'caja_movimientos',
+        entidad_id: confirmDelete.id,
+        descripcion: `Movimiento de caja eliminado (${confirmDelete.tipo} $${Number(confirmDelete.monto).toLocaleString('es-CL')} · ${confirmDelete.categoria})`,
+        usuario_id: currentUser?.id || null,
+        datos_anteriores: confirmDelete,
+      });
+
+      toast({ message: 'Movimiento eliminado y saldo recalculado.', tone: 'success' });
+      setConfirmDelete(null);
+      await onReload();
+    } catch (err) {
+      toast({ message: mensajeError(err, 'No se pudo eliminar el movimiento.'), tone: 'danger' });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   /* ── Edición de la caja actual ── */
   const abrirEdicion = () => {
@@ -354,6 +600,7 @@ export function CajaResumen({
       return;
     }
     const get = (f: string[], h: string) => (cols[h] >= 0 ? (f[cols[h]] || '').trim() : '');
+    const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
     const rows: ImportRow[] = datos.map((f, i) => {
       const tipoTxt = get(f, 'Tipo').toLowerCase();
       const tipo = tipoTxt.startsWith('ing') ? 'ingreso' : tipoTxt.startsWith('egr') ? 'egreso' : null;
@@ -361,6 +608,47 @@ export function CajaResumen({
       const fecha = parseFecha(get(f, 'Fecha'));
       const cuentaTexto = get(f, 'Cuenta');
       const cuenta = cuentaTexto ? cuentas.find((c) => c.alias.toLowerCase() === cuentaTexto.toLowerCase()) : undefined;
+
+      const medioTxt = get(f, 'Medio de pago');
+      const medioMatch = medioTxt
+        ? MEDIOS_PAGO.find((m) => norm(m.id) === norm(medioTxt) || norm(m.label) === norm(medioTxt))
+        : undefined;
+
+      const docTxt = get(f, 'Documento');
+      const docMatch = docTxt
+        ? TIPOS_DOCUMENTO_CAJA.find((d) => norm(d.id) === norm(docTxt) || norm(d.label) === norm(docTxt))
+        : undefined;
+
+      const ccTxt = get(f, 'Centro de costos');
+      const ccMatch = ccTxt
+        ? lookups.centrosCosto.find((c) => norm(c.codigo) === norm(ccTxt) || norm(c.nombre) === norm(ccTxt))
+        : undefined;
+
+      const insTxt = get(f, 'Código insumo');
+      const insMatch = insTxt
+        ? lookups.insumos.find((x) => norm(x.codigo) === norm(insTxt) || norm(x.nombre) === norm(insTxt))
+        : undefined;
+
+      const vehTxt = get(f, 'Camión');
+      const vehMatch = vehTxt
+        ? lookups.vehiculos.find((v) => norm(v.nombre) === norm(vehTxt) || (v.patente && norm(v.patente) === norm(vehTxt)))
+        : undefined;
+
+      const trabTxt = get(f, 'Trabajador');
+      const trabMatch = trabTxt
+        ? lookups.trabajadores.find((t) => norm(t.nombre) === norm(trabTxt))
+        : undefined;
+
+      const cliTxt = get(f, 'Cliente');
+      const cliMatch = cliTxt
+        ? lookups.clientes.find((c) => norm(nombreClienteCorto(c)) === norm(cliTxt))
+        : undefined;
+
+      const provTxt = get(f, 'Proveedor');
+      const provMatch = provTxt
+        ? lookups.proveedores.find((p) => norm(p.nombre) === norm(provTxt))
+        : undefined;
+
       let error: string | null = null;
       if (!fecha) error = 'Fecha inválida';
       else if (!tipo) error = 'Tipo inválido';
@@ -375,6 +663,15 @@ export function CajaResumen({
         descripcion: get(f, 'Glosa'),
         cuentaTexto,
         cuentaId: cuenta?.id || null,
+        empresaId: cuenta?.empresa_id || null,
+        medioPago: medioMatch?.id || (medioTxt || null),
+        tipoDocumento: docMatch?.id || (docTxt || null),
+        centroCostoId: ccMatch?.id || null,
+        insumoId: insMatch?.id || null,
+        vehiculoId: vehMatch?.id || null,
+        trabajadorId: trabMatch?.id || null,
+        clienteId: cliMatch?.id || null,
+        proveedorId: provMatch?.id || null,
         monto,
         error,
       };
@@ -395,6 +692,15 @@ export function CajaResumen({
         descripcion: r.descripcion || r.categoria,
         usuario_id: currentUser?.id || null,
         cuenta_bancaria_id: r.cuentaId,
+        empresa_id: r.empresaId,
+        medio_pago: r.medioPago,
+        tipo_documento: r.tipoDocumento,
+        centro_costo_id: r.centroCostoId,
+        insumo_id: r.insumoId,
+        vehiculo_id: r.vehiculoId,
+        trabajador_id: r.trabajadorId,
+        cliente_id: r.clienteId,
+        proveedor_id: r.proveedorId,
         fecha: r.fecha,
       }));
       for (let i = 0; i < payload.length; i += 200) {
@@ -414,7 +720,23 @@ export function CajaResumen({
   };
 
   const descargarPlantilla = () => {
-    const ejemplo = [`${hoy} 10:30`, 'Ingreso', 'Venta directa', 'Abono cliente', cuentas[0]?.alias || '', '', '150000'];
+    const ejemplo = [
+      `${hoy} 10:30`,
+      'Egreso',
+      'Combustibles',
+      'Carga bencina traslado obra',
+      cuentas[0]?.alias || '',
+      cuentas[0]?.empresa?.razon_social || '',
+      '45000',
+      'Transferencia',
+      'Comprobante',
+      'Terreno 2 – Calera de Tango',
+      'COMB-BENCINA',
+      '',
+      '',
+      '',
+      '',
+    ];
     const blob = new Blob(['\ufeff' + [CSV_HEADER.join(';'), ejemplo.join(';')].join('\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -541,39 +863,121 @@ export function CajaResumen({
         {canEdit && (
           <section className="rounded-[20px] border border-line bg-surface p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <CardTitle title="Margen por nota de venta" />
-              <div className="text-right">
-                <p className={`t-num text-xl font-bold ${margenTotal >= 0 ? 'text-success' : 'text-danger'}`}>{money(margenTotal)}</p>
-                <p className="text-xs text-ink-muted">{margenPct.toFixed(1)}% de {formatShortMoney(ventaTotal)}</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <CardTitle title={margenVista === 'nv' ? 'Margen por nota de venta' : 'Costos y sobrecostos por cliente'} />
+                <div role="tablist" aria-label="Vista de rentabilidad" className="inline-flex items-center gap-1 rounded-lg bg-surface-muted p-1">
+                  {([
+                    ['nv', 'Por NV'],
+                    ['cliente', 'Por Cliente'],
+                  ] as const).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="tab"
+                      aria-selected={margenVista === id}
+                      onClick={() => setMargenVista(id)}
+                      className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition ${
+                        margenVista === id ? 'bg-ink text-surface' : 'text-ink-muted hover:text-ink'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
+              {margenVista === 'nv' ? (
+                <div className="text-right">
+                  <p className={`t-num text-xl font-bold ${margenTotal >= 0 ? 'text-success' : 'text-danger'}`}>{money(margenTotal)}</p>
+                  <p className="text-xs text-ink-muted">{margenPct.toFixed(1)}% de {formatShortMoney(ventaTotal)}</p>
+                </div>
+              ) : (
+                <div className="text-right">
+                  <p className="t-num text-xl font-bold text-ink">
+                    {costosClientes.filter((c) => c.tiene_sobrecosto).length}
+                    <span className="text-xs font-medium text-ink-muted"> con sobrecosto</span>
+                  </p>
+                  <p className="text-xs text-ink-muted">{costosClientes.length} clientes con actividad</p>
+                </div>
+              )}
             </div>
-            {margenTop.length === 0 ? (
-              <p className="py-10 text-center text-sm text-ink-muted">No hay notas de venta creadas en este período.</p>
+            {margenVista === 'nv' ? (
+              margenTop.length === 0 ? (
+                <p className="py-10 text-center text-sm text-ink-muted">No hay notas de venta creadas en este período.</p>
+              ) : (
+                <ul className="mt-5 space-y-3">
+                  {margenTop.map((r) => {
+                    const valor = Number(r.margen_bruto_proyectado || 0);
+                    const positivo = valor >= 0;
+                    return (
+                      <li key={r.oportunidad_id}>
+                        <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+                          <span className="min-w-0 truncate">
+                            <span className="font-semibold text-ink">{r.codigo}</span>
+                            <span className="text-ink-muted"> · {r.cliente_nombre || r.titulo}</span>
+                          </span>
+                          <span className={`t-num shrink-0 font-semibold ${positivo ? 'text-success' : 'text-danger'}`}>
+                            {money(valor)} · {Number(r.porcentaje_margen_proyectado || 0).toFixed(0)}%
+                          </span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-surface-muted">
+                          <div
+                            className={`h-full rounded-full ${positivo ? 'bg-success' : 'bg-danger'}`}
+                            style={{ width: `${Math.max(2, (Math.abs(valor) / margenMax) * 100)}%` }}
+                          />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )
+            ) : costosClientes.length === 0 ? (
+              <p className="py-10 text-center text-sm text-ink-muted">Sin costos ni ventas registradas por cliente.</p>
             ) : (
               <ul className="mt-5 space-y-3">
-                {margenTop.map((r) => {
-                  const valor = Number(r.margen_bruto_proyectado || 0);
-                  const positivo = valor >= 0;
-                  return (
-                    <li key={r.oportunidad_id}>
-                      <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-                        <span className="min-w-0 truncate">
-                          <span className="font-semibold text-ink">{r.codigo}</span>
-                          <span className="text-ink-muted"> · {r.cliente_nombre || r.titulo}</span>
-                        </span>
-                        <span className={`t-num shrink-0 font-semibold ${positivo ? 'text-success' : 'text-danger'}`}>
-                          {money(valor)} · {Number(r.porcentaje_margen_proyectado || 0).toFixed(0)}%
-                        </span>
-                      </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-surface-muted">
-                        <div
-                          className={`h-full rounded-full ${positivo ? 'bg-success' : 'bg-danger'}`}
-                          style={{ width: `${Math.max(2, (Math.abs(valor) / margenMax) * 100)}%` }}
-                        />
-                      </div>
-                    </li>
+                {(() => {
+                  const topClientes = [...costosClientes]
+                    .sort((a, b) => Number(b.sobrecosto || 0) - Number(a.sobrecosto || 0) || Math.abs(Number(b.margen_real || 0)) - Math.abs(Number(a.margen_real || 0)))
+                    .slice(0, 8);
+                  const maxCli = Math.max(
+                    ...topClientes.map((c) => Math.max(Math.abs(Number(c.margen_real || 0)), Number(c.costo_total || 0))),
+                    1,
                   );
-                })}
+                  return topClientes.map((c) => {
+                    const margenVal = Number(c.margen_real || 0);
+                    const sobreVal = Number(c.sobrecosto || 0);
+                    const positivo = margenVal >= 0 && !c.tiene_sobrecosto;
+                    return (
+                      <li key={c.cliente_id}>
+                        <Link
+                          href={`/clientes/${c.cliente_id}`}
+                          className="group block rounded-lg -mx-1.5 px-1.5 py-1 transition hover:bg-surface-muted/70"
+                          title="Abrir ficha del cliente y centro de costos"
+                        >
+                          <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              <span className="font-semibold text-ink group-hover:text-accent-ink truncate">
+                                {c.cliente_nombre}
+                              </span>
+                              {c.tiene_sobrecosto && (
+                                <StatusBadge tone="danger">Sobrecosto {money(sobreVal)}</StatusBadge>
+                              )}
+                            </span>
+                            <span className={`t-num shrink-0 font-semibold ${positivo ? 'text-success' : 'text-danger'}`}>
+                              {money(margenVal)}
+                              <span className="text-ink-muted font-normal"> · Costo {money(Number(c.costo_total || 0))}</span>
+                            </span>
+                          </div>
+                          <div className="h-2 overflow-hidden rounded-full bg-surface-muted">
+                            <div
+                              className={`h-full rounded-full ${positivo ? 'bg-success' : 'bg-danger'}`}
+                              style={{ width: `${Math.max(3, (Math.abs(margenVal || Number(c.costo_total || 0)) / maxCli) * 100)}%` }}
+                            />
+                          </div>
+                        </Link>
+                      </li>
+                    );
+                  });
+                })()}
               </ul>
             )}
           </section>
@@ -606,6 +1010,198 @@ export function CajaResumen({
                 );
               })}
             </ul>
+          )}
+        </section>
+      </div>
+
+      {/* Consumo de materias primas y combustibles + Centros de costos y flota */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <section className="rounded-[20px] border border-line bg-surface p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle title="Consumo de materias primas y combustibles" />
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                <span className="inline-flex items-center gap-1.5 text-ink-muted">
+                  <Package className="h-3.5 w-3.5 text-accent-ink" aria-hidden />
+                  Materia prima: <strong className="t-num text-ink">{money(consumoInsumos.totalMateriaPrima)}</strong>
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-ink-muted">
+                  <Fuel className="h-3.5 w-3.5 text-warning" aria-hidden />
+                  Combustibles: <strong className="t-num text-ink">{money(consumoInsumos.totalCombustibles)}</strong>
+                </span>
+              </div>
+            </div>
+            <div role="tablist" aria-label="Filtrar grupo de insumo" className="inline-flex items-center gap-1 rounded-lg bg-surface-muted p-1">
+              {([
+                ['todos', 'Todos'],
+                ['materia_prima', 'Materia prima'],
+                ['combustible', 'Combustibles'],
+              ] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={grupoInsumoTab === id}
+                  onClick={() => setGrupoInsumoTab(id)}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition ${
+                    grupoInsumoTab === id ? 'bg-ink text-surface' : 'text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {insumosVisibles.length === 0 ? (
+            <p className="py-8 text-center text-sm text-ink-muted">Sin insumos configurados en este grupo.</p>
+          ) : (
+            <ul className="mt-5 space-y-3">
+              {(() => {
+                const maxInsumo = Math.max(...insumosVisibles.map((x) => x.monto), 1);
+                const totalGrupo = insumosVisibles.reduce((s, x) => s + x.monto, 0);
+                return insumosVisibles.map(({ insumo, monto, count }) => {
+                  const pct = totalGrupo > 0 ? Math.round((monto / totalGrupo) * 100) : 0;
+                  const isComb = insumo.grupo === 'combustible';
+                  return (
+                    <li key={insumo.id}>
+                      <button
+                        type="button"
+                        onClick={() => abrirMovimientosFiltrados({ insumo: insumo.id })}
+                        className="group w-full text-left rounded-lg -mx-1.5 px-1.5 py-1 transition hover:bg-surface-muted/70"
+                        title={`Ver movimientos de ${insumo.nombre}`}
+                      >
+                        <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="font-semibold text-ink group-hover:text-accent-ink transition-colors truncate">
+                              {insumo.nombre}
+                            </span>
+                            <CodeStamp>{insumo.codigo}</CodeStamp>
+                          </span>
+                          <span className="t-num shrink-0 text-ink-muted">
+                            <strong className={monto > 0 ? 'text-ink' : 'text-ink-muted font-normal'}>{money(monto)}</strong>
+                            {' · '}
+                            {count > 0 ? `${pct}% · ${count} mov.` : '0 mov.'}
+                          </span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-surface-muted">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              monto === 0 ? 'bg-transparent' : isComb ? 'bg-warning' : 'bg-accent'
+                            }`}
+                            style={{ width: monto > 0 ? `${Math.max(3, (monto / maxInsumo) * 100)}%` : '0%' }}
+                          />
+                        </div>
+                      </button>
+                    </li>
+                  );
+                });
+              })()}
+            </ul>
+          )}
+        </section>
+
+        <section className="rounded-[20px] border border-line bg-surface p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle title="Gastos por centro de costos y flota" />
+              <p className="mt-1.5 text-xs text-ink-muted">
+                Asignado a centros: <strong className="t-num text-ink">{money(gastosCentrosCosto.totalAsignado)}</strong>
+                {gastosCentrosCosto.sinCentroMonto > 0 && (
+                  <> · Sin asignar: <span className="t-num">{money(gastosCentrosCosto.sinCentroMonto)}</span></>
+                )}
+              </p>
+            </div>
+          </div>
+
+          {gastosCentrosCosto.items.length === 0 ? (
+            <p className="py-8 text-center text-sm text-ink-muted">Sin centros de costos configurados.</p>
+          ) : (
+            <ul className="mt-5 space-y-3">
+              {(() => {
+                const maxCC = Math.max(...gastosCentrosCosto.items.map((x) => x.monto), 1);
+                const totalCC = gastosCentrosCosto.totalAsignado;
+                return gastosCentrosCosto.items.map(({ centro, monto, count }) => {
+                  const pct = totalCC > 0 ? Math.round((monto / totalCC) * 100) : 0;
+                  return (
+                    <li key={centro.id}>
+                      <button
+                        type="button"
+                        onClick={() => abrirMovimientosFiltrados({ centro_costo: centro.id })}
+                        className="group w-full text-left rounded-lg -mx-1.5 px-1.5 py-1 transition hover:bg-surface-muted/70"
+                        title={`Ver egresos de ${centro.nombre}`}
+                      >
+                        <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <Building2 className="h-3.5 w-3.5 shrink-0 text-accent-ink" aria-hidden />
+                            <span className="font-semibold text-ink group-hover:text-accent-ink transition-colors truncate">
+                              {centro.nombre}
+                            </span>
+                            <CodeStamp>{centro.codigo}</CodeStamp>
+                          </span>
+                          <span className="t-num shrink-0 text-ink-muted">
+                            <strong className={monto > 0 ? 'text-ink' : 'text-ink-muted font-normal'}>{money(monto)}</strong>
+                            {' · '}
+                            {count > 0 ? `${pct}% · ${count} mov.` : '0 mov.'}
+                          </span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-surface-muted">
+                          <div
+                            className={`h-full rounded-full transition-all ${monto > 0 ? 'bg-info' : 'bg-transparent'}`}
+                            style={{ width: monto > 0 ? `${Math.max(3, (monto / maxCC) * 100)}%` : '0%' }}
+                          />
+                        </div>
+                      </button>
+                    </li>
+                  );
+                });
+              })()}
+            </ul>
+          )}
+
+          {gastosVehiculos.items.length > 0 && (
+            <div className="mt-6 border-t border-line-subtle pt-4">
+              <div className="mb-3 flex items-center justify-between gap-2 text-xs">
+                <span className="flex items-center gap-1.5 font-semibold text-ink">
+                  <Truck className="h-3.5 w-3.5 text-info" aria-hidden />
+                  Desglose por camión / vehículo
+                </span>
+                <span className="t-num font-semibold text-ink">{money(gastosVehiculos.total)}</span>
+              </div>
+              <ul className="space-y-2">
+                {(() => {
+                  const maxVeh = Math.max(...gastosVehiculos.items.map((x) => x.monto), 1);
+                  return gastosVehiculos.items.map(({ vehiculo, monto, count }) => (
+                    <li key={vehiculo.id}>
+                      <button
+                        type="button"
+                        onClick={() => abrirMovimientosFiltrados({ vehiculo: vehiculo.id })}
+                        className="group w-full text-left rounded-lg -mx-1.5 px-1.5 py-1 transition hover:bg-surface-muted/70"
+                        title={`Ver egresos de ${vehiculo.nombre}`}
+                      >
+                        <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span className="font-medium text-ink group-hover:text-accent-ink truncate">{vehiculo.nombre}</span>
+                            {vehiculo.patente && <CodeStamp>{vehiculo.patente}</CodeStamp>}
+                          </span>
+                          <span className="t-num shrink-0 text-ink-muted">
+                            <strong className={monto > 0 ? 'text-ink' : 'text-ink-muted font-normal'}>{money(monto)}</strong>
+                            {' · '}
+                            {count} mov.
+                          </span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-surface-muted">
+                          <div
+                            className={`h-full rounded-full transition-all ${monto > 0 ? 'bg-warning' : 'bg-transparent'}`}
+                            style={{ width: monto > 0 ? `${Math.max(3, (monto / maxVeh) * 100)}%` : '0%' }}
+                          />
+                        </div>
+                      </button>
+                    </li>
+                  ));
+                })()}
+              </ul>
+            </div>
           )}
         </section>
       </div>
@@ -671,10 +1267,10 @@ export function CajaResumen({
             {filtrados.length === 0 ? (
               <p className="p-10 text-center text-sm text-ink-muted">No hay movimientos con estos filtros.</p>
             ) : (
-              <table className="w-full min-w-[860px] text-left text-xs">
+              <table className="w-full min-w-[920px] text-left text-xs">
                 <thead>
                   <tr className="bg-surface-muted text-ink-muted">
-                    {['Categoría', 'Glosa', 'Cuenta', 'Empresa', 'Monto', 'Tipo', 'Fecha y hora', 'Acción'].map((h) => (
+                    {['Categoría y glosa', 'Centro de costos / Imputación', 'Respaldo', 'Cuenta y empresa', 'Monto', 'Tipo', 'Fecha y hora', 'Acción'].map((h) => (
                       <th key={h} className={`p-3 font-semibold ${h === 'Monto' ? 'text-right' : ''}`}>
                         {h}
                       </th>
@@ -682,23 +1278,74 @@ export function CajaResumen({
                   </tr>
                 </thead>
                 <tbody>
-                  {pagina.map((m) => (
+                  {pagina.map((m) => {
+                    const clienteNom = nombreClienteCorto(m.cliente);
+                    const tags: string[] = [];
+                    if (m.oportunidad?.codigo) tags.push(`NV ${m.oportunidad.codigo}`);
+                    if (clienteNom) tags.push(clienteNom);
+                    if (m.proveedor?.nombre) tags.push(`Prov: ${m.proveedor.nombre}`);
+                    if (m.trabajador?.nombre) tags.push(`Trab: ${m.trabajador.nombre}`);
+                    if (m.vehiculo?.nombre) tags.push(m.vehiculo.patente ? `${m.vehiculo.nombre} (${m.vehiculo.patente})` : m.vehiculo.nombre);
+
+                    return (
                     <tr key={m.id} className="border-t border-line-subtle transition hover:bg-surface-muted/50">
-                      <td className="p-3 font-semibold text-ink">{m.categoria}</td>
-                      <td className="max-w-[240px] truncate p-3 text-ink-muted" title={m.descripcion || undefined}>
-                        {m.descripcion && m.descripcion !== m.categoria ? m.descripcion : '—'}
+                      <td className="p-3 max-w-[220px]">
+                        <div className="font-semibold text-ink truncate" title={m.categoria}>{m.categoria}</div>
+                        {m.descripcion && m.descripcion !== m.categoria && (
+                          <div className="t-micro text-ink-muted truncate mt-0.5" title={m.descripcion}>
+                            {m.descripcion}
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-3 max-w-[240px]">
+                        <div className="flex flex-wrap items-center gap-1">
+                          {m.centro_costo && (
+                            <span className="inline-flex items-center rounded-md bg-surface-muted px-1.5 py-0.5 text-[11px] font-medium text-ink">
+                              {m.centro_costo.nombre}
+                            </span>
+                          )}
+                          {m.insumo && (
+                            <CodeStamp title={m.insumo.nombre}>
+                              {m.insumo.codigo} · {m.insumo.nombre}
+                            </CodeStamp>
+                          )}
+                          {tags.map((t) => (
+                            <span key={t} className="t-micro text-ink-muted truncate max-w-[180px]" title={t}>
+                              {t}
+                            </span>
+                          ))}
+                          {!m.centro_costo && !m.insumo && tags.length === 0 && (
+                            <span className="text-ink-muted">—</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-3 whitespace-nowrap">
+                        {m.medio_pago || m.tipo_documento ? (
+                          <div className="space-y-0.5">
+                            {m.medio_pago && <div className="font-medium text-ink">{labelMedioPago(m.medio_pago)}</div>}
+                            {m.tipo_documento && <div className="t-micro text-ink-muted">{labelTipoDocumento(m.tipo_documento)}</div>}
+                          </div>
+                        ) : (
+                          <span className="text-ink-muted">—</span>
+                        )}
                       </td>
                       <td className="p-3">
                         {m.cuenta_bancaria?.alias ? (
-                          <span className="inline-flex items-center gap-1 font-medium text-ink">
-                            <Landmark className="h-3 w-3 text-accent-ink" aria-hidden />
-                            {m.cuenta_bancaria.alias}
-                          </span>
+                          <div>
+                            <span className="inline-flex items-center gap-1 font-medium text-ink">
+                              <Landmark className="h-3 w-3 text-accent-ink" aria-hidden />
+                              {m.cuenta_bancaria.alias}
+                            </span>
+                            {m.cuenta_bancaria?.empresa?.razon_social && (
+                              <div className="t-micro text-ink-muted mt-0.5">
+                                {m.cuenta_bancaria.empresa.razon_social}
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <span className="italic text-ink-muted">Sin cuenta</span>
                         )}
                       </td>
-                      <td className="p-3 text-ink-muted">{m.cuenta_bancaria?.empresa?.razon_social || '—'}</td>
                       <td className={`t-num p-3 text-right text-sm font-semibold ${m.tipo === 'ingreso' ? 'text-success' : 'text-danger'}`}>
                         {m.tipo === 'ingreso' ? '+' : '−'}${Number(m.monto).toLocaleString('es-CL')}
                       </td>
@@ -711,10 +1358,24 @@ export function CajaResumen({
                         {new Date(m.fecha).toLocaleDateString('es-CL')} · {new Date(m.fecha).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
                       </td>
                       <td className="p-3">
-                        <IconButton icon={Eye} label="Ver detalle" onClick={() => setDetalle(m)} />
+                        <div className="inline-flex items-center gap-1">
+                          <IconButton icon={Eye} label="Ver detalle" onClick={() => setDetalle(m)} />
+                          {canEdit && onEditMovimiento && (
+                            <IconButton icon={Pencil} label="Editar movimiento" onClick={() => onEditMovimiento(m)} />
+                          )}
+                          {canEdit && (
+                            <IconButton
+                              icon={Trash2}
+                              label="Eliminar movimiento"
+                              className="hover:text-danger hover:bg-danger-subtle"
+                              onClick={() => setConfirmDelete(m)}
+                            />
+                          )}
+                        </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -783,10 +1444,27 @@ export function CajaResumen({
         onClose={() => setDetalle(null)}
         title={detalle ? `${detalle.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'} · ${detalle.categoria}` : ''}
         size="sm"
-        footer={<Button variant="secondary" onClick={() => setDetalle(null)}>Cerrar</Button>}
+        footer={
+          <>
+            {canEdit && detalle && onEditMovimiento && (
+              <Button
+                variant="secondary"
+                icon={Pencil}
+                onClick={() => {
+                  const target = detalle;
+                  setDetalle(null);
+                  onEditMovimiento(target);
+                }}
+              >
+                Editar
+              </Button>
+            )}
+            <Button variant="secondary" onClick={() => setDetalle(null)}>Cerrar</Button>
+          </>
+        }
       >
         {detalle && (
-          <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2 text-xs">
+          <dl className="grid grid-cols-[125px_1fr] gap-x-3 gap-y-2 text-xs">
             <dt className="text-ink-muted">Monto</dt>
             <dd className={`t-num text-base font-bold ${detalle.tipo === 'ingreso' ? 'text-success' : 'text-danger'}`}>
               {detalle.tipo === 'ingreso' ? '+' : '−'}${Number(detalle.monto).toLocaleString('es-CL')}
@@ -799,7 +1477,107 @@ export function CajaResumen({
             <dd className="text-ink">{detalle.cuenta_bancaria?.alias || 'Sin cuenta asignada'}</dd>
             <dt className="text-ink-muted">Empresa</dt>
             <dd className="text-ink">{detalle.cuenta_bancaria?.empresa?.razon_social || '—'}</dd>
+            <dt className="text-ink-muted">Medio de pago</dt>
+            <dd className="text-ink">{labelMedioPago(detalle.medio_pago)}</dd>
+            <dt className="text-ink-muted">Documento</dt>
+            <dd className="text-ink">{labelTipoDocumento(detalle.tipo_documento)}</dd>
+            {detalle.centro_costo && (
+              <>
+                <dt className="text-ink-muted">Centro de costos</dt>
+                <dd className="text-ink">{detalle.centro_costo.nombre} ({detalle.centro_costo.codigo})</dd>
+              </>
+            )}
+            {detalle.insumo && (
+              <>
+                <dt className="text-ink-muted">Código insumo</dt>
+                <dd className="text-ink">{detalle.insumo.codigo} · {detalle.insumo.nombre}</dd>
+              </>
+            )}
+            {detalle.vehiculo && (
+              <>
+                <dt className="text-ink-muted">Camión / Vehículo</dt>
+                <dd className="text-ink">{detalle.vehiculo.nombre}{detalle.vehiculo.patente ? ` (${detalle.vehiculo.patente})` : ''}</dd>
+              </>
+            )}
+            {detalle.trabajador && (
+              <>
+                <dt className="text-ink-muted">Trabajador</dt>
+                <dd className="text-ink">{detalle.trabajador.nombre}{detalle.trabajador.cargo ? ` · ${detalle.trabajador.cargo}` : ''}</dd>
+              </>
+            )}
+            {detalle.cliente && (
+              <>
+                <dt className="text-ink-muted">Cliente</dt>
+                <dd className="text-ink">{nombreClienteCorto(detalle.cliente)}</dd>
+              </>
+            )}
+            {detalle.oportunidad && (
+              <>
+                <dt className="text-ink-muted">Obra / NV</dt>
+                <dd className="text-ink">{detalle.oportunidad.codigo} · {detalle.oportunidad.titulo}</dd>
+              </>
+            )}
+            {detalle.proveedor && (
+              <>
+                <dt className="text-ink-muted">Proveedor</dt>
+                <dd className="text-ink">{detalle.proveedor.nombre}</dd>
+              </>
+            )}
           </dl>
+        )}
+      </Dialog>
+
+      <Dialog
+        open={!!confirmDelete}
+        onClose={() => !deleting && setConfirmDelete(null)}
+        title="Eliminar movimiento de caja"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmDelete(null)} disabled={deleting}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleting || (!!confirmDelete && !!abonoMovIds?.has(confirmDelete.id))}
+              onClick={() => void eliminarMovimiento()}
+            >
+              {deleting ? 'Eliminando…' : 'Eliminar movimiento'}
+            </Button>
+          </>
+        }
+      >
+        {confirmDelete && (
+          <div className="space-y-3 text-xs">
+            {abonoMovIds?.has(confirmDelete.id) ? (
+              <div className="rounded-control border border-warning-line bg-warning-soft p-3 text-warning flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  Este movimiento proviene de un <strong>abono validado</strong> y está protegido. Para revertirlo, recházalo desde la pestaña <strong>Validación de pagos</strong>.
+                </span>
+              </div>
+            ) : (
+              <p className="text-ink-muted">
+                Esta acción eliminará el movimiento del registro y recalculará automáticamente el saldo de la cuenta y empresa asociada.
+              </p>
+            )}
+            <dl className="grid grid-cols-[96px_1fr] gap-x-3 gap-y-1.5 rounded-xl border border-line bg-surface-muted p-3">
+              <dt className="text-ink-muted">Tipo</dt>
+              <dd className="font-semibold text-ink">{confirmDelete.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}</dd>
+              <dt className="text-ink-muted">Monto</dt>
+              <dd className={`t-num font-bold ${confirmDelete.tipo === 'ingreso' ? 'text-success' : 'text-danger'}`}>
+                {confirmDelete.tipo === 'ingreso' ? '+' : '−'}${Number(confirmDelete.monto).toLocaleString('es-CL')}
+              </dd>
+              <dt className="text-ink-muted">Categoría</dt>
+              <dd className="text-ink">{confirmDelete.categoria}</dd>
+              <dt className="text-ink-muted">Cuenta</dt>
+              <dd className="text-ink">{confirmDelete.cuenta_bancaria?.alias || 'Sin cuenta'}</dd>
+              <dt className="text-ink-muted">Empresa</dt>
+              <dd className="text-ink">{confirmDelete.cuenta_bancaria?.empresa?.razon_social || '—'}</dd>
+              <dt className="text-ink-muted">Fecha</dt>
+              <dd className="text-ink">{new Date(confirmDelete.fecha).toLocaleString('es-CL')}</dd>
+            </dl>
+          </div>
         )}
       </Dialog>
 
